@@ -1,0 +1,262 @@
+/*
+ * Styles of the state machine diagram. The themes mimic the look of PlantUML state diagrams.
+ * This file is also embedded into exported SVG files.
+ */
+.theme-classic, .theme-modern, .theme-dark {
+    --hsm-font: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
+    --hsm-select: #1a73e8;
+    --hsm-error: #d32f2f;
+    --hsm-warning: #f5a623;
+}
+
+/* PlantUML "classic" skin: light yellow states with dark red borders */
+.theme-classic {
+    --hsm-bg: #ffffff;
+    --hsm-state-fill: #fefece;
+    --hsm-state-stroke: #a80036;
+    --hsm-text: #000000;
+    --hsm-edge: #a80036;
+    --hsm-pseudo: #000000;
+    --hsm-grid: #f3f3f3;
+}
+
+/* current PlantUML default look */
+.theme-modern {
+    --hsm-bg: #ffffff;
+    --hsm-state-fill: #f1f1f1;
+    --hsm-state-stroke: #181818;
+    --hsm-text: #000000;
+    --hsm-edge: #181818;
+    --hsm-pseudo: #222222;
+    --hsm-grid: #f5f5f5;
+}
+
+.theme-dark {
+    --hsm-bg: #1e2227;
+    --hsm-state-fill: #2d333b;
+    --hsm-state-stroke: #9fb3c8;
+    --hsm-text: #e6edf3;
+    --hsm-edge: #9fb3c8;
+    --hsm-pseudo: #e6edf3;
+    --hsm-grid: #23282e;
+    --hsm-select: #58a6ff;
+}
+
+.sprotty-graph {
+    background: var(--hsm-bg);
+    font-family: var(--hsm-font);
+}
+
+.sprotty-graph text {
+    font-family: var(--hsm-font);
+    fill: var(--hsm-text);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.export-background {
+    fill: var(--hsm-bg);
+}
+
+/* ---- states ---- */
+
+.state-shape {
+    fill: var(--hsm-state-fill);
+    stroke: var(--hsm-state-stroke);
+    stroke-width: 1.5px;
+}
+
+.state-separator {
+    stroke: var(--hsm-state-stroke);
+    stroke-width: 1.5px;
+}
+
+.state-name {
+    font-size: 14px;
+    text-anchor: middle;
+}
+
+.state-body {
+    font-size: 12px;
+}
+
+/* ---- regions ---- */
+
+.region-shape {
+    fill: transparent;
+    stroke: none;
+}
+
+.region-separator {
+    stroke: var(--hsm-state-stroke);
+    stroke-width: 1.2px;
+    stroke-dasharray: 6 4;
+}
+
+.region-name {
+    font-size: 11px;
+    font-style: italic;
+    opacity: 0.75;
+}
+
+.region.selected > .region-shape {
+    fill: var(--hsm-select);
+    fill-opacity: 0.06;
+    stroke: var(--hsm-select);
+    stroke-width: 1.5px;
+    stroke-dasharray: 4 3;
+}
+
+/* ---- pseudo states ---- */
+
+.initial-shape,
+.junction-shape,
+.final-inner {
+    fill: var(--hsm-pseudo);
+}
+
+.final-outer {
+    fill: var(--hsm-bg);
+    stroke: var(--hsm-pseudo);
+    stroke-width: 1.5px;
+}
+
+.choice-shape,
+.history-shape {
+    fill: var(--hsm-state-fill);
+    stroke: var(--hsm-state-stroke);
+    stroke-width: 1.5px;
+}
+
+.history-text {
+    font-size: 12px;
+    font-weight: bold;
+    text-anchor: middle;
+}
+
+/* ---- transitions ---- */
+
+.transition-line {
+    fill: none;
+    stroke: var(--hsm-edge);
+    stroke-width: 1.2px;
+}
+
+.transition-arrow {
+    fill: var(--hsm-edge);
+    stroke: var(--hsm-edge);
+    stroke-width: 0.6px;
+    stroke-linejoin: round;
+}
+
+.transition-hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 12px;
+}
+
+.transition-label text {
+    font-size: 12px;
+}
+
+.transition-label-hit {
+    fill: transparent;
+}
+
+/* ---- interaction feedback ---- */
+
+.hsm-node.mouseover > .state-shape,
+.hsm-node.mouseover > .choice-shape,
+.hsm-node.mouseover > .history-shape {
+    stroke-width: 2.5px;
+}
+
+.hsm-node.mouseover > .initial-shape,
+.hsm-node.mouseover > .junction-shape,
+.hsm-node.mouseover > .final-outer {
+    stroke: var(--hsm-select);
+    stroke-width: 2px;
+}
+
+.hsm-node.selected > .state-shape,
+.hsm-node.selected > .choice-shape,
+.hsm-node.selected > .history-shape,
+.hsm-node.selected > .final-outer {
+    stroke: var(--hsm-select);
+    stroke-width: 2.5px;
+}
+
+.hsm-node.selected > .state-separator {
+    stroke: var(--hsm-select);
+}
+
+.hsm-node.selected > .initial-shape,
+.hsm-node.selected > .junction-shape {
+    stroke: var(--hsm-select);
+    stroke-width: 3px;
+}
+
+.hsm-node.pending-source > .state-shape,
+.hsm-node.pending-source > .choice-shape,
+.hsm-node.pending-source > .history-shape,
+.hsm-node.pending-source > .initial-shape,
+.hsm-node.pending-source > .junction-shape {
+    stroke: var(--hsm-select);
+    stroke-width: 3px;
+    stroke-dasharray: 5 3;
+}
+
+.transition.mouseover .transition-line {
+    stroke-width: 2px;
+}
+
+.transition.selected .transition-line {
+    stroke: var(--hsm-select);
+    stroke-width: 2px;
+}
+
+.transition.selected .transition-arrow {
+    fill: var(--hsm-select);
+    stroke: var(--hsm-select);
+}
+
+.transition.selected .transition-label text {
+    fill: var(--hsm-select);
+}
+
+/* ---- problems ---- */
+
+.hsm-node.has-error > .state-shape,
+.hsm-node.has-error > .choice-shape,
+.hsm-node.has-error > .history-shape {
+    stroke: var(--hsm-error);
+}
+
+.transition.has-error .transition-line {
+    stroke: var(--hsm-error);
+    stroke-dasharray: 5 3;
+}
+
+.issue circle {
+    stroke: var(--hsm-bg);
+    stroke-width: 1.5px;
+}
+
+.issue-error circle {
+    fill: var(--hsm-error);
+}
+
+.issue-warning circle {
+    fill: var(--hsm-warning);
+}
+
+.sprotty-graph .issue text {
+    fill: #ffffff;
+    font-size: 11px;
+    font-weight: bold;
+    text-anchor: middle;
+}
+
+.hsm-export .issue {
+    display: none;
+}

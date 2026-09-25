@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HSM Modeler</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='6' width='26' height='20' rx='6' fill='%23fefece' stroke='%23a80036' stroke-width='2'/%3E%3Cline x1='3' y1='13' x2='29' y2='13' stroke='%23a80036' stroke-width='2'/%3E%3C/svg%3E" />
+</head>
+<body>
+    <header class="toolbar">
+        <div class="brand" title="Hierarchical State Machine Modeler">
+            <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true"><rect x="3" y="6" width="26" height="20" rx="6" fill="#fefece" stroke="#a80036" stroke-width="2"/><line x1="3" y1="13" x2="29" y2="13" stroke="#a80036" stroke-width="2"/><circle cx="11" cy="20" r="2.5" fill="#000"/><path d="M14 20 H20" stroke="#a80036" stroke-width="1.5"/><path d="M22 20 l-3 -2 v4 z" fill="#a80036"/></svg>
+            <span>HSM Modeler</span>
+        </div>
+        <div class="group">
+            <select id="example-select" title="Load an example">
+                <option value="">Examples…</option>
+            </select>
+            <button id="btn-new" title="New state machine">New</button>
+            <button id="btn-open" title="Open a .hsm file">Open…</button>
+            <button id="btn-save" title="Download the model (.hsm)">Save</button>
+            <input type="file" id="file-input" accept=".hsm,.txt" hidden />
+        </div>
+        <div class="group">
+            <button id="btn-undo" title="Undo (Ctrl+Z)">↶</button>
+            <button id="btn-redo" title="Redo (Ctrl+Y)">↷</button>
+            <button id="btn-format" title="Format the text (Shift+Alt+F)">Format</button>
+        </div>
+        <div class="group">
+            <label><span class="label-text">Layout</span>
+                <select id="direction-select">
+                    <option value="DOWN">Top → bottom</option>
+                    <option value="RIGHT">Left → right</option>
+                </select>
+            </label>
+            <label><span class="label-text">Edges</span>
+                <select id="routing-select">
+                    <option value="SPLINES">Splines</option>
+                    <option value="ORTHOGONAL">Orthogonal</option>
+                    <option value="POLYLINE">Polyline</option>
+                </select>
+            </label>
+            <label><span class="label-text">Theme</span>
+                <select id="theme-select">
+                    <option value="classic">PlantUML classic</option>
+                    <option value="modern">PlantUML modern</option>
+                    <option value="dark">Dark</option>
+                </select>
+            </label>
+        </div>
+        <div class="spacer"></div>
+        <div class="group">
+            <button id="btn-svg" title="Export the diagram as SVG">Export SVG</button>
+            <button id="btn-plantuml" title="Show the model as PlantUML">PlantUML</button>
+        </div>
+    </header>
+    <main>
+        <section id="editor-pane">
+            <div class="pane-title">Model <span id="file-name"></span></div>
+            <div id="editor"></div>
+        </section>
+        <div id="splitter" title="Drag to resize"></div>
+        <section id="diagram-pane">
+            <div id="palette" role="toolbar" aria-label="Tools"></div>
+            <div id="diagram-area" class="theme-classic">
+                <div id="sprotty"></div>
+                <div id="sprotty_hidden"></div>
+                <div id="diagram-banner" hidden></div>
+                <div id="diagram-hint"></div>
+            </div>
+            <aside id="properties"></aside>
+        </section>
+    </main>
+    <footer id="statusbar">
+        <span id="status-message"></span>
+        <span class="spacer"></span>
+        <span id="status-problems"></span>
+    </footer>
+    <div id="modal" hidden>
+        <div class="modal-dialog">
+            <div class="modal-header"><span id="modal-title"></span><button id="modal-close" title="Close">✕</button></div>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

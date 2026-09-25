@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react",
+    "jsxFactory": "svg",
+    "types": ["vite/client"],
+    "noEmit": true,
+    "declaration": false,
+    "paths": {
+      "hsm-language": ["../language/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"]
+}
