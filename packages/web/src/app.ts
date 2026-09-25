@@ -1,4 +1,4 @@
-import * as monaco from 'monaco-editor';
+import { monaco } from './monaco.js';
 import type { Container } from 'inversify';
 import { LocalModelSource, TYPES, type IActionDispatcher, type SModelElementImpl } from 'sprotty';
 import { FitToScreenAction, SelectAction, SelectAllAction, CenterAction } from 'sprotty-protocol';
@@ -14,6 +14,7 @@ import { createDiagramContainer } from './diagram/di.config.js';
 import type { DiagramCallbacks } from './diagram/listeners.js';
 import { toSchema, type Issue } from './diagram/model.js';
 import { canvasTextMeasure } from './diagram/text-measure.js';
+import { createWorkerElk } from './diagram/elk.js';
 import { byId, download, h } from './ui/dom.js';
 import { Icons } from './ui/icons.js';
 import { closeInlineEditor, showInlineEditor } from './ui/inline-editor.js';
@@ -84,12 +85,15 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
     private pendingSelectOffset?: number;
     private pendingRename?: string;
     private fileName = 'statemachine.hsm';
+    /** Fit the diagram to the screen once the next layout has been rendered. */
+    private fitOnNextRender = false;
 
     private tool: Tool = 'select';
     private stickyTool = false;
     private pendingSource?: string;
     readonly selection = new Set<string>();
     private settings: Settings = { direction: 'DOWN', routing: 'SPLINES', theme: 'classic' };
+    private readonly elk = createWorkerElk();
 
     async start(): Promise<void> {
         this.loadSettings();
@@ -233,7 +237,8 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         direction.addEventListener('change', () => {
             this.settings.direction = direction.value as LayoutDirection;
             this.saveSettings();
-            this.update(true).then(() => this.fit());
+            this.fitOnNextRender = true;
+            this.update(true);
         });
         const routing = byId<HTMLSelectElement>('routing-select');
         routing.value = this.settings.routing;
@@ -369,11 +374,20 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         if (!forceLayout && this.state?.parsed.text === text) {
             return;
         }
-        const layout = await layoutStateMachine(parsed.model, {
-            direction: this.settings.direction,
-            routing: this.settings.routing,
-            measure: canvasTextMeasure
-        });
+        let layout: LayoutResult;
+        try {
+            layout = await layoutStateMachine(parsed.model, {
+                direction: this.settings.direction,
+                routing: this.settings.routing,
+                measure: canvasTextMeasure,
+                elk: this.elk
+            });
+        } catch (error) {
+            console.error(error);
+            banner.hidden = false;
+            banner.textContent = `The diagram layout failed: ${error instanceof Error ? error.message : error}`;
+            return;
+        }
         if (version !== this.updateVersion) {
             return;
         }
@@ -430,6 +444,10 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
             requestAnimationFrame(() => this.fit(false));
         } else {
             await this.modelSource.updateModel(schema);
+            if (this.fitOnNextRender) {
+                this.fitOnNextRender = false;
+                requestAnimationFrame(() => this.fit(false));
+            }
         }
         this.renderPropertiesPanel();
     }
@@ -569,8 +587,9 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         }
         this.selection.clear();
         this.pendingSource = undefined;
+        this.fitOnNextRender = true;
         this.editor.setValue(text);
-        this.update(true).then(() => this.fit());
+        this.update(true);
     }
 
     // -----------------------------------------------------------------------------------------

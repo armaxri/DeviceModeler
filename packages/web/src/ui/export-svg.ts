@@ -15,6 +15,7 @@ export function exportSvg(container: HTMLElement, width: number, height: number,
     svg.setAttribute('width', `${Math.ceil(width)}`);
     svg.setAttribute('height', `${Math.ceil(height)}`);
     svg.removeAttribute('style');
+    svg.removeAttribute('id');
     svg.removeAttribute('tabindex');
     svg.classList.add(themeClass, 'hsm-export');
     const viewport = svg.querySelector(':scope > g');

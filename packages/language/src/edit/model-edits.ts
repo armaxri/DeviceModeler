@@ -151,11 +151,7 @@ export class ModelEditor {
     private readonly indentUnit: string;
 
     constructor(readonly text: string, readonly machine: ast.StateMachine) {
-        const match = /^([ \t]+)\S/m.exec(text);
-        this.indentUnit = match ? (match[1].startsWith('\t') ? '\t' : match[1]) : '    ';
-        if (this.indentUnit.length > 8 || this.indentUnit.length === 0) {
-            this.indentUnit = '    ';
-        }
+        this.indentUnit = detectIndentUnit(text);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -597,6 +593,21 @@ export class ModelEditor {
         }
         return { offset: start, length: end - start, text: '' };
     }
+}
+
+/** The smallest indentation used in the text (ignoring block comment continuation lines). */
+function detectIndentUnit(text: string): string {
+    let unit: string | undefined;
+    for (const match of text.matchAll(/^([ \t]+)([^\s*])/gm)) {
+        const indent = match[1];
+        if (indent.startsWith('\t')) {
+            return '\t';
+        }
+        if (!unit || indent.length < unit.length) {
+            unit = indent;
+        }
+    }
+    return unit && unit.length >= 2 && unit.length <= 8 ? unit : '    ';
 }
 
 function defaultNamePrefix(kind: NewVertexKind): string {

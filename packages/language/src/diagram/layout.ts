@@ -1,5 +1,4 @@
 import type { AstNode } from 'langium';
-import ElkModule from 'elkjs/lib/elk.bundled.js';
 import type { ELK as ElkApi, ElkExtendedEdge, ElkNode, LayoutOptions } from 'elkjs/lib/elk-api.js';
 import * as ast from '../generated/ast.js';
 import { scopeOf, transitionLabel, type ScopeContainer } from '../model-utils.js';
@@ -47,11 +46,12 @@ export function finalNodeId(scopeId: string): string {
 type ElkInstance = Pick<ElkApi, 'layout'>;
 let defaultElk: ElkInstance | undefined;
 
-function createDefaultElk(): ElkInstance {
+/** Creates an ELK instance running on the current thread (loaded on demand). */
+async function createDefaultElk(): Promise<ElkInstance> {
     // elkjs is a CommonJS module: depending on the module loader the constructor is the default export or nested in it
     type ElkConstructor = new () => ElkInstance;
-    const module = ElkModule as unknown as ElkConstructor | { default: ElkConstructor };
-    const Constructor = typeof module === 'function' ? module : module.default;
+    const module = await import('elkjs/lib/elk.bundled.js') as unknown as { default: ElkConstructor | { default: ElkConstructor } };
+    const Constructor = typeof module.default === 'function' ? module.default : module.default.default;
     return new Constructor();
 }
 
@@ -66,7 +66,7 @@ export async function layoutStateMachine(machine: ast.StateMachine, options: Lay
         measure: options.measure ?? approximateTextMeasure,
         elkOptions: options.elkOptions
     });
-    const elk = options.elk as ElkInstance | undefined ?? (defaultElk ??= createDefaultElk());
+    const elk = options.elk as ElkInstance | undefined ?? (defaultElk ??= await createDefaultElk());
     return builder.build(elk);
 }
 

@@ -1,4 +1,4 @@
-import * as monaco from 'monaco-editor';
+import { monaco } from './monaco.js';
 import { HsmModelLoader, HsmMonarchSyntax, type ParsedModel } from 'hsm-language';
 import type { Diagnostic, Range, TextEdit } from 'vscode-languageserver-types';
 

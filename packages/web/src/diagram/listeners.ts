@@ -1,6 +1,6 @@
 import { inject, injectable } from 'inversify';
 import {
-    MouseListener, SelectMouseListener, TYPES, isSelectable,
+    MouseListener, SelectMouseListener, TYPES,
     type IActionHandler, type SModelElementImpl, type SModelRootImpl, type ViewerOptions
 } from 'sprotty';
 import { BringToFrontAction, SelectAction, SelectAllAction, type Action } from 'sprotty-protocol';
@@ -131,4 +131,3 @@ export class SelectionTracker implements IActionHandler {
     }
 }
 
-export { isSelectable };

@@ -62,6 +62,12 @@ describe('ModelEditor', () => {
         B1 -> B2 : next`);
     });
 
+    test('indentation ignores block comments', async () => {
+        const text = '/*\n * comment\n */\nstatemachine M {\n  [*] -> A\n  state A\n}\n';
+        const { text: result } = await edit(text, (e, f) => e.addVertex(f('A') as ast.State, 'state', 'B'));
+        expect(result).toContain('  state A {\n    state B\n  }');
+    });
+
     test('add state to empty body', async () => {
         const { text } = await edit('statemachine M {}', (e, _f, m) => e.addVertex(m, 'state', 'X'));
         expect(text).toBe(`statemachine M {\n    state X\n}`);

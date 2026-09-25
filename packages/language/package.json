@@ -34,6 +34,7 @@
   "devDependencies": {
     "@types/node": "^22.20.4",
     "langium-cli": "~4.4.0",
-    "vitest": "~3.2.7"
+    "vitest": "~3.2.7",
+    "vscode-languageserver-textdocument": "~1.0.12"
   }
 }

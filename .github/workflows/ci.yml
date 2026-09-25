@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check that the generated Langium sources are up to date
+        run: |
+          npm run langium:generate
+          git diff --exit-code -- packages/language/src/generated packages/language/src/syntaxes packages/language/syntaxes
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
