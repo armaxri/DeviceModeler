@@ -1,0 +1,41 @@
+// A pedestrian traffic light - hierarchical states with entry actions.
+statemachine TrafficLight {
+    [*] -> Off
+
+    state Off {
+        entry / "allLightsOff()"
+    }
+
+    state Operating {
+        [*] -> Red
+
+        state Red {
+            entry / "switchOn(RED)"
+        }
+        state RedYellow {
+            entry / "switchOn(RED, YELLOW)"
+        }
+        state Green {
+            entry / "switchOn(GREEN)"
+            on pedestrianRequest / "requested = true"
+        }
+        state Yellow {
+            entry / "switchOn(YELLOW)"
+        }
+
+        Red -> RedYellow : timeout
+        RedYellow -> Green : timeout
+        Green -> Yellow : timeout [ "requested" ]
+        Yellow -> Red : timeout
+    }
+
+    state Blinking {
+        do / "blink(YELLOW)"
+    }
+
+    Off -> Operating : powerOn
+    Operating -> Blinking : failure / "reportError()"
+    Blinking -> Operating : reset
+    Operating -> Off : powerOff
+    Blinking -> Off : powerOff
+}

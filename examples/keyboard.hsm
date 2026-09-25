@@ -1,0 +1,30 @@
+// Orthogonal regions: caps lock and num lock are independent of each other.
+statemachine Keyboard {
+    [*] -> Active
+
+    state Active {
+        region CapsLock {
+            [*] -> CapsOff
+            state CapsOff
+            state CapsOn {
+                entry / "led(CAPS, ON)"
+                exit / "led(CAPS, OFF)"
+            }
+            CapsOff -> CapsOn : capsLock
+            CapsOn -> CapsOff : capsLock
+        }
+        region NumLock {
+            [*] -> NumOff
+            state NumOff
+            state NumOn
+            NumOff -> NumOn : numLock
+            NumOn -> NumOff : numLock
+        }
+    }
+
+    state Suspended
+
+    Active -> Suspended : suspend
+    Suspended -> Active : wakeUp
+    Active -> [*] : unplug
+}

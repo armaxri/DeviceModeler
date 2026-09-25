@@ -1,0 +1,23 @@
+{
+  "name": "hsm-workspace",
+  "private": true,
+  "description": "Langium based modeling environment for hierarchical state machines",
+  "type": "module",
+  "workspaces": [
+    "packages/language",
+    "packages/web"
+  ],
+  "scripts": {
+    "langium:generate": "npm run langium:generate -w packages/language",
+    "build": "npm run build -w packages/language && npm run build -w packages/web",
+    "dev": "npm run langium:generate && npm run dev -w packages/web",
+    "test": "npm run test -w packages/language",
+    "typecheck": "npm run typecheck -w packages/language && npm run typecheck -w packages/web"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  },
+  "engines": {
+    "node": ">=20.10.0"
+  }
+}

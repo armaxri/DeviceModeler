@@ -1,0 +1,39 @@
+{
+  "name": "hsm-language",
+  "version": "0.1.0",
+  "description": "Langium language, validation, layout and model edits for hierarchical state machines",
+  "type": "module",
+  "main": "./out/index.js",
+  "types": "./out/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./out/index.d.ts",
+      "default": "./out/index.js"
+    }
+  },
+  "bin": {
+    "hsm": "./bin/cli.js"
+  },
+  "files": [
+    "bin",
+    "out",
+    "src"
+  ],
+  "scripts": {
+    "langium:generate": "langium generate",
+    "build": "langium generate && tsc -b tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "commander": "~15.0.0",
+    "elkjs": "~0.11.1",
+    "langium": "~4.4.0",
+    "vscode-languageserver-types": "~3.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "langium-cli": "~4.4.0",
+    "vitest": "~3.2.7"
+  }
+}
