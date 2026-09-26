@@ -40,7 +40,13 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 
 ## Phase 3 – Migration from itemis CREATE 🚧
 
-- 🚧 `.sct` importer (CLI `hsm import`, "Open…" in the web editor)
+- ✅ `.sct` importer (CLI `hsm import`, "Open…" in the web editor); 201 of the 215 `.sct` files of
+  the upstream itemis repository imported without syntax or linking errors (before the grammar
+  additions below)
+- ✅ Grammar additions found by the importer: events as conditions (`[e1 && x > 0]`), `x++` / `x--`,
+  local reactions of the statechart itself
+- 📋 Remaining gaps: `null`, type aliases, transitions handling several exit nodes or entry points at
+  once, entry points with the same name in several orthogonal regions
 - 📋 Import test suite based on real-world models from users
 - 💭 Keep manual layout from `.sct` notation models (saved positions)
 
