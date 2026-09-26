@@ -7,6 +7,8 @@ import { HsmModelLoader } from '../hsm-document.js';
 import { generatePlantUml } from '../generator/plantuml.js';
 import { layoutStateMachine } from '../diagram/layout.js';
 import { importSct } from '../importer/sct-importer.js';
+import { StatechartInterpreter } from '../simulation/interpreter.js';
+import { formatTraceEntry, runScenario, validateScenario, type ScenarioStep } from '../simulation/scenario.js';
 
 const severities = ['', 'error', 'warning', 'info', 'hint'];
 
@@ -65,6 +67,49 @@ export function createProgram(): Command {
             console.log(JSON.stringify(graph, undefined, 2));
         });
 
+    program.command('simulate')
+        .argument('<file>', '.hsm file')
+        .option('-s, --script <scenario>', 'scenario file (JSON, see packages/language/test/scenarios/README.md) to run against the model')
+        .option('-e, --events <events>', 'without script: comma separated in events raised one after another (cycle based: each followed by a run cycle)')
+        .option('-q, --quiet', 'print only the active states after each step, not the trace')
+        .description('runs the state machine in the interpreter and prints the trace and the active states')
+        .action(async (file: string, options: { script?: string, events?: string, quiet?: boolean }) => {
+            const { parsed, errors } = await load(file);
+            if (errors > 0 || parsed.hasSyntaxErrors) {
+                process.exitCode = 1;
+                return;
+            }
+            const printTrace = options.quiet ? () => { /* quiet */ } : (line: string) => console.log(line);
+            if (options.script) {
+                const scenario = validateScenario(JSON.parse(await fs.readFile(options.script, 'utf-8')), options.script);
+                const result = runScenario(parsed.model, scenario, {
+                    onTrace: entry => printTrace(formatTraceEntry(entry)),
+                    onStep: (step, index, sim) => {
+                        console.log(`#${index} ${describeStep(step)}${step.expect ? '' : `  -> [${sim.activeStates.join(', ')}]`}`);
+                    },
+                    onFailure: failure => console.log(`   FAILED: ${failure.message}`)
+                });
+                for (const failure of result.failures) {
+                    console.error(`${options.script}: step ${failure.step}: ${failure.message}`);
+                }
+                console.log(result.passed ? `${scenario.name ?? options.script}: passed` : `${scenario.name ?? options.script}: FAILED`);
+                process.exitCode = result.passed ? 0 : 1;
+                return;
+            }
+            const sim = new StatechartInterpreter(parsed.model, { onTrace: entry => printTrace(formatTraceEntry(entry)) });
+            console.log(`> enter (${sim.executionMode === 'cycle' ? `cycle based, ${sim.cyclePeriod} ms` : 'event driven'}, ${sim.executionOrder})`);
+            sim.enter();
+            console.log(`  active: [${sim.activeStates.join(', ')}]`);
+            for (const event of (options.events ?? '').split(',').map(e => e.trim()).filter(e => e)) {
+                console.log(`> raise ${event}`);
+                sim.raise(event);
+                if (sim.executionMode === 'cycle') {
+                    sim.runCycle();
+                }
+                console.log(`  active: [${sim.activeStates.join(', ')}]${sim.isFinal() ? ' (final)' : ''}`);
+            }
+        });
+
     program.command('import')
         .argument('<file>', 'itemis CREATE / YAKINDU statechart (.sct)')
         .option('-o, --out <file>', 'output file (default: <file>.hsm)')
@@ -80,6 +125,17 @@ export function createProgram(): Command {
         });
 
     return program;
+}
+
+/** Short text of a scenario step, e.g. `raise play` or `expect {"active":["Closed"]}`. */
+function describeStep(step: ScenarioStep): string {
+    const { comment: _comment, expectError, value: eventValue, ...action } = step;
+    const [key, value] = Object.entries(action)[0] ?? ['?', ''];
+    let text = value === true ? key : `${key} ${typeof value === 'string' ? value : JSON.stringify(value)}`;
+    if (eventValue !== undefined) {
+        text += ` : ${JSON.stringify(eventValue)}`;
+    }
+    return `${text}${expectError !== undefined ? ` (expecting error '${expectError}')` : ''}`;
 }
 
 createProgram().parseAsync(process.argv).catch(error => {

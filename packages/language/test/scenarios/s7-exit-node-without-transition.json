@@ -1,0 +1,24 @@
+{
+    "name": "s7-exit-node-without-transition",
+    "description": "Reaching an exit node without enabled # X> transition is a runtime error.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event fail",
+        "    [*] -> P",
+        "    state P {",
+        "        [*] -> A",
+        "        exit Error",
+        "        state A",
+        "        A -> Error : fail",
+        "    }",
+        "    state Failed",
+        "    P -> Failed : [false] # Error>",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "fail"},
+        {"runCycle": true, "expectError": "Exit node 'Error'"}
+    ]
+}

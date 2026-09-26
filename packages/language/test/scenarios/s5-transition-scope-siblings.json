@@ -1,0 +1,27 @@
+{
+    "name": "s5-transition-scope-siblings",
+    "description": "A transition between sub states of a composite state does not exit the composite state (the scope is its region).",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event e",
+        "        var entries : integer",
+        "        var exits : integer",
+        "    [*] -> P",
+        "    state P {",
+        "        entry / entries += 1",
+        "        exit / exits += 1",
+        "        [*] -> A",
+        "        state A",
+        "        state B",
+        "        A -> B : e",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "e"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.B"], "variables": {"entries": 1, "exits": 0}}}
+    ]
+}

@@ -1,0 +1,22 @@
+{
+    "name": "s8-initial-transition-effect",
+    "description": "Entering a region by default takes its initial transition and executes its effect.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        var log : string",
+        "    [*] -> P : / log = \"top \"",
+        "    state P {",
+        "        entry / log = log + \"P \"",
+        "        [*] -> A : / log = log + \"init \"",
+        "        state A {",
+        "            entry / log = log + \"A\"",
+        "        }",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"configuration": ["P.A"], "variables": {"log": "top P init A"}}}
+    ]
+}

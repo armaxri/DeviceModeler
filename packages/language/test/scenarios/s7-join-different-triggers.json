@@ -1,0 +1,40 @@
+{
+    "name": "s7-join-different-triggers",
+    "description": "The incoming transitions of a join may have different triggers; the join fires only when all are enabled in the same step.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event jc",
+        "        in event jd",
+        "    [*] -> P",
+        "    state P {",
+        "        region R1 {",
+        "            [*] -> C2",
+        "            state C2",
+        "        }",
+        "        region R2 {",
+        "            [*] -> D2",
+        "            state D2",
+        "        }",
+        "    }",
+        "    state Done",
+        "    sync Sync1",
+        "    C2 -> Sync1 : jc",
+        "    D2 -> Sync1 : jd",
+        "    Sync1 -> Done",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "jc"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.C2", "P.D2"]}},
+        {"raise": "jd"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.C2", "P.D2"]}},
+        {"raise": "jc"},
+        {"raise": "jd"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Done"]}}
+    ]
+}

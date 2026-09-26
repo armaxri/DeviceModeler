@@ -1,0 +1,24 @@
+{
+    "name": "s3-event-driven-only-raised-event",
+    "description": "Event driven: only the raised event is present in its step.",
+    "text": [
+        "statemachine M {",
+        "    @EventDriven",
+        "    interface:",
+        "        in event a",
+        "        in event b",
+        "    [*] -> S",
+        "    state S",
+        "    state T",
+        "    S -> T : a [false]",
+        "    S -> T : b",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "a"},
+        {"expect": {"configuration": ["S"]}},
+        {"raise": "b"},
+        {"expect": {"configuration": ["T"]}}
+    ]
+}

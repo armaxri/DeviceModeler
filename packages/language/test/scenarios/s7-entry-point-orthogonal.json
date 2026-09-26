@@ -1,0 +1,33 @@
+{
+    "name": "s7-entry-point-orthogonal",
+    "description": "Orthogonal regions not entered through the entry point are entered by default.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "    [*] -> Idle",
+        "    state Idle",
+        "    state P {",
+        "        region R1 {",
+        "            [*] -> A",
+        "            state A",
+        "            state B",
+        "        }",
+        "        region R2 {",
+        "            [*] -> C",
+        "            entry E",
+        "            state C",
+        "            state D",
+        "            E -> D",
+        "        }",
+        "    }",
+        "    Idle -> P : go # >E",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.A", "P.D"]}}
+    ]
+}

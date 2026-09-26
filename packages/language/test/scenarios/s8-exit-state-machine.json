@@ -1,0 +1,31 @@
+{
+    "name": "s8-exit-state-machine",
+    "description": "exit() exits all active states innermost first; regions in document order.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        operation log(msg : string) : void",
+        "    [*] -> P",
+        "    state P {",
+        "        exit / log(\"P\")",
+        "        region R1 {",
+        "            [*] -> A",
+        "            state A {",
+        "                exit / log(\"A\")",
+        "            }",
+        "        }",
+        "        region R2 {",
+        "            [*] -> B",
+        "            state B {",
+        "                exit / log(\"B\")",
+        "            }",
+        "        }",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"exit": true},
+        {"expect": {"configuration": [], "calls": ["log(\"A\")", "log(\"B\")", "log(\"P\")"]}}
+    ]
+}

@@ -1,0 +1,30 @@
+{
+    "name": "s7-choice-into-composite",
+    "description": "A choice inside a composite state can target a state outside of it; the composite state is then exited.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "        var leave : boolean = true",
+        "        operation log(msg : string) : void",
+        "    [*] -> P",
+        "    state P {",
+        "        exit / log(\"exit P\")",
+        "        [*] -> A",
+        "        state A",
+        "        state B",
+        "        choice C",
+        "        A -> C : go / log(\"effect 1\")",
+        "        C -> Outside : [leave] / log(\"effect 2\")",
+        "        C -> B : else",
+        "    }",
+        "    state Outside",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Outside"], "calls": ["log(\"effect 1\")", "log(\"exit P\")", "log(\"effect 2\")"]}}
+    ]
+}

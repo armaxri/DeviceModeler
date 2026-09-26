@@ -1,0 +1,40 @@
+{
+    "name": "s7-deep-history",
+    "description": "Deep history restores the recorded configuration recursively.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event next",
+        "        in event leave",
+        "        in event back",
+        "    [*] -> P",
+        "    state P {",
+        "        [*] -> A",
+        "        deephistory H",
+        "        state A",
+        "        state B {",
+        "            [*] -> B1",
+        "            state B1",
+        "            state B2",
+        "            B1 -> B2 : next",
+        "        }",
+        "        A -> B : next",
+        "    }",
+        "    state Q",
+        "    P -> Q : leave",
+        "    Q -> H : back",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "next"},
+        {"runCycle": true},
+        {"raise": "next"},
+        {"runCycle": true},
+        {"raise": "leave"},
+        {"runCycle": true},
+        {"raise": "back"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.B.B2"]}}
+    ]
+}

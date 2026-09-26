@@ -1,0 +1,26 @@
+{
+    "name": "s5-self-transition",
+    "description": "A self transition exits and re-enters the state.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event e",
+        "        var entries : integer",
+        "        var exits : integer",
+        "    [*] -> A",
+        "    state A {",
+        "        entry / entries += 1",
+        "        exit / exits += 1",
+        "    }",
+        "    A -> A : e",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "e"},
+        {"runCycle": true},
+        {"raise": "e"},
+        {"runCycle": true},
+        {"expect": {"variables": {"entries": 3, "exits": 2}}}
+    ]
+}

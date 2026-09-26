@@ -1,0 +1,23 @@
+{
+    "name": "s2-bitwise-operators",
+    "description": "Bitwise and shift operators on integers, compound assignments.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        var a : integer = 12",
+        "        var b : integer",
+        "        var c : integer",
+        "        var d : integer",
+        "        var e : integer",
+        "        var f : integer",
+        "    [*] -> A",
+        "    state A {",
+        "        entry / b = a & 10; c = a | 3; d = a ^ 5; e = ~a; f = 1 << 4; f >>= 2; a <<= 1",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"a": 24, "b": 8, "c": 15, "d": 9, "e": -13, "f": 4}}}
+    ]
+}

@@ -1,0 +1,29 @@
+{
+    "name": "s3-event-driven-internal-queue",
+    "description": "Event driven: internal events are queued and processed in separate steps after the current step, in order.",
+    "text": [
+        "statemachine M {",
+        "    @EventDriven",
+        "    interface:",
+        "        in event go",
+        "        var log : string",
+        "    internal:",
+        "        event i1",
+        "        event i2",
+        "    [*] -> A",
+        "    state A",
+        "    state B",
+        "    state C",
+        "    state D",
+        "    A -> B : go / raise i1; raise i2; log = log + \"A\"",
+        "    B -> C : i1 / log = log + \"B\"",
+        "    C -> D : i2 / log = log + \"C\"",
+        "    B -> D : i2 / log = log + \"X\"",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "go"},
+        {"expect": {"configuration": ["D"], "variables": {"log": "ABC"}}}
+    ]
+}

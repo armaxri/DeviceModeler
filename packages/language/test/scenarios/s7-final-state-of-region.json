@@ -1,0 +1,37 @@
+{
+    "name": "s7-final-state-of-region",
+    "description": "Entering the final state of a region makes the region final; the composite state stays active.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event a",
+        "        in event b",
+        "    [*] -> P",
+        "    state P {",
+        "        region R1 {",
+        "            [*] -> A",
+        "            state A",
+        "            A -> [*] : a",
+        "        }",
+        "        region R2 {",
+        "            [*] -> B",
+        "            state B",
+        "            B -> [*] : b",
+        "        }",
+        "    }",
+        "    state Done",
+        "    P -> Done : [!active(A) && !active(B)]",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "a"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.B"], "active": ["P"], "final": false}},
+        {"raise": "b"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P"]}},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Done"]}}
+    ]
+}

@@ -1,0 +1,42 @@
+{
+    "name": "s7-choice",
+    "description": "Choice: guarded branches are checked in priority order, the else branch only if none is enabled.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "        var x : integer",
+        "    [*] -> A",
+        "    state A",
+        "    state Neg",
+        "    state Zero",
+        "    state Pos",
+        "    choice C",
+        "    A -> C : go",
+        "    C -> Zero : else",
+        "    C -> Neg : [x < 0]",
+        "    C -> Pos : [x > 0]",
+        "    Neg -> A : go",
+        "    Zero -> A : go",
+        "    Pos -> A : go",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Zero"]}},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"set": {"x": 5}},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Pos"]}},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"set": {"x": -5}},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Neg"]}}
+    ]
+}

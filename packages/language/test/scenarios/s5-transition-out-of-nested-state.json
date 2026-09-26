@@ -1,0 +1,31 @@
+{
+    "name": "s5-transition-out-of-nested-state",
+    "description": "A transition from a deeply nested state to an outer state exits all states below the scope, innermost first.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event e",
+        "        operation log(msg : string) : void",
+        "    [*] -> P",
+        "    state P {",
+        "        exit / log(\"P\")",
+        "        [*] -> Q",
+        "        state Q {",
+        "            exit / log(\"Q\")",
+        "            [*] -> R",
+        "            state R {",
+        "                exit / log(\"R\")",
+        "            }",
+        "        }",
+        "    }",
+        "    state Out",
+        "    R -> Out : e",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "e"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Out"], "calls": ["log(\"R\")", "log(\"Q\")", "log(\"P\")"]}}
+    ]
+}

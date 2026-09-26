@@ -1,0 +1,26 @@
+{
+    "name": "s7-history-without-record-default-transition",
+    "description": "Without recorded history the default transition of the history pseudo state is taken.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "    [*] -> Q",
+        "    state P {",
+        "        [*] -> A",
+        "        history H",
+        "        state A",
+        "        state B",
+        "        H -> B",
+        "    }",
+        "    state Q",
+        "    Q -> H : go",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.B"]}}
+    ]
+}

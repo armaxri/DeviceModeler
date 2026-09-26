@@ -1,0 +1,17 @@
+{
+    "name": "example-traffic-light-no-pedestrian",
+    "description": "Traffic light: an after timer fires once; if the guard is false at that time, the transition is not taken later.",
+    "model": "../../../../examples/traffic-light.hsm",
+    "steps": [
+        {"enter": true},
+        {"raise": "powerOn"},
+        {"runCycle": true},
+        {"runFor": 22000},
+        {"expect": {"configuration": ["Operating.Green"]}},
+        {"runFor": 60000},
+        {"expect": {"configuration": ["Operating.Green"]}},
+        {"raise": "Pedestrian.request"},
+        {"runFor": 100},
+        {"expect": {"configuration": ["Operating.Green"], "variables": {"Pedestrian.waiting": true}}}
+    ]
+}

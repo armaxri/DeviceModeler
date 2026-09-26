@@ -1,0 +1,25 @@
+{
+    "name": "s5-guard-only-transition",
+    "description": "A guard-only transition is enabled in every step in which its guard holds.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        var x : integer",
+        "    [*] -> A",
+        "    state A {",
+        "        always / x += 1",
+        "    }",
+        "    state B",
+        "    A -> B : [x >= 3]",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"runCycle": true},
+        {"runCycle": true},
+        {"runCycle": true},
+        {"expect": {"configuration": ["A"], "variables": {"x": 3}}},
+        {"runCycle": true},
+        {"expect": {"configuration": ["B"], "variables": {"x": 3}}}
+    ]
+}

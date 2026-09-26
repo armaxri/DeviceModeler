@@ -1,0 +1,33 @@
+{
+    "name": "s7-join-without-trigger-never-fires",
+    "description": "Incoming transitions of a join without trigger and guard are never enabled, so the join never fires.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "    [*] -> P",
+        "    state P {",
+        "        region R1 {",
+        "            [*] -> A",
+        "            state A",
+        "        }",
+        "        region R2 {",
+        "            [*] -> B",
+        "            state B",
+        "        }",
+        "    }",
+        "    state Done",
+        "    sync J",
+        "    A -> J",
+        "    B -> J",
+        "    J -> Done",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"runCycle": true},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.A", "P.B"]}}
+    ]
+}

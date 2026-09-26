@@ -1,0 +1,26 @@
+{
+    "name": "s7-junction",
+    "description": "Junctions behave like choices; branches without guard are default branches.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "        var flag : boolean",
+        "    [*] -> A",
+        "    state A",
+        "    state B",
+        "    state D",
+        "    junction J",
+        "    A -> J : go",
+        "    J -> D",
+        "    J -> B : [flag]",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"set": {"flag": true}},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["B"]}}
+    ]
+}

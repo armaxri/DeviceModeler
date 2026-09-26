@@ -1,0 +1,36 @@
+{
+    "name": "s5-several-triggers-and-guard",
+    "description": "A reaction is enabled if one of its triggers matches and its guard holds.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event a",
+        "        in event b",
+        "        in event c",
+        "        var ok : boolean",
+        "    [*] -> A",
+        "    state A",
+        "    state B",
+        "    A -> B : a, b [ok]",
+        "    B -> A : c",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "b"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["A"]}},
+        {"set": {"ok": true}},
+        {"raise": "c"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["A"]}},
+        {"raise": "b"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["B"]}},
+        {"raise": "c"},
+        {"runCycle": true},
+        {"raise": "a"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["B"]}}
+    ]
+}

@@ -15,3 +15,4 @@ export * from './hsm-linker.js';
 export * from './hsm-expression-validator.js';
 export * from './hsm-typesystem.js';
 export * from './importer/sct-importer.js';
+export * from './simulation/index.js';

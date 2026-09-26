@@ -1,0 +1,19 @@
+{
+    "name": "s2-operation-arguments",
+    "description": "Operation calls with positional, named and variable arguments; integer arguments of real parameters are converted.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        operation move(x : integer, y : integer, speed : real) : void",
+        "        operation print(format : string, args... : integer) : void",
+        "    [*] -> A",
+        "    state A {",
+        "        entry / move(1, speed = 2, y = 3); print(\"a\"); print(\"b\", 1, 2, 3)",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"calls": ["move(1, 3, 2.0)", "print(\"a\")", "print(\"b\", 1, 2, 3)"]}}
+    ]
+}

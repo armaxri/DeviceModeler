@@ -1,0 +1,42 @@
+{
+    "name": "s7-shallow-history",
+    "description": "Shallow history restores the recorded direct sub state and enters it by default.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event next",
+        "        in event leave",
+        "        in event back",
+        "    [*] -> P",
+        "    state P {",
+        "        [*] -> A",
+        "        history H",
+        "        state A",
+        "        state B {",
+        "            [*] -> B1",
+        "            state B1",
+        "            state B2",
+        "            B1 -> B2 : next",
+        "        }",
+        "        A -> B : next",
+        "    }",
+        "    state Q",
+        "    P -> Q : leave",
+        "    Q -> H : back",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "next"},
+        {"runCycle": true},
+        {"raise": "next"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.B.B2"]}},
+        {"raise": "leave"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Q"]}},
+        {"raise": "back"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.B.B1"]}}
+    ]
+}

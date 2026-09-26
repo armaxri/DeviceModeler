@@ -1,0 +1,30 @@
+{
+    "name": "s4-child-first-priority",
+    "description": "Child first: a transition of a sub state has priority over transitions of its parent.",
+    "text": [
+        "statemachine M {",
+        "    @ChildFirstExecution",
+        "    interface:",
+        "        in event e",
+        "        var log : string",
+        "    [*] -> P",
+        "    state P {",
+        "        [*] -> C1",
+        "        state C1",
+        "        state C2",
+        "        C1 -> C2 : e / log = log + \"child\"",
+        "    }",
+        "    state Q",
+        "    P -> Q : e / log = log + \"parent\"",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "e"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.C2"], "variables": {"log": "child"}}},
+        {"raise": "e"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Q"], "variables": {"log": "childparent"}}}
+    ]
+}

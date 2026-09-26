@@ -1,0 +1,22 @@
+{
+    "name": "s6-event-driven-timer-chain",
+    "description": "Event driven: timers started in a step triggered by a timer are relative to the expiry time.",
+    "text": [
+        "statemachine M {",
+        "    @EventDriven",
+        "    [*] -> A",
+        "    state A",
+        "    state B",
+        "    state C",
+        "    A -> B : after 100 ms",
+        "    B -> C : after 100 ms",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"advance": 199},
+        {"expect": {"configuration": ["B"]}},
+        {"advance": 1},
+        {"expect": {"configuration": ["C"]}}
+    ]
+}

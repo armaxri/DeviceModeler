@@ -1,0 +1,21 @@
+{
+    "name": "s6-event-driven-timers-in-expiry-order",
+    "description": "Event driven: each expired timer triggers its own step at its expiry time, in expiry order.",
+    "text": [
+        "statemachine M {",
+        "    @EventDriven",
+        "    interface:",
+        "        operation log(msg : string) : void",
+        "    [*] -> A",
+        "    state A {",
+        "        every 400 ms / log(\"every\")",
+        "        after 1 s / log(\"after\")",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"advance": 1300},
+        {"expect": {"calls": ["log(\"every\")", "log(\"every\")", "log(\"after\")", "log(\"every\")"]}}
+    ]
+}

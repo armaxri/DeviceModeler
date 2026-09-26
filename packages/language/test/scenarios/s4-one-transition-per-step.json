@@ -1,0 +1,22 @@
+{
+    "name": "s4-one-transition-per-step",
+    "description": "Every state takes part in at most one transition per step: states entered in a step are not processed again.",
+    "text": [
+        "statemachine M {",
+        "    [*] -> A",
+        "    state A",
+        "    state B",
+        "    state C",
+        "    A -> B : always",
+        "    B -> C : always",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"configuration": ["A"]}},
+        {"runCycle": true},
+        {"expect": {"configuration": ["B"]}},
+        {"runCycle": true},
+        {"expect": {"configuration": ["C"]}}
+    ]
+}

@@ -1,0 +1,24 @@
+{
+    "name": "s3-cycle-events-cleared",
+    "description": "Cycle based: events are cleared at the end of the cycle.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event a",
+        "        var n : integer",
+        "    [*] -> S",
+        "    state S {",
+        "        a / n += 1",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "a"},
+        {"raise": "a"},
+        {"runCycle": true},
+        {"runCycle": true},
+        {"runCycle": true},
+        {"expect": {"variables": {"n": 1}}}
+    ]
+}

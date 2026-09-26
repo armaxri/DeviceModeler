@@ -1,0 +1,19 @@
+{
+    "name": "s6-statechart-timer",
+    "description": "Time triggers of reactions of the state machine itself run while the state machine is entered.",
+    "text": [
+        "statemachine M {",
+        "    @CycleBased(100)",
+        "    interface:",
+        "        var ticks : integer",
+        "    every 1 s / ticks++",
+        "    [*] -> A",
+        "    state A",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"runFor": 3500},
+        {"expect": {"variables": {"ticks": 3}}}
+    ]
+}

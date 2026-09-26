@@ -1,0 +1,31 @@
+{
+    "name": "s4-region-transition-does-not-stop-other-regions",
+    "description": "A transition taken in one region does not prevent the processing of the next region.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event e",
+        "    [*] -> P",
+        "    state P {",
+        "        region R1 {",
+        "            [*] -> A1",
+        "            state A1",
+        "            state A2",
+        "            A1 -> A2 : e",
+        "        }",
+        "        region R2 {",
+        "            [*] -> B1",
+        "            state B1",
+        "            state B2",
+        "            B1 -> B2 : e",
+        "        }",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "e"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.A2", "P.B2"]}}
+    ]
+}

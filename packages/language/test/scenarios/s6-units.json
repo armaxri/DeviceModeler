@@ -1,0 +1,29 @@
+{
+    "name": "s6-units",
+    "description": "Time units s, ms, us and ns.",
+    "text": [
+        "statemachine M {",
+        "    @EventDriven",
+        "    interface:",
+        "        operation log(msg : string) : void",
+        "    [*] -> A",
+        "    state A {",
+        "        after 1 s / log(\"s\")",
+        "        after 1500 ms / log(\"ms\")",
+        "        after 500 us / log(\"us\")",
+        "        after 2000000 ns / log(\"ns\")",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"advance": 1},
+        {"expect": {"calls": ["log(\"us\")"]}},
+        {"advance": 1},
+        {"expect": {"calls": ["log(\"ns\")"]}},
+        {"advance": 998},
+        {"expect": {"calls": ["log(\"s\")"]}},
+        {"advance": 500},
+        {"expect": {"calls": ["log(\"ms\")"]}}
+    ]
+}

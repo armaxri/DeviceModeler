@@ -1,0 +1,32 @@
+{
+    "name": "s4-leaving-parent-stops-regions",
+    "description": "If a transition in a region leaves the parent state, the remaining regions are not processed.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event e",
+        "        var n : integer",
+        "    [*] -> P",
+        "    state P {",
+        "        region R1 {",
+        "            [*] -> A",
+        "            state A",
+        "        }",
+        "        region R2 {",
+        "            [*] -> B",
+        "            state B {",
+        "                e / n += 1",
+        "            }",
+        "        }",
+        "    }",
+        "    state Q",
+        "    A -> Q : e",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "e"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Q"], "variables": {"n": 0}}}
+    ]
+}
