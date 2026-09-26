@@ -6,6 +6,7 @@ import { createHsmServices } from '../hsm-module.js';
 import { HsmModelLoader } from '../hsm-document.js';
 import { generatePlantUml } from '../generator/plantuml.js';
 import { layoutStateMachine } from '../diagram/layout.js';
+import { importSct } from '../importer/sct-importer.js';
 
 const severities = ['', 'error', 'warning', 'info', 'hint'];
 
@@ -62,6 +63,20 @@ export function createProgram(): Command {
             const { parsed } = await load(file);
             const { graph } = await layoutStateMachine(parsed.model, { direction: options.direction });
             console.log(JSON.stringify(graph, undefined, 2));
+        });
+
+    program.command('import')
+        .argument('<file>', 'itemis CREATE / YAKINDU statechart (.sct)')
+        .option('-o, --out <file>', 'output file (default: <file>.hsm)')
+        .description('converts an itemis CREATE (.sct) statechart into an .hsm model')
+        .action(async (file: string, options: { out?: string }) => {
+            const { text, warnings } = importSct(await fs.readFile(file, 'utf-8'));
+            for (const warning of warnings) {
+                console.error(`${file}: warning: ${warning}`);
+            }
+            const out = options.out ?? file.replace(/\.sct$/, '') + '.hsm';
+            await fs.writeFile(out, text);
+            console.log(`Generated ${out}`);
         });
 
     return program;

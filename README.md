@@ -58,6 +58,7 @@ npm run build -w packages/language
 node packages/language/bin/cli.js validate examples/cd-player.hsm
 node packages/language/bin/cli.js plantuml examples/cd-player.hsm -o cd-player.puml
 node packages/language/bin/cli.js layout examples/keyboard.hsm --direction RIGHT
+node packages/language/bin/cli.js import model.sct -o model.hsm   # itemis CREATE import, see below
 ```
 
 ## The language
@@ -134,6 +135,7 @@ packages/
     src/diagram/layout.ts     AST -> PlantUML-like diagram model, laid out with ELK
     src/edit/model-edits.ts   structural edits (add, move, rename, delete, …) as text edits
     src/generator/plantuml.ts PlantUML generator
+    src/importer/             itemis CREATE (.sct) importer with a small XML parser
     src/cli/main.ts           command line interface
   web/          Vite app: Monaco editor + Sprotty diagram
     src/app.ts                controller: text -> Langium -> ELK (web worker) -> Sprotty, diagram edits -> text
@@ -152,3 +154,53 @@ model, which triggers the same pipeline again – so undo / redo, comments and f
 Possible next steps: a VS Code extension (the language package can be used by a Langium language server
 together with `sprotty-vscode`), code generation for a target language, and simulation / animation of
 state machine executions.
+
+## Importing itemis CREATE models
+
+Statecharts of itemis CREATE (formerly YAKINDU Statechart Tools) can be converted into `.hsm` models:
+
+```bash
+node packages/language/bin/cli.js import TrafficLight.sct -o TrafficLight.hsm   # warnings go to stderr
+```
+
+In the web editor, `Open…` accepts `.sct` files as well; warnings are shown in the status bar. From
+code, use `importSct(xml)` of `hsm-language`, which returns `{ text, warnings }` (no DOM needed).
+
+The definition section and all reactions are copied as they are (both languages use the same
+syntax); the diagram layout of the `.sct` file is ignored. The structure is mapped as follows:
+
+| itemis CREATE                                   | HSM                                                                 |
+|-------------------------------------------------|---------------------------------------------------------------------|
+| statechart `specification`                      | definition section (`namespace`, annotations and scopes re-ordered) |
+| single top-level region                         | body of the `statemachine`                                          |
+| several top-level regions                       | `[*] -> Main` and `state Main { region r1 { … } region r2 { … } }`  |
+| region of a composite state                     | dropped if it is the only one, otherwise `region name { … }`        |
+| state and its local reactions                   | `state Name { entry / … }`, one reaction per line                   |
+| default entry and its transition                | `[*] -> Target`                                                     |
+| named entry / exit                              | `entry Name` / `exit Name` (an unnamed exit becomes `exit Exit1`)   |
+| shallow / deep history entry                    | `history H` / `deephistory DH` (or the itemis name)                 |
+| choice (dynamic / static)                       | `choice Choice1` / `junction Junction1`                             |
+| synchronization                                 | `sync Sync1`                                                        |
+| final state                                     | `Source -> [*]` in the region of the final state                    |
+| transition `spec # >entry` / `# exit>`          | `Source -> Target : spec # >entry` / `# exit>`                      |
+| `active(Statechart.main_region.A.r.B)`          | `active(B)` (shortest unambiguous name, regions are not part of it) |
+
+Details and limitations (each of them is reported as a warning):
+
+- State names that are not valid identifiers or clash with keywords are sanitized (`Door Open` →
+  `state Door_Open "Door Open"`, `entry` → `entry_`) and made unique among the vertices of the same
+  state (itemis names only need to be unique per region).
+- Transitions are declared in the innermost container of source and target and keep the order of the
+  itemis model, i.e. their priority. Multi-line effects get `;` separators, `x++` statements become
+  `x += 1`, number suffixes (`1.5f`) are removed.
+- A transition which handles several exit nodes (`# ex1> ex2>`) is duplicated per exit node; the
+  unnamed (default) exit is handled by the transitions without trigger.
+- A transition without trigger and guard is never taken by itemis CREATE, but taken in every step by HSM.
+- Several final states of one region are merged into the final state `[*]` of the region.
+- An entry through a named history (`# >hist`) targets the history pseudo state; an unknown entry
+  point name enters by default. Entry points with the same name in several orthogonal regions cannot
+  be expressed: only one of them is used.
+- Not supported (kept as `// TODO import: …` comments): submachine states (referenced statecharts),
+  `@SuperSteps` / `@EventBuffering`, imports and local reactions of the statechart itself. Type
+  aliases, `null`, events used as boolean values in expressions and `++` / `--` inside expressions are
+  copied unchanged and reported by the validator.
