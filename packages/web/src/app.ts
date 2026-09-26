@@ -9,6 +9,7 @@ import {
     nodeText as nodeTextOf, type DeletionTarget, type DiagramNode, type DiagramNodeKind, type EdgeRouting, type EditResult, type LayoutDirection, type LayoutResult,
     type ParsedModel, type ScopeContainer, type TransitionSource, type TransitionTarget, type Vertex
 } from 'hsm-language';
+import { importSct } from 'hsm-language';
 import { HsmLanguageSupport, LANGUAGE_ID } from './language-support.js';
 import { createDiagramContainer } from './diagram/di.config.js';
 import type { DiagramCallbacks } from './diagram/listeners.js';
@@ -222,7 +223,18 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         byId('btn-open').addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', async () => {
             const file = fileInput.files?.[0];
-            if (file) {
+            if (file && /\.sct$/i.test(file.name)) {
+                // itemis CREATE / YAKINDU statechart: convert to HSM text
+                try {
+                    const { text, warnings } = importSct(await file.text());
+                    this.loadText(text, file.name.replace(/\.sct$/i, '.hsm'));
+                    warnings.forEach(warning => console.warn(`${file.name}: ${warning}`));
+                    this.setStatus(warnings.length > 0 ? `Imported ${file.name} with ${warnings.length} warning(s): ${warnings.join(' ')}` : `Imported ${file.name}.`,
+                        warnings.length > 0 ? 'warning' : 'info');
+                } catch (error) {
+                    this.setStatus(`Import of ${file.name} failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
+                }
+            } else if (file) {
                 this.loadText(await file.text(), file.name);
             }
             fileInput.value = '';

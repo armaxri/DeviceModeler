@@ -11,3 +11,4 @@ export * from './generator/plantuml.js';
 export * from './diagram/diagram-model.js';
 export * from './diagram/layout.js';
 export * from './edit/model-edits.js';
+export * from './importer/sct-importer.js';
