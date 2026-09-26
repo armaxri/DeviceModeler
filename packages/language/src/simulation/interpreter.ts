@@ -568,7 +568,8 @@ export class StatechartInterpreter {
 
     private runLocalReactions(state: ast.State | ast.StateMachine): void {
         for (const reaction of state.reactions) {
-            if (this.enabled(reaction.triggers, reaction.guard)) {
+            // like transitions: a reaction without trigger and guard is never executed (itemis CREATE)
+            if ((reaction.triggers.length > 0 || reaction.guard) && this.enabled(reaction.triggers, reaction.guard)) {
                 this.executeReaction(reaction, state);
             }
         }

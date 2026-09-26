@@ -116,12 +116,12 @@ same step.
 A reaction (transition or local reaction) is **enabled** if
 
 - one of its triggers matches: an event trigger whose event is present, a time trigger whose timer
-  expired (§6), `always` / `oncycle` (always matches), or – **if the reaction has no trigger at
-  all** – it matches in every step (like `always`);
+  expired (§6), `always` / `oncycle` (always matches), or – **if the reaction has no trigger but
+  a guard** – it matches in every step (like `always`);
 - and its guard evaluates to `true` (no guard = `true`).
 
-Exception (as in itemis CREATE): a transition leaving a **state** that has **neither a trigger nor
-a guard** is never taken (use `always` or `oncycle`); a guard-only transition (`A -> B : [x > 3]`)
+As in itemis CREATE, a transition leaving a **state** or a local reaction that has **neither a
+trigger nor a guard** is never taken / executed (use `always` or `oncycle`; the validator warns); a guard-only transition (`A -> B : [x > 3]`)
 is enabled in every step in which its guard holds. This also applies to the incoming transitions
 of a join (§7). Transitions leaving pseudo states (initial transitions, choices, junctions, entry
 points, history defaults, forks) have no triggers by design and are taken as described in §7 / §8.

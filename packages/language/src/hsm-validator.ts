@@ -10,7 +10,7 @@ export function registerValidationChecks(services: HsmServices): void {
     const registry = services.validation.ValidationRegistry;
     const validator = services.validation.HsmValidator;
     const checks: ValidationChecks<ast.HsmAstType> = {
-        StateMachine: [validator.checkUniqueNames, validator.checkReachability, validator.checkContainer],
+        StateMachine: [validator.checkUniqueNames, validator.checkReachability, validator.checkContainer, validator.checkStateActions],
         State: [validator.checkContainer, validator.checkStateStructure, validator.checkStateActions],
         Region: validator.checkContainer,
         PseudoState: validator.checkPseudoState,
@@ -109,8 +109,11 @@ export class HsmValidator {
         }
     }
 
-    checkStateActions(state: ast.State, accept: ValidationAcceptor): void {
+    checkStateActions(state: ast.State | ast.StateMachine, accept: ValidationAcceptor): void {
         for (const reaction of state.reactions) {
+            if (reaction.triggers.length === 0 && !reaction.guard) {
+                accept('warning', `Missing trigger: this reaction is never executed. Use 'always' or 'oncycle' to execute it in every step.`, { node: reaction });
+            }
             for (const trigger of reaction.triggers) {
                 if (ast.isBuiltinTrigger(trigger) && (trigger.kind === 'else' || trigger.kind === 'default')) {
                     accept('error', `'${trigger.kind}' can only be used on transitions leaving a choice.`, { node: trigger, property: 'kind' });
