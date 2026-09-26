@@ -348,3 +348,78 @@
 .hsm-export .issue {
     display: none;
 }
+
+/* ---- simulation ---- */
+
+.theme-classic, .theme-modern {
+    --hsm-active-fill: #d4f5cc;
+    --hsm-active-fill-composite: #effbeb;
+    --hsm-active-stroke: #1e8e3e;
+    --hsm-taken: #ff6d00;
+    --hsm-breakpoint: #e53935;
+}
+
+.theme-dark {
+    --hsm-active-fill: #1f4a2b;
+    --hsm-active-fill-composite: #22362a;
+    --hsm-active-stroke: #4ade80;
+    --hsm-taken: #ffa94d;
+    --hsm-breakpoint: #ff5252;
+}
+
+.state-shape,
+.transition-line,
+.transition-arrow {
+    transition: fill 0.25s, stroke 0.9s ease-out, stroke-width 0.9s ease-out;
+}
+
+.hsm-node.active > .state-shape {
+    fill: var(--hsm-active-fill);
+    stroke: var(--hsm-active-stroke);
+    stroke-width: 3px;
+}
+
+.hsm-node.active.composite > .state-shape {
+    fill: var(--hsm-active-fill-composite);
+}
+
+.hsm-node.active > .state-separator {
+    stroke: var(--hsm-active-stroke);
+    stroke-width: 2px;
+}
+
+.hsm-node.active > .state-name {
+    font-weight: bold;
+}
+
+.hsm-node.active > .final-outer {
+    stroke: var(--hsm-active-stroke);
+    stroke-width: 3px;
+}
+
+.hsm-node.active > .final-inner {
+    fill: var(--hsm-active-stroke);
+}
+
+/* taken transitions are highlighted immediately and fade out when the flag is removed */
+.transition.taken .transition-line {
+    transition: none;
+    stroke: var(--hsm-taken);
+    stroke-width: 3.5px;
+}
+
+.transition.taken .transition-arrow {
+    transition: none;
+    fill: var(--hsm-taken);
+    stroke: var(--hsm-taken);
+}
+
+.breakpoint-marker circle {
+    fill: var(--hsm-breakpoint);
+    stroke: var(--hsm-bg);
+    stroke-width: 1.5px;
+}
+
+.hsm-export .breakpoint-marker {
+    display: none;
+}

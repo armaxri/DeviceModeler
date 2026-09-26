@@ -29,8 +29,21 @@ function issueMarker(issue: Issue | undefined, x: number, y: number): VNode | un
     </g>;
 }
 
+/** Simulation breakpoint: a small red dot. */
+function breakpointMarker(enabled: boolean, x: number, y: number): VNode | undefined {
+    if (!enabled) {
+        return undefined;
+    }
+    return <g class-breakpoint-marker={true} transform={`translate(${x}, ${y})`}>
+        <title>Breakpoint (right-click to remove)</title>
+        <circle r={5} cx={0} cy={0} />
+    </g>;
+}
+
 function vertexClasses(node: Readonly<VertexNode>): Record<string, boolean> {
     return {
+        'class-active': node.active,
+        'class-breakpoint': node.breakpoint,
         'class-hsm-node': true,
         'class-selected': node.selected,
         'class-mouseover': node.hoverFeedback,
@@ -64,6 +77,7 @@ export class StateView extends ShapeView {
                 </text>)}
             {context.renderChildren(node)}
             {issueMarker(node.issue, width - 4, 4)}
+            {breakpointMarker(node.breakpoint, 9, 9)}
         </g>;
     }
 }
@@ -273,7 +287,9 @@ export class TransitionView implements IView {
             previous = points[i];
         }
         const label = edge.label;
+        const middle = points[Math.floor(points.length / 2)];
         return <g class-transition={true} class-selected={edge.selected} class-mouseover={edge.hoverFeedback}
+            class-taken={edge.taken} class-breakpoint={edge.breakpoint}
             class-has-error={edge.issue?.severity === 'error'} class-has-warning={edge.issue?.severity === 'warning'}>
             <path class-transition-hit={true} d={path} />
             <path class-transition-line={true} d={path} />
@@ -286,6 +302,7 @@ export class TransitionView implements IView {
                     </text>
                 </g>
                 : undefined}
+            {breakpointMarker(edge.breakpoint, label ? label.x - 7 : middle.x, label ? label.y + label.height / 2 : middle.y)}
             {issueMarker(edge.issue, label ? label.x + label.width + 8 : (points[0].x + end.x) / 2, label ? label.y + label.height / 2 : (points[0].y + end.y) / 2)}
         </g>;
     }

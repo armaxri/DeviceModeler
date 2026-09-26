@@ -57,6 +57,10 @@ export class VertexNode extends SNodeImpl {
     issue?: Issue;
     /** Whether the node is the pending source of a transition being created. */
     pendingSource = false;
+    /** Simulation: the state (or final state) is active. */
+    active = false;
+    /** Simulation: a breakpoint is set on the state. */
+    breakpoint = false;
 }
 
 export class TransitionEdge extends SChildElementImpl {
@@ -70,6 +74,10 @@ export class TransitionEdge extends SChildElementImpl {
     issue?: Issue;
     selected = false;
     hoverFeedback = false;
+    /** Simulation: the transition was taken recently. */
+    taken = false;
+    /** Simulation: a breakpoint is set on the transition. */
+    breakpoint = false;
 }
 
 export function isVertexNode(element: SModelElementImpl | undefined): element is VertexNode {
@@ -84,6 +92,12 @@ export interface SchemaOptions {
     selected: Set<string>;
     issues: Map<string, Issue>;
     pendingSource?: string;
+    /** Simulation: ids of the active states and final states. */
+    activeStates?: ReadonlySet<string>;
+    /** Simulation: ids of the transitions taken recently. */
+    recentTransitions?: ReadonlySet<string>;
+    /** Simulation: ids of the elements with a breakpoint. */
+    breakpoints?: ReadonlySet<string>;
 }
 
 /** Converts the layouted diagram into the sprotty model schema. */
@@ -106,6 +120,8 @@ export function toSchema(graph: DiagramGraph, options: SchemaOptions): SModelRoo
         selected: options.selected.has(node.id),
         issue: options.issues.get(node.id),
         pendingSource: options.pendingSource === node.id,
+        active: options.activeStates?.has(node.id) ?? false,
+        breakpoint: options.breakpoints?.has(node.id) ?? false,
         children: node.children.map(convertNode)
     } as SModelElement);
     const convertEdge = (edge: DiagramEdge): SModelElement => ({
@@ -118,6 +134,8 @@ export function toSchema(graph: DiagramGraph, options: SchemaOptions): SModelRoo
         label: edge.label,
         selected: options.selected.has(edge.id),
         issue: options.issues.get(edge.id),
+        taken: options.recentTransitions?.has(edge.id) ?? false,
+        breakpoint: options.breakpoints?.has(edge.id) ?? false,
         children: []
     } as SModelElement);
     return {
