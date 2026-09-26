@@ -63,8 +63,13 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 
 ## Phase 5 – Code generation and testing 🚧
 
-- 🚧 C code generator (timer service and operation callbacks), verified against the conformance
-  suite by compiling and running the scenarios
+- ✅ C code generator (`hsm generate c`, `generateC()`): C99 without dynamic memory or global state,
+  timer service and operations as host functions, error hook; verified against the complete
+  conformance suite by compiling (gcc / clang, `-Wall -Wextra -Wpedantic -Werror`) and running
+  every scenario. Limitations: strings live in fixed-size buffers (`<PREFIX>_STRING_CAPACITY`,
+  longer strings are truncated with an error), fixed-size event queues (`<PREFIX>_QUEUE_CAPACITY`),
+  runtime errors do not abort the step (the failed operation is skipped, see README), typed out
+  events are always reported with their value
 - 🚧 Unit test language for statecharts (like SCTUnit) with a test runner in the CLI and the editor
 - 💭 Further generator targets (C++, Java, Python, TypeScript) depending on demand
 - 💭 Generator configuration model (like itemis `.sgen` files)

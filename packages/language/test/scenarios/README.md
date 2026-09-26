@@ -54,7 +54,8 @@ Every step contains exactly one of the following keys (plus an optional `comment
 An action step may carry `"expectError": "text"`: the action must fail with a runtime error whose
 message contains `text` (for example a choice without enabled branch). The interpreter continues
 with the next step (the configuration may be inconsistent). Implementations without runtime error
-detection (e.g. generated C code) may skip scenarios containing `expectError`.
+detection may skip scenarios containing `expectError`; the C harness checks the message passed to
+the error hook (an unknown event is rejected when the harness is generated: a compile time error in C).
 
 ### Expectations
 
