@@ -5,6 +5,7 @@ import { NodeFileSystem } from 'langium/node';
 import { createHsmServices } from '../hsm-module.js';
 import { HsmModelLoader } from '../hsm-document.js';
 import { generatePlantUml } from '../generator/plantuml.js';
+import { generateC } from '../generator/c/index.js';
 import { layoutStateMachine } from '../diagram/layout.js';
 import { importSct } from '../importer/sct-importer.js';
 import { StatechartInterpreter } from '../simulation/interpreter.js';
@@ -56,6 +57,40 @@ export function createProgram(): Command {
             const out = options.out ?? file.replace(/\.hsm$/, '') + '.puml';
             await fs.writeFile(out, generatePlantUml(parsed.model));
             console.log(`Generated ${out}`);
+        });
+
+    program.command('generate')
+        .argument('<target>', 'target language: c')
+        .argument('<file>', '.hsm file')
+        .option('-o, --out <dir>', 'output directory (default: the directory of the model)')
+        .option('-p, --prefix <prefix>', 'prefix of the generated functions and files (default: the state machine name in snake case)')
+        .description('generates code for a state machine (c: sc_types.h, <prefix>.h, <prefix>.c)')
+        .action(async (target: string, file: string, options: { out?: string, prefix?: string }) => {
+            if (target !== 'c') {
+                console.error(`Unknown target '${target}' (supported: c)`);
+                process.exitCode = 1;
+                return;
+            }
+            const { parsed, errors } = await load(file);
+            if (errors > 0 || parsed.hasSyntaxErrors) {
+                process.exitCode = 1;
+                return;
+            }
+            const result = generateC(parsed.model, { prefix: options.prefix });
+            for (const d of result.diagnostics) {
+                const line = d.node?.$cstNode ? `${d.node.$cstNode.range.start.line + 1}:` : '';
+                console.error(`${file}:${line} ${d.severity}: ${d.message}`);
+            }
+            if (result.files.length === 0) {
+                process.exitCode = 1;
+                return;
+            }
+            const out = options.out ?? path.dirname(file);
+            await fs.mkdir(out, { recursive: true });
+            for (const generated of result.files) {
+                await fs.writeFile(path.join(out, generated.path), generated.content);
+                console.log(`Generated ${path.join(out, generated.path)}`);
+            }
         });
 
     program.command('layout')

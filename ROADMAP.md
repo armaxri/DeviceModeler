@@ -51,7 +51,7 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 - 📋 Import test suite based on real-world models from users
 - 💭 Keep manual layout from `.sct` notation models (saved positions)
 
-## Phase 4 – Execution 🚧
+## Phase 4 – Execution ✅
 
 - ✅ Execution semantics specified in [docs/semantics.md](docs/semantics.md): cycle-based and
   event-driven, parent-first and child-first
@@ -67,10 +67,15 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
     operation mocks with scripted results (sequences, expressions), simulation of several machines
 - 📋 `@SuperSteps`, `@EventBuffering`, `@InEventQueue`
 
-## Phase 5 – Code generation and testing 🚧
+## Phase 5 – Code generation and testing ✅
 
-- 🚧 C code generator (timer service and operation callbacks), verified against the conformance
-  suite by compiling and running the scenarios
+- ✅ C code generator (`hsm generate c`, `generateC()`): C99 without dynamic memory or global state,
+  timer service and operations as host functions, error hook; verified against the complete
+  conformance suite by compiling (gcc / clang, `-Wall -Wextra -Wpedantic -Werror`) and running
+  every scenario. Limitations: strings live in fixed-size buffers (`<PREFIX>_STRING_CAPACITY`,
+  longer strings are truncated with an error), fixed-size event queues (`<PREFIX>_QUEUE_CAPACITY`),
+  runtime errors do not abort the step (the failed operation is skipped, see README), typed out
+  events are always reported with their value
 - ✅ Unit test language for statecharts (like SCTUnit, `.hsmtest`) with a test runner on the interpreter,
   `hsm test` in the CLI (JUnit XML reports) and tests for all examples. Limitations: not run in the web
   editor yet; no `@Ignore`, packages / imports, call order verification or mock value sequences;

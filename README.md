@@ -94,6 +94,7 @@ node packages/language/bin/cli.js import model.sct -o model.hsm   # itemis CREAT
 node packages/language/bin/cli.js simulate examples/cd-player.hsm -e play,eject,eject   # run the interpreter
 node packages/language/bin/cli.js simulate examples/door.hsm --script packages/language/test/scenarios/example-door.json
 node packages/language/bin/cli.js test examples/tests/*.hsmtest --machine examples --junit report.xml   # unit tests
+node packages/language/bin/cli.js generate c examples/traffic-light.hsm -o gen   # C code, see below
 ```
 
 ## The language
@@ -317,6 +318,7 @@ packages/
     src/diagram/layout.ts     AST -> PlantUML-like diagram model, laid out with ELK
     src/edit/model-edits.ts   structural edits (add, move, rename, delete, add declaration, …) as text edits
     src/generator/plantuml.ts PlantUML generator
+    src/generator/c/          C code generator and scenario test harness generator
     src/importer/             itemis CREATE (.sct) importer with a small XML parser
     src/simulation/           interpreter (docs/semantics.md) with virtual clock, scenario runner
     src/hsm-test.langium      grammar of the unit test language (.hsmtest), imports the expressions of hsm.langium
@@ -341,6 +343,118 @@ model, which triggers the same pipeline again – so undo / redo, comments and f
 
 Possible next steps: a VS Code extension (the language package can be used by a Langium language server
 together with `sprotty-vscode`) and code generation for further target languages (see [ROADMAP.md](ROADMAP.md)).
+
+## Code generation (C)
+
+`hsm generate c model.hsm -o gen` (or `generateC(machine, options)` of `hsm-language`) generates C99
+code in the spirit of the itemis CREATE C generator: `sc_types.h` (`sc_integer` = `int64_t`,
+`sc_real` = `double`, `sc_boolean` = `bool`, `sc_string` = `const char *`) and one `.h` / `.c` pair
+per state machine, named after the state machine in snake case (`TrafficLight` →
+`traffic_light.h`, prefix `traffic_light_`; option `--prefix`). The code implements
+[`docs/semantics.md`](docs/semantics.md) exactly like the interpreter: every scenario of the
+conformance suite is compiled with gcc (`-std=c99 -Wall -Wextra -Wpedantic -Werror`) and run by
+`npm test`, the examples are also compiled with clang. It uses no dynamic memory and no global
+state – everything is in the handle struct – and consists of readable functions per state
+(`enter_…`, `exit_…`, `react_…`), region and transition, with comments naming them.
+
+Generated API (for `TrafficLight`; `@EventDriven` machines process each event when it is raised):
+
+| Function | |
+|---|---|
+| `void traffic_light_init(TrafficLight *h)` | initializes the handle (call first) |
+| `void traffic_light_enter(TrafficLight *h)` / `traffic_light_exit` | enters / exits the state machine |
+| `void traffic_light_run_cycle(TrafficLight *h)` | one run cycle (cycle based: call every `TRAFFIC_LIGHT_CYCLE_PERIOD_MS`) |
+| `void traffic_light_raise_powerOn(TrafficLight *h)` | raises an in event (typed events take a value); named interfaces: `traffic_light_Pedestrian_raise_request` |
+| `sc_boolean traffic_light_is_raised_lightsChanged(const TrafficLight *h)` | whether an out event was raised in the last call; value: `traffic_light_get_lightsChanged_value` |
+| `traffic_light_set_out_event_observer(h, callback)` | optional callback for every out event (`TrafficLightEvent` id) |
+| `traffic_light_get_x` / `traffic_light_set_x`, `traffic_light_Pedestrian_get_waiting`, `traffic_light_internal_get_lights` | variables and constants (setters only for writable variables) |
+| `traffic_light_is_state_active(h, TrafficLight_Operating_Red)`, `traffic_light_is_final`, `traffic_light_is_active` | state queries (`TrafficLightState` enum) |
+| `void traffic_light_raise_time_event(TrafficLight *h, TrafficLightTimerId timer)` | called by the timer service when a timer expires |
+
+The host implements the **required functions** (like the operation callbacks of itemis CREATE):
+operations `traffic_light_<op>` / `traffic_light_<Interface>_<op>` / `traffic_light_internal_<op>`
+with the handle as first argument (variable arguments are passed as count and array), the timer
+service `traffic_light_set_timer(h, timer, duration_ns, periodic)` / `traffic_light_unset_timer(h, timer)`
+(only for machines with time events; durations in nanoseconds) and the error hook
+`traffic_light_on_error(h, error, message)`. Runtime errors of the semantics (a choice without
+enabled branch, a composite state without initial transition, an exit node without transition,
+division by zero, too many transitions in one step, a full event queue, a string that does not fit
+its buffer) are reported to the hook; after it returns the machine continues with the failed part
+skipped (the choice is not left, the division yields 0, the string is truncated). The handle has a
+`user_data` pointer for the host, e.g. to find its timers when there are several instances.
+
+Strings (variables, event values, concatenation results) are stored in buffers of
+`<PREFIX>_STRING_CAPACITY` bytes (default 64, generator option `stringCapacity` or `-D`), the event
+queues of event driven machines hold `<PREFIX>_QUEUE_CAPACITY` events (default 16), and loops are
+stopped after `<PREFIX>_MAX_MICROSTEPS` transitions (default 1000).
+
+```c
+#include <stdio.h>
+#include "traffic_light.h"
+
+typedef struct {
+    sc_boolean active, periodic;
+    sc_integer remaining_ns, period_ns;
+} Timer;
+
+static Timer timers[TRAFFIC_LIGHT_TIMER_COUNT];
+
+/* timer service */
+void traffic_light_set_timer(TrafficLight *h, TrafficLightTimerId timer, sc_integer duration_ns, sc_boolean periodic) {
+    (void)h;
+    timers[timer].active = true;
+    timers[timer].periodic = periodic;
+    timers[timer].remaining_ns = duration_ns;
+    timers[timer].period_ns = duration_ns;
+}
+
+void traffic_light_unset_timer(TrafficLight *h, TrafficLightTimerId timer) {
+    (void)h;
+    timers[timer].active = false;
+}
+
+/* operation switchOn of the internal scope */
+void traffic_light_internal_switchOn(TrafficLight *h, sc_integer mask) {
+    (void)h;
+    printf("lights: %d\n", (int)mask);
+}
+
+void traffic_light_on_error(TrafficLight *h, TrafficLightError error, const char *message) {
+    (void)h;
+    fprintf(stderr, "state machine error %d: %s\n", (int)error, message);
+}
+
+int main(void) {
+    const sc_integer period_ns = TRAFFIC_LIGHT_CYCLE_PERIOD_MS * INT64_C(1000000);
+    TrafficLight light;
+    int i;
+
+    traffic_light_init(&light);
+    traffic_light_enter(&light);
+    traffic_light_raise_powerOn(&light);
+    for (;;) {
+        /* ... wait for the next cycle (TRAFFIC_LIGHT_CYCLE_PERIOD_MS), e.g. a timer interrupt ... */
+        for (i = 0; i < TRAFFIC_LIGHT_TIMER_COUNT; i++) {
+            if (timers[i].active && (timers[i].remaining_ns -= period_ns) <= 0) {
+                traffic_light_raise_time_event(&light, (TrafficLightTimerId)i);
+                if (timers[i].periodic) {
+                    timers[i].remaining_ns += timers[i].period_ns;
+                } else {
+                    timers[i].active = false;
+                }
+            }
+        }
+        traffic_light_run_cycle(&light);
+        if (traffic_light_is_raised_lightsChanged(&light)) {
+            printf("lights changed: %d\n", (int)traffic_light_get_lightsChanged_value(&light));
+        }
+    }
+}
+```
+
+The test harnesses are generated from the scenarios by `generateScenarioHarness(api, scenario)`
+(mocked operations with scripted results, a virtual timer service); `HSM_CFLAGS='-O2
+-fsanitize=address,undefined' npm test` runs them with sanitizers.
 
 ## Importing itemis CREATE models
 
