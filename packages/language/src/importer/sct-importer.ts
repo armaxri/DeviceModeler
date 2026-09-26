@@ -412,8 +412,6 @@ class SctImporter {
                     if (defaultExits.length > 1) {
                         this.warn(`Transition '${source.name}' -> '${targetName(target)}' handles several default exits; it was duplicated for each exit node.`);
                     }
-                } else if (!hasTrigger(reaction) && !hasGuard(reaction)) {
-                    this.warn(`Transition '${source.name}' -> '${targetName(target)}' has no trigger: itemis CREATE never takes it, HSM takes it in every step (like 'always').`);
                 }
             }
         } else if (exits.length > 0) {
@@ -540,7 +538,7 @@ class SctImporter {
 
     /**
      * Normalizes the lines of one reaction: statements of multi-line effects are separated by `;`,
-     * `x++` / `x--` statements are converted. Returns one line if the reaction has no comments.
+     * Returns one line if the reaction has no comments.
      */
     private normalizeReaction(lines: string[], location: string): string[] {
         const parts: Array<{ code: string, comment: string }> = [];
@@ -548,14 +546,11 @@ class SctImporter {
         let inEffect = false;
         for (const line of lines) {
             const split = splitComment(line);
-            let code = mapCode(split.code, text => convertNumbers(convertIncrements(text)));
+            let code = mapCode(split.code, text => convertNumbers(text));
             const trimmed = code.trim();
             const previous = [...parts].reverse().find(p => p.code.trim());
             if (trimmed && previous && depthLevel === 0 && inEffect && needsSemicolon(previous.code, trimmed)) {
                 previous.code = previous.code.trimEnd() + ';';
-            }
-            if (/\+\+|--/.test(mapCode(code, text => text, () => ''))) {
-                this.warn(`'++' / '--' inside an expression (${location}) is not supported by HSM: ${trimmed}`);
             }
             if (trimmed) {
                 const scan = scanCode(code, depthLevel, inEffect);
@@ -592,6 +587,7 @@ class SctImporter {
         const preamble: string[] = [];
         const movedAnnotations: string[] = [];
         const scopes: string[] = [];
+        const machineReactions: string[] = [];
         let inScope = false;
         let inImport = false;
         for (const line of lines) {
@@ -621,8 +617,8 @@ class SctImporter {
                 movedAnnotations.push(converted);
             } else if (trimmed && !trimmed.startsWith('//') && !trimmed.startsWith('/*') && !trimmed.startsWith('*')
                 && !DECLARATION_START.test(trimmed) && isReactionStart(splitComment(trimmed).code)) {
-                this.warn(`Local reactions of the statechart are not supported: '${trimmed}' was commented out.`);
-                scopes.push(this.indentUnit + `// TODO import: ${trimmed}`);
+                // local reactions of the statechart itself are placed after the definition section
+                machineReactions.push(...this.normalizeReaction([trimmed], 'the statechart'));
             } else {
                 if (/^alias\b/.test(trimmed)) {
                     this.warn(`Type aliases are not supported: '${trimmed}'.`);
@@ -633,7 +629,8 @@ class SctImporter {
         if (!namespace && namespaceAttribute?.trim()) {
             namespace = `namespace ${namespaceAttribute.trim()}`;
         }
-        const result = [...(namespace ? [namespace, ''] : []), ...preamble, ...movedAnnotations, '', ...scopes];
+        const result = [...(namespace ? [namespace, ''] : []), ...preamble, ...movedAnnotations, '', ...scopes,
+            ...(machineReactions.length > 0 ? ['', ...machineReactions] : [])];
         return trimBlankLines(collapseBlankLines(result));
     }
 
@@ -1058,13 +1055,6 @@ function hasTrigger(reaction: string): boolean {
     return code.substring(0, end).trim() !== '';
 }
 
-/** Whether the reaction text has a guard (`[...]` before the effect). */
-function hasGuard(reaction: string): boolean {
-    const code = mapCode(reaction, t => t, t => ' '.repeat(t.length));
-    const slash = effectStart(code);
-    return code.substring(0, slash < 0 ? code.length : slash).includes('[');
-}
-
 /** Removes the type suffixes of itemis number literals (`1.5f`, `2.0d`, `10l`), which HSM does not support. */
 function convertNumbers(code: string): string {
     return code.replace(/\b(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)[fFdDlL]\b/g, '$1');
@@ -1078,15 +1068,6 @@ function needsSemicolon(previous: string, next: string): boolean {
     return !/^[)\]}.+\-*/%&|^=<>?:;,]/.test(next);
 }
 
-/** Converts statements `x++`, `x--`, `++x` and `--x` into `x += 1` / `x -= 1`. */
-function convertIncrements(code: string): string {
-    const name = String.raw`[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*`;
-    return code
-        .replace(new RegExp(String.raw`(^|[;/]\s*|^\s*)(${name})\s*(\+\+|--)(?=\s*(;|$))`, 'g'),
-            (_m, before: string, variable: string, op: string) => `${before}${variable} ${op[0]}= 1`)
-        .replace(new RegExp(String.raw`(^|[;/]\s*|^\s*)(\+\+|--)\s*(${name})(?=\s*(;|$))`, 'g'),
-            (_m, before: string, op: string, variable: string) => `${before}${variable} ${op[0]}= 1`);
-}
 
 /**
  * Splits the `# >entry` / `# exit>` part off a transition specification.

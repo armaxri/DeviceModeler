@@ -191,16 +191,16 @@ Details and limitations (each of them is reported as a warning):
   `state Door_Open "Door Open"`, `entry` → `entry_`) and made unique among the vertices of the same
   state (itemis names only need to be unique per region).
 - Transitions are declared in the innermost container of source and target and keep the order of the
-  itemis model, i.e. their priority. Multi-line effects get `;` separators, `x++` statements become
-  `x += 1`, number suffixes (`1.5f`) are removed.
+  itemis model, i.e. their priority. Multi-line effects get `;` separators, number suffixes (`1.5f`)
+  are removed.
 - A transition which handles several exit nodes (`# ex1> ex2>`) is duplicated per exit node; the
   unnamed (default) exit is handled by the transitions without trigger.
-- A transition without trigger and guard is never taken by itemis CREATE, but taken in every step by HSM.
+- Local reactions of the statechart itself (e.g. `oncycle / x += 1` in the `internal:` scope) are
+  placed after the definition section.
 - Several final states of one region are merged into the final state `[*]` of the region.
 - An entry through a named history (`# >hist`) targets the history pseudo state; an unknown entry
   point name enters by default. Entry points with the same name in several orthogonal regions cannot
   be expressed: only one of them is used.
 - Not supported (kept as `// TODO import: …` comments): submachine states (referenced statecharts),
-  `@SuperSteps` / `@EventBuffering`, imports and local reactions of the statechart itself. Type
-  aliases, `null`, events used as boolean values in expressions and `++` / `--` inside expressions are
-  copied unchanged and reported by the validator.
+  `@SuperSteps` / `@EventBuffering` and imports. Type aliases and `null` are copied unchanged and
+  reported by the validator.

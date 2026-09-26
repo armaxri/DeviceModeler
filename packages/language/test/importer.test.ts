@@ -302,7 +302,7 @@ describe('sct importer', () => {
             '        // counts',
             '        entry / x = 1; y = 2; z = x + y',
             '        exit / x = 0 // reset',
-            '        e [x > 1 && y > 1] / x += 1',
+            '        e [x > 1 && y > 1] / x++',
             '        every 1 s / raise done',
             '        after 2.5 s / y = 3.0',
             '    }'
@@ -325,11 +325,11 @@ describe('sct importer', () => {
             '        in event e',
             '    internal:',
             '        var x : integer',
-            '        // TODO import: oncycle / x += 1',
+            '',
+            '    oncycle / x += 1',
             ''
         ].join('\n'));
         expect(warnings.join('\n')).toContain('@SuperSteps(yes)');
-        expect(warnings.join('\n')).toContain('Local reactions of the statechart are not supported');
     });
 
     test('references use the shortest unambiguous names', async () => {
