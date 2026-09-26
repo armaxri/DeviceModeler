@@ -33,9 +33,11 @@ export type HsmKeywordNames =
     | "*"
     | "*="
     | "+"
+    | "++"
     | "+="
     | ","
     | "-"
+    | "--"
     | "-="
     | "->"
     | "."
@@ -103,7 +105,7 @@ export type HsmKeywordNames =
 export type HsmTokenNames = HsmTerminalNames | HsmKeywordNames;
 
 export interface ActiveExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
     readonly $type: 'ActiveExpression';
     state: langium.Reference<Vertex>;
 }
@@ -152,7 +154,7 @@ export function isArgument(item: unknown): item is Argument {
 }
 
 export interface AssignmentExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
     readonly $type: 'AssignmentExpression';
     left: Expression;
     operator: AssignmentOperator;
@@ -177,7 +179,7 @@ export function isAssignmentOperator(item: unknown): item is AssignmentOperator 
 }
 
 export interface BinaryExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
     readonly $type: 'BinaryExpression';
     left: Expression;
     operator: '!=' | '%' | '&&' | '&' | '*' | '+' | '-' | '/' | '<' | '<<' | '<=' | '==' | '>' | '>=' | '>>' | '^' | '|' | '||';
@@ -196,7 +198,7 @@ export function isBinaryExpression(item: unknown): item is BinaryExpression {
 }
 
 export interface BoolLiteral extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
     readonly $type: 'BoolLiteral';
     value: 'false' | 'true';
 }
@@ -226,7 +228,7 @@ export function isBuiltinTrigger(item: unknown): item is BuiltinTrigger {
 }
 
 export interface CastExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
     readonly $type: 'CastExpression';
     operand: Expression;
     type: TypeReference;
@@ -243,7 +245,7 @@ export function isCastExpression(item: unknown): item is CastExpression {
 }
 
 export interface ConditionalExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
     readonly $type: 'ConditionalExpression';
     condition: Expression;
     falseCase: Expression;
@@ -287,7 +289,7 @@ export function isEffect(item: unknown): item is Effect {
 }
 
 export interface ElementReference extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
     readonly $type: 'ElementReference';
     arguments: Array<Argument>;
     call: boolean;
@@ -339,7 +341,7 @@ export function isEventTrigger(item: unknown): item is EventTrigger {
     return reflection.isInstance(item, EventTrigger.$type);
 }
 
-export type Expression = ActiveExpression | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ElementReference | Literal | ParenthesizedExpression | UnaryExpression | ValueOfExpression;
+export type Expression = ActiveExpression | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ElementReference | Literal | ParenthesizedExpression | PostfixExpression | UnaryExpression | ValueOfExpression;
 
 export const Expression = {
     $type: 'Expression'
@@ -365,7 +367,7 @@ export function isExpressionStatement(item: unknown): item is ExpressionStatemen
 }
 
 export interface HexLiteral extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
     readonly $type: 'HexLiteral';
     value: string;
 }
@@ -412,7 +414,7 @@ export function isInternalScope(item: unknown): item is InternalScope {
 }
 
 export interface IntLiteral extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
     readonly $type: 'IntLiteral';
     value: number;
 }
@@ -437,7 +439,7 @@ export function isLiteral(item: unknown): item is Literal {
 }
 
 export interface LocalReaction extends langium.AstNode {
-    readonly $container: State;
+    readonly $container: State | StateMachine;
     readonly $type: 'LocalReaction';
     effect: Effect;
     guard?: Expression;
@@ -494,7 +496,7 @@ export function isParameter(item: unknown): item is Parameter {
 }
 
 export interface ParenthesizedExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
     readonly $type: 'ParenthesizedExpression';
     expression: Expression;
 }
@@ -506,6 +508,23 @@ export const ParenthesizedExpression = {
 
 export function isParenthesizedExpression(item: unknown): item is ParenthesizedExpression {
     return reflection.isInstance(item, ParenthesizedExpression.$type);
+}
+
+export interface PostfixExpression extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $type: 'PostfixExpression';
+    operand: Expression;
+    operator: '++' | '--';
+}
+
+export const PostfixExpression = {
+    $type: 'PostfixExpression',
+    operand: 'operand',
+    operator: 'operator'
+} as const;
+
+export function isPostfixExpression(item: unknown): item is PostfixExpression {
+    return reflection.isInstance(item, PostfixExpression.$type);
 }
 
 export interface PseudoState extends langium.AstNode {
@@ -574,7 +593,7 @@ export function isReactionSpec(item: unknown): item is ReactionSpec {
 }
 
 export interface RealLiteral extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
     readonly $type: 'RealLiteral';
     value: string;
 }
@@ -648,6 +667,7 @@ export interface StateMachine extends langium.AstNode {
     description?: string;
     name: string;
     namespace?: QualifiedName;
+    reactions: Array<LocalReaction>;
     scopes: Array<Scope>;
     transitions: Array<Transition>;
     vertices: Array<Vertex>;
@@ -659,6 +679,7 @@ export const StateMachine = {
     description: 'description',
     name: 'name',
     namespace: 'namespace',
+    reactions: 'reactions',
     scopes: 'scopes',
     transitions: 'transitions',
     vertices: 'vertices'
@@ -679,7 +700,7 @@ export function isStatement(item: unknown): item is Statement {
 }
 
 export interface StringLiteral extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
     readonly $type: 'StringLiteral';
     value: string;
 }
@@ -765,7 +786,7 @@ export function isTypeReference(item: unknown): item is TypeReference {
 }
 
 export interface UnaryExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
     readonly $type: 'UnaryExpression';
     operand: Expression;
     operator: '!' | '+' | '-' | '~';
@@ -782,7 +803,7 @@ export function isUnaryExpression(item: unknown): item is UnaryExpression {
 }
 
 export interface ValueOfExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
     readonly $type: 'ValueOfExpression';
     event: langium.Reference<EventDeclaration>;
 }
@@ -855,6 +876,7 @@ export type HsmAstType = {
     OperationDeclaration: OperationDeclaration
     Parameter: Parameter
     ParenthesizedExpression: ParenthesizedExpression
+    PostfixExpression: PostfixExpression
     PseudoState: PseudoState
     RaiseStatement: RaiseStatement
     ReactionSpec: ReactionSpec
@@ -1179,6 +1201,18 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: [Expression.$type]
         },
+        PostfixExpression: {
+            name: PostfixExpression.$type,
+            properties: {
+                operand: {
+                    name: PostfixExpression.operand
+                },
+                operator: {
+                    name: PostfixExpression.operator
+                }
+            },
+            superTypes: [Expression.$type]
+        },
         PseudoState: {
             name: PseudoState.$type,
             properties: {
@@ -1309,6 +1343,11 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
                 },
                 namespace: {
                     name: StateMachine.namespace,
+                    optional: true
+                },
+                reactions: {
+                    name: StateMachine.reactions,
+                    defaultValue: [],
                     optional: true
                 },
                 scopes: {

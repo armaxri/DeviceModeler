@@ -219,7 +219,15 @@ function infer(expression: ast.Expression | undefined, visiting: Set<AstNode>): 
             if (ast.isOperationDeclaration(element)) {
                 return expression.call ? returnTypeOf(element) : 'error';
             }
+            if (ast.isEventDeclaration(element)) {
+                // an event used as condition: true if the event is present
+                return expression.call ? 'error' : 'boolean';
+            }
             return 'error';
+        }
+        case 'PostfixExpression': {
+            const operand = infer(expression.operand, visiting);
+            return isNumeric(operand) ? operand : 'error';
         }
         case 'UnaryExpression': {
             const operand = infer(expression.operand, visiting);

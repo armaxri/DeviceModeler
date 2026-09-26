@@ -55,7 +55,7 @@ export class HsmScopeProvider extends DefaultScopeProvider {
             if (!scopes) {
                 return EMPTY_SCOPE;
             }
-            return scopes.elements ??= this.declarationScope(scopes.machine, d => ast.isVariableDeclaration(d) || ast.isOperationDeclaration(d));
+            return scopes.elements ??= this.declarationScope(scopes.machine, () => true);
         }
         return super.getScope(context);
     }

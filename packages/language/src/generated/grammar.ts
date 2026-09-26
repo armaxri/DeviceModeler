@@ -30,7 +30,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@60"
+                "$ref": "#/rules@61"
               },
               "arguments": []
             }
@@ -42,7 +42,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@61"
+                "$ref": "#/rules@62"
               },
               "arguments": []
             },
@@ -66,7 +66,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@55"
+                    "$ref": "#/rules@56"
                   },
                   "arguments": []
                 }
@@ -126,6 +126,18 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
                   },
                   "arguments": []
                 }
+              },
+              {
+                "$type": "Assignment",
+                "feature": "reactions",
+                "operator": "+=",
+                "terminal": {
+                  "$type": "RuleCall",
+                  "rule": {
+                    "$ref": "#/rules@16"
+                  },
+                  "arguments": []
+                }
               }
             ],
             "cardinality": "*"
@@ -156,7 +168,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@60"
+                "$ref": "#/rules@61"
               },
               "arguments": []
             }
@@ -264,7 +276,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@60"
+                "$ref": "#/rules@61"
               },
               "arguments": []
             },
@@ -402,7 +414,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@60"
+                "$ref": "#/rules@61"
               },
               "arguments": []
             }
@@ -481,7 +493,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@60"
+                "$ref": "#/rules@61"
               },
               "arguments": []
             }
@@ -553,7 +565,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@60"
+                "$ref": "#/rules@61"
               },
               "arguments": []
             }
@@ -647,7 +659,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@60"
+                "$ref": "#/rules@61"
               },
               "arguments": []
             }
@@ -694,7 +706,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
         "terminal": {
           "$type": "RuleCall",
           "rule": {
-            "$ref": "#/rules@60"
+            "$ref": "#/rules@61"
           },
           "arguments": []
         }
@@ -746,7 +758,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@60"
+                "$ref": "#/rules@61"
               },
               "arguments": []
             }
@@ -758,7 +770,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@61"
+                "$ref": "#/rules@62"
               },
               "arguments": []
             },
@@ -855,7 +867,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@60"
+                "$ref": "#/rules@61"
               },
               "arguments": []
             },
@@ -930,7 +942,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@60"
+                "$ref": "#/rules@61"
               },
               "arguments": []
             }
@@ -1106,7 +1118,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
                   "terminal": {
                     "$type": "RuleCall",
                     "rule": {
-                      "$ref": "#/rules@55"
+                      "$ref": "#/rules@56"
                     },
                     "arguments": []
                   },
@@ -1144,7 +1156,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
                   "terminal": {
                     "$type": "RuleCall",
                     "rule": {
-                      "$ref": "#/rules@55"
+                      "$ref": "#/rules@56"
                     },
                     "arguments": []
                   },
@@ -1200,7 +1212,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
                         "terminal": {
                           "$type": "RuleCall",
                           "rule": {
-                            "$ref": "#/rules@60"
+                            "$ref": "#/rules@61"
                           },
                           "arguments": []
                         }
@@ -1217,7 +1229,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
                         "terminal": {
                           "$type": "RuleCall",
                           "rule": {
-                            "$ref": "#/rules@60"
+                            "$ref": "#/rules@61"
                           },
                           "arguments": []
                         }
@@ -1394,7 +1406,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
           "terminal": {
             "$type": "RuleCall",
             "rule": {
-              "$ref": "#/rules@55"
+              "$ref": "#/rules@56"
             },
             "arguments": []
           },
@@ -1437,7 +1449,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@43"
+                "$ref": "#/rules@44"
               },
               "arguments": []
             }
@@ -1449,7 +1461,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@60"
+                "$ref": "#/rules@61"
               },
               "arguments": []
             }
@@ -1600,7 +1612,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
               "terminal": {
                 "$type": "RuleCall",
                 "rule": {
-                  "$ref": "#/rules@55"
+                  "$ref": "#/rules@56"
                 },
                 "arguments": []
               },
@@ -2634,6 +2646,62 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
     },
     {
       "$type": "ParserRule",
+      "name": "PostfixExpression",
+      "inferredType": {
+        "$type": "InferredType",
+        "name": "Expression"
+      },
+      "definition": {
+        "$type": "Group",
+        "elements": [
+          {
+            "$type": "RuleCall",
+            "rule": {
+              "$ref": "#/rules@44"
+            },
+            "arguments": []
+          },
+          {
+            "$type": "Group",
+            "elements": [
+              {
+                "$type": "Action",
+                "inferredType": {
+                  "$type": "InferredType",
+                  "name": "PostfixExpression"
+                },
+                "feature": "operand",
+                "operator": "="
+              },
+              {
+                "$type": "Assignment",
+                "feature": "operator",
+                "operator": "=",
+                "terminal": {
+                  "$type": "Alternatives",
+                  "elements": [
+                    {
+                      "$type": "Keyword",
+                      "value": "++"
+                    },
+                    {
+                      "$type": "Keyword",
+                      "value": "--"
+                    }
+                  ]
+                }
+              }
+            ],
+            "cardinality": "?"
+          }
+        ]
+      },
+      "entry": false,
+      "fragment": false,
+      "parameters": []
+    },
+    {
+      "$type": "ParserRule",
       "name": "PrimaryExpression",
       "inferredType": {
         "$type": "InferredType",
@@ -2645,14 +2713,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
           {
             "$type": "RuleCall",
             "rule": {
-              "$ref": "#/rules@49"
-            },
-            "arguments": []
-          },
-          {
-            "$type": "RuleCall",
-            "rule": {
-              "$ref": "#/rules@44"
+              "$ref": "#/rules@50"
             },
             "arguments": []
           },
@@ -2674,6 +2735,13 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
             "$type": "RuleCall",
             "rule": {
               "$ref": "#/rules@47"
+            },
+            "arguments": []
+          },
+          {
+            "$type": "RuleCall",
+            "rule": {
+              "$ref": "#/rules@48"
             },
             "arguments": []
           }
@@ -2741,7 +2809,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
               "terminal": {
                 "$type": "RuleCall",
                 "rule": {
-                  "$ref": "#/rules@55"
+                  "$ref": "#/rules@56"
                 },
                 "arguments": []
               },
@@ -2785,7 +2853,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
               "terminal": {
                 "$type": "RuleCall",
                 "rule": {
-                  "$ref": "#/rules@55"
+                  "$ref": "#/rules@56"
                 },
                 "arguments": []
               },
@@ -2821,7 +2889,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
               "terminal": {
                 "$type": "RuleCall",
                 "rule": {
-                  "$ref": "#/rules@55"
+                  "$ref": "#/rules@56"
                 },
                 "arguments": []
               },
@@ -2851,7 +2919,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
                     "terminal": {
                       "$type": "RuleCall",
                       "rule": {
-                        "$ref": "#/rules@48"
+                        "$ref": "#/rules@49"
                       },
                       "arguments": []
                     }
@@ -2870,7 +2938,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
                         "terminal": {
                           "$type": "RuleCall",
                           "rule": {
-                            "$ref": "#/rules@48"
+                            "$ref": "#/rules@49"
                           },
                           "arguments": []
                         }
@@ -2910,7 +2978,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@60"
+                    "$ref": "#/rules@61"
                   },
                   "arguments": []
                 }
@@ -2949,13 +3017,6 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
           {
             "$type": "RuleCall",
             "rule": {
-              "$ref": "#/rules@50"
-            },
-            "arguments": []
-          },
-          {
-            "$type": "RuleCall",
-            "rule": {
               "$ref": "#/rules@51"
             },
             "arguments": []
@@ -2978,6 +3039,13 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
             "$type": "RuleCall",
             "rule": {
               "$ref": "#/rules@54"
+            },
+            "arguments": []
+          },
+          {
+            "$type": "RuleCall",
+            "rule": {
+              "$ref": "#/rules@55"
             },
             "arguments": []
           }
@@ -3022,7 +3090,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
         "terminal": {
           "$type": "RuleCall",
           "rule": {
-            "$ref": "#/rules@59"
+            "$ref": "#/rules@60"
           },
           "arguments": []
         }
@@ -3041,7 +3109,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
         "terminal": {
           "$type": "RuleCall",
           "rule": {
-            "$ref": "#/rules@58"
+            "$ref": "#/rules@59"
           },
           "arguments": []
         }
@@ -3060,7 +3128,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
         "terminal": {
           "$type": "RuleCall",
           "rule": {
-            "$ref": "#/rules@57"
+            "$ref": "#/rules@58"
           },
           "arguments": []
         }
@@ -3079,7 +3147,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
         "terminal": {
           "$type": "RuleCall",
           "rule": {
-            "$ref": "#/rules@61"
+            "$ref": "#/rules@62"
           },
           "arguments": []
         }
@@ -3098,7 +3166,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
           {
             "$type": "RuleCall",
             "rule": {
-              "$ref": "#/rules@60"
+              "$ref": "#/rules@61"
             },
             "arguments": []
           },
@@ -3112,7 +3180,7 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
               {
                 "$type": "RuleCall",
                 "rule": {
-                  "$ref": "#/rules@60"
+                  "$ref": "#/rules@61"
                 },
                 "arguments": []
               }

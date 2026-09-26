@@ -240,6 +240,24 @@ export class HsmExpressionValidator {
         }
     }
 
+    checkPostfix(expression: ast.PostfixExpression, accept: ValidationAcceptor): void {
+        const operand = expression.operand;
+        const element = ast.isElementReference(operand) && !operand.call ? operand.element.ref : undefined;
+        if (!ast.isElementReference(operand) || operand.call || (operand.element.ref && !ast.isVariableDeclaration(element))) {
+            accept('error', `'${expression.operator}' can only be applied to a variable.`, { node: expression, property: 'operator' });
+            return;
+        }
+        if (ast.isVariableDeclaration(element)) {
+            if (element.const || element.readonly) {
+                accept('error', `Cannot modify the ${element.const ? 'constant' : 'readonly variable'} '${operand.element.$refText}'.`, { node: operand, property: 'element' });
+            }
+            const type = typeOfVariable(element);
+            if (isValueType(type) && !isNumeric(type)) {
+                accept('error', `'${expression.operator}' requires a numeric variable, but '${operand.element.$refText}' is ${typeName(type)}.`, { node: expression, property: 'operator' });
+            }
+        }
+    }
+
     checkAssignment(assignment: ast.AssignmentExpression, accept: ValidationAcceptor): void {
         const left = assignment.left;
         if (!ast.isElementReference(left)) {
@@ -381,6 +399,12 @@ export class HsmExpressionValidator {
             }
             return;
         }
+        if (ast.isEventDeclaration(element)) {
+            if (reference.call) {
+                accept('error', `'${name}' is an event and cannot be called.`, { node: reference, property: 'call' });
+            }
+            return;
+        }
         if (!ast.isOperationDeclaration(element)) {
             return;
         }
@@ -485,7 +509,7 @@ function isValueType(type: HsmType): boolean {
 
 /** Assignments and operation calls have a side effect (unresolved references are reported by the linker). */
 function hasSideEffect(expression: ast.Expression): boolean {
-    if (ast.isAssignmentExpression(expression)) {
+    if (ast.isAssignmentExpression(expression) || ast.isPostfixExpression(expression)) {
         return true;
     }
     if (ast.isElementReference(expression)) {

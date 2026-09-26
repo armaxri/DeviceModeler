@@ -8,6 +8,7 @@ statemachine Door {
         in event close
         in event obstacle
         in event motorStopped
+        in event serviceDone
         out event alarm
         var cycles : integer = 0
 
@@ -54,7 +55,7 @@ statemachine Door {
     Moving -> Fork : / raise alarm # Blocked>
     Fork -> Service.Locked
     Fork -> Service.On
-    Service.Locked -> Join
-    Service.On -> Join
+    Service.Locked -> Join : serviceDone
+    Service.On -> Join : serviceDone
     Join -> Closed
 }

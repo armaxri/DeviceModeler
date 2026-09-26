@@ -674,3 +674,53 @@ describe('vertex references', () => {
         expect(Date.now() - start).toBeLessThan(10000);
     });
 });
+
+describe('itemis compatibility extensions', () => {
+    test('events as conditions, postfix operators and statechart reactions', async () => {
+        const parsed = await parse(`statemachine M {
+            interface:
+                in event e1
+                in event start
+                var x : integer = 0
+                var b : boolean
+            internal:
+                const C : integer = 1
+            always / x++
+            [*] -> A
+            state A
+            state B
+            A -> B : e1, start [e1 && x > 0] / x--; b = start
+        }`);
+        expect(errors(parsed)).toEqual([]);
+    });
+
+    test('postfix operators require numeric variables', async () => {
+        const parsed = await parse(`statemachine M {
+            interface:
+                in event e1
+                var b : boolean
+                const C : integer = 1
+            [*] -> A
+            state A
+            A -> A : e1 / b++; C--; e1++
+        }`);
+        const messages = errors(parsed).join('\\n');
+        expect(messages).toContain(`'++' requires a numeric variable, but 'b' is boolean.`);
+        expect(messages).toContain(`Cannot modify the constant 'C'.`);
+        expect(messages).toContain(`'++' can only be applied to a variable.`);
+    });
+
+    test('transitions from states without trigger and guard are never taken', async () => {
+        const parsed = await parse(`statemachine M {
+            interface:
+                var x : integer
+            [*] -> A
+            state A
+            state B
+            A -> B
+            B -> A : [x > 0]
+        }`);
+        expect(warnings(parsed)).toContain(`Missing trigger: this transition is never taken. Use 'always' or 'oncycle' to take it in every step.`);
+        expect(warnings(parsed).filter(w => w.startsWith('Missing trigger'))).toHaveLength(1);
+    });
+});

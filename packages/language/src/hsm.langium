@@ -35,7 +35,7 @@ entry StateMachine:
         ('namespace' namespace=QualifiedName)?
         annotations+=Annotation*
         scopes+=Scope*
-        (vertices+=Vertex | transitions+=Transition)*
+        (vertices+=Vertex | transitions+=Transition | reactions+=LocalReaction)*
     '}';
 
 // ---------------------------------------------------------------------------------------------
@@ -194,7 +194,11 @@ UnaryExpression infers Expression:
     | CastExpression;
 
 CastExpression infers Expression:
-    PrimaryExpression ({infer CastExpression.operand=current} 'as' type=TypeReference)*;
+    PostfixExpression ({infer CastExpression.operand=current} 'as' type=TypeReference)*;
+
+// `x++` / `x--`: increments / decrements the variable, the value is the value before the operation
+PostfixExpression infers Expression:
+    PrimaryExpression ({infer PostfixExpression.operand=current} operator=('++' | '--'))?;
 
 PrimaryExpression infers Expression:
     Literal
@@ -214,7 +218,7 @@ ValueOfExpression:
 ActiveExpression:
     'active' '(' state=[Vertex:QualifiedName] ')';
 
-// variable, constant or operation call
+// variable, constant, operation call or event (an event in an expression is true if it is present)
 ElementReference:
     element=[Declaration:QualifiedName] (call?='(' (arguments+=Argument (',' arguments+=Argument)*)? ')')?;
 

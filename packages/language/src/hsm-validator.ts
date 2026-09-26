@@ -35,6 +35,7 @@ export function registerValidationChecks(services: HsmServices): void {
         RaiseStatement: expressions.checkRaise,
         ValueOfExpression: expressions.checkValueOf,
         AssignmentExpression: expressions.checkAssignment,
+        PostfixExpression: expressions.checkPostfix,
         BinaryExpression: expressions.checkBinary,
         UnaryExpression: expressions.checkUnary,
         ConditionalExpression: expressions.checkConditional,
@@ -219,6 +220,10 @@ export class HsmValidator {
         }
         if (source && ast.isPseudoState(source) && (source.kind === 'history' || source.kind === 'deephistory') && target && !isAncestorOrSelf(source.$container, target)) {
             accept('warning', 'The default transition of a history pseudo state should stay within its composite state.', { node: transition, property: 'target' });
+        }
+        if (source && ast.isState(source) && !hasTrigger(transition) && !hasGuard(transition) && !transition.exitPoint) {
+            accept('warning', `Missing trigger: this transition is never taken. Use 'always' or 'oncycle' to take it in every step.`,
+                { node: transition, property: transition.spec ? 'spec' : 'target' });
         }
         const sourceIsChoice = source && ast.isPseudoState(source) && (source.kind === 'choice' || source.kind === 'junction');
         for (const trigger of transition.spec?.triggers ?? []) {
