@@ -241,7 +241,7 @@ testclass CdPlayerTest for statemachine CdPlayer {
   raised before `enter`) are reported as **errors**.
 
 ```bash
-hsm test examples/tests/door.hsmtest                    # loads the .hsm files next to the test file
+hsm test examples/tests/door.hsmtest                    # loads the .hsm files next to the test file (or in its parent directory)
 hsm test tests/*.hsmtest --machine models/ --junit report.xml -v
 ```
 

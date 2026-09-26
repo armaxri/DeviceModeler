@@ -19,13 +19,20 @@ const SEVERITIES = ['', 'error', 'warning', 'info', 'hint'];
 
 /**
  * `hsm test <file.hsmtest ...>`: loads the test files together with the `.hsm` files in their
- * directories (and the given `--machine` files / directories), runs all tests and prints a report.
+ * directories – or in the parent directories if there are none – (and the given `--machine` files /
+ * directories), runs all tests and prints a report.
  * Returns the exit code: 0 if all tests passed, 1 otherwise.
  */
 export async function runTestCommand(files: string[], options: TestCommandOptions): Promise<number> {
     const machineFiles = new Set<string>();
     for (const file of files) {
-        for (const candidate of await hsmFilesIn(path.dirname(path.resolve(file)))) {
+        // the directory of the test file, or its parent if it contains no models (e.g. `examples/tests/`)
+        const directory = path.dirname(path.resolve(file));
+        let candidates = await hsmFilesIn(directory);
+        if (candidates.length === 0) {
+            candidates = await hsmFilesIn(path.dirname(directory));
+        }
+        for (const candidate of candidates) {
             machineFiles.add(candidate);
         }
     }
