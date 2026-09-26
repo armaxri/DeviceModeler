@@ -6,8 +6,9 @@ expected along the way. The scenarios pin down the execution semantics of
 section N, `example-...` scenarios run the models in [`examples/`](../../../../examples).
 
 All implementations run the same scenarios: the interpreter (`test/scenarios.test.ts`, and
-`hsm simulate <model> --script <scenario>`) and code generators, which compile a scenario into a
-test harness. The format therefore only uses plain JSON values and no JS specifics.
+`hsm simulate <model> --script <scenario>`) and the code generators (`test/cpp-generator.test.ts`,
+`test/c-generator.test.ts`), which compile a scenario into a test harness. The format therefore only
+uses plain JSON values and no JS specifics.
 
 ## File format
 
@@ -54,8 +55,9 @@ Every step contains exactly one of the following keys (plus an optional `comment
 An action step may carry `"expectError": "text"`: the action must fail with a runtime error whose
 message contains `text` (for example a choice without enabled branch). The interpreter continues
 with the next step (the configuration may be inconsistent). Implementations without runtime error
-detection may skip scenarios containing `expectError`; the C harness checks the message passed to
-the error hook (an unknown event is rejected when the harness is generated: a compile time error in C).
+detection may skip scenarios containing `expectError`; the C++ harness checks the message of the
+`sc::StatemachineError` exception, the C harness the message passed to the error hook (an unknown event
+is rejected when the harness is generated: a compile time error in C / C++).
 
 ### Expectations
 
