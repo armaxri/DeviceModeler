@@ -24,7 +24,8 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
   `oncycle`, `else`/`default`, guards, multi-statement effects, local reactions
 - ✅ Partially qualified state names (`Active.Playing`); the same simple name may appear in
   different composite states
-- 🚧 Type system and full validation of expressions and declarations
+- ✅ Type system and full validation of expressions and declarations (types, operators,
+  assignments, calls, raise/valueof, triggers, annotations, ambiguous names)
 - 📋 Imports of other statecharts / header files
 
 ## Phase 2 – Structure parity 🚧
