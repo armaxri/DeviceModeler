@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import 'sprotty/css/sprotty.css';
 import './styles/app.css';
 import './styles/diagram.css';
+import './styles/simulation.css';
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import { HsmApp } from './app.js';
 

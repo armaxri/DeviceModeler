@@ -52,6 +52,11 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
     transitions; the panel of the definition section adds declarations (events, variables, constants,
     operations) to the right scope and creates `interface:` / `internal:` if necessary
   - `Del` deletes (including all attached transitions), `F2` renames
+- **Simulation** in the editor, like the simulation view of itemis CREATE: raise events, run cycles,
+  advance the virtual clock or let it run in real time (0.1× – 10×), inspect and change variables, mock
+  operation results, watch out events, operation calls and the execution trace. Active states and the
+  transitions just taken are highlighted in the diagram; breakpoints on states and transitions pause
+  real-time mode (see [Simulation](#simulation)).
 - **Selection sync**: selecting an element in the diagram highlights its text, moving the cursor in the
   text selects the element in the diagram.
 - **Export**: standalone SVG, PlantUML (`.puml`, copy to clipboard or open on plantuml.com). Synchronizations
@@ -200,6 +205,31 @@ statemachine CdPlayer "optional description" {
 | Undo / redo | `Ctrl+Z` / `Ctrl+Y` (shared with the text editor) |
 | Keep a tool active | hold `Shift` while choosing it, `Esc` to go back to selection |
 
+## Simulation
+
+Click **▶ Simulate** in the toolbar (the model must not contain errors; warnings are fine). The text
+becomes read-only, the diagram tools are disabled and the simulation panel replaces the properties
+panel. The simulation uses the interpreter of the language package (`StatechartInterpreter`, semantics in
+[`docs/semantics.md`](docs/semantics.md)) with a virtual clock; **■ Stop** returns to editing.
+
+| Part of the panel | What it does |
+| --- | --- |
+| *Run cycle* / *Step* | cycle based: one run cycle with the collected events and expired time events; event driven: a step without events (`Space`) |
+| *Real time* | advances the virtual clock with the wall-clock time × *Speed*: cycle based machines run a cycle every `@CycleBased` period, event driven machines fire their time events (`Esc` pauses) |
+| *Advance … ms* | advances the virtual clock at once, running the cycles resp. firing the time events that are due |
+| *Restart* | re-enters the state machine (breakpoints and operation results are kept) |
+| *In events* | one button per `in` event, grouped by interface, with a value field for typed events. Cycle based: with *Run cycle after raising an event* (default) a cycle is run immediately, otherwise the event is shown as *pending* until the next cycle |
+| *Variables* | grouped by interface / internal scope; non-constant variables can be edited (checked against the type), changed values flash |
+| *Operations* | the value each operation returns (a mock of the host implementation) and the number of calls |
+| *Out events*, *Operation calls*, *Trace* | logs with the virtual time; click a trace entry to show the element in the text and in the diagram |
+
+Active states (also inside orthogonal regions) are highlighted in the diagram, the transitions taken in
+the last step light up in orange and fade out, a reached final state turns green. Right-click a state or
+a transition (or use *Toggle breakpoint* for the selected element) to set a **breakpoint** (red dot):
+real-time mode and *Advance* stop when the state is entered or the transition is taken. Errors of the
+interpreter (e.g. a division by zero or a choice without enabled branch) stop the simulation and are
+shown with a link to the model element.
+
 ## Architecture
 
 ```
@@ -220,7 +250,8 @@ packages/
     src/app.ts                controller: text -> Langium -> ELK (web worker) -> Sprotty, diagram edits -> text
     src/language-support.ts   Langium services wired into Monaco (markers, completion, formatting, …)
     src/diagram/              Sprotty model, views (PlantUML look), mouse / selection listeners
-    src/ui/                   properties panel, inline editor, SVG / PlantUML export
+    src/simulation/           simulation session: interpreter, real-time clock, logs, operation mocks, breakpoints
+    src/ui/                   properties and simulation panels, inline editor, SVG / PlantUML export
 examples/       sample state machines
 docs/           execution semantics
 ```
@@ -232,8 +263,7 @@ custom views. Diagram interactions are turned into text edits by `ModelEditor` a
 model, which triggers the same pipeline again – so undo / redo, comments and formatting just work.
 
 Possible next steps: a VS Code extension (the language package can be used by a Langium language server
-together with `sprotty-vscode`), code generation for a target language, and simulation / animation of
-state machine executions.
+together with `sprotty-vscode`) and code generation for further target languages (see [ROADMAP.md](ROADMAP.md)).
 
 ## Importing itemis CREATE models
 

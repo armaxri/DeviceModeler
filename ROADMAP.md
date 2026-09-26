@@ -57,8 +57,14 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
   event-driven, parent-first and child-first
 - ✅ Interpreter with a virtual clock (`hsm simulate`)
 - ✅ Shared conformance suite (scenario tests) for the interpreter and all code generators
-- 🚧 Simulation in the web editor: raise events, inspect and change variables, advance time,
-  animated active states and taken transitions, breakpoints
+- ✅ Simulation in the web editor: raise events (with values), run cycles / steps, advance time or run in
+  real time with a speed factor, inspect and change variables, mocked operation results, logs of out
+  events, operation calls and the trace (linked to the text), animated active states, taken transitions
+  and final states, simple breakpoints on states and transitions, errors linked to the model element
+  - 📋 still missing: conditional breakpoints (guard expression, hit count), breakpoints on local
+    reactions / events, stepping micro steps within a cycle, a timer overview (pending time events and
+    their due times), recording / exporting a session as a scenario for the conformance suite,
+    operation mocks with scripted results (sequences, expressions), simulation of several machines
 - 📋 `@SuperSteps`, `@EventBuffering`, `@InEventQueue`
 
 ## Phase 5 – Code generation and testing 🚧

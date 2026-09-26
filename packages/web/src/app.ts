@@ -6,7 +6,7 @@ import type { AstNode } from 'langium';
 import {
     EditError, ModelEditor, allVertices, applyEdits, definitionRange, generatePlantUml, isEventDeclaration, isInterfaceScope, isOperationDeclaration,
     isScopeContainer, isValidIdentifier, isPseudoState, isRegion, isState, isStateMachine, isTransition, isVertex, layoutStateMachine,
-    qualifiedName, scopeOf, siblingVertices, transitionLabel, DEFINITION_ID, MACHINE_ID,
+    qualifiedName, scopeOf, siblingVertices, transitionLabel, finalNodeId, DEFINITION_ID, MACHINE_ID,
     nodeText as nodeTextOf, type DeletionTarget, type DiagramNode, type DiagramNodeKind, type EdgeRouting, type EditResult, type LayoutDirection, type LayoutResult,
     type NewVertexKind, type ParsedModel, type ScopeContainer, type TransitionSource, type TransitionTarget, type Vertex
 } from 'hsm-language';
@@ -23,6 +23,8 @@ import { closeInlineEditor, showInlineEditor } from './ui/inline-editor.js';
 import { exportSvg } from './ui/export-svg.js';
 import { plantUmlServerUrl } from './ui/plantuml.js';
 import { renderProperties, type PropertiesHost, type SelectionInfo } from './ui/properties.js';
+import { SimulationPanel } from './ui/simulation-panel.js';
+import { SimulationSession, canHaveBreakpoint } from './simulation/session.js';
 import { EMPTY_MODEL, EXAMPLES } from './examples.js';
 
 export type Tool = 'select' | 'state' | 'choice' | 'junction' | 'history' | 'deephistory' | 'sync' | 'entry' | 'exit' | 'initial' | 'final'
@@ -80,6 +82,9 @@ const STORAGE_TEXT = 'hsm-modeler.text';
 const STORAGE_SETTINGS = 'hsm-modeler.settings';
 const STORAGE_FILE = 'hsm-modeler.file';
 
+/** How long (ms) a taken transition keeps its highlight before it fades out (see diagram.css). */
+const TAKEN_HIGHLIGHT_MS = 350;
+
 export class HsmApp implements PropertiesHost, DiagramCallbacks {
 
     readonly language = new HsmLanguageSupport();
@@ -109,6 +114,13 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
     readonly selection = new Set<string>();
     private settings: Settings = { direction: 'DOWN', routing: 'SPLINES', theme: 'classic', priorities: true };
     private readonly elk = createWorkerElk();
+
+    /** The running simulation (simulation mode), if any. */
+    private simulation?: SimulationSession;
+    private simulationPanel?: SimulationPanel;
+    /** Key of the simulation flags last rendered (to skip identical diagram updates). */
+    private renderedFlags = '';
+    private flagTimer?: ReturnType<typeof setTimeout>;
 
     async start(): Promise<void> {
         this.loadSettings();
@@ -195,7 +207,11 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         this.container = createDiagramContainer('sprotty', this);
         this.modelSource = this.container.get<LocalModelSource>(TYPES.ModelSource);
         this.actionDispatcher = this.container.get<IActionDispatcher>(TYPES.IActionDispatcher);
-        new ResizeObserver(() => this.fitIfSmall()).observe(byId('diagram-area'));
+        new ResizeObserver(() => {
+            // sprotty updates its canvas bounds on window resize events only
+            window.dispatchEvent(new Event('resize'));
+            this.fitIfSmall();
+        }).observe(byId('diagram-area'));
     }
 
     private createPalette(): void {
@@ -287,6 +303,7 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
             this.saveSettings();
             this.applyTheme();
         });
+        byId('btn-simulate').addEventListener('click', () => this.simulation ? this.stopSimulation() : this.startSimulation());
         byId('btn-svg').addEventListener('click', () => this.exportSvg());
         byId('btn-plantuml').addEventListener('click', () => this.showPlantUml());
         byId('modal-close').addEventListener('click', () => this.closeModal());
@@ -305,7 +322,7 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         // note: sprotty replaces its base div when rendering, so listeners are registered on the parent
         const diagram = byId('diagram-area');
         diagram.addEventListener('keydown', event => {
-            if (event.target instanceof HTMLInputElement) {
+            if (event.target instanceof HTMLInputElement || this.simulation) {
                 return;
             }
             const ctrl = event.ctrlKey || event.metaKey;
@@ -337,6 +354,32 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape' && !byId('modal').hidden) {
                 this.closeModal();
+                return;
+            }
+            if (this.simulation && !event.ctrlKey && !event.metaKey && !event.altKey) {
+                const target = event.target;
+                const inField = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLButtonElement
+                    || (target instanceof HTMLTextAreaElement && !byId('editor').contains(target));
+                if (event.key === ' ' && !inField) {
+                    this.simulation.runCycle();
+                    event.preventDefault();
+                } else if (event.key === 'Escape' && this.simulation.isPlaying) {
+                    this.simulation.pause();
+                    event.preventDefault();
+                }
+            }
+        });
+        diagram.addEventListener('contextmenu', event => {
+            if (!this.simulation) {
+                return;
+            }
+            event.preventDefault();
+            const id = this.elementIdAt(event.target);
+            const node = id ? this.astOf(id) : undefined;
+            if (canHaveBreakpoint(node)) {
+                this.toggleBreakpoint(node);
+            } else {
+                this.setStatus('Right-click a state or a transition to toggle its breakpoint.', 'info');
             }
         });
     }
@@ -467,10 +510,15 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         if (!this.state) {
             return;
         }
+        const flags = this.simulationFlags();
+        this.renderedFlags = flags?.key ?? '';
         const schema = toSchema(this.state.layout.graph, {
             selected: this.selection,
             issues: this.state.issues,
-            pendingSource: this.pendingSource
+            pendingSource: this.pendingSource,
+            activeStates: flags?.active,
+            recentTransitions: flags?.recent,
+            breakpoints: flags?.breakpoints
         });
         if (!this.rendered) {
             this.rendered = true;
@@ -562,6 +610,10 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
      * (undoable with Ctrl+Z), then updates the diagram.
      */
     async applyEdit(producer: (editor: ModelEditor, state: ModelState) => EditResult | undefined): Promise<boolean> {
+        if (this.simulation) {
+            this.setStatus('Stop the simulation to edit the model.', 'warning');
+            return false;
+        }
         if (!this.state || this.state.parsed.text !== this.editor.getValue()) {
             await this.update();
         }
@@ -676,6 +728,9 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
 
     /** Undo / redo on the text model, also when the editor does not have the focus. */
     private undoRedo(command: 'undo' | 'redo'): void {
+        if (this.simulation) {
+            return;
+        }
         const model = this.editor.getModel() as unknown as Partial<Record<'undo' | 'redo', () => void>> | null;
         const operation = model?.[command];
         if (typeof operation === 'function') {
@@ -687,6 +742,7 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
     }
 
     private loadText(text: string, fileName: string): void {
+        this.stopSimulation();
         this.fileName = fileName;
         byId('file-name').textContent = fileName;
         try {
@@ -706,6 +762,9 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
 
     setTool(tool: Tool, sticky = false): void {
         closeInlineEditor();
+        if (this.simulation) {
+            tool = 'select';
+        }
         this.tool = tool;
         this.stickyTool = sticky;
         if (this.pendingSource) {
@@ -931,7 +990,7 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
     }
 
     doubleClick(target: SModelElementImpl): void {
-        if (this.tool !== 'select') {
+        if (this.tool !== 'select' || this.simulation) {
             return;
         }
         const id = this.diagramId(target);
@@ -953,6 +1012,10 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
     }
 
     dragEnd(draggedId: string, dropTargetId: string | undefined): void {
+        if (this.simulation) {
+            this.render();
+            return;
+        }
         const vertex = this.astOf(draggedId);
         const container = this.containerAt(dropTargetId);
         const dropNode = dropTargetId ? this.astOf(dropTargetId) : undefined;
@@ -1061,7 +1124,14 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         this.editor.revealRangeInCenterIfOutsideViewport(range, monaco.editor.ScrollType.Smooth);
     }
 
+    canEdit(): boolean {
+        return !this.simulation;
+    }
+
     deleteSelection(): void {
+        if (this.simulation) {
+            return;
+        }
         const targets = [...this.selection].flatMap((id): DeletionTarget[] => {
             const kind = this.kindOf(id);
             const node = this.astOf(id);
@@ -1088,6 +1158,9 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
 
     /** Opens an inline editor to rename a vertex / region or to edit the label of a transition. */
     startRename(id: string): void {
+        if (this.simulation) {
+            return;
+        }
         const node = this.astOf(id);
         const element = document.getElementById(`sprotty_${id}`);
         if (!node || !element) {
@@ -1148,11 +1221,222 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
     }
 
     // -----------------------------------------------------------------------------------------
+    // Simulation
+
+    /** Starts the simulation mode: the model must not contain errors (warnings are fine). */
+    async startSimulation(): Promise<void> {
+        if (this.simulation) {
+            return;
+        }
+        closeInlineEditor();
+        await this.update();
+        const state = this.state;
+        if (!state || this.syntaxErrors || state.parsed.text !== this.editor.getValue()) {
+            this.setStatus('The model contains syntax errors – fix them before starting the simulation.', 'error');
+            return;
+        }
+        const errors = state.parsed.diagnostics.filter(d => d.severity === 1);
+        if (errors.length > 0) {
+            this.setStatus(`The model contains ${errors.length} error${errors.length === 1 ? '' : 's'} – fix ${errors.length === 1 ? 'it' : 'them'} before `
+                + `starting the simulation (line ${errors[0].range.start.line + 1}: ${errors[0].message}).`, 'error');
+            return;
+        }
+        this.setTool('select');
+        this.pendingSource = undefined;
+        this.editor.updateOptions({ readOnly: true, readOnlyMessage: { value: 'Stop the simulation to edit the model.' } });
+        document.body.classList.add('simulating');
+        this.setEditingControlsEnabled(false);
+        const button = byId('btn-simulate');
+        button.textContent = '■ Stop';
+        button.title = 'Stop the simulation and return to editing';
+        button.classList.add('active');
+        byId('properties').classList.add('simulation');
+        const session = new SimulationSession(state.parsed.model, { changed: () => this.simulationChanged() });
+        this.simulation = session;
+        this.simulationPanel = new SimulationPanel(byId('properties'), session, this);
+        this.setStatus(`Simulation of ${state.parsed.model.name} started.`);
+        this.simulationChanged();
+        this.focusDiagram();
+    }
+
+    /** Leaves the simulation mode and returns to editing. */
+    stopSimulation(): void {
+        const session = this.simulation;
+        if (!session) {
+            return;
+        }
+        session.dispose();
+        this.simulation = undefined;
+        this.simulationPanel = undefined;
+        clearTimeout(this.flagTimer);
+        this.editor.updateOptions({ readOnly: false });
+        document.body.classList.remove('simulating');
+        this.setEditingControlsEnabled(true);
+        const button = byId('btn-simulate');
+        button.textContent = '▶ Simulate';
+        button.title = 'Simulate the state machine (the model must not contain errors)';
+        button.classList.remove('active');
+        byId('properties').classList.remove('simulation');
+        byId('properties').replaceChildren();
+        this.decorations.clear();
+        this.render();
+    }
+
+    /** Palette, undo / redo, format and layout settings are disabled while simulating. */
+    private setEditingControlsEnabled(enabled: boolean): void {
+        const controls = [
+            ...byId('palette').querySelectorAll<HTMLButtonElement>('button'),
+            ...['btn-undo', 'btn-redo', 'btn-format', 'direction-select', 'routing-select', 'priorities-toggle'].map(id => byId<HTMLButtonElement>(id))
+        ];
+        for (const control of controls) {
+            control.disabled = !enabled;
+        }
+    }
+
+    /** Called by the session after every change: updates the panel and (if necessary) the diagram. */
+    private simulationChanged(): void {
+        this.simulationPanel?.update();
+        const flags = this.simulationFlags();
+        if (flags && flags.key !== this.renderedFlags) {
+            this.render();
+        }
+    }
+
+    /**
+     * The simulation state as diagram flags: active states (and final states), recently taken
+     * transitions and breakpoints, mapped to diagram ids via `layout.ids`. The layout itself is not
+     * recomputed. Schedules a re-render when the highlight of a taken transition expires.
+     */
+    private simulationFlags(): { active: Set<string>, recent: Set<string>, breakpoints: Set<string>, key: string } | undefined {
+        const session = this.simulation;
+        const state = this.state;
+        if (!session || !state) {
+            return undefined;
+        }
+        const ids = state.layout.ids;
+        const active = new Set<string>();
+        const sim = session.sim;
+        if (sim?.isRunning) {
+            for (const node of sim.activeStateNodes()) {
+                const id = ids.get(node);
+                if (id) {
+                    active.add(id);
+                }
+            }
+            // the final state of a container is active if the container is active but none of its states
+            const containers: ScopeContainer[] = [state.parsed.model];
+            for (const vertex of allVertices(state.parsed.model)) {
+                if (isState(vertex)) {
+                    containers.push(vertex, ...vertex.regions);
+                }
+            }
+            for (const container of containers) {
+                const containerId = ids.get(container);
+                const finalId = containerId && finalNodeId(containerId);
+                if (!finalId || !state.nodes.has(finalId)) {
+                    continue;
+                }
+                const owner = isRegion(container) ? container.$container : container;
+                const ownerActive = isStateMachine(owner) || sim.isActive(owner);
+                if (ownerActive && !container.vertices.some(v => isState(v) && sim.isActive(v))) {
+                    active.add(finalId);
+                }
+            }
+        }
+        const recent = new Set<string>();
+        const now = performance.now();
+        let nextExpiry = Number.POSITIVE_INFINITY;
+        for (const [transition, time] of session.recentTransitions) {
+            const age = now - time;
+            if (age >= TAKEN_HIGHLIGHT_MS) {
+                session.recentTransitions.delete(transition);
+                continue;
+            }
+            const id = ids.get(transition);
+            if (id) {
+                recent.add(id);
+            }
+            nextExpiry = Math.min(nextExpiry, TAKEN_HIGHLIGHT_MS - age);
+        }
+        clearTimeout(this.flagTimer);
+        if (Number.isFinite(nextExpiry)) {
+            this.flagTimer = setTimeout(() => this.simulationChanged(), nextExpiry + 10);
+        }
+        const breakpoints = new Set<string>();
+        for (const node of session.breakpoints) {
+            const id = ids.get(node);
+            if (id) {
+                breakpoints.add(id);
+            }
+        }
+        const key = [[...active].sort().join(','), [...recent].sort().join(','), [...breakpoints].sort().join(',')].join('|');
+        return { active, recent, breakpoints, key };
+    }
+
+    toggleBreakpoint(node: AstNode): void {
+        const session = this.simulation;
+        if (!session) {
+            return;
+        }
+        const set = session.toggleBreakpoint(node);
+        const name = isTransition(node) ? `transition ${this.transitionLabelText(node) || nodeTextOf(node)}` : `state ${isState(node) ? qualifiedName(node) : ''}`;
+        this.setStatus(`Breakpoint ${set ? 'set on' : 'removed from'} ${name}.`);
+        this.simulationChanged();
+    }
+
+    toggleBreakpointOfSelection(): void {
+        const id = this.singleSelection();
+        const node = id ? this.astOf(id) : undefined;
+        if (canHaveBreakpoint(node)) {
+            this.toggleBreakpoint(node);
+        } else {
+            this.setStatus('Select a state or a transition in the diagram first (or right-click it).', 'warning');
+        }
+    }
+
+    /** Selects the text of a model element (read-only while simulating) and the corresponding diagram element. */
+    reveal(node: AstNode): void {
+        const cst = node.$cstNode;
+        const model = this.editor.getModel();
+        if (cst && model) {
+            const start = model.getPositionAt(cst.offset);
+            const end = model.getPositionAt(cst.end);
+            const range = new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column);
+            this.editor.setSelection(range);
+            this.editor.revealRangeInCenterIfOutsideViewport(range, monaco.editor.ScrollType.Smooth);
+            this.decorations.set([{ range, options: { className: 'hsm-selected-range', isWholeLine: false } }]);
+        }
+        let current: AstNode | undefined = node;
+        while (current && !this.state?.layout.ids.has(current)) {
+            current = current.$container;
+        }
+        const id = current ? this.state?.layout.ids.get(current) : undefined;
+        if (id && id !== MACHINE_ID) {
+            this.select(id, true);
+        }
+    }
+
+    /** The id of the diagram element of a DOM element (walking up to the element with a sprotty id). */
+    private elementIdAt(target: EventTarget | null): string | undefined {
+        let element = target instanceof Element ? target : null;
+        while (element) {
+            if (element.id.startsWith('sprotty_')) {
+                const id = element.id.substring('sprotty_'.length);
+                if (this.state?.layout.elements.has(id)) {
+                    return id;
+                }
+            }
+            element = element.parentElement;
+        }
+        return undefined;
+    }
+
+    // -----------------------------------------------------------------------------------------
     // Properties panel
 
     private renderPropertiesPanel(): void {
         const panel = byId('properties');
-        if (panel.contains(document.activeElement)) {
+        if (this.simulation || panel.contains(document.activeElement)) {
             return;
         }
         const id = this.singleSelection();
