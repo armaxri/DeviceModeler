@@ -58,6 +58,8 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
   become `<<fork>>` / `<<join>>`, entry points / exit nodes `<<entryPoint>>` / `<<exitPoint>>`, the
   definition section a legend.
 - **CLI** for validation, PlantUML generation and layout computation.
+- **Unit tests** for state machines in the style of SCTUnit (`.hsmtest` files, see [Unit tests](#unit-tests)),
+  executed by the interpreter, with JUnit XML reports for CI.
 
 ## Getting started
 
@@ -86,6 +88,7 @@ node packages/language/bin/cli.js layout examples/keyboard.hsm --direction RIGHT
 node packages/language/bin/cli.js import model.sct -o model.hsm   # itemis CREATE import, see below
 node packages/language/bin/cli.js simulate examples/cd-player.hsm -e play,eject,eject   # run the interpreter
 node packages/language/bin/cli.js simulate examples/door.hsm --script packages/language/test/scenarios/example-door.json
+node packages/language/bin/cli.js test examples/tests/*.hsmtest --machine examples --junit report.xml   # unit tests
 ```
 
 ## The language
@@ -179,6 +182,78 @@ statemachine CdPlayer "optional description" {
   [`examples/`](examples) for more: `door.hsm` shows entry points, exit nodes and fork / join,
   `traffic-light.hsm` time events and named interfaces, `keyboard.hsm` orthogonal regions.
 
+## Unit tests
+
+State machines are tested with a small test language modeled after **SCTUnit** of itemis CREATE
+(files `*.hsmtest`). A test class tests one state machine; every operation annotated with `@Test` is
+executed on a fresh instance of the interpreter, after the `@SetUp` operation (if any):
+
+```
+testclass CdPlayerTest for statemachine CdPlayer {
+
+    @SetUp
+    operation insertDisc() {
+        mock discInserted returns (true)        // result of an operation (`mock op(1) returns (x)`: for these arguments)
+        enter
+        tracks = 3                              // assign variables of the state machine
+    }
+
+    @Test
+    operation playsWhenDiscInserted() {
+        assert active(Closed.Stopped)
+        raise play                              // raise in events (`raise level : 4` with a value)
+        proceed 1 cycle                         // `proceed 2 cycles`, `proceed 200 ms` (s, ms, us, ns)
+        assert active(CdPlayer.Active.Playing) message "the choice selects Active"
+        assert called startMotor times 1        // `assert called op with (1, true)`, `assert !called op`
+        assert track == 1 && !is_final
+        press(2)                                // call helper operations
+    }
+
+    operation press(count : integer) {          // operations without @Test are helpers
+        var i : integer = 0                     // local variables
+        while (i < count) { raise play; proceed 1 cycle; i += 1 }
+        if (tracks > 0) { assert active(Playing) } else { assert false }
+    }
+}
+```
+
+- **Statements**: `enter`, `exit`, `raise`, `proceed`, `assert <expr> (message "...")?`,
+  `assert (!)called op (with (args))? (times n)?`, `mock op ((args))? returns (value)`, `var` / `const`,
+  assignments (`=`, `+=`, …, `++`, `--`), `if` / `else if` / `else`, `while`, calls of helper operations.
+  Statements are separated by line breaks or `;`. The keywords of the test language (`enter`, `proceed`,
+  `called`, `mock`, `returns`, `times`, `with`, `message`, `if`, `while`, …) cannot be used as names in tests.
+- **Expressions** are the expressions of the HSM language. Names are resolved in the tested state machine
+  like inside the state machine (`x`, `Iface.x`, states by (partially) qualified name, optionally prefixed
+  with the name of the state machine), local variables and parameters shadow them. An **out event** is
+  `true` if it was raised by the last `enter` / `raise` (event driven) / `proceed` / `exit`; `valueof(e)`
+  is its last value. `is_final` is true if the final state of the top-level region is active.
+- **`proceed n cycle(s)`** performs `n` run cycles (event driven: `n` steps without events).
+  **`proceed t unit`** advances the virtual clock: cycle based state machines run a cycle whenever the
+  clock reaches a multiple of the cycle period (counted from `enter`), event driven ones process the
+  time events that expire.
+- **`assert called`** counts the calls since the start of the test (including the set up). Operations of the
+  state machine cannot be called in tests; unmocked operations return the default value of their type.
+- The validator checks the references and the types (asserted expressions and conditions are boolean,
+  event values, mocked values and arguments match the declarations, units of `proceed`, `@Test` / `@SetUp`
+  operations have no parameters).
+- A **failed** assertion reports its line, the message (or the asserted expression with the values of
+  the operands of a comparison) and the last lines of the trace; runtime errors of the model (e.g. an event
+  raised before `enter`) are reported as **errors**.
+
+```bash
+hsm test examples/tests/door.hsmtest                    # loads the .hsm files next to the test file
+hsm test tests/*.hsmtest --machine models/ --junit report.xml -v
+```
+
+`--machine` adds `.hsm` files or directories, `--junit` writes a JUnit XML report, `-v` prints the trace of
+every test. The exit code is 1 if a test failed or a file has errors. The examples in
+[`examples/tests/`](examples/tests) test all example state machines. The runner is available as API
+(`runTests`, `HsmTestWorkspace`, `toJUnitXml` in `hsm-language`); it runs in the browser as well.
+
+Not yet supported (compared to SCTUnit): `@Ignore`, `package` / imports, test suites, verifying the
+order of calls, mocks with sequences of values, calling operations of the state machine in a test,
+`assert` on time (`proceed` is the only way to advance time); the web editor does not run tests yet.
+
 ## Editing in the diagram
 
 | Action | How |
@@ -214,6 +289,8 @@ packages/
     src/generator/plantuml.ts PlantUML generator
     src/importer/             itemis CREATE (.sct) importer with a small XML parser
     src/simulation/           interpreter (docs/semantics.md) with virtual clock, scenario runner
+    src/hsm-test.langium      grammar of the unit test language (.hsmtest), imports the expressions of hsm.langium
+    src/testing/              scoping, validation and test runner of the unit test language, JUnit XML
     test/scenarios/           conformance suite shared with code generators (format: README.md there)
     src/cli/main.ts           command line interface
   web/          Vite app: Monaco editor + Sprotty diagram
@@ -221,7 +298,7 @@ packages/
     src/language-support.ts   Langium services wired into Monaco (markers, completion, formatting, …)
     src/diagram/              Sprotty model, views (PlantUML look), mouse / selection listeners
     src/ui/                   properties panel, inline editor, SVG / PlantUML export
-examples/       sample state machines
+examples/       sample state machines, examples/tests: their unit tests
 docs/           execution semantics
 ```
 

@@ -9,6 +9,7 @@ import { layoutStateMachine } from '../diagram/layout.js';
 import { importSct } from '../importer/sct-importer.js';
 import { StatechartInterpreter } from '../simulation/interpreter.js';
 import { formatTraceEntry, runScenario, validateScenario, type ScenarioStep } from '../simulation/scenario.js';
+import { runTestCommand, type TestCommandOptions } from '../testing/test-command.js';
 
 const severities = ['', 'error', 'warning', 'info', 'hint'];
 
@@ -108,6 +109,16 @@ export function createProgram(): Command {
                 }
                 console.log(`  active: [${sim.activeStates.join(', ')}]${sim.isFinal() ? ' (final)' : ''}`);
             }
+        });
+
+    program.command('test')
+        .argument('<files...>', 'unit test files (.hsmtest)')
+        .option('-m, --machine <files...>', 'state machine files (.hsm) or directories; the .hsm files next to the test files are loaded automatically')
+        .option('--junit <file>', 'writes a JUnit XML report')
+        .option('-v, --verbose', 'prints the trace of every test')
+        .description('runs the unit tests of state machines')
+        .action(async (files: string[], options: TestCommandOptions) => {
+            process.exitCode = await runTestCommand(files, options);
         });
 
     program.command('import')

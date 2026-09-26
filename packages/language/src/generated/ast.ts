@@ -6,106 +6,331 @@
 /* eslint-disable */
 import * as langium from 'langium';
 
+/** Contains the reachable terminals & keywords and all available types of the 'Hsm' language. */
+export namespace Hsm {
+
+    export const Terminals = {
+        WS: /\s+/,
+        HEX: /0[xX][0-9a-fA-F]+/,
+        REAL: /[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?/,
+        INT: /[0-9]+/,
+        ID: /[_a-zA-Z][\w]*/,
+        STRING: /"(\\.|[^"\\])*"|'(\\.|[^'\\])*'/,
+        ML_COMMENT: /\/\*[\s\S]*?\*\//,
+        SL_COMMENT: /\/\/[^\n\r]*/,
+    };
+
+    export type TerminalNames = keyof typeof Terminals;
+
+    export type KeywordNames =
+        | "!"
+        | "!="
+        | "#"
+        | "%"
+        | "%="
+        | "&"
+        | "&&"
+        | "&="
+        | "("
+        | ")"
+        | "*"
+        | "*="
+        | "+"
+        | "++"
+        | "+="
+        | ","
+        | "-"
+        | "--"
+        | "-="
+        | "->"
+        | "."
+        | "..."
+        | "/"
+        | "/="
+        | ":"
+        | ";"
+        | "<"
+        | "<<"
+        | "<<="
+        | "<="
+        | "="
+        | "=="
+        | ">"
+        | ">="
+        | ">>"
+        | ">>="
+        | "?"
+        | "@"
+        | "["
+        | "[*]"
+        | "]"
+        | "^"
+        | "^="
+        | "active"
+        | "after"
+        | "always"
+        | "as"
+        | "choice"
+        | "const"
+        | "deephistory"
+        | "default"
+        | "else"
+        | "entry"
+        | "event"
+        | "every"
+        | "exit"
+        | "false"
+        | "history"
+        | "in"
+        | "interface"
+        | "internal"
+        | "junction"
+        | "namespace"
+        | "oncycle"
+        | "operation"
+        | "out"
+        | "raise"
+        | "readonly"
+        | "region"
+        | "state"
+        | "statemachine"
+        | "sync"
+        | "true"
+        | "valueof"
+        | "var"
+        | "{"
+        | "|"
+        | "|="
+        | "||"
+        | "}"
+        | "~";
+
+    export type TokenNames = TerminalNames | KeywordNames;
+
+    export type AstType = {
+        ActiveExpression: ActiveExpression
+        Annotation: Annotation
+        Argument: Argument
+        AssignmentExpression: AssignmentExpression
+        BinaryExpression: BinaryExpression
+        BoolLiteral: BoolLiteral
+        BuiltinTrigger: BuiltinTrigger
+        CastExpression: CastExpression
+        ConditionalExpression: ConditionalExpression
+        Declaration: Declaration
+        Effect: Effect
+        ElementReference: ElementReference
+        EventDeclaration: EventDeclaration
+        EventTrigger: EventTrigger
+        Expression: Expression
+        ExpressionStatement: ExpressionStatement
+        HexLiteral: HexLiteral
+        IntLiteral: IntLiteral
+        InterfaceScope: InterfaceScope
+        InternalScope: InternalScope
+        Literal: Literal
+        LocalReaction: LocalReaction
+        OperationDeclaration: OperationDeclaration
+        Parameter: Parameter
+        ParenthesizedExpression: ParenthesizedExpression
+        PostfixExpression: PostfixExpression
+        PseudoState: PseudoState
+        RaiseStatement: RaiseStatement
+        ReactionSpec: ReactionSpec
+        RealLiteral: RealLiteral
+        Region: Region
+        Scope: Scope
+        State: State
+        StateMachine: StateMachine
+        Statement: Statement
+        StringLiteral: StringLiteral
+        TimeTrigger: TimeTrigger
+        Transition: Transition
+        Trigger: Trigger
+        TypeReference: TypeReference
+        UnaryExpression: UnaryExpression
+        ValueOfExpression: ValueOfExpression
+        VariableDeclaration: VariableDeclaration
+        Vertex: Vertex
+    }
+
+}
+
+/** Contains the reachable terminals & keywords and all available types of the 'HsmTest' language. */
+export namespace HsmTest {
+
+    export const Terminals = {
+        WS: /\s+/,
+        HEX: /0[xX][0-9a-fA-F]+/,
+        REAL: /[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?/,
+        INT: /[0-9]+/,
+        ID: /[_a-zA-Z][\w]*/,
+        STRING: /"(\\.|[^"\\])*"|'(\\.|[^'\\])*'/,
+        ML_COMMENT: /\/\*[\s\S]*?\*\//,
+        SL_COMMENT: /\/\/[^\n\r]*/,
+    };
+
+    export type TerminalNames = keyof typeof Terminals;
+
+    export type KeywordNames =
+        | "!"
+        | "!="
+        | "%"
+        | "%="
+        | "&"
+        | "&&"
+        | "&="
+        | "("
+        | ")"
+        | "*"
+        | "*="
+        | "+"
+        | "++"
+        | "+="
+        | ","
+        | "-"
+        | "--"
+        | "-="
+        | "."
+        | "/"
+        | "/="
+        | ":"
+        | ";"
+        | "<"
+        | "<<"
+        | "<<="
+        | "<="
+        | "="
+        | "=="
+        | ">"
+        | ">="
+        | ">>"
+        | ">>="
+        | "?"
+        | "@"
+        | "^"
+        | "^="
+        | "active"
+        | "as"
+        | "assert"
+        | "called"
+        | "const"
+        | "else"
+        | "enter"
+        | "exit"
+        | "false"
+        | "for"
+        | "if"
+        | "message"
+        | "mock"
+        | "operation"
+        | "proceed"
+        | "raise"
+        | "readonly"
+        | "returns"
+        | "statemachine"
+        | "testclass"
+        | "times"
+        | "true"
+        | "valueof"
+        | "var"
+        | "while"
+        | "with"
+        | "{"
+        | "|"
+        | "|="
+        | "||"
+        | "}"
+        | "~";
+
+    export type TokenNames = TerminalNames | KeywordNames;
+
+    export type AstType = {
+        ActiveExpression: ActiveExpression
+        Annotation: Annotation
+        Argument: Argument
+        AssertCalledStatement: AssertCalledStatement
+        AssertStatement: AssertStatement
+        AssignmentExpression: AssignmentExpression
+        AssignmentStatement: AssignmentStatement
+        BinaryExpression: BinaryExpression
+        Block: Block
+        BoolLiteral: BoolLiteral
+        BuiltinTrigger: BuiltinTrigger
+        CastExpression: CastExpression
+        ConditionalExpression: ConditionalExpression
+        Declaration: Declaration
+        Effect: Effect
+        ElementReference: ElementReference
+        EnterStatement: EnterStatement
+        EventDeclaration: EventDeclaration
+        EventTrigger: EventTrigger
+        ExitStatement: ExitStatement
+        Expression: Expression
+        ExpressionStatement: ExpressionStatement
+        HexLiteral: HexLiteral
+        IfStatement: IfStatement
+        IntLiteral: IntLiteral
+        InterfaceScope: InterfaceScope
+        InternalScope: InternalScope
+        Literal: Literal
+        LocalReaction: LocalReaction
+        LocalVariableStatement: LocalVariableStatement
+        MockStatement: MockStatement
+        OperationCallStatement: OperationCallStatement
+        OperationDeclaration: OperationDeclaration
+        Parameter: Parameter
+        ParenthesizedExpression: ParenthesizedExpression
+        PostfixExpression: PostfixExpression
+        ProceedStatement: ProceedStatement
+        PseudoState: PseudoState
+        RaiseStatement: RaiseStatement
+        ReactionSpec: ReactionSpec
+        RealLiteral: RealLiteral
+        Region: Region
+        Scope: Scope
+        State: State
+        StateMachine: StateMachine
+        Statement: Statement
+        StringLiteral: StringLiteral
+        TestClass: TestClass
+        TestModel: TestModel
+        TestOperation: TestOperation
+        TestStatement: TestStatement
+        TimeTrigger: TimeTrigger
+        Transition: Transition
+        Trigger: Trigger
+        TypeReference: TypeReference
+        UnaryExpression: UnaryExpression
+        ValueOfExpression: ValueOfExpression
+        VariableDeclaration: VariableDeclaration
+        Vertex: Vertex
+        WhileStatement: WhileStatement
+    }
+
+}
+
+
+// the terminals, keywords and types of the whole 'Hsm' project
+
 export const HsmTerminals = {
-    WS: /\s+/,
-    HEX: /0[xX][0-9a-fA-F]+/,
-    REAL: /[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?/,
-    INT: /[0-9]+/,
-    ID: /[_a-zA-Z][\w]*/,
-    STRING: /"(\\.|[^"\\])*"|'(\\.|[^'\\])*'/,
-    ML_COMMENT: /\/\*[\s\S]*?\*\//,
-    SL_COMMENT: /\/\/[^\n\r]*/,
+    ...Hsm.Terminals,
+    ...HsmTest.Terminals,
 };
 
 export type HsmTerminalNames = keyof typeof HsmTerminals;
 
-export type HsmKeywordNames =
-    | "!"
-    | "!="
-    | "#"
-    | "%"
-    | "%="
-    | "&"
-    | "&&"
-    | "&="
-    | "("
-    | ")"
-    | "*"
-    | "*="
-    | "+"
-    | "++"
-    | "+="
-    | ","
-    | "-"
-    | "--"
-    | "-="
-    | "->"
-    | "."
-    | "..."
-    | "/"
-    | "/="
-    | ":"
-    | ";"
-    | "<"
-    | "<<"
-    | "<<="
-    | "<="
-    | "="
-    | "=="
-    | ">"
-    | ">="
-    | ">>"
-    | ">>="
-    | "?"
-    | "@"
-    | "["
-    | "[*]"
-    | "]"
-    | "^"
-    | "^="
-    | "active"
-    | "after"
-    | "always"
-    | "as"
-    | "choice"
-    | "const"
-    | "deephistory"
-    | "default"
-    | "else"
-    | "entry"
-    | "event"
-    | "every"
-    | "exit"
-    | "false"
-    | "history"
-    | "in"
-    | "interface"
-    | "internal"
-    | "junction"
-    | "namespace"
-    | "oncycle"
-    | "operation"
-    | "out"
-    | "raise"
-    | "readonly"
-    | "region"
-    | "state"
-    | "statemachine"
-    | "sync"
-    | "true"
-    | "valueof"
-    | "var"
-    | "{"
-    | "|"
-    | "|="
-    | "||"
-    | "}"
-    | "~";
+export type HsmKeywordNames = Hsm.KeywordNames | HsmTest.KeywordNames;
 
 export type HsmTokenNames = HsmTerminalNames | HsmKeywordNames;
 
+export type HsmAstType = Hsm.AstType & HsmTest.AstType
+
+
+// all type definitions of the the whole 'Hsm' project
+
 export interface ActiveExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'ActiveExpression';
     state: langium.Reference<Vertex>;
 }
@@ -120,7 +345,7 @@ export function isActiveExpression(item: unknown): item is ActiveExpression {
 }
 
 export interface Annotation extends langium.AstNode {
-    readonly $container: StateMachine;
+    readonly $container: StateMachine | TestOperation;
     readonly $type: 'Annotation';
     arguments: Array<Expression>;
     name: string;
@@ -153,10 +378,50 @@ export function isArgument(item: unknown): item is Argument {
     return reflection.isInstance(item, Argument.$type);
 }
 
+export interface AssertCalledStatement extends langium.AstNode {
+    readonly $container: Block;
+    readonly $type: 'AssertCalledStatement';
+    arguments: Array<Expression>;
+    message?: string;
+    negated: boolean;
+    operation: langium.Reference<OperationDeclaration>;
+    times?: Expression;
+}
+
+export const AssertCalledStatement = {
+    $type: 'AssertCalledStatement',
+    arguments: 'arguments',
+    message: 'message',
+    negated: 'negated',
+    operation: 'operation',
+    times: 'times'
+} as const;
+
+export function isAssertCalledStatement(item: unknown): item is AssertCalledStatement {
+    return reflection.isInstance(item, AssertCalledStatement.$type);
+}
+
+export interface AssertStatement extends langium.AstNode {
+    readonly $container: Block;
+    readonly $type: 'AssertStatement';
+    expression: Expression;
+    message?: string;
+}
+
+export const AssertStatement = {
+    $type: 'AssertStatement',
+    expression: 'expression',
+    message: 'message'
+} as const;
+
+export function isAssertStatement(item: unknown): item is AssertStatement {
+    return reflection.isInstance(item, AssertStatement.$type);
+}
+
 export interface AssignmentExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'AssignmentExpression';
-    left: Expression;
+    left: ElementReference | Expression;
     operator: AssignmentOperator;
     value: Expression;
 }
@@ -178,8 +443,23 @@ export function isAssignmentOperator(item: unknown): item is AssignmentOperator 
     return item === '=' || item === '+=' || item === '-=' || item === '*=' || item === '/=' || item === '%=' || item === '<<=' || item === '>>=' || item === '&=' || item === '|=' || item === '^=';
 }
 
+export interface AssignmentStatement extends langium.AstNode {
+    readonly $container: Block;
+    readonly $type: 'AssignmentStatement';
+    expression: Expression;
+}
+
+export const AssignmentStatement = {
+    $type: 'AssignmentStatement',
+    expression: 'expression'
+} as const;
+
+export function isAssignmentStatement(item: unknown): item is AssignmentStatement {
+    return reflection.isInstance(item, AssignmentStatement.$type);
+}
+
 export interface BinaryExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'BinaryExpression';
     left: Expression;
     operator: '!=' | '%' | '&&' | '&' | '*' | '+' | '-' | '/' | '<' | '<<' | '<=' | '==' | '>' | '>=' | '>>' | '^' | '|' | '||';
@@ -197,8 +477,23 @@ export function isBinaryExpression(item: unknown): item is BinaryExpression {
     return reflection.isInstance(item, BinaryExpression.$type);
 }
 
+export interface Block extends langium.AstNode {
+    readonly $container: IfStatement | TestOperation | WhileStatement;
+    readonly $type: 'Block';
+    statements: Array<TestStatement>;
+}
+
+export const Block = {
+    $type: 'Block',
+    statements: 'statements'
+} as const;
+
+export function isBlock(item: unknown): item is Block {
+    return reflection.isInstance(item, Block.$type);
+}
+
 export interface BoolLiteral extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'BoolLiteral';
     value: 'false' | 'true';
 }
@@ -228,7 +523,7 @@ export function isBuiltinTrigger(item: unknown): item is BuiltinTrigger {
 }
 
 export interface CastExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'CastExpression';
     operand: Expression;
     type: TypeReference;
@@ -245,7 +540,7 @@ export function isCastExpression(item: unknown): item is CastExpression {
 }
 
 export interface ConditionalExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'ConditionalExpression';
     condition: Expression;
     falseCase: Expression;
@@ -289,7 +584,7 @@ export function isEffect(item: unknown): item is Effect {
 }
 
 export interface ElementReference extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'ElementReference';
     arguments: Array<Argument>;
     call: boolean;
@@ -305,6 +600,19 @@ export const ElementReference = {
 
 export function isElementReference(item: unknown): item is ElementReference {
     return reflection.isInstance(item, ElementReference.$type);
+}
+
+export interface EnterStatement extends langium.AstNode {
+    readonly $container: Block;
+    readonly $type: 'EnterStatement';
+}
+
+export const EnterStatement = {
+    $type: 'EnterStatement'
+} as const;
+
+export function isEnterStatement(item: unknown): item is EnterStatement {
+    return reflection.isInstance(item, EnterStatement.$type);
 }
 
 export interface EventDeclaration extends langium.AstNode {
@@ -341,6 +649,19 @@ export function isEventTrigger(item: unknown): item is EventTrigger {
     return reflection.isInstance(item, EventTrigger.$type);
 }
 
+export interface ExitStatement extends langium.AstNode {
+    readonly $container: Block;
+    readonly $type: 'ExitStatement';
+}
+
+export const ExitStatement = {
+    $type: 'ExitStatement'
+} as const;
+
+export function isExitStatement(item: unknown): item is ExitStatement {
+    return reflection.isInstance(item, ExitStatement.$type);
+}
+
 export type Expression = ActiveExpression | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ElementReference | Literal | ParenthesizedExpression | PostfixExpression | UnaryExpression | ValueOfExpression;
 
 export const Expression = {
@@ -367,7 +688,7 @@ export function isExpressionStatement(item: unknown): item is ExpressionStatemen
 }
 
 export interface HexLiteral extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'HexLiteral';
     value: string;
 }
@@ -379,6 +700,27 @@ export const HexLiteral = {
 
 export function isHexLiteral(item: unknown): item is HexLiteral {
     return reflection.isInstance(item, HexLiteral.$type);
+}
+
+export interface IfStatement extends langium.AstNode {
+    readonly $container: Block | IfStatement;
+    readonly $type: 'IfStatement';
+    condition: Expression;
+    else?: Block;
+    elseIf?: IfStatement;
+    then: Block;
+}
+
+export const IfStatement = {
+    $type: 'IfStatement',
+    condition: 'condition',
+    else: 'else',
+    elseIf: 'elseIf',
+    then: 'then'
+} as const;
+
+export function isIfStatement(item: unknown): item is IfStatement {
+    return reflection.isInstance(item, IfStatement.$type);
 }
 
 export interface InterfaceScope extends langium.AstNode {
@@ -414,7 +756,7 @@ export function isInternalScope(item: unknown): item is InternalScope {
 }
 
 export interface IntLiteral extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'IntLiteral';
     value: number;
 }
@@ -457,6 +799,59 @@ export function isLocalReaction(item: unknown): item is LocalReaction {
     return reflection.isInstance(item, LocalReaction.$type);
 }
 
+export interface LocalVariableStatement extends langium.AstNode {
+    readonly $container: Block;
+    readonly $type: 'LocalVariableStatement';
+    declaration: VariableDeclaration;
+}
+
+export const LocalVariableStatement = {
+    $type: 'LocalVariableStatement',
+    declaration: 'declaration'
+} as const;
+
+export function isLocalVariableStatement(item: unknown): item is LocalVariableStatement {
+    return reflection.isInstance(item, LocalVariableStatement.$type);
+}
+
+export interface MockStatement extends langium.AstNode {
+    readonly $container: Block;
+    readonly $type: 'MockStatement';
+    arguments: Array<Expression>;
+    operation: langium.Reference<OperationDeclaration>;
+    value: Expression;
+    withArguments: boolean;
+}
+
+export const MockStatement = {
+    $type: 'MockStatement',
+    arguments: 'arguments',
+    operation: 'operation',
+    value: 'value',
+    withArguments: 'withArguments'
+} as const;
+
+export function isMockStatement(item: unknown): item is MockStatement {
+    return reflection.isInstance(item, MockStatement.$type);
+}
+
+export interface OperationCallStatement extends langium.AstNode {
+    readonly $container: Block;
+    readonly $type: 'OperationCallStatement';
+    arguments: Array<Expression>;
+    operation: langium.Reference<TestOperation>;
+}
+
+export const OperationCallStatement = {
+    $type: 'OperationCallStatement',
+    arguments: 'arguments',
+    operation: 'operation'
+} as const;
+
+export function isOperationCallStatement(item: unknown): item is OperationCallStatement {
+    return reflection.isInstance(item, OperationCallStatement.$type);
+}
+
 export interface OperationDeclaration extends langium.AstNode {
     readonly $container: InterfaceScope | InternalScope;
     readonly $type: 'OperationDeclaration';
@@ -496,7 +891,7 @@ export function isParameter(item: unknown): item is Parameter {
 }
 
 export interface ParenthesizedExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'ParenthesizedExpression';
     expression: Expression;
 }
@@ -511,9 +906,9 @@ export function isParenthesizedExpression(item: unknown): item is ParenthesizedE
 }
 
 export interface PostfixExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'PostfixExpression';
-    operand: Expression;
+    operand: ElementReference | Expression;
     operator: '++' | '--';
 }
 
@@ -525,6 +920,23 @@ export const PostfixExpression = {
 
 export function isPostfixExpression(item: unknown): item is PostfixExpression {
     return reflection.isInstance(item, PostfixExpression.$type);
+}
+
+export interface ProceedStatement extends langium.AstNode {
+    readonly $container: Block;
+    readonly $type: 'ProceedStatement';
+    unit: string;
+    value: Expression;
+}
+
+export const ProceedStatement = {
+    $type: 'ProceedStatement',
+    unit: 'unit',
+    value: 'value'
+} as const;
+
+export function isProceedStatement(item: unknown): item is ProceedStatement {
+    return reflection.isInstance(item, ProceedStatement.$type);
 }
 
 export interface PseudoState extends langium.AstNode {
@@ -557,7 +969,7 @@ export function isQualifiedName(item: unknown): item is QualifiedName {
 }
 
 export interface RaiseStatement extends langium.AstNode {
-    readonly $container: Effect;
+    readonly $container: Block | Effect;
     readonly $type: 'RaiseStatement';
     event: langium.Reference<EventDeclaration>;
     value?: Expression;
@@ -593,7 +1005,7 @@ export function isReactionSpec(item: unknown): item is ReactionSpec {
 }
 
 export interface RealLiteral extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'RealLiteral';
     value: string;
 }
@@ -700,7 +1112,7 @@ export function isStatement(item: unknown): item is Statement {
 }
 
 export interface StringLiteral extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'StringLiteral';
     value: string;
 }
@@ -712,6 +1124,70 @@ export const StringLiteral = {
 
 export function isStringLiteral(item: unknown): item is StringLiteral {
     return reflection.isInstance(item, StringLiteral.$type);
+}
+
+export interface TestClass extends langium.AstNode {
+    readonly $container: TestModel;
+    readonly $type: 'TestClass';
+    machine: langium.Reference<StateMachine>;
+    name: string;
+    operations: Array<TestOperation>;
+}
+
+export const TestClass = {
+    $type: 'TestClass',
+    machine: 'machine',
+    name: 'name',
+    operations: 'operations'
+} as const;
+
+export function isTestClass(item: unknown): item is TestClass {
+    return reflection.isInstance(item, TestClass.$type);
+}
+
+export interface TestModel extends langium.AstNode {
+    readonly $type: 'TestModel';
+    testClasses: Array<TestClass>;
+}
+
+export const TestModel = {
+    $type: 'TestModel',
+    testClasses: 'testClasses'
+} as const;
+
+export function isTestModel(item: unknown): item is TestModel {
+    return reflection.isInstance(item, TestModel.$type);
+}
+
+export interface TestOperation extends langium.AstNode {
+    readonly $container: TestClass;
+    readonly $type: 'TestOperation';
+    annotations: Array<Annotation>;
+    body: Block;
+    name: string;
+    parameters: Array<VariableDeclaration>;
+}
+
+export const TestOperation = {
+    $type: 'TestOperation',
+    annotations: 'annotations',
+    body: 'body',
+    name: 'name',
+    parameters: 'parameters'
+} as const;
+
+export function isTestOperation(item: unknown): item is TestOperation {
+    return reflection.isInstance(item, TestOperation.$type);
+}
+
+export type TestStatement = AssertCalledStatement | AssertStatement | AssignmentStatement | EnterStatement | ExitStatement | IfStatement | LocalVariableStatement | MockStatement | OperationCallStatement | ProceedStatement | RaiseStatement | WhileStatement;
+
+export const TestStatement = {
+    $type: 'TestStatement'
+} as const;
+
+export function isTestStatement(item: unknown): item is TestStatement {
+    return reflection.isInstance(item, TestStatement.$type);
 }
 
 export interface TimeTrigger extends langium.AstNode {
@@ -786,7 +1262,7 @@ export function isTypeReference(item: unknown): item is TypeReference {
 }
 
 export interface UnaryExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'UnaryExpression';
     operand: Expression;
     operator: '!' | '+' | '-' | '~';
@@ -803,7 +1279,7 @@ export function isUnaryExpression(item: unknown): item is UnaryExpression {
 }
 
 export interface ValueOfExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | PostfixExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'ValueOfExpression';
     event: langium.Reference<EventDeclaration>;
 }
@@ -818,7 +1294,7 @@ export function isValueOfExpression(item: unknown): item is ValueOfExpression {
 }
 
 export interface VariableDeclaration extends langium.AstNode {
-    readonly $container: InterfaceScope | InternalScope;
+    readonly $container: InterfaceScope | InternalScope | LocalVariableStatement | TestOperation;
     readonly $type: 'VariableDeclaration';
     const: boolean;
     initialValue?: Expression;
@@ -850,51 +1326,21 @@ export function isVertex(item: unknown): item is Vertex {
     return reflection.isInstance(item, Vertex.$type);
 }
 
-export type HsmAstType = {
-    ActiveExpression: ActiveExpression
-    Annotation: Annotation
-    Argument: Argument
-    AssignmentExpression: AssignmentExpression
-    BinaryExpression: BinaryExpression
-    BoolLiteral: BoolLiteral
-    BuiltinTrigger: BuiltinTrigger
-    CastExpression: CastExpression
-    ConditionalExpression: ConditionalExpression
-    Declaration: Declaration
-    Effect: Effect
-    ElementReference: ElementReference
-    EventDeclaration: EventDeclaration
-    EventTrigger: EventTrigger
-    Expression: Expression
-    ExpressionStatement: ExpressionStatement
-    HexLiteral: HexLiteral
-    IntLiteral: IntLiteral
-    InterfaceScope: InterfaceScope
-    InternalScope: InternalScope
-    Literal: Literal
-    LocalReaction: LocalReaction
-    OperationDeclaration: OperationDeclaration
-    Parameter: Parameter
-    ParenthesizedExpression: ParenthesizedExpression
-    PostfixExpression: PostfixExpression
-    PseudoState: PseudoState
-    RaiseStatement: RaiseStatement
-    ReactionSpec: ReactionSpec
-    RealLiteral: RealLiteral
-    Region: Region
-    Scope: Scope
-    State: State
-    StateMachine: StateMachine
-    Statement: Statement
-    StringLiteral: StringLiteral
-    TimeTrigger: TimeTrigger
-    Transition: Transition
-    Trigger: Trigger
-    TypeReference: TypeReference
-    UnaryExpression: UnaryExpression
-    ValueOfExpression: ValueOfExpression
-    VariableDeclaration: VariableDeclaration
-    Vertex: Vertex
+export interface WhileStatement extends langium.AstNode {
+    readonly $container: Block;
+    readonly $type: 'WhileStatement';
+    body: Block;
+    condition: Expression;
+}
+
+export const WhileStatement = {
+    $type: 'WhileStatement',
+    body: 'body',
+    condition: 'condition'
+} as const;
+
+export function isWhileStatement(item: unknown): item is WhileStatement {
+    return reflection.isInstance(item, WhileStatement.$type);
 }
 
 export class HsmAstReflection extends langium.AbstractAstReflection {
@@ -936,6 +1382,47 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: []
         },
+        AssertCalledStatement: {
+            name: AssertCalledStatement.$type,
+            properties: {
+                arguments: {
+                    name: AssertCalledStatement.arguments,
+                    defaultValue: [],
+                    optional: true
+                },
+                message: {
+                    name: AssertCalledStatement.message,
+                    optional: true
+                },
+                negated: {
+                    name: AssertCalledStatement.negated,
+                    defaultValue: false,
+                    optional: true
+                },
+                operation: {
+                    name: AssertCalledStatement.operation,
+                    referenceType: OperationDeclaration.$type
+                },
+                times: {
+                    name: AssertCalledStatement.times,
+                    optional: true
+                }
+            },
+            superTypes: [TestStatement.$type]
+        },
+        AssertStatement: {
+            name: AssertStatement.$type,
+            properties: {
+                expression: {
+                    name: AssertStatement.expression
+                },
+                message: {
+                    name: AssertStatement.message,
+                    optional: true
+                }
+            },
+            superTypes: [TestStatement.$type]
+        },
         AssignmentExpression: {
             name: AssignmentExpression.$type,
             properties: {
@@ -951,6 +1438,15 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: [Expression.$type]
         },
+        AssignmentStatement: {
+            name: AssignmentStatement.$type,
+            properties: {
+                expression: {
+                    name: AssignmentStatement.expression
+                }
+            },
+            superTypes: [TestStatement.$type]
+        },
         BinaryExpression: {
             name: BinaryExpression.$type,
             properties: {
@@ -965,6 +1461,17 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
                 }
             },
             superTypes: [Expression.$type]
+        },
+        Block: {
+            name: Block.$type,
+            properties: {
+                statements: {
+                    name: Block.statements,
+                    defaultValue: [],
+                    optional: true
+                }
+            },
+            superTypes: []
         },
         BoolLiteral: {
             name: BoolLiteral.$type,
@@ -1047,6 +1554,12 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: [Expression.$type]
         },
+        EnterStatement: {
+            name: EnterStatement.$type,
+            properties: {
+            },
+            superTypes: [TestStatement.$type]
+        },
         EventDeclaration: {
             name: EventDeclaration.$type,
             properties: {
@@ -1074,6 +1587,12 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: [Trigger.$type]
         },
+        ExitStatement: {
+            name: ExitStatement.$type,
+            properties: {
+            },
+            superTypes: [TestStatement.$type]
+        },
         Expression: {
             name: Expression.$type,
             properties: {
@@ -1097,6 +1616,26 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
                 }
             },
             superTypes: [Literal.$type]
+        },
+        IfStatement: {
+            name: IfStatement.$type,
+            properties: {
+                condition: {
+                    name: IfStatement.condition
+                },
+                else: {
+                    name: IfStatement.else,
+                    optional: true
+                },
+                elseIf: {
+                    name: IfStatement.elseIf,
+                    optional: true
+                },
+                then: {
+                    name: IfStatement.then
+                }
+            },
+            superTypes: [TestStatement.$type]
         },
         IntLiteral: {
             name: IntLiteral.$type,
@@ -1157,6 +1696,53 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: []
         },
+        LocalVariableStatement: {
+            name: LocalVariableStatement.$type,
+            properties: {
+                declaration: {
+                    name: LocalVariableStatement.declaration
+                }
+            },
+            superTypes: [TestStatement.$type]
+        },
+        MockStatement: {
+            name: MockStatement.$type,
+            properties: {
+                arguments: {
+                    name: MockStatement.arguments,
+                    defaultValue: [],
+                    optional: true
+                },
+                operation: {
+                    name: MockStatement.operation,
+                    referenceType: OperationDeclaration.$type
+                },
+                value: {
+                    name: MockStatement.value
+                },
+                withArguments: {
+                    name: MockStatement.withArguments,
+                    defaultValue: false,
+                    optional: true
+                }
+            },
+            superTypes: [TestStatement.$type]
+        },
+        OperationCallStatement: {
+            name: OperationCallStatement.$type,
+            properties: {
+                arguments: {
+                    name: OperationCallStatement.arguments,
+                    defaultValue: [],
+                    optional: true
+                },
+                operation: {
+                    name: OperationCallStatement.operation,
+                    referenceType: TestOperation.$type
+                }
+            },
+            superTypes: [TestStatement.$type]
+        },
         OperationDeclaration: {
             name: OperationDeclaration.$type,
             properties: {
@@ -1213,6 +1799,18 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: [Expression.$type]
         },
+        ProceedStatement: {
+            name: ProceedStatement.$type,
+            properties: {
+                unit: {
+                    name: ProceedStatement.unit
+                },
+                value: {
+                    name: ProceedStatement.value
+                }
+            },
+            superTypes: [TestStatement.$type]
+        },
         PseudoState: {
             name: PseudoState.$type,
             properties: {
@@ -1237,7 +1835,7 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
                     optional: true
                 }
             },
-            superTypes: [Statement.$type]
+            superTypes: [Statement.$type, TestStatement.$type]
         },
         ReactionSpec: {
             name: ReactionSpec.$type,
@@ -1383,6 +1981,63 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: [Literal.$type]
         },
+        TestClass: {
+            name: TestClass.$type,
+            properties: {
+                machine: {
+                    name: TestClass.machine,
+                    referenceType: StateMachine.$type
+                },
+                name: {
+                    name: TestClass.name
+                },
+                operations: {
+                    name: TestClass.operations,
+                    defaultValue: [],
+                    optional: true
+                }
+            },
+            superTypes: []
+        },
+        TestModel: {
+            name: TestModel.$type,
+            properties: {
+                testClasses: {
+                    name: TestModel.testClasses,
+                    defaultValue: [],
+                    optional: true
+                }
+            },
+            superTypes: []
+        },
+        TestOperation: {
+            name: TestOperation.$type,
+            properties: {
+                annotations: {
+                    name: TestOperation.annotations,
+                    defaultValue: [],
+                    optional: true
+                },
+                body: {
+                    name: TestOperation.body
+                },
+                name: {
+                    name: TestOperation.name
+                },
+                parameters: {
+                    name: TestOperation.parameters,
+                    defaultValue: [],
+                    optional: true
+                }
+            },
+            superTypes: []
+        },
+        TestStatement: {
+            name: TestStatement.$type,
+            properties: {
+            },
+            superTypes: []
+        },
         TimeTrigger: {
             name: TimeTrigger.$type,
             properties: {
@@ -1505,6 +2160,18 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
             properties: {
             },
             superTypes: []
+        },
+        WhileStatement: {
+            name: WhileStatement.$type,
+            properties: {
+                body: {
+                    name: WhileStatement.body
+                },
+                condition: {
+                    name: WhileStatement.condition
+                }
+            },
+            superTypes: [TestStatement.$type]
         }
     } as const satisfies langium.AstMetaData
 }

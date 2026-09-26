@@ -65,7 +65,10 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 
 - 🚧 C code generator (timer service and operation callbacks), verified against the conformance
   suite by compiling and running the scenarios
-- 🚧 Unit test language for statecharts (like SCTUnit) with a test runner in the CLI and the editor
+- ✅ Unit test language for statecharts (like SCTUnit, `.hsmtest`) with a test runner on the interpreter,
+  `hsm test` in the CLI (JUnit XML reports) and tests for all examples. Limitations: not run in the web
+  editor yet; no `@Ignore`, packages / imports, call order verification or mock value sequences;
+  operations of the state machine cannot be called from tests
 - 💭 Further generator targets (C++, Java, Python, TypeScript) depending on demand
 - 💭 Generator configuration model (like itemis `.sgen` files)
 

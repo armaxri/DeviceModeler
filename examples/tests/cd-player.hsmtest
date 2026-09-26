@@ -1,0 +1,88 @@
+// Unit tests of the CD player (cycle based): mocked operations, choice and history.
+// Run with: hsm test examples/tests/cd-player.hsmtest --machine examples/cd-player.hsm
+testclass CdPlayerTest for statemachine CdPlayer {
+
+    @SetUp
+    operation insertDisc() {
+        mock discInserted returns (true)
+        enter
+        tracks = 3
+    }
+
+    // presses play `count` times, one cycle each
+    operation press(count : integer) {
+        var i : integer = 0
+        while (i < count) {
+            raise play; proceed 1 cycle
+            i += 1
+        }
+    }
+
+    @Test
+    operation playsWhenDiscInserted() {
+        assert active(Closed.Stopped)
+        raise play
+        proceed 1 cycle
+        assert active(Active.Playing)
+        assert called startMotor times 1
+        assert !called stopMotor
+    }
+
+    @Test
+    operation staysStoppedWithoutDisc() {
+        mock discInserted returns (false)
+        press(1)
+        assert active(Stopped) message "the choice takes the else branch"
+        assert called discInserted
+        assert !called startMotor
+    }
+
+    @Test
+    operation countsTracks() {
+        press(1)
+        var n : integer = 0
+        while (n < 5) {
+            raise trackEnd
+            proceed 1 cycle
+            n++
+        }
+        assert track == tracks message "the track number stops at the last track"
+        if (tracks > 0) {
+            assert active(Active.Playing)
+        } else {
+            assert false
+        }
+    }
+
+    @Test
+    operation pauseAndResume() {
+        press(1)
+        raise pause
+        proceed 1 cycle
+        assert active(Paused)
+        assert called stopMotor times 1
+        raise play
+        proceed 200 ms
+        assert active(Playing)
+        assert called startMotor times 2
+    }
+
+    @Test
+    operation historyRestoresActive() {
+        press(1)
+        raise eject
+        proceed 1 cycle
+        assert active(Open)
+        raise eject
+        proceed 1 cycle
+        assert active(Closed.Active)
+        assert track == 1
+    }
+
+    @Test
+    operation powerOffFinishes() {
+        raise powerOff
+        proceed 1 cycle
+        assert is_final
+    }
+}

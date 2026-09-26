@@ -1,0 +1,57 @@
+// Unit tests of the door (event driven): entry / exit points and fork / join.
+// Run with: hsm test examples/tests/door.hsmtest --machine examples/door.hsm
+testclass DoorTest for statemachine Door {
+
+    @SetUp
+    operation init() {
+        enter
+    }
+
+    @Test
+    operation startsClosed() {
+        assert active(Door.Closed)
+        assert cycles == 1 message "the entry action of Closed runs once"
+        assert !is_final
+    }
+
+    @Test
+    operation opensAndCloses() {
+        raise open
+        assert active(Moving.Up) message "open enters Moving through the entry point Opening"
+        assert !active(Moving.Down)
+        raise motorStopped
+        assert active(Closed)
+        assert cycles == 2
+    }
+
+    @Test
+    operation obstacleStartsService() {
+        raise open
+        raise obstacle
+        assert alarm message "leaving Moving through the exit node Blocked raises alarm"
+        assert active(Service.Locked) && active(Service.On)
+        raise serviceDone
+        assert active(Closed)
+        assert cycles == 2
+    }
+
+    @Test
+    operation stepsWithoutEventsChangeNothing() {
+        proceed 3 cycles
+        proceed 10 s
+        assert active(Closed)
+        assert cycles == 1
+    }
+
+    @Test
+    operation openAndCloseRepeatedly() {
+        var i : integer = 0
+        while (i < 5) {
+            raise open; raise motorStopped
+            i += 1
+        }
+        assert cycles == 6
+        exit
+        assert !active(Closed)
+    }
+}

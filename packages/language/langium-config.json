@@ -10,6 +10,13 @@
         "monarch": {
             "out": "src/syntaxes/hsm.monarch.ts"
         }
+    }, {
+        "id": "hsmtest",
+        "grammar": "src/hsm-test.langium",
+        "fileExtensions": [".hsmtest"],
+        "textMate": {
+            "out": "syntaxes/hsmtest.tmLanguage.json"
+        }
     }],
     "out": "src/generated"
 }

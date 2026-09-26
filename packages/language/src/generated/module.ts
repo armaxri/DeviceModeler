@@ -5,11 +5,18 @@
 
 import type { LangiumSharedCoreServices, LangiumCoreServices, LangiumGeneratedCoreServices, LangiumGeneratedSharedCoreServices, LanguageMetaData, Module } from 'langium';
 import { HsmAstReflection } from './ast.js';
-import { HsmGrammar } from './grammar.js';
+import { HsmGrammar, HsmTestGrammar } from './grammar.js';
 
 export const HsmLanguageMetaData = {
     languageId: 'hsm',
     fileExtensions: ['.hsm'],
+    caseInsensitive: false,
+    mode: 'development'
+} as const satisfies LanguageMetaData;
+
+export const HsmTestLanguageMetaData = {
+    languageId: 'hsmtest',
+    fileExtensions: ['.hsmtest'],
     caseInsensitive: false,
     mode: 'development'
 } as const satisfies LanguageMetaData;
@@ -21,5 +28,11 @@ export const HsmGeneratedSharedModule: Module<LangiumSharedCoreServices, Langium
 export const HsmGeneratedModule: Module<LangiumCoreServices, LangiumGeneratedCoreServices> = {
     Grammar: () => HsmGrammar(),
     LanguageMetaData: () => HsmLanguageMetaData,
+    parser: {}
+};
+
+export const HsmTestGeneratedModule: Module<LangiumCoreServices, LangiumGeneratedCoreServices> = {
+    Grammar: () => HsmTestGrammar(),
+    LanguageMetaData: () => HsmTestLanguageMetaData,
     parser: {}
 };

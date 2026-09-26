@@ -1,5 +1,5 @@
 export * from './generated/ast.js';
-export { HsmLanguageMetaData } from './generated/module.js';
+export { HsmLanguageMetaData, HsmTestLanguageMetaData } from './generated/module.js';
 export { default as HsmMonarchSyntax } from './syntaxes/hsm.monarch.js';
 export * from './hsm-module.js';
 export * from './hsm-validator.js';
@@ -16,3 +16,4 @@ export * from './hsm-expression-validator.js';
 export * from './hsm-typesystem.js';
 export * from './importer/sct-importer.js';
 export * from './simulation/index.js';
+export * from './testing/index.js';
