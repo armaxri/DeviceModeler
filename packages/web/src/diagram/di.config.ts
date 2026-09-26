@@ -6,7 +6,10 @@ import {
 } from 'sprotty';
 import { SelectAction, SelectAllAction } from 'sprotty-protocol';
 import { DiagramTypes, StateMachineGraph, TransitionEdge, VertexNode } from './model.js';
-import { ChoiceView, FinalView, HistoryView, InitialView, JunctionView, RegionView, StateView, TransitionView } from './views.js';
+import {
+    ChoiceView, DefinitionView, EntryPointView, ExitPointView, FinalView, HistoryView, InitialView, JunctionView, RegionView, StateView, SyncView,
+    TransitionView
+} from './views.js';
 import { DiagramCallbacks, HsmMouseListener, HsmSelectMouseListener, SelectionTracker } from './listeners.js';
 
 export function createDiagramContainer(baseDiv: string, callbacks: DiagramCallbacks): Container {
@@ -27,6 +30,10 @@ export function createDiagramContainer(baseDiv: string, callbacks: DiagramCallba
         configureModelElement(context, DiagramTypes.junction, VertexNode, JunctionView);
         configureModelElement(context, DiagramTypes.history, VertexNode, HistoryView);
         configureModelElement(context, DiagramTypes.deephistory, VertexNode, HistoryView);
+        configureModelElement(context, DiagramTypes.sync, VertexNode, SyncView);
+        configureModelElement(context, DiagramTypes.entry, VertexNode, EntryPointView);
+        configureModelElement(context, DiagramTypes.exit, VertexNode, ExitPointView);
+        configureModelElement(context, DiagramTypes.definition, VertexNode, DefinitionView, { disable: [moveFeature] });
         configureModelElement(context, DiagramTypes.transition, TransitionEdge, TransitionView, { enable: [selectFeature] });
 
         configureViewerOptions(context, {

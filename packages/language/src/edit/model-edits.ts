@@ -28,6 +28,27 @@ export class EditError extends Error { }
 
 export type NewVertexKind = 'state' | ast.PseudoStateKind;
 
+/** Kinds of declarations which can be added to the definition section. */
+export type DeclarationKind = 'in event' | 'out event' | 'internal event' | 'var' | 'const' | 'operation';
+
+export const DECLARATION_KINDS: DeclarationKind[] = ['in event', 'out event', 'internal event', 'var', 'const', 'operation'];
+
+export interface NewDeclaration {
+    kind: DeclarationKind;
+    /** Name of the declaration. Operations may include a parameter list: `log(msg : string)`. */
+    name: string;
+    /** Type (of the event payload, variable, constant or the return type of an operation). */
+    type?: string;
+    /** Initial value of a variable or constant. */
+    value?: string;
+    /**
+     * Scope to add the declaration to: `internal`, the name of a named interface, or empty / undefined
+     * for the unnamed interface. Default: `internal` for internal events, the unnamed interface otherwise.
+     * A missing scope is created.
+     */
+    scope?: string;
+}
+
 /** Special end points of a transition: the initial or final pseudo state of a container. */
 export type TransitionSource = ast.Vertex | { initialOf: ScopeContainer };
 export type TransitionTarget = ast.Vertex | { finalOf: ScopeContainer };
@@ -266,6 +287,77 @@ export class ModelEditor {
         };
     }
 
+    /**
+     * Adds a declaration (event, variable, constant, operation) to a scope of the definition
+     * section. The scope (`interface:`, `interface Name:` or `internal:`) is created if missing.
+     */
+    addDeclaration(declaration: NewDeclaration): EditResult {
+        const name = declaration.name.trim();
+        const simpleName = /^\s*([^\s(]*)/.exec(name)![1];
+        if (!isValidIdentifier(simpleName)) {
+            throw new EditError(`'${simpleName}' is not a valid name. Use letters, digits and '_' (no keywords).`);
+        }
+        const type = declaration.type?.trim() || undefined;
+        if (type && !isValidIdentifier(type)) {
+            throw new EditError(`'${type}' is not a valid type name.`);
+        }
+        const scopeName = (declaration.scope ?? (declaration.kind === 'internal event' ? 'internal' : '')).trim();
+        if (scopeName && scopeName !== 'internal' && !isValidIdentifier(scopeName)) {
+            throw new EditError(`'${scopeName}' is not a valid interface name.`);
+        }
+        const scope = this.machine.scopes.find(s => scopeName === 'internal'
+            ? ast.isInternalScope(s)
+            : ast.isInterfaceScope(s) && (s.name ?? '') === scopeName);
+        const qualified = scopeName && scopeName !== 'internal' ? `${scopeName}.${simpleName}` : simpleName;
+        for (const other of this.machine.scopes) {
+            for (const existing of other.declarations) {
+                const otherName = ast.isInterfaceScope(other) && other.name ? `${other.name}.${existing.name}` : existing.name;
+                if (otherName === qualified) {
+                    throw new EditError(`'${qualified}' is already declared.`);
+                }
+            }
+        }
+        const text = declarationText({ ...declaration, name, type });
+        if (scope) {
+            const last = scope.declarations[scope.declarations.length - 1];
+            const scopeIndent = this.indentOf(scope.$cstNode!.offset);
+            if (last) {
+                const firstOffset = scope.declarations[0].$cstNode!.offset;
+                const indent = this.isAtLineStart(firstOffset) ? this.indentOf(firstOffset) : scopeIndent + this.indentUnit;
+                const offset = this.endOfLineAfter(last.$cstNode!.end);
+                return { edits: [{ offset, length: 0, text: `\n${indent}${text}` }] };
+            }
+            const colon = GrammarUtils.findNodeForKeyword(scope.$cstNode, ':')!;
+            const offset = this.endOfLineAfter(colon.end);
+            return { edits: [{ offset, length: 0, text: `\n${scopeIndent}${this.indentUnit}${text}` }] };
+        }
+        // create the scope
+        const header = scopeName === 'internal' ? 'internal:' : scopeName ? `interface ${scopeName}:` : 'interface:';
+        const indent = this.childIndent(this.machine);
+        const block = `${indent}${header}\n${indent}${this.indentUnit}${text}`;
+        const firstScope = this.machine.scopes[0];
+        if (!scopeName && firstScope && this.isAtLineStart(firstScope.$cstNode!.offset)) {
+            // the unnamed interface comes first
+            const lineStart = this.text.lastIndexOf('\n', firstScope.$cstNode!.offset - 1) + 1;
+            return { edits: [{ offset: lineStart, length: 0, text: `${block}\n\n` }] };
+        }
+        const cst = this.machine.$cstNode!;
+        const anchors = [
+            GrammarUtils.findNodeForProperty(cst, 'namespace'),
+            ...this.machine.annotations.map(a => a.$cstNode),
+            ...this.machine.scopes.map(s => s.$cstNode)
+        ].filter((n): n is CstNode => !!n);
+        const anchor = anchors.sort((a, b) => a.end - b.end)[anchors.length - 1];
+        if (anchor) {
+            const offset = this.endOfLineAfter(anchor.end);
+            return { edits: [{ offset, length: 0, text: `\n\n${block}` }] };
+        }
+        const { open } = this.braces(this.machine);
+        const offset = this.endOfLineAfter(open + 1);
+        const hasMembers = this.members(this.machine).length > 0;
+        return { edits: [{ offset, length: 0, text: `\n${block}${hasMembers ? '\n' : ''}` }] };
+    }
+
     /** Changes the source or target of a transition. */
     reconnectTransition(transition: ast.Transition, end: 'source' | 'target', vertex: ast.Vertex): EditResult {
         const cst = transition.$cstNode!;
@@ -379,11 +471,7 @@ export class ModelEditor {
         if (!isValidIdentifier(name)) {
             throw new EditError(`'${name}' is not a valid name. Use letters, digits and '_' (no keywords).`);
         }
-        const owner = ast.isRegion(container) ? container.$container : container;
-        const siblings = ast.isState(owner)
-            ? [...owner.vertices, ...owner.regions.flatMap(r => r.vertices)]
-            : isScopeContainer(owner) ? owner.vertices : [];
-        if (siblings.some(v => v !== except && v.name === name)) {
+        if (siblingVertices(container).some(v => v !== except && v.name === name)) {
             throw new EditError(`A state named '${name}' already exists here.`);
         }
     }
@@ -424,6 +512,9 @@ export class ModelEditor {
         const result: AstNode[] = [...container.vertices, ...container.transitions];
         if (ast.isState(container)) {
             result.push(...container.reactions, ...container.regions);
+        } else if (ast.isStateMachine(container)) {
+            // the definition section precedes the vertices
+            result.push(...container.annotations, ...container.scopes);
         }
         return result.filter(n => n.$cstNode).sort((a, b) => a.$cstNode!.offset - b.$cstNode!.offset);
     }
@@ -491,7 +582,14 @@ export class ModelEditor {
         }
         if (anchor) {
             const offset = this.endOfLineAfter(anchor.$cstNode!.end);
-            const prefix = `\n${indent}`;
+            // separate the first vertex from the definition section by an empty line
+            const prefix = ast.isScope(anchor) || ast.isAnnotation(anchor) ? `\n\n${indent}` : `\n${indent}`;
+            return { edit: { offset, length: 0, text: prefix + memberText }, memberOffset: offset + prefix.length };
+        }
+        const namespace = ast.isStateMachine(container) ? GrammarUtils.findNodeForProperty(cst, 'namespace') : undefined;
+        if (namespace) {
+            const offset = this.endOfLineAfter(namespace.end);
+            const prefix = `\n\n${indent}`;
             return { edit: { offset, length: 0, text: prefix + memberText }, memberOffset: offset + prefix.length };
         }
         const first = members[0];
@@ -581,6 +679,38 @@ function vertexReferences(machine: ast.StateMachine): Array<Reference<ast.Vertex
         }
     }
     return result;
+}
+
+/**
+ * Vertices whose names must differ from the name of a vertex in the given container: the vertices
+ * of the owning state including all its regions (regions are transparent in qualified names).
+ */
+export function siblingVertices(container: AstNode): ast.Vertex[] {
+    const owner = ast.isRegion(container) ? container.$container : container;
+    if (ast.isState(owner)) {
+        return [...owner.vertices, ...owner.regions.flatMap(r => r.vertices)];
+    }
+    return isScopeContainer(owner) ? owner.vertices : [];
+}
+
+/** Text of a new declaration, e.g. `in event open : integer` or `operation log(msg : string) : void`. */
+export function declarationText(declaration: NewDeclaration): string {
+    const name = declaration.name.trim();
+    const type = declaration.type?.trim();
+    const value = declaration.value?.trim();
+    const typeSuffix = type ? ` : ${type}` : '';
+    switch (declaration.kind) {
+        case 'in event':
+        case 'out event':
+            return `${declaration.kind} ${name}${typeSuffix}`;
+        case 'internal event':
+            return `event ${name}${typeSuffix}`;
+        case 'var':
+        case 'const':
+            return `${declaration.kind} ${name}${typeSuffix}${value ? ` = ${value}` : ''}`;
+        case 'operation':
+            return `operation ${name.includes('(') ? name : `${name}()`}${typeSuffix}`;
+    }
 }
 
 /** The unguarded `entry /` or `exit /` reaction of a state. */

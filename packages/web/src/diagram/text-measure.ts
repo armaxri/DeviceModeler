@@ -3,6 +3,9 @@ import { DiagramMetrics, type TextMeasure, type TextStyle } from 'hsm-language';
 /** Font family used in the diagram. Must match `--hsm-font` in diagram.css. */
 export const DIAGRAM_FONT = '"Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif';
 
+/** Monospace font of the definition section. Must match `--hsm-mono` in diagram.css. */
+export const DIAGRAM_MONO_FONT = '"DejaVu Sans Mono", Menlo, Consolas, "Liberation Mono", monospace';
+
 let context: CanvasRenderingContext2D | null | undefined;
 const cache = new Map<string, number>();
 
@@ -14,7 +17,7 @@ export const canvasTextMeasure: TextMeasure = (text: string, style: TextStyle) =
     if (width === undefined) {
         context ??= document.createElement('canvas').getContext('2d');
         if (context) {
-            context.font = `${size}px ${DIAGRAM_FONT}`;
+            context.font = `${size}px ${style === 'code' ? DIAGRAM_MONO_FONT : DIAGRAM_FONT}`;
             width = Math.ceil(context.measureText(text).width);
         } else {
             width = Math.ceil(text.length * size * 0.6);

@@ -4,13 +4,14 @@ import { LocalModelSource, TYPES, type IActionDispatcher, type SModelElementImpl
 import { FitToScreenAction, SelectAction, SelectAllAction, CenterAction } from 'sprotty-protocol';
 import type { AstNode } from 'langium';
 import {
-    EditError, ModelEditor, generatePlantUml, isScopeContainer, isValidIdentifier, isPseudoState, isRegion, isState, isStateMachine,
-    isTransition, isVertex, layoutStateMachine, scopeOf, transitionLabel, MACHINE_ID,
+    EditError, ModelEditor, allVertices, applyEdits, definitionRange, generatePlantUml, isEventDeclaration, isInterfaceScope, isOperationDeclaration,
+    isScopeContainer, isValidIdentifier, isPseudoState, isRegion, isState, isStateMachine, isTransition, isVertex, layoutStateMachine,
+    qualifiedName, scopeOf, siblingVertices, transitionLabel, DEFINITION_ID, MACHINE_ID,
     nodeText as nodeTextOf, type DeletionTarget, type DiagramNode, type DiagramNodeKind, type EdgeRouting, type EditResult, type LayoutDirection, type LayoutResult,
-    type ParsedModel, type ScopeContainer, type TransitionSource, type TransitionTarget, type Vertex
+    type NewVertexKind, type ParsedModel, type ScopeContainer, type TransitionSource, type TransitionTarget, type Vertex
 } from 'hsm-language';
 import { importSct } from 'hsm-language';
-import { HsmLanguageSupport, LANGUAGE_ID } from './language-support.js';
+import { EDITOR_THEMES, HsmLanguageSupport, LANGUAGE_ID, describeSyntaxProblem } from './language-support.js';
 import { createDiagramContainer } from './diagram/di.config.js';
 import type { DiagramCallbacks } from './diagram/listeners.js';
 import { toSchema, type Issue } from './diagram/model.js';
@@ -24,7 +25,11 @@ import { plantUmlServerUrl } from './ui/plantuml.js';
 import { renderProperties, type PropertiesHost, type SelectionInfo } from './ui/properties.js';
 import { EMPTY_MODEL, EXAMPLES } from './examples.js';
 
-export type Tool = 'select' | 'state' | 'choice' | 'junction' | 'history' | 'deephistory' | 'initial' | 'final' | 'transition' | 'region';
+export type Tool = 'select' | 'state' | 'choice' | 'junction' | 'history' | 'deephistory' | 'sync' | 'entry' | 'exit' | 'initial' | 'final'
+    | 'transition' | 'region';
+
+/** Tools which add a vertex to the container that is clicked. */
+const VERTEX_TOOLS: ReadonlySet<Tool> = new Set<Tool>(['state', 'choice', 'junction', 'history', 'deephistory', 'sync', 'entry', 'exit']);
 
 interface ToolDescription {
     tool: Tool;
@@ -43,6 +48,9 @@ const TOOLS: Array<ToolDescription | 'separator'> = [
     { tool: 'junction', label: 'Junction', key: 'J', icon: Icons.junction, hint: 'Click on the canvas, a state or a region to add a junction' },
     { tool: 'history', label: 'Shallow history', key: 'H', icon: Icons.history, hint: 'Click on a composite state to add a history pseudo state' },
     { tool: 'deephistory', label: 'Deep history', key: 'D', icon: Icons.deephistory, hint: 'Click on a composite state to add a deep history pseudo state' },
+    { tool: 'sync', label: 'Synchronization (fork / join)', key: 'B', icon: Icons.sync, hint: 'Click on the canvas, a state or a region to add a synchronization bar' },
+    { tool: 'entry', label: 'Entry point', key: 'E', icon: Icons.entry, hint: 'Click on a composite state to add a named entry point' },
+    { tool: 'exit', label: 'Exit node', key: 'X', icon: Icons.exit, hint: 'Click on a composite state to add an exit node' },
     'separator',
     { tool: 'initial', label: 'Initial state', key: 'I', icon: Icons.initial, hint: 'Click on the state that should be the initial state of its parent' },
     { tool: 'final', label: 'Final state', key: 'F', icon: Icons.final, hint: 'Click on a state to add a transition to the final state' },
@@ -60,8 +68,13 @@ interface Settings {
     direction: LayoutDirection;
     routing: EdgeRouting;
     theme: 'classic' | 'modern' | 'dark';
+    /** Show the priorities of transitions leaving a vertex with several outgoing transitions. */
+    priorities: boolean;
     editorWidth?: string;
 }
+
+/** Keywords offered by the completion of the inline editors (in addition to the declarations). */
+const REACTION_KEYWORDS = ['after', 'every', 'always', 'oncycle', 'else', 'default', 'raise', 'valueof', 'active', 'entry', 'exit', 'true', 'false'];
 
 const STORAGE_TEXT = 'hsm-modeler.text';
 const STORAGE_SETTINGS = 'hsm-modeler.settings';
@@ -84,7 +97,8 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
     private updateVersion = 0;
     private applyingEdit = false;
     private pendingSelectOffset?: number;
-    private pendingRename?: string;
+    /** Start renaming the element selected after the next update (a newly created vertex). */
+    private pendingRename = false;
     private fileName = 'statemachine.hsm';
     /** Fit the diagram to the screen once the next layout has been rendered. */
     private fitOnNextRender = false;
@@ -93,7 +107,7 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
     private stickyTool = false;
     private pendingSource?: string;
     readonly selection = new Set<string>();
-    private settings: Settings = { direction: 'DOWN', routing: 'SPLINES', theme: 'classic' };
+    private settings: Settings = { direction: 'DOWN', routing: 'SPLINES', theme: 'classic', priorities: true };
     private readonly elk = createWorkerElk();
 
     async start(): Promise<void> {
@@ -154,7 +168,7 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
             scrollBeyondLastLine: false,
             renderWhitespace: 'none',
             fixedOverflowWidgets: true,
-            theme: this.settings.theme === 'dark' ? 'vs-dark' : 'vs'
+            theme: this.settings.theme === 'dark' ? EDITOR_THEMES.dark : EDITOR_THEMES.light
         });
         this.decorations = this.editor.createDecorationsCollection();
         byId('file-name').textContent = this.fileName;
@@ -259,6 +273,13 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
             this.saveSettings();
             this.update(true);
         });
+        const priorities = byId<HTMLInputElement>('priorities-toggle');
+        priorities.checked = this.settings.priorities;
+        priorities.addEventListener('change', () => {
+            this.settings.priorities = priorities.checked;
+            this.saveSettings();
+            this.update(true);
+        });
         const theme = byId<HTMLSelectElement>('theme-select');
         theme.value = this.settings.theme;
         theme.addEventListener('change', () => {
@@ -351,7 +372,7 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         diagram.classList.remove('theme-classic', 'theme-modern', 'theme-dark');
         diagram.classList.add(`theme-${this.settings.theme}`);
         document.body.classList.toggle('ui-dark', this.settings.theme === 'dark');
-        monaco.editor.setTheme(this.settings.theme === 'dark' ? 'vs-dark' : 'vs');
+        monaco.editor.setTheme(this.settings.theme === 'dark' ? EDITOR_THEMES.dark : EDITOR_THEMES.light);
     }
 
     // -----------------------------------------------------------------------------------------
@@ -392,7 +413,8 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
                 direction: this.settings.direction,
                 routing: this.settings.routing,
                 measure: canvasTextMeasure,
-                elk: this.elk
+                elk: this.elk,
+                priorities: this.settings.priorities
             });
         } catch (error) {
             console.error(error);
@@ -420,22 +442,22 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         if (this.pendingSource && !nodes.has(this.pendingSource)) {
             this.pendingSource = undefined;
         }
+        let createdId: string | undefined;
         if (this.pendingSelectOffset !== undefined) {
-            const id = this.elementAtOffset(this.pendingSelectOffset, true);
+            createdId = this.elementAtOffset(this.pendingSelectOffset, true);
             this.pendingSelectOffset = undefined;
-            if (id) {
+            if (createdId) {
                 this.selection.clear();
-                this.selection.add(id);
-                this.revealInEditor(id);
+                this.selection.add(createdId);
+                this.revealInEditor(createdId);
             }
         }
         await this.render();
         if (this.pendingRename) {
-            const name = this.pendingRename;
-            this.pendingRename = undefined;
-            const vertex = this.findVertex(name);
-            const id = vertex && layout.ids.get(vertex);
-            if (id) {
+            // rename the created vertex: it is identified by its offset in the text (names need not be unique)
+            this.pendingRename = false;
+            const id = createdId;
+            if (id && isVertex(layout.elements.get(id))) {
                 requestAnimationFrame(() => requestAnimationFrame(() => this.startRename(id)));
             }
         }
@@ -486,6 +508,15 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         return issues;
     }
 
+    /** Text range of a diagram element: the definition node covers the whole definition section. */
+    private rangeOf(id: string, node: AstNode | undefined): { offset: number, end: number } | undefined {
+        if (id === DEFINITION_ID) {
+            return isStateMachine(node) ? definitionRange(node) : undefined;
+        }
+        const cst = node?.$cstNode;
+        return cst ? { offset: cst.offset, end: cst.end } : undefined;
+    }
+
     /** Finds the innermost diagram element whose text contains the offset. */
     private elementAtOffset(offset: number, exactStart: boolean, layout = this.state?.layout, nodes = this.state?.nodes): string | undefined {
         if (!layout || !nodes) {
@@ -497,15 +528,16 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
             if (id === MACHINE_ID || kind === 'initial' || kind === 'final') {
                 continue;
             }
-            const cst = node.$cstNode;
-            if (!cst) {
+            const range = this.rangeOf(id, node);
+            if (!range) {
                 continue;
             }
-            if (exactStart && cst.offset === offset) {
+            if (exactStart && range.offset === offset) {
                 return id;
             }
-            if (cst.offset <= offset && offset <= cst.end && (!best || cst.length < best.length)) {
-                best = { id, length: cst.length };
+            const length = range.end - range.offset;
+            if (range.offset <= offset && offset <= range.end && (!best || length < best.length)) {
+                best = { id, length };
             }
         }
         return best?.id;
@@ -550,6 +582,11 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         if (!result || result.edits.length === 0) {
             return false;
         }
+        // a button of the properties panel keeps the focus otherwise, which prevents updates of the panel
+        const focused = document.activeElement;
+        if (focused instanceof HTMLButtonElement && byId('properties').contains(focused)) {
+            focused.blur();
+        }
         const model = this.editor.getModel()!;
         const edits = result.edits.map(edit => {
             const start = model.getPositionAt(edit.offset);
@@ -567,6 +604,66 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         this.pendingSelectOffset = result.selectOffset;
         await this.update();
         return true;
+    }
+
+    /**
+     * Checks whether the edit computed by `producer` results in a syntactically valid text.
+     * Returns the error message (of the edit operation or of the parser) or undefined.
+     */
+    checkEdit(producer: (editor: ModelEditor) => EditResult | undefined): string | undefined {
+        if (!this.state || this.syntaxErrors || this.state.parsed.text !== this.editor.getValue()) {
+            // applyEdit reports the problem
+            return undefined;
+        }
+        const text = this.state.parsed.text;
+        let result: EditResult | undefined;
+        try {
+            result = producer(new ModelEditor(text, this.state.parsed.model));
+        } catch (error) {
+            if (error instanceof EditError) {
+                return error.message;
+            }
+            throw error;
+        }
+        if (!result || result.edits.length === 0) {
+            return undefined;
+        }
+        const errors = this.language.syntaxErrors(applyEdits(text, result.edits));
+        if (errors.length === 0) {
+            return undefined;
+        }
+        // range of the changed text in the new text (to tell whether the input is just incomplete)
+        let delta = 0;
+        let start = Number.POSITIVE_INFINITY;
+        let end = 0;
+        for (const edit of [...result.edits].sort((x, y) => x.offset - y.offset)) {
+            start = Math.min(start, edit.offset + delta);
+            end = Math.max(end, edit.offset + delta + edit.text.length);
+            delta += edit.text.length - edit.length;
+        }
+        return `Syntax error: ${describeSyntaxProblem(errors[0], start, end)}`;
+    }
+
+    /** Words offered by the completion of reaction texts: declarations, keywords and state names. */
+    completions(): string[] {
+        const model = this.state?.parsed.model;
+        if (!model) {
+            return REACTION_KEYWORDS;
+        }
+        const result: string[] = [];
+        for (const scope of model.scopes) {
+            for (const declaration of scope.declarations) {
+                const name = isInterfaceScope(scope) && scope.name ? `${scope.name}.${declaration.name}` : declaration.name;
+                result.push(isOperationDeclaration(declaration) ? `${name}()` : name);
+                if (isInterfaceScope(scope) && scope.name && !isEventDeclaration(declaration)) {
+                    // also offer the name without the interface to find it while typing
+                    result.push(declaration.name);
+                }
+            }
+        }
+        result.push(...REACTION_KEYWORDS);
+        result.push(...allVertices(model).filter(isState).map(v => qualifiedName(v)));
+        return result;
     }
 
     private undo(): void {
@@ -730,26 +827,25 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         }
         const id = this.diagramId(target);
         const tool = this.tool;
-        switch (tool) {
-            case 'state':
-            case 'choice':
-            case 'junction':
-            case 'history':
-            case 'deephistory': {
-                const container = this.containerAt(id);
-                if (!container) {
-                    return;
-                }
-                this.applyEdit(editor => {
-                    const result = editor.addVertex(container, tool);
-                    if (tool === 'state') {
-                        this.pendingRename = result.createdName;
-                    }
-                    return result;
-                });
-                this.toolDone();
-                break;
+        if (VERTEX_TOOLS.has(tool)) {
+            const kind = tool as NewVertexKind;
+            const container = this.containerAt(id);
+            if (!container) {
+                return;
             }
+            if ((kind === 'entry' || kind === 'exit') && isStateMachine(container)) {
+                this.setStatus(`Click on a composite state to add ${kind === 'entry' ? 'an entry point' : 'an exit node'}.`, 'warning');
+                return;
+            }
+            this.applyEdit(editor => {
+                const result = editor.addVertex(container, kind);
+                this.pendingRename = kind === 'state' || kind === 'entry' || kind === 'exit';
+                return result;
+            });
+            this.toolDone();
+            return;
+        }
+        switch (tool) {
             case 'region': {
                 const node = id ? this.astOf(id) : undefined;
                 const state = isState(node) ? node : isRegion(node) ? node.$container : undefined;
@@ -823,11 +919,14 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
             return;
         }
         showInlineEditor({
-            rect: { left: event.clientX - 90, top: event.clientY - 15, width: 180, height: 30 },
+            rect: { left: event.clientX - 120, top: event.clientY - 15, width: 240, height: 30 },
             value: '',
             placeholder: 'trigger [guard] / effect',
+            validate: value => this.checkEdit(editor => editor.addTransition(source, target, value)),
+            completions: () => this.completions(),
             commit: value => finish(value),
-            cancel: () => finish(undefined)
+            cancel: () => finish(undefined),
+            discarded: (_value, error) => this.setStatus(`The label was not applied – ${error}`, 'error')
         });
     }
 
@@ -843,10 +942,11 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         if (kind === 'machine') {
             // double click on the canvas creates a new state
             this.applyEdit((editor, state) => {
-                const result = editor.addVertex(state.parsed.model, 'state');
-                this.pendingRename = result.createdName;
-                return result;
+                this.pendingRename = true;
+                return editor.addVertex(state.parsed.model, 'state');
             });
+        } else if (kind === 'definition') {
+            this.editInText(id);
         } else if (kind !== 'initial' && kind !== 'final') {
             this.startRename(id);
         }
@@ -935,14 +1035,27 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         this.decorations.clear();
     }
 
-    private revealInEditor(id: string): void {
-        const cst = this.astOf(id)?.$cstNode;
+    /** Moves the cursor of the text editor to the element and focuses the editor. */
+    editInText(id: string): void {
+        const range = this.rangeOf(id, this.astOf(id));
         const model = this.editor.getModel();
-        if (!cst || !model || this.editor.hasTextFocus()) {
+        if (!range || !model) {
             return;
         }
-        const start = model.getPositionAt(cst.offset);
-        const end = model.getPositionAt(cst.end);
+        const end = model.getPositionAt(range.end);
+        this.editor.setPosition(end);
+        this.editor.revealPositionInCenterIfOutsideViewport(end);
+        this.editor.focus();
+    }
+
+    private revealInEditor(id: string): void {
+        const textRange = this.rangeOf(id, this.astOf(id));
+        const model = this.editor.getModel();
+        if (!textRange || !model || this.editor.hasTextFocus()) {
+            return;
+        }
+        const start = model.getPositionAt(textRange.offset);
+        const end = model.getPositionAt(textRange.end);
         const range = new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column);
         this.decorations.set([{ range, options: { className: 'hsm-selected-range', isWholeLine: false } }]);
         this.editor.revealRangeInCenterIfOutsideViewport(range, monaco.editor.ScrollType.Smooth);
@@ -960,6 +1073,9 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
             }
             if (kind === 'final' && isScopeContainer(node)) {
                 return [{ finalOf: node }];
+            }
+            if (kind === 'definition' || isStateMachine(node)) {
+                return [];
             }
             return [node];
         });
@@ -984,9 +1100,13 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
             const rect = labelElement.getBoundingClientRect();
             showInlineEditor({
                 rect,
+                minWidth: 240,
                 value: nodeTextOf(node.spec),
                 placeholder: 'trigger [guard] / effect',
-                commit: value => this.applyEdit(editor => editor.updateTransitionLabel(node, value))
+                validate: value => this.checkEdit(editor => editor.updateTransitionLabel(node, value)),
+                completions: () => this.completions(),
+                commit: value => this.applyEdit(editor => editor.updateTransitionLabel(node, value)),
+                discarded: (_value, error) => this.setStatus(`The label was not applied – ${error}`, 'error')
             });
         } else if (isVertex(node)) {
             const scale = diagramNode ? bounds.width / diagramNode.width : 1;
@@ -1008,23 +1128,17 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         }
     }
 
+    /**
+     * Validates a new name for the vertex: it must be an identifier and must differ from the names of
+     * its siblings (vertices in other states may have the same simple name).
+     */
     validateName(value: string, vertex?: Vertex): string | undefined {
         const name = value.trim();
         if (!isValidIdentifier(name)) {
             return 'Use letters, digits and _ (no keywords), starting with a letter.';
         }
-        const existing = this.findVertex(name);
-        if (existing && existing !== vertex) {
-            return `'${name}' already exists.`;
-        }
-        return undefined;
-    }
-
-    findVertex(name: string): Vertex | undefined {
-        for (const node of this.state?.layout.elements.values() ?? []) {
-            if (isVertex(node) && node.name === name) {
-                return node;
-            }
+        if (vertex && siblingVertices(vertex.$container).some(v => v !== vertex && v.name === name)) {
+            return `'${name}' already exists here.`;
         }
         return undefined;
     }

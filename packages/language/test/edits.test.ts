@@ -228,3 +228,70 @@ describe('qualified names', () => {
         expect(result).toContain('A.X -> B.X');
     });
 });
+
+describe('pseudo states', () => {
+    for (const kind of ['sync', 'entry', 'exit'] as const) {
+        test(`add ${kind}`, async () => {
+            const { text, result } = await edit(base, (e, f) => e.addVertex(f('B') as ast.State, kind));
+            const name = { sync: 'Sync1', entry: 'Entry1', exit: 'Exit1' }[kind];
+            expect(result.createdName).toBe(name);
+            expect(text).toContain(`        state B2 // comment\n        ${kind} ${name}\n`);
+            expect(text.substring(result.selectOffset!)).toMatch(new RegExp(`^${kind} ${name}`));
+        });
+    }
+});
+
+describe('definition section', () => {
+    test('add declarations to the existing interface', async () => {
+        let { text } = await edit(base, e => e.addDeclaration({ kind: 'out event', name: 'done', type: 'integer' }));
+        expect(text).toContain(`        operation log(msg : string) : void\n        out event done : integer\n\n    [*] -> A`);
+        ({ text } = await edit(text, e => e.addDeclaration({ kind: 'var', name: 'count', type: 'integer', value: '0' })));
+        expect(text).toContain(`        out event done : integer\n        var count : integer = 0\n`);
+        ({ text } = await edit(text, e => e.addDeclaration({ kind: 'operation', name: 'beep', type: 'void' })));
+        expect(text).toContain(`        operation beep() : void\n`);
+    });
+
+    test('internal events create the internal scope', async () => {
+        const { text, parsed } = await edit(base, e => e.addDeclaration({ kind: 'internal event', name: 'tick' }));
+        expect(text).toContain(`        operation log(msg : string) : void\n\n    internal:\n        event tick\n\n    [*] -> A`);
+        expect(parsed.model.scopes).toHaveLength(2);
+    });
+
+    test('creates the interface in a machine without definition section', async () => {
+        const { text, parsed } = await edit(`statemachine M {\n    [*] -> A\n    state A\n}\n`, e => e.addDeclaration({ kind: 'in event', name: 'go' }));
+        expect(text).toBe(`statemachine M {\n    interface:\n        in event go\n\n    [*] -> A\n    state A\n}\n`);
+        expect(parsed.model.scopes[0].declarations[0].name).toBe('go');
+    });
+
+    test('the unnamed interface is inserted before other scopes', async () => {
+        const source = `statemachine M {\n    @EventDriven\n\n    internal:\n        var x : integer\n\n    state A\n}\n`;
+        const { text } = await edit(source, e => e.addDeclaration({ kind: 'in event', name: 'go' }));
+        expect(text).toBe(`statemachine M {\n    @EventDriven\n\n    interface:\n        in event go\n\n    internal:\n        var x : integer\n\n    state A\n}\n`);
+    });
+
+    test('named interfaces and empty scopes', async () => {
+        const source = `statemachine M {\n    interface:\n    state A\n}\n`;
+        let { text } = await edit(source, e => e.addDeclaration({ kind: 'in event', name: 'go' }));
+        expect(text).toBe(`statemachine M {\n    interface:\n        in event go\n    state A\n}\n`);
+        ({ text } = await edit(text, e => e.addDeclaration({ kind: 'in event', name: 'request', scope: 'Pedestrian' })));
+        expect(text).toContain(`        in event go\n\n    interface Pedestrian:\n        in event request\n    state A`);
+    });
+
+    test('rejects duplicates and invalid names', async () => {
+        const parsed = await parse(base);
+        const editor = new ModelEditor(base, parsed.model);
+        expect(() => editor.addDeclaration({ kind: 'in event', name: 'go' })).toThrow(`'go' is already declared.`);
+        expect(() => editor.addDeclaration({ kind: 'var', name: '1x' })).toThrow('not a valid name');
+        expect(() => editor.addDeclaration({ kind: 'var', name: 'y', type: 'in' })).toThrow('not a valid type');
+    });
+
+    test('new states are added after the definition section', async () => {
+        const { text } = await edit(`statemachine M {\n    interface:\n        in event go\n}\n`, (e, _f, m) => e.addVertex(m, 'state', 'A'));
+        expect(text).toBe(`statemachine M {\n    interface:\n        in event go\n\n    state A\n}\n`);
+    });
+
+    test('new states keep the namespace', async () => {
+        const { text } = await edit(`statemachine M {\n    namespace a.b\n}\n`, (e, _f, m) => e.addVertex(m, 'state', 'A'));
+        expect(text).toBe(`statemachine M {\n    namespace a.b\n\n    state A\n}\n`);
+    });
+});
