@@ -19,3 +19,4 @@ export * from './importer/sct-importer.js';
 export * from './simulation/index.js';
 export * from './testing/index.js';
 export * from './generator/c/index.js';
+export * from './generator/cpp/index.js';

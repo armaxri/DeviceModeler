@@ -7,6 +7,7 @@ import { HsmModelLoader } from '../hsm-document.js';
 import { generatePlantUml } from '../generator/plantuml.js';
 import { generateC } from '../generator/c/index.js';
 import { layoutFileName, layoutStateMachineWithLayout, parseManualLayout, serializeManualLayout, type ManualLayout } from '../diagram/manual-layout.js';
+import { generateCpp } from '../generator/cpp/index.js';
 import { importSct } from '../importer/sct-importer.js';
 import { StatechartInterpreter } from '../simulation/interpreter.js';
 import { formatTraceEntry, runScenario, validateScenario, type ScenarioStep } from '../simulation/scenario.js';
@@ -60,14 +61,22 @@ export function createProgram(): Command {
         });
 
     program.command('generate')
-        .argument('<target>', 'target language: c')
+        .argument('<target>', 'target language: cpp or c')
         .argument('<file>', '.hsm file')
         .option('-o, --out <dir>', 'output directory (default: the directory of the model)')
-        .option('-p, --prefix <prefix>', 'prefix of the generated functions and files (default: the state machine name in snake case)')
-        .description('generates code for a state machine (c: sc_types.h, <prefix>.h, <prefix>.c)')
-        .action(async (target: string, file: string, options: { out?: string, prefix?: string }) => {
-            if (target !== 'c') {
-                console.error(`Unknown target '${target}' (supported: c)`);
+        .option('-n, --namespace <namespace>', 'cpp: namespace of the generated class, e.g. a::b (default: the namespace of the model, "" for none)')
+        .option('--class-name <name>', 'cpp: name of the generated class and files (default: the state machine name)')
+        .option('--std <standard>', 'cpp: C++ standard of the generated code, 17 or 11 (default: 17)')
+        .option('-p, --prefix <prefix>', 'c: prefix of the generated functions and files (default: the state machine name in snake case)')
+        .description('generates code for a state machine (cpp: sc_statemachine.h, <Class>.h, <Class>.cpp; c: sc_types.h, <prefix>.h, <prefix>.c)')
+        .action(async (target: string, file: string, options: { out?: string, prefix?: string, namespace?: string, className?: string, std?: string }) => {
+            if (target !== 'c' && target !== 'cpp') {
+                console.error(`Unknown target '${target}' (supported: cpp, c)`);
+                process.exitCode = 1;
+                return;
+            }
+            if (options.std !== undefined && options.std !== '11' && options.std !== '17') {
+                console.error(`Unsupported C++ standard '${options.std}' (supported: 17, 11)`);
                 process.exitCode = 1;
                 return;
             }
@@ -76,7 +85,9 @@ export function createProgram(): Command {
                 process.exitCode = 1;
                 return;
             }
-            const result = generateC(parsed.model, { prefix: options.prefix });
+            const result = target === 'cpp'
+                ? generateCpp(parsed.model, { namespace: options.namespace, className: options.className, standard: options.std === '11' ? 11 : 17 })
+                : generateC(parsed.model, { prefix: options.prefix });
             for (const d of result.diagnostics) {
                 const line = d.node?.$cstNode ? `${d.node.$cstNode.range.start.line + 1}:` : '';
                 console.error(`${file}:${line} ${d.severity}: ${d.message}`);

@@ -1,13 +1,16 @@
 import { AstUtils, type AstNode } from 'langium';
 import * as ast from '../../generated/ast.js';
-import { qualifiedName } from '../../hsm-scope.js';
-import { typeOfEvent, typeOfParameter, typeOfVariable, returnTypeOf, type HsmType } from '../../hsm-typesystem.js';
-import { nodeText, transitionLabel } from '../../model-utils.js';
+import { typeOfEvent, typeOfParameter, returnTypeOf, type HsmType } from '../../hsm-typesystem.js';
+import { nodeText } from '../../model-utils.js';
 import { SimulationError } from '../../simulation/errors.js';
-import { StatechartInterpreter, type ExecutionMode, type ExecutionOrder } from '../../simulation/interpreter.js';
-import { isFinalState, ModelIndex, type RegionNode, type TargetVertex } from '../../simulation/model-index.js';
-import { CBlock, cInteger, commentText, cString, indent, snakeCase, stripParens, UniqueNames } from './c-code.js';
-import { CExpressionCompiler, countConcatenations, cDefault, cType, type CHelper, type CExpressionContext } from './c-expressions.js';
+import type { ExecutionMode, ExecutionOrder } from '../../simulation/interpreter.js';
+import type { ModelIndex } from '../../simulation/model-index.js';
+import { countConcatenations, type Code, type Helper } from '../common/expressions.js';
+import {
+    alignComments, GeneratorError, spaces, StatechartGenerator, type ErrorKind, type GeneratedFunction, type ScopeInfo, type TimerInfo
+} from '../common/statechart-generator.js';
+import { C_KEYWORDS, CBlock, commentText, cString, indent, snakeCase, stripParens } from './c-code.js';
+import { cDefault, cType } from './c-expressions.js';
 
 /** Options of the C code generator. */
 export interface CGeneratorOptions {
@@ -103,7 +106,7 @@ export function generateC(machine: ast.StateMachine, options: CGeneratorOptions 
     try {
         return new CGenerator(machine, options).generate();
     } catch (error) {
-        if (error instanceof CGeneratorError) {
+        if (error instanceof GeneratorError) {
             return { files: [], diagnostics: [{ severity: 'error', message: error.message, node: error.node }] };
         }
         if (error instanceof SimulationError) {
@@ -112,17 +115,6 @@ export function generateC(machine: ast.StateMachine, options: CGeneratorOptions 
         throw error;
     }
 }
-
-class CGeneratorError extends Error {
-    constructor(message: string, readonly node?: AstNode) {
-        super(message);
-    }
-}
-
-const NS_PER_UNIT: Record<string, bigint> = { s: 1000000000n, ms: 1000000n, us: 1000n, ns: 1n };
-
-type ErrorKind = 'division_by_zero' | 'shift_out_of_range' | 'invalid_conversion' | 'no_enabled_transition'
-    | 'no_initial_transition' | 'invalid_time' | 'loop' | 'queue_overflow' | 'string_overflow';
 
 const ERROR_KINDS: Array<[ErrorKind, string]> = [
     ['division_by_zero', 'integer division or modulo by zero'],
@@ -136,186 +128,35 @@ const ERROR_KINDS: Array<[ErrorKind, string]> = [
     ['string_overflow', 'string does not fit into its buffer and is truncated']
 ];
 
-interface EnterTarget {
-    vertex: TargetVertex;
-    entryPoint?: string;
-}
+/**
+ * The C dialect of the {@link StatechartGenerator}: all data is in the handle struct `h`, the
+ * functions of the state machine are static functions taking the handle.
+ */
+class CGenerator extends StatechartGenerator {
 
-interface TimerInfo {
-    trigger: ast.TimeTrigger;
-    owner: ast.State | ast.StateMachine;
-    constant: string;
-}
-
-interface CFunction {
-    name: string;
-    signature: string;
-    comment: string;
-    body: CBlock;
-    order: number;
-}
-
-interface Scope {
-    /** Member of the handle (`iface`, `internal`, `iface_Panel`). */
-    member: string;
-    /** Prefix of the API functions (`cd_player`, `cd_player_Panel`, `cd_player_internal`). */
-    api: string;
-    names: UniqueNames;
-}
-
-class CGenerator implements CExpressionContext {
-
-    private readonly index: ModelIndex;
     private readonly prefix: string;
-    private readonly typeName: string;
+    private readonly cTypeName: string;
     private readonly macro: string;
-    private readonly mode: ExecutionMode;
-    private readonly order: ExecutionOrder;
-    private readonly cyclePeriod: number;
     private readonly stringCapacity: number;
     private readonly queueCapacity: number;
-    private readonly maxMicrosteps: number;
     private readonly outDir?: string;
-    private readonly expressions: CExpressionCompiler;
-
-    private readonly stateNames = new Map<ast.State, string>();
-    private readonly regionNames = new Map<RegionNode, string>();
-    private readonly pseudoNames = new Map<ast.PseudoState, string>();
-    private readonly eventNames = new Map<ast.EventDeclaration, string>();
-    private readonly variableMembers = new Map<ast.VariableDeclaration, string>();
-    private readonly declarationScopes = new Map<ast.Declaration, Scope>();
-    private readonly scopes = new Map<string, Scope>();
-    private readonly variableTypes = new Map<ast.VariableDeclaration, HsmType>();
-    private readonly transitionNumbers = new Map<ast.Transition, number>();
-    private readonly timers: TimerInfo[] = [];
-    private readonly timerByTrigger = new Map<ast.TimeTrigger, TimerInfo>();
-    private readonly regions: RegionNode[] = [];
-    private readonly historyRegions = new Set<RegionNode>();
-    private readonly finalRegions = new Set<RegionNode>();
-
-    private readonly functions = new Map<string, CFunction>();
-    private readonly pending: Array<() => void> = [];
-    private readonly helpers = new Set<CHelper>();
-    private functionOrder = 0;
     private scratchCount = 0;
     private usesStrings = false;
 
-    constructor(private readonly machine: ast.StateMachine, options: CGeneratorOptions) {
-        this.index = new ModelIndex(machine);
-        const interpreter = new StatechartInterpreter(machine);
-        this.mode = interpreter.executionMode;
-        this.order = interpreter.executionOrder;
-        this.cyclePeriod = interpreter.cyclePeriod;
-        this.typeName = options.typeName ?? machine.name;
+    constructor(machine: ast.StateMachine, options: CGeneratorOptions) {
+        super(machine, options.maxMicrosteps, { keywords: C_KEYWORDS, reservedStateNames: C_RESERVED_STATE_NAMES });
+        this.cTypeName = options.typeName ?? machine.name;
         this.prefix = options.prefix ?? snakeCase(machine.name);
         this.macro = this.prefix.toUpperCase();
         this.stringCapacity = options.stringCapacity ?? 64;
         this.queueCapacity = options.queueCapacity ?? 16;
-        this.maxMicrosteps = options.maxMicrosteps ?? 1000;
         this.outDir = options.outDir;
-        this.expressions = new CExpressionCompiler(this);
-        this.collectNames();
+        this.collectStringUsage();
     }
 
-    // -----------------------------------------------------------------------------------------
-    // Names
-
-    private collectNames(): void {
-        const states = new UniqueNames(C_RESERVED_STATE_NAMES);
-        for (const state of this.index.states) {
-            this.stateNames.set(state, states.get(qualifiedName(state).replace(/\./g, '_')));
-        }
-        const regionNames = new UniqueNames([]);
-        const pseudoNames = new UniqueNames([]);
-        const addRegion = (region: RegionNode) => {
-            this.regions.push(region);
-            let name: string;
-            if (ast.isStateMachine(region)) {
-                name = 'main';
-            } else if (ast.isState(region)) {
-                name = this.stateNames.get(region)!;
-            } else {
-                const owner = region.$container;
-                name = `${this.stateNames.get(owner)}_${region.name ?? `region${owner.regions.indexOf(region) + 1}`}`;
-            }
-            this.regionNames.set(region, regionNames.get(name));
-        };
-        addRegion(this.machine);
-        for (const state of this.index.states) {
-            this.index.regionsOf(state).forEach(addRegion);
-        }
-        for (const node of AstUtils.streamAllContents(this.machine)) {
-            if (ast.isPseudoState(node)) {
-                this.pseudoNames.set(node, pseudoNames.get(qualifiedName(node).replace(/\./g, '_')));
-                if (node.kind === 'history' || node.kind === 'deephistory') {
-                    const region = this.index.regionOf(node);
-                    this.historyRegions.add(region);
-                    if (node.kind === 'deephistory') {
-                        this.addDeepHistoryRegions(region);
-                    }
-                }
-            } else if (ast.isTransition(node)) {
-                if (node.final) {
-                    this.finalRegions.add(this.index.regionOf(this.index.targetOf(node)));
-                }
-            }
-        }
-        const transitions = AstUtils.streamAllContents(this.machine).filter(ast.isTransition).toArray()
-            .sort((a, b) => (a.$cstNode?.offset ?? 0) - (b.$cstNode?.offset ?? 0));
-        transitions.forEach((transition, i) => this.transitionNumbers.set(transition, i + 1));
-
-        const events = new UniqueNames();
-        for (const scope of this.machine.scopes) {
-            let key: string;
-            let member: string;
-            let api: string;
-            if (ast.isInternalScope(scope)) {
-                key = '#internal';
-                member = 'internal';
-                api = `${this.prefix}_internal`;
-            } else if (scope.name) {
-                key = scope.name;
-                member = `iface_${scope.name}`;
-                api = `${this.prefix}_${scope.name}`;
-            } else {
-                key = '#iface';
-                member = 'iface';
-                api = this.prefix;
-            }
-            let info = this.scopes.get(key);
-            if (!info) {
-                info = { member, api, names: new UniqueNames() };
-                this.scopes.set(key, info);
-            }
-            for (const declaration of scope.declarations) {
-                this.declarationScopes.set(declaration, info);
-                if (ast.isEventDeclaration(declaration)) {
-                    this.eventNames.set(declaration, events.get(ast.isInterfaceScope(scope) && scope.name ? `${scope.name}_${declaration.name}` : declaration.name));
-                } else if (ast.isVariableDeclaration(declaration)) {
-                    this.variableMembers.set(declaration, info.names.get(declaration.name));
-                    const type = typeOfVariable(declaration);
-                    this.variableTypes.set(declaration, type === 'error' || type === 'void' ? 'integer' : type);
-                    if (this.variableTypes.get(declaration) === 'string') {
-                        this.usesStrings = true;
-                    }
-                }
-            }
-        }
-        for (const event of this.index.events()) {
-            if (typeOfEvent(event) === 'string') {
-                this.usesStrings = true;
-            }
-        }
-        const addTimers = (owner: ast.State | ast.StateMachine) => {
-            this.index.timeTriggers(owner).forEach((trigger, i) => {
-                const ownerName = ast.isStateMachine(owner) ? 'statechart' : this.stateNames.get(owner)!;
-                const info: TimerInfo = { trigger, owner, constant: `${this.typeName}_timer_${ownerName}_${i}` };
-                this.timers.push(info);
-                this.timerByTrigger.set(trigger, info);
-            });
-        };
-        addTimers(this.machine);
-        this.index.states.forEach(addTimers);
+    /** Whether strings are used and how many scratch buffers the concatenations need. */
+    private collectStringUsage(): void {
+        this.usesStrings = [...this.variableTypes.values()].includes('string') || this.index.events().some(e => typeOfEvent(e) === 'string');
         for (const node of AstUtils.streamAllContents(this.machine)) {
             if (ast.isExpressionStatement(node) || ast.isRaiseStatement(node) || (ast.isReactionSpec(node))
                 || ast.isLocalReaction(node) || ast.isVariableDeclaration(node) || ast.isTimeTrigger(node)) {
@@ -331,81 +172,116 @@ class CGenerator implements CExpressionContext {
         }
     }
 
-    private addDeepHistoryRegions(region: RegionNode): void {
-        for (const vertex of region.vertices) {
-            if (ast.isState(vertex)) {
-                for (const sub of this.index.regionsOf(vertex)) {
-                    this.historyRegions.add(sub);
-                    this.addDeepHistoryRegions(sub);
-                }
-            }
-        }
+    // -----------------------------------------------------------------------------------------
+    // Names and hooks of the StatechartGenerator
+
+    /** Member of the handle holding the variables of a scope (`iface`, `internal`, `iface_Panel`). */
+    private scopeMember(scope: ScopeInfo): string {
+        return scope.kind === 'internal' ? 'internal' : scope.kind === 'named' ? `iface_${scope.name}` : 'iface';
     }
 
-    private stateConstant(state: ast.State): string {
-        return `${this.typeName}_${this.stateNames.get(state)}`;
+    /** Prefix of the API functions of the scope of a declaration (`cd_player`, `cd_player_Panel`, `cd_player_internal`). */
+    private scopeApi(declaration: ast.Declaration): string {
+        const scope = this.scopeOf(declaration);
+        return scope.kind === 'internal' ? `${this.prefix}_internal` : scope.kind === 'named' ? `${this.prefix}_${scope.name}` : this.prefix;
     }
 
-    private get noState(): string {
-        return `${this.typeName}_NO_STATE`;
+    protected stateConstant(state: ast.State): string {
+        return `${this.cTypeName}_${this.stateNames.get(state)}`;
     }
 
-    private get finalState(): string {
-        return `${this.typeName}_FINAL_STATE`;
+    protected get noState(): string {
+        return `${this.cTypeName}_NO_STATE`;
     }
 
-    private regionId(region: RegionNode): string {
-        return `REGION_${this.regionNames.get(region)}`;
+    protected get finalState(): string {
+        return `${this.cTypeName}_FINAL_STATE`;
     }
 
-    private eventConstant(event: ast.EventDeclaration): string {
-        return `${this.typeName}_event_${this.eventNames.get(event)}`;
+    protected stateSlot(state: ast.State): string {
+        return this.stateConstant(state);
+    }
+
+    protected get stateType(): string {
+        return `${this.cTypeName}State`;
+    }
+
+    protected get maxMicrostepsConstant(): string {
+        return `${this.macro}_MAX_MICROSTEPS`;
+    }
+
+    protected get runtimeFunctions(): readonly string[] {
+        return RUNTIME_FUNCTIONS;
+    }
+
+    protected timerConstant(timer: TimerInfo): string {
+        return `${this.cTypeName}_timer_${timer.ownerName}_${timer.index}`;
+    }
+
+    protected eventConstant(event: ast.EventDeclaration): string {
+        return `${this.cTypeName}_event_${this.eventNames.get(event)}`;
     }
 
     private errorConstant(kind: ErrorKind): string {
-        return `${this.typeName}_error_${kind}`;
-    }
-
-    private scopeOf(declaration: ast.Declaration): Scope {
-        return this.declarationScopes.get(declaration)!;
+        return `${this.cTypeName}_error_${kind}`;
     }
 
     private get onError(): string {
         return `${this.prefix}_on_error`;
     }
 
-    private errorCall(kind: ErrorKind, message: string): string {
+    protected errorCall(kind: ErrorKind, message: string): string {
         return `${this.onError}(h, ${this.errorConstant(kind)}, ${cString(message)});`;
     }
 
+    protected call(fn: string, args?: string): string {
+        return args ? `${fn}(h, ${args})` : `${fn}(h)`;
+    }
+
+    protected field(name: string): string {
+        return `h->${name}`;
+    }
+
+    protected setTimer(timer: TimerInfo, duration: string, periodic: boolean): string {
+        return `${this.prefix}_set_timer(h, ${this.timerConstant(timer)}, ${duration}, ${periodic});`;
+    }
+
+    protected unsetTimer(timer: TimerInfo): string {
+        return `${this.prefix}_unset_timer(h, ${this.timerConstant(timer)});`;
+    }
+
     // -----------------------------------------------------------------------------------------
-    // CExpressionContext
+    // ExpressionContext
 
     variable(variable: ast.VariableDeclaration): string {
-        return `h->${this.scopeOf(variable).member}.${this.variableMembers.get(variable)}`;
-    }
-
-    variableType(variable: ast.VariableDeclaration): HsmType {
-        return this.variableTypes.get(variable) ?? 'integer';
-    }
-
-    eventPresent(event: ast.EventDeclaration): string {
-        return this.index.eventDirection(event) === 'out' ? 'false' : `h->present[${this.eventConstant(event)}]`;
+        return `h->${this.scopeMember(this.scopeOf(variable))}.${this.variableMembers.get(variable)}`;
     }
 
     eventValue(event: ast.EventDeclaration): string {
         return `h->event_value.${this.eventNames.get(event)}`;
     }
 
-    stateActive(vertex: ast.Vertex): string {
-        if (!ast.isState(vertex)) {
-            return 'false';
-        }
-        return `(h->active[${this.regionId(this.index.regionOf(vertex))}] == ${this.stateConstant(vertex)})`;
+    /** Name of the host function implementing an operation (`cd_player_discInserted`). */
+    operation(operation: ast.OperationDeclaration): string {
+        return `${this.scopeApi(operation)}_${operation.name}`;
     }
 
-    operation(operation: ast.OperationDeclaration): string {
-        return `${this.scopeOf(operation).api}_${operation.name}`;
+    operationCall(operation: ast.OperationDeclaration, args: Code[][]): string {
+        const texts = ['h'];
+        operation.parameters.forEach((parameter, index) => {
+            const slot = args[index];
+            if (parameter.varArgs) {
+                texts.push(String(slot.length));
+                texts.push(slot.length === 0 ? 'NULL' : `(const ${cType(typeOfParameter(parameter))}[]){${slot.map(s => stripParens(s.text)).join(', ')}}`);
+            } else {
+                texts.push(stripParens(slot[0].text));
+            }
+        });
+        return `${this.operation(operation)}(${texts.join(', ')})`;
+    }
+
+    operationResult(type: HsmType, call: string): string {
+        return type === 'string' ? `${this.helper('str_nonnull')}(${call})` : call;
     }
 
     raise(event: ast.EventDeclaration, block: CBlock): void {
@@ -416,687 +292,36 @@ class CGenerator implements CExpressionContext {
         }
     }
 
-    helper(name: CHelper): string {
-        this.helpers.add(name);
-        if (name === 'int_div') {
-            this.helpers.add('int_neg');
-        }
+    override helper(name: Helper): string {
+        super.helper(name);
         if (name === 'raise_internal' && this.eventDriven) {
             this.enqueue();
         }
         return name;
     }
 
-    unsupported(message: string, node: AstNode): never {
-        throw new CGeneratorError(message, node);
+    withHandle(args: string): string {
+        return `h, ${args}`;
     }
 
-    // -----------------------------------------------------------------------------------------
-    // Functions of the source file (generated on demand, so that there are no unused functions)
-
-    private use(name: string, signatureRest: string, comment: string, build: (body: CBlock) => void, returnType = 'void'): string {
-        if (!this.functions.has(name)) {
-            const fn: CFunction = {
-                name,
-                signature: `static ${returnType} ${name}(${this.typeName} *h${signatureRest})`,
-                comment,
-                body: new CBlock(),
-                order: this.sortKey(name)
-            };
-            this.functions.set(name, fn);
-            this.pending.push(() => {
-                this.expressions.resetTemporaries();
-                build(fn.body);
-                if (!fn.body.lines.some(line => /\bh\b/.test(line))) {
-                    fn.body.lines.unshift('(void)h;');
-                }
-            });
-        }
-        return name;
+    typeName(type: HsmType): string {
+        return cType(type);
     }
 
-    /** Order of the functions in the source file: runtime, states, regions, pseudo states, transitions. */
-    private sortKey(name: string): number {
-        const runtime = RUNTIME_FUNCTIONS.indexOf(name);
-        if (runtime >= 0) {
-            return runtime;
-        }
-        const position = (names: Iterable<string>, key: string) => [...names].indexOf(key);
-        let match = /^(enter|enseq|exit|react)_(.*)$/.exec(name);
-        if (match) {
-            return 1e6 + position(this.stateNames.values(), match[2]) * 10 + ['enter', 'enseq', 'exit', 'react'].indexOf(match[1]);
-        }
-        match = /^(renter|rexit|rfinal|rrestore)_(.*)$/.exec(name);
-        if (match) {
-            return 2e6 + position(this.regionNames.values(), match[2]) * 10 + ['renter', 'rexit', 'rfinal', 'rrestore'].indexOf(match[1]);
-        }
-        match = /^(choice|history|entrypoint|exitnode|fork|joincheck|joinfire)_(.*)$/.exec(name);
-        if (match) {
-            return 3e6 + position(this.pseudoNames.values(), match[2]) * 10 + ['joincheck', 'joinfire'].indexOf(match[1]) + 1;
-        }
-        match = /^transition_(\d+)$/.exec(name);
-        return 4e6 + (match ? Number(match[1]) : this.functionOrder++);
+    toReal(text: string): string {
+        return `((sc_real)${text})`;
     }
 
-    private flush(): void {
-        while (this.pending.length > 0) {
-            this.pending.shift()!();
-        }
+    store(target: string, type: HsmType, value: string): string {
+        return type === 'string' ? `${this.helper('str_assign')}(h, ${target}, ${value});` : `${target} = ${value};`;
     }
 
-    private transitionText(transition: ast.Transition): string {
-        const source = transition.initial ? '[*]' : this.index.vertexName(transition.source?.ref);
-        const target = this.index.vertexName(this.index.targetOf(transition));
-        const label = transitionLabel(transition);
-        return commentText(`${source} -> ${target}${label ? ` : ${label}` : ''}`);
+    compareStrings(left: Code, right: Code, operator: '==' | '!='): string {
+        return `(strcmp(${stripParens(left.text)}, ${stripParens(right.text)}) ${operator} 0)`;
     }
 
-    private stateName(state: ast.State): string {
-        return this.index.stateName(state);
-    }
-
-    /** `enter_S`: marks the state active, executes its entry reactions and starts its timers. */
-    private enterState(state: ast.State): string {
-        return this.use(`enter_${this.stateNames.get(state)}`, '', `Enters state ${this.stateName(state)}: entry reactions and timers (not its regions).`, body => {
-            body.add(`h->active[${this.regionId(this.index.regionOf(state))}] = ${this.stateConstant(state)};`);
-            body.add(`h->entered[${this.stateConstant(state)}] = true;`);
-            this.builtinReactions(state, 'entry', body);
-            for (const trigger of this.index.timeTriggers(state)) {
-                this.startTimer(trigger, body);
-            }
-        });
-    }
-
-    /** `enseq_S`: enters a state and its regions by default. */
-    private enterStateDefault(state: ast.State): string {
-        return this.use(`enseq_${this.stateNames.get(state)}`, '', `Enters state ${this.stateName(state)} and its regions by default.`, body => {
-            body.add(`${this.enterState(state)}(h);`);
-            for (const region of this.index.regionsOf(state)) {
-                body.add(`${this.regionEnter(region)}(h);`);
-            }
-        });
-    }
-
-    /** `exit_S`: exits the sub states (recording history), executes the exit reactions, stops the timers. */
-    private exitState(state: ast.State): string {
-        return this.use(`exit_${this.stateNames.get(state)}`, '', `Exits state ${this.stateName(state)}: sub states first (innermost first), exit reactions, timers.`, body => {
-            for (const region of this.index.regionsOf(state)) {
-                if (!this.regionCanBeActive(region)) {
-                    continue;
-                }
-                if (this.historyRegions.has(region)) {
-                    body.block('', [
-                        `${this.typeName}State last = h->active[${this.regionId(region)}];`,
-                        `${this.regionExit(region)}(h);`,
-                        `if (last != ${this.noState}) {`,
-                        `    h->history[${this.regionId(region)}] = last;`,
-                        '}'
-                    ]);
-                } else {
-                    body.add(`${this.regionExit(region)}(h);`);
-                }
-            }
-            this.builtinReactions(state, 'exit', body);
-            for (const trigger of this.index.timeTriggers(state)) {
-                this.stopTimer(trigger, body);
-            }
-            body.add(`h->active[${this.regionId(this.index.regionOf(state))}] = ${this.noState};`);
-            body.add(`h->exited[${this.stateConstant(state)}] = true;`);
-        });
-    }
-
-    private regionStates(region: RegionNode): ast.State[] {
-        return region.vertices.filter(ast.isState);
-    }
-
-    private regionCanBeActive(region: RegionNode): boolean {
-        return this.regionStates(region).length > 0 || this.finalRegions.has(region);
-    }
-
-    private regionLabel(region: RegionNode): string {
-        if (ast.isStateMachine(region)) {
-            return `the top-level region of ${region.name}`;
-        }
-        if (ast.isState(region)) {
-            return `the region of ${this.stateName(region)}`;
-        }
-        return `region ${region.name ?? `#${region.$container.regions.indexOf(region) + 1}`} of ${this.stateName(region.$container)}`;
-    }
-
-    /** `rexit_R`: exits the active vertex of a region (without recording its history). */
-    private regionExit(region: RegionNode): string {
-        return this.use(`rexit_${this.regionNames.get(region)}`, '', `Exits the active state of ${this.regionLabel(region)}.`, body => {
-            const cases = new CBlock();
-            for (const state of this.regionStates(region)) {
-                cases.add(`case ${this.stateConstant(state)}:`, `    ${this.exitState(state)}(h);`, '    break;');
-            }
-            if (this.finalRegions.has(region)) {
-                cases.add(`case ${this.finalState}:`, `    h->active[${this.regionId(region)}] = ${this.noState};`, '    break;');
-            }
-            cases.add('default:', '    break;');
-            body.block(`switch (h->active[${this.regionId(region)}])`, cases);
-        });
-    }
-
-    /** `renter_R`: enters a region by its initial transition (docs/semantics.md §8.3). */
-    private regionEnter(region: RegionNode): string {
-        return this.use(`renter_${this.regionNames.get(region)}`, '', `Enters ${this.regionLabel(region)} by default.`, body => {
-            const initial = region.transitions.find(t => t.initial);
-            if (!initial) {
-                if (region.vertices.some(ast.isState)) {
-                    const name = ast.isStateMachine(region) ? `state machine '${region.name}'` : ast.isState(region)
-                        ? `state '${this.stateName(region)}'`
-                        : region.name ? `region '${region.name}' of '${this.stateName(region.$container)}'`
-                            : `region #${region.$container.regions.indexOf(region) + 1} of '${this.stateName(region.$container)}'`;
-                    body.add(this.errorCall('no_initial_transition', `${capitalize(name)} is entered by default but has no initial transition ('[*] -> ...')`));
-                } else {
-                    body.add('(void)h;');
-                }
-                return;
-            }
-            const target = this.index.targetOf(initial);
-            body.add(`/* ${this.transitionText(initial)} */`);
-            body.add(`if (!${this.microstep()}(h)) {`, '    return;', '}');
-            this.expressions.effect(initial.spec?.effect, body);
-            const inside = this.index.childIn(region, target) !== undefined;
-            const scope = inside ? region : this.index.commonRegion([region, this.index.regionOf(target)]);
-            this.enterInRegion(scope, [{ vertex: target, entryPoint: initial.entryPoint }], body, !inside);
-        });
-    }
-
-    /** `rfinal_R`: enters the final state of a region. */
-    private regionFinal(region: RegionNode): string {
-        return this.use(`rfinal_${this.regionNames.get(region)}`, '', `Enters the final state of ${this.regionLabel(region)}.`, body => {
-            body.add(`${this.regionExit(region)}(h);`);
-            body.add(`h->active[${this.regionId(region)}] = ${this.finalState};`);
-        });
-    }
-
-    /** `rrestore_R`: restores the recorded configuration of a region below a deep history. */
-    private regionRestore(region: RegionNode): string {
-        return this.use(`rrestore_${this.regionNames.get(region)}`, '', `Restores the recorded configuration of ${this.regionLabel(region)} (deep history).`, body => {
-            body.block(`switch (h->history[${this.regionId(region)}])`, this.historyCases(region, true, [`${this.regionEnter(region)}(h);`]));
-        });
-    }
-
-    private historyCases(region: RegionNode, deep: boolean, otherwise: string[]): CBlock {
-        const cases = new CBlock();
-        for (const state of this.regionStates(region)) {
-            cases.add(`case ${this.stateConstant(state)}:`);
-            if (deep) {
-                cases.add(`    ${this.enterState(state)}(h);`);
-                for (const sub of this.index.regionsOf(state)) {
-                    cases.add(`    ${this.regionRestore(sub)}(h);`);
-                }
-            } else {
-                cases.add(`    ${this.enterStateDefault(state)}(h);`);
-            }
-            cases.add('    break;');
-        }
-        if (this.finalRegions.has(region)) {
-            cases.add(`case ${this.finalState}:`, `    ${this.regionFinal(region)}(h);`, '    break;');
-        }
-        cases.add('default:', ...indent(otherwise), '    break;');
-        return cases;
-    }
-
-    /**
-     * Enters the target vertices, which are all contained in `region` (docs/semantics.md §8): the
-     * ancestors below the region are entered outermost first, their other regions by default.
-     * `maybeActive`: the ancestor might already be active (only for initial transitions whose target is
-     * outside of their region).
-     */
-    private enterInRegion(region: RegionNode, targets: EnterTarget[], block: CBlock, maybeActive: boolean): void {
-        const children = targets.map(t => this.index.childIn(region, t.vertex));
-        const child = children[0];
-        if (!child || children.some(c => c !== child)) {
-            throw new CGeneratorError(`Cannot enter ${targets.map(t => this.index.vertexName(t.vertex)).join(', ')} together`, targets[0].vertex as AstNode);
-        }
-        if (targets.length === 1 && targets[0].vertex === child) {
-            this.enterTarget(targets[0], block);
-            return;
-        }
-        if (!ast.isState(child) || targets.some(t => t.vertex === child)) {
-            throw new CGeneratorError(`Cannot enter ${this.index.vertexName(child)} and its sub vertices together`, child as AstNode);
-        }
-        const inner = new CBlock();
-        const defaults = new CBlock();
-        for (const sub of this.index.regionsOf(child)) {
-            const inside = targets.filter(t => this.index.childIn(sub, t.vertex) !== undefined);
-            if (inside.length > 0) {
-                this.enterInRegion(sub, inside, inner, maybeActive);
-            } else {
-                (maybeActive ? defaults : inner).add(`${this.regionEnter(sub)}(h);`);
-            }
-        }
-        if (maybeActive) {
-            const flag = `was_active_${this.stateNames.get(child)}`;
-            block.add(`sc_boolean ${flag} = (h->active[${this.regionId(region)}] == ${this.stateConstant(child)});`);
-            defaults.lines.unshift(`${this.enterState(child)}(h);`);
-            block.block(`if (!${flag})`, defaults);
-            block.append(inner);
-        } else {
-            block.add(`${this.enterState(child)}(h);`);
-            block.append(inner);
-        }
-    }
-
-    /** Enters the target of a transition itself (its ancestors are active). */
-    private enterTarget(target: EnterTarget, block: CBlock): void {
-        const vertex = target.vertex;
-        if (isFinalState(vertex)) {
-            block.add(`${this.regionFinal(vertex.region)}(h);`);
-        } else if (ast.isState(vertex)) {
-            if (!target.entryPoint) {
-                block.add(`${this.enterStateDefault(vertex)}(h);`);
-                return;
-            }
-            const entry = this.index.findPseudo(vertex, 'entry', target.entryPoint);
-            if (!entry) {
-                throw new CGeneratorError(`State '${vertex.name}' has no entry point '${target.entryPoint}'`, vertex);
-            }
-            block.add(`${this.enterState(vertex)}(h);`);
-            for (const region of this.index.regionsOf(vertex)) {
-                if (this.index.regionOf(entry) === region) {
-                    block.add(`${this.entryPoint(entry)}(h);`);
-                } else {
-                    block.add(`${this.regionEnter(region)}(h);`);
-                }
-            }
-        } else {
-            block.add(`${this.pseudoState(vertex)}(h);`);
-        }
-    }
-
-    private pseudoState(pseudo: ast.PseudoState): string {
-        switch (pseudo.kind) {
-            case 'choice':
-            case 'junction':
-                return this.choice(pseudo);
-            case 'history':
-            case 'deephistory':
-                return this.history(pseudo);
-            case 'entry':
-                return this.entryPoint(pseudo);
-            case 'exit':
-                return this.exitNode(pseudo);
-            case 'sync':
-                return this.fork(pseudo);
-        }
-    }
-
-    /** Choice / junction: guarded branches first (priority order), then the default branches. */
-    private choice(choice: ast.PseudoState): string {
-        return this.use(`choice_${this.pseudoNames.get(choice)}`, '', `${capitalize(choice.kind)} ${qualifiedName(choice)}: takes the first enabled branch.`, body => {
-            const outgoing = this.index.outgoing(choice);
-            const isDefault = (t: ast.Transition) => !t.spec?.guard
-                || t.spec.triggers.some(trigger => ast.isBuiltinTrigger(trigger) && (trigger.kind === 'else' || trigger.kind === 'default'));
-            const ordered = [...outgoing.filter(t => !isDefault(t)), ...outgoing.filter(isDefault)];
-            let unconditional = false;
-            for (const transition of ordered) {
-                unconditional = this.guarded(transition.spec?.guard, [`${this.transition(transition)}(h);`, 'return;'], body, this.transitionText(transition));
-                if (unconditional) {
-                    break;
-                }
-            }
-            if (!unconditional) {
-                body.add(this.errorCall('no_enabled_transition', `${capitalize(choice.kind)} '${choice.name}' has no enabled outgoing transition`));
-            }
-        });
-    }
-
-    /**
-     * Emits `if (guard) { then }` (with the statements evaluating the guard before). Returns true if the
-     * guard is missing, i.e. `then` is executed unconditionally.
-     */
-    private guarded(guard: ast.Expression | undefined, then: string[], block: CBlock, comment?: string): boolean {
-        if (comment) {
-            block.add(`/* ${comment} */`);
-        }
-        if (!guard) {
-            block.add(...then);
-            return true;
-        }
-        const inner = new CBlock();
-        const condition = this.expressions.condition(guard, inner);
-        if (inner.isEmpty) {
-            block.block(`if (${condition})`, then);
-        } else {
-            inner.block(`if (${condition})`, then);
-            block.block('', inner);
-        }
-        return false;
-    }
-
-    private entryPoint(entry: ast.PseudoState): string {
-        return this.use(`entrypoint_${this.pseudoNames.get(entry)}`, '', `Entry point ${qualifiedName(entry)}.`, body => {
-            let unconditional = false;
-            for (const transition of this.index.outgoing(entry)) {
-                unconditional = this.guarded(transition.spec?.guard, [`${this.transition(transition)}(h);`, 'return;'], body, this.transitionText(transition));
-                if (unconditional) {
-                    break;
-                }
-            }
-            if (!unconditional) {
-                body.add(this.errorCall('no_enabled_transition', `Entry point '${entry.name}' has no enabled outgoing transition`));
-            }
-        });
-    }
-
-    /** Exit node `X`: the owning composite state is left by its `# X>` transition. */
-    private exitNode(exitNode: ast.PseudoState): string {
-        return this.use(`exitnode_${this.pseudoNames.get(exitNode)}`, '', `Exit node ${qualifiedName(exitNode)}: leaves the state by its '# ${exitNode.name}>' transition.`, body => {
-            const owner = this.index.ownerState(this.index.regionOf(exitNode));
-            let unconditional = false;
-            for (const transition of owner ? this.index.exitTransitions(owner, exitNode.name) : []) {
-                unconditional = this.guarded(transition.spec?.guard, [`${this.transition(transition, owner)}(h);`, 'return;'], body, this.transitionText(transition));
-                if (unconditional) {
-                    break;
-                }
-            }
-            if (!unconditional) {
-                body.add(this.errorCall('no_enabled_transition',
-                    `Exit node '${exitNode.name}' was reached but ${owner ? `state '${owner.name}'` : 'its state'} has no enabled transition '# ${exitNode.name}>'`));
-            }
-        });
-    }
-
-    /** History: restores the recorded state (deep: recursively), else takes the default transition. */
-    private history(pseudo: ast.PseudoState): string {
-        return this.use(`history_${this.pseudoNames.get(pseudo)}`, '', `${pseudo.kind === 'deephistory' ? 'Deep' : 'Shallow'} history ${qualifiedName(pseudo)}.`, body => {
-            const region = this.index.regionOf(pseudo);
-            const transition = this.index.outgoing(pseudo)[0];
-            const otherwise = transition
-                ? [`/* no history: ${this.transitionText(transition)} */`, `${this.transition(transition)}(h);`]
-                : ['/* no history: enter by default */', `${this.regionEnter(region)}(h);`];
-            body.block(`switch (h->history[${this.regionId(region)}])`, this.historyCases(region, pseudo.kind === 'deephistory', otherwise));
-        });
-    }
-
-    /** Fork: executes the effects of all outgoing transitions, then enters all targets together. */
-    private fork(sync: ast.PseudoState): string {
-        return this.use(`fork_${this.pseudoNames.get(sync)}`, '', `Synchronization ${qualifiedName(sync)} (fork).`, body => {
-            const outgoing = this.index.outgoing(sync);
-            if (outgoing.length === 0) {
-                throw new CGeneratorError(`Synchronization '${sync.name}' has no outgoing transition`, sync);
-            }
-            if (outgoing.length === 1) {
-                body.add(`${this.transition(outgoing[0])}(h);`);
-                return;
-            }
-            body.add(`if (!${this.microstep()}(h)) {`, '    return;', '}');
-            const targets = outgoing.map(t => ({ vertex: this.index.targetOf(t), entryPoint: t.entryPoint }));
-            const scope = this.index.scopeRegion([sync, ...targets.map(t => t.vertex)]);
-            this.exitScope(scope, body);
-            for (const transition of outgoing) {
-                body.add(`/* ${this.transitionText(transition)} */`);
-                this.expressions.effect(transition.spec?.effect, body);
-            }
-            this.enterInRegion(scope, targets, body, false);
-        });
-    }
-
-    private exitScope(scope: RegionNode, body: CBlock): void {
-        if (this.regionCanBeActive(scope)) {
-            body.add(`${this.regionExit(scope)}(h);`);
-        }
-    }
-
-    /** Join: whether all incoming transitions are enabled in this step. */
-    private joinCheck(join: ast.PseudoState): string {
-        return this.use(`joincheck_${this.pseudoNames.get(join)}`, '', `Whether all incoming transitions of synchronization ${qualifiedName(join)} are enabled.`, body => {
-            for (const transition of this.index.incoming(join)) {
-                body.add(`/* ${this.transitionText(transition)} */`);
-                const source = transition.source?.ref;
-                if (!source || !ast.isState(source)) {
-                    body.add('return false;');
-                    return;
-                }
-                body.block(`if (!${this.stateActive(source)} || h->entered[${this.stateConstant(source)}])`, ['return false;']);
-                const trigger = this.transitionTrigger(transition);
-                if (trigger === 'false') {
-                    body.add('return false;');
-                    return;
-                }
-                if (trigger !== 'true') {
-                    body.block(`if (!(${trigger}))`, ['return false;']);
-                }
-                if (transition.spec?.guard) {
-                    const condition = this.expressions.condition(transition.spec.guard, body);
-                    body.block(`if (!(${condition}))`, ['return false;']);
-                }
-            }
-            body.add('return true;');
-        }, 'sc_boolean');
-    }
-
-    /** Join: exits all sources, executes the incoming effects in priority order and enters the sync. */
-    private joinFire(join: ast.PseudoState): string {
-        return this.use(`joinfire_${this.pseudoNames.get(join)}`, '', `Takes the incoming transitions of synchronization ${qualifiedName(join)} (join).`, body => {
-            const incoming = this.index.incoming(join);
-            body.add(`if (!${this.microstep()}(h)) {`, '    return;', '}');
-            const scope = this.index.scopeRegion([join, ...incoming.map(t => t.source!.ref!)]);
-            this.exitScope(scope, body);
-            for (const transition of incoming) {
-                body.add(`/* ${this.transitionText(transition)} */`);
-                this.expressions.effect(transition.spec?.effect, body);
-            }
-            this.enterInRegion(scope, [{ vertex: join }], body, false);
-        });
-    }
-
-    /** `transition_N`: takes a transition (docs/semantics.md §5): exit, effect, enter. */
-    private transition(transition: ast.Transition, sourceOverride?: ast.Vertex): string {
-        const number = this.transitionNumbers.get(transition)!;
-        return this.use(`transition_${number}`, '', `Takes the transition ${this.transitionText(transition)}.`, body => {
-            const source = sourceOverride ?? transition.source?.ref;
-            if (!source) {
-                throw new CGeneratorError('Transition without source', transition);
-            }
-            const target = this.index.targetOf(transition);
-            const scope = this.index.scopeRegion([source, target]);
-            body.add(`if (!${this.microstep()}(h)) {`, '    return;', '}');
-            this.exitScope(scope, body);
-            this.expressions.effect(transition.spec?.effect, body);
-            this.enterInRegion(scope, [{ vertex: target, entryPoint: transition.entryPoint }], body, false);
-        });
-    }
-
-    // -----------------------------------------------------------------------------------------
-    // Reactions
-
-    /** C condition for the triggers of a reaction: `true` (no trigger / always), `false` (never in a step) or flags. */
-    private triggerCondition(triggers: readonly ast.Trigger[]): string {
-        if (triggers.length === 0) {
-            return 'true';
-        }
-        const conditions: string[] = [];
-        for (const trigger of triggers) {
-            if (ast.isEventTrigger(trigger)) {
-                const event = trigger.event.ref;
-                if (!event) {
-                    throw new CGeneratorError(`Unresolved event '${trigger.event.$refText}'`, trigger);
-                }
-                const condition = this.eventPresent(event);
-                if (condition !== 'false') {
-                    conditions.push(condition);
-                }
-            } else if (ast.isTimeTrigger(trigger)) {
-                const timer = this.timerByTrigger.get(trigger);
-                if (timer) {
-                    conditions.push(`h->timer_present[${timer.constant}]`);
-                }
-            } else if (trigger.kind === 'always' || trigger.kind === 'oncycle') {
-                return 'true';
-            }
-        }
-        return conditions.length === 0 ? 'false' : conditions.join(' || ');
-    }
-
-    /** Trigger condition of a transition leaving a state; `false` if it is never taken in a step. */
-    private transitionTrigger(transition: ast.Transition): string {
-        const spec = transition.spec;
-        if (!spec || (spec.triggers.length === 0 && !spec.guard)) {
-            return 'false';
-        }
-        return this.triggerCondition(spec.triggers);
-    }
-
-    /** Emits `if (trigger && guard) { then }`. */
-    private reaction(trigger: string, guard: ast.Expression | undefined, then: string[], block: CBlock, comment: string): void {
-        block.add(`/* ${comment} */`);
-        if (trigger === 'true') {
-            this.guarded(guard, then, block);
-            return;
-        }
-        const inner = new CBlock();
-        const condition = guard ? this.expressions.condition(guard, inner) : 'true';
-        if (inner.isEmpty) {
-            const triggerText = trigger.includes(' || ') ? `(${trigger})` : trigger;
-            block.block(`if (${condition === 'true' ? trigger : `${triggerText} && ${wrap(condition)}`})`, then);
-        } else {
-            inner.block(`if (${condition})`, then);
-            block.block(`if (${trigger})`, inner);
-        }
-    }
-
-    /** Executes the `entry` or `exit` reactions of a state (or the state machine) whose guard holds. */
-    private builtinReactions(owner: ast.State | ast.StateMachine, kind: 'entry' | 'exit', block: CBlock): void {
-        for (const reaction of owner.reactions) {
-            if (reaction.triggers.some(t => ast.isBuiltinTrigger(t) && t.kind === kind)) {
-                const effect = new CBlock();
-                this.expressions.effect(reaction.effect, effect);
-                this.guarded(reaction.guard, effect.lines, block, commentText(nodeText(reaction)));
-            }
-        }
-    }
-
-    /** The local reactions of a state (or the state machine) in a step. */
-    private localReactions(owner: ast.State | ast.StateMachine, block: CBlock): void {
-        for (const reaction of owner.reactions) {
-            if (reaction.triggers.length === 0 && !reaction.guard) {
-                continue;
-            }
-            const trigger = this.triggerCondition(reaction.triggers);
-            if (trigger === 'false') {
-                continue;
-            }
-            const effect = new CBlock();
-            this.expressions.effect(reaction.effect, effect);
-            this.reaction(trigger, reaction.guard, effect.lines, block, commentText(nodeText(reaction)));
-        }
-    }
-
-    /** The outgoing transitions of a state in priority order; the first enabled one is taken. */
-    private transitions(state: ast.State, block: CBlock): void {
-        for (const transition of this.index.outgoing(state)) {
-            const target = transition.target?.ref;
-            if (target && ast.isPseudoState(target) && target.kind === 'sync' && this.index.incoming(target).length > 1) {
-                block.add(`/* ${this.transitionText(transition)} (join) */`);
-                block.block(`if (${this.joinCheck(target)}(h))`, [`${this.joinFire(target)}(h);`, 'return true;']);
-                continue;
-            }
-            const trigger = this.transitionTrigger(transition);
-            if (trigger === 'false') {
-                block.add(`/* ${this.transitionText(transition)}: never taken in a step */`);
-                continue;
-            }
-            this.reaction(trigger, transition.spec?.guard, [`${this.transition(transition)}(h);`, 'return true;'], block, this.transitionText(transition));
-        }
-    }
-
-    /** Processing of the sub regions of an active state (docs/semantics.md §4). */
-    private reactRegions(state: ast.State, block: CBlock): void {
-        for (const region of this.index.regionsOf(state)) {
-            const states = this.regionStates(region);
-            if (states.length === 0) {
-                continue;
-            }
-            const cases = new CBlock();
-            for (const sub of states) {
-                cases.add(`case ${this.stateConstant(sub)}:`);
-                cases.add(`    if (!h->entered[${this.stateConstant(sub)}] && ${this.react(sub)}(h)) {`, '        taken = true;', '    }', '    break;');
-            }
-            cases.add('default:', '    break;');
-            block.block(`switch (h->active[${this.regionId(region)}])`, cases);
-            block.block(`if (h->exited[${this.stateConstant(state)}])`, ['return true;']);
-        }
-    }
-
-    /** `react_S`: processes the active state `S` in a step; returns whether a transition left it. */
-    private react(state: ast.State): string {
-        return this.use(`react_${this.stateNames.get(state)}`, '', `Processes state ${this.stateName(state)} in a step (${this.order}); returns whether a transition was taken.`, body => {
-            const hasRegions = this.index.regionsOf(state).some(r => this.regionStates(r).length > 0);
-            if (this.order === 'parent-first') {
-                this.transitions(state, body);
-                this.localReactions(state, body);
-                if (hasRegions) {
-                    body.add('sc_boolean taken = false;');
-                    this.reactRegions(state, body);
-                    body.add('return taken;');
-                } else {
-                    body.add('return false;');
-                }
-            } else {
-                if (hasRegions) {
-                    body.add('sc_boolean taken = false;');
-                    this.reactRegions(state, body);
-                    body.block('if (taken)', ['return true;']);
-                }
-                this.transitions(state, body);
-                this.localReactions(state, body);
-                body.add('return false;');
-            }
-        }, 'sc_boolean');
-    }
-
-    // -----------------------------------------------------------------------------------------
-    // Timers
-
-    private startTimer(trigger: ast.TimeTrigger, block: CBlock): void {
-        const timer = this.timerByTrigger.get(trigger)!;
-        const factor = NS_PER_UNIT[trigger.unit];
-        if (factor === undefined) {
-            throw new CGeneratorError(`Unknown time unit '${trigger.unit}' (use s, ms, us or ns)`, trigger);
-        }
-        const periodic = trigger.kind === 'every';
-        const setTimer = (duration: string) => `${this.prefix}_set_timer(h, ${timer.constant}, ${duration}, ${periodic});`;
-        const invalid = this.errorCall('invalid_time', `The period of 'every' must be positive`);
-        block.add(`/* ${commentText(nodeText(trigger))} */`);
-        if (ast.isIntLiteral(trigger.value) || ast.isHexLiteral(trigger.value)) {
-            const value = BigInt(trigger.value.$cstNode?.text ?? trigger.value.value) * factor;
-            if (periodic && value <= 0n) {
-                block.add(invalid);
-            } else {
-                block.add(setTimer(cInteger(value < 0n ? 0n : BigInt.asIntN(64, value))));
-            }
-            return;
-        }
-        const inner = new CBlock();
-        const amount = this.expressions.compile(trigger.value, inner);
-        let duration: string;
-        if (amount.type === 'integer') {
-            duration = `${this.helper('int_mul')}(${stripParens(amount.text)}, ${cInteger(factor)})`;
-        } else if (amount.type === 'real') {
-            duration = `${this.helper('real_round')}(${amount.text} * ${factor}.0)`;
-        } else {
-            throw new CGeneratorError('The duration of a time event must be a number', trigger);
-        }
-        inner.add(`sc_integer duration = ${duration};`);
-        if (periodic) {
-            inner.add('if (duration <= 0) {', `    ${invalid}`, '} else {', `    ${setTimer('duration')}`, '}');
-        } else {
-            inner.block('if (duration < 0)', ['duration = 0;']);
-            inner.add(setTimer('duration'));
-        }
-        block.block('', inner);
-    }
-
-    private stopTimer(trigger: ast.TimeTrigger, block: CBlock): void {
-        const timer = this.timerByTrigger.get(trigger)!;
-        block.add(`${this.prefix}_unset_timer(h, ${timer.constant});`);
-        block.add(`h->timer_present[${timer.constant}] = false;`);
-        block.add(`h->timer_pending[${timer.constant}] = false;`);
+    concatStrings(left: Code, right: Code): string {
+        return `${this.helper('str_concat')}(h, ${stripParens(left.text)}, ${stripParens(right.text)})`;
     }
 
     // -----------------------------------------------------------------------------------------
@@ -1121,17 +346,8 @@ class CGenerator implements CExpressionContext {
         };
     }
 
-    private get events(): ast.EventDeclaration[] {
-        return this.index.events();
-    }
 
-    private get inEvents(): ast.EventDeclaration[] {
-        return this.events.filter(e => this.index.eventDirection(e) === 'in');
-    }
 
-    private get outEvents(): ast.EventDeclaration[] {
-        return this.events.filter(e => this.index.eventDirection(e) === 'out');
-    }
 
     private get valueEvents(): ast.EventDeclaration[] {
         return this.events.filter(e => {
@@ -1140,32 +356,29 @@ class CGenerator implements CExpressionContext {
         });
     }
 
-    private get operations(): ast.OperationDeclaration[] {
-        return this.machine.scopes.flatMap(s => s.declarations).filter(ast.isOperationDeclaration);
-    }
 
     private raiseName(event: ast.EventDeclaration): string {
-        return `${this.scopeOf(event).api}_raise_${event.name}`;
+        return `${this.scopeApi(event)}_raise_${event.name}`;
     }
 
     private isRaisedName(event: ast.EventDeclaration): string {
-        return `${this.scopeOf(event).api}_is_raised_${event.name}`;
+        return `${this.scopeApi(event)}_is_raised_${event.name}`;
     }
 
     private eventValueName(event: ast.EventDeclaration): string {
-        return `${this.scopeOf(event).api}_get_${event.name}_value`;
+        return `${this.scopeApi(event)}_get_${event.name}_value`;
     }
 
     private getterName(variable: ast.VariableDeclaration): string {
-        return `${this.scopeOf(variable).api}_get_${variable.name}`;
+        return `${this.scopeApi(variable)}_get_${variable.name}`;
     }
 
     private setterName(variable: ast.VariableDeclaration): string | undefined {
-        return variable.const || variable.readonly ? undefined : `${this.scopeOf(variable).api}_set_${variable.name}`;
+        return variable.const || variable.readonly ? undefined : `${this.scopeApi(variable)}_set_${variable.name}`;
     }
 
     private createApi(): CApi {
-        const t = this.typeName;
+        const t = this.cTypeName;
         return {
             prefix: this.prefix,
             typeName: t,
@@ -1203,18 +416,12 @@ class CGenerator implements CExpressionContext {
         };
     }
 
-    private get hasEvents(): boolean {
-        return this.events.length > 0;
-    }
 
-    private get eventDriven(): boolean {
-        return this.mode === 'event';
-    }
 
     // ----- header
 
     private header(): string {
-        const t = this.typeName;
+        const t = this.cTypeName;
         const m = this.macro;
         const lines: string[] = [];
         const guard = `${m}_H_`;
@@ -1289,7 +496,7 @@ class CGenerator implements CExpressionContext {
             lines.push('/** Time events (identify the timers of the timer service). */', 'typedef enum {');
             this.timers.forEach((timer, i) => {
                 const owner = ast.isStateMachine(timer.owner) ? 'state machine' : this.stateName(timer.owner);
-                lines.push(`    ${timer.constant}${i < this.timers.length - 1 ? ',' : ''}${spaces()}/* ${commentText(nodeText(timer.trigger))} (${owner}) */`);
+                lines.push(`    ${this.timerConstant(timer)}${i < this.timers.length - 1 ? ',' : ''}${spaces()}/* ${commentText(nodeText(timer.trigger))} (${owner}) */`);
             });
             lines.push(`} ${t}TimerId;`, '', `#define ${m}_TIMER_COUNT ${this.timers.length}`, '');
         }
@@ -1342,7 +549,7 @@ class CGenerator implements CExpressionContext {
             for (const [variable, member] of variables) {
                 lines.push(`        ${this.memberDeclaration(this.variableType(variable), member)}`);
             }
-            lines.push(`    } ${scope.member};`);
+            lines.push(`    } ${this.scopeMember(scope)};`);
         }
         if (this.valueEvents.length > 0) {
             lines.push('    struct {');
@@ -1432,7 +639,7 @@ class CGenerator implements CExpressionContext {
     }
 
     private operationSignature(operation: ast.OperationDeclaration): string {
-        const params = [`${this.typeName} *handle`];
+        const params = [`${this.cTypeName} *handle`];
         for (const parameter of operation.parameters) {
             const type = cType(typeOfParameter(parameter));
             if (parameter.varArgs) {
@@ -1446,12 +653,12 @@ class CGenerator implements CExpressionContext {
 
     /** Checks that the identifiers of the header are unique (e.g. a state `event_x` and an event `x`). */
     private checkDuplicates(): void {
-        const t = this.typeName;
+        const t = this.cTypeName;
         const identifiers = [
             t, `${t}State`, `${t}Event`, `${t}TimerId`, `${t}Error`, `${t}OutEventObserver`, this.noState, this.finalState,
             ...this.index.states.map(s => this.stateConstant(s)),
             ...this.events.map(e => this.eventConstant(e)),
-            ...this.timers.map(timer => timer.constant),
+            ...this.timers.map(timer => this.timerConstant(timer)),
             ...ERROR_KINDS.map(([kind]) => this.errorConstant(kind)),
             ...['init', 'enter', 'exit', 'run_cycle', 'is_active', 'is_final', 'is_state_active', 'raise_time_event',
                 'set_out_event_observer', 'set_timer', 'unset_timer', 'on_error'].map(name => `${this.prefix}_${name}`),
@@ -1464,7 +671,7 @@ class CGenerator implements CExpressionContext {
         const seen = new Set<string>();
         for (const identifier of identifiers) {
             if (seen.has(identifier)) {
-                throw new CGeneratorError(`The generated identifier '${identifier}' is not unique; rename a state, event, variable or operation`, this.machine);
+                throw new GeneratorError(`The generated identifier '${identifier}' is not unique; rename a state, event, variable or operation`, this.machine);
             }
             seen.add(identifier);
         }
@@ -1473,7 +680,7 @@ class CGenerator implements CExpressionContext {
     // ----- source
 
     private publicFunctions(): CBlock[] {
-        const t = this.typeName;
+        const t = this.cTypeName;
         const result: CBlock[] = [];
         const fn = (comment: string, signature: string, build: (body: CBlock) => void) => {
             this.expressions.resetTemporaries();
@@ -1673,7 +880,7 @@ class CGenerator implements CExpressionContext {
     }
 
     private resetData(): string {
-        return this.use('reset_data', '', 'Sets all variables and event values to the default values of their types.', body => {
+        return this.use('reset_data', [], 'Sets all variables and event values to the default values of their types.', body => {
             for (const variable of this.index.variables()) {
                 const type = this.variableType(variable);
                 body.add(type === 'string' ? `${this.variable(variable)}[0] = '\\0';` : `${this.variable(variable)} = ${cDefault(type)};`);
@@ -1689,7 +896,7 @@ class CGenerator implements CExpressionContext {
     }
 
     private beginHostCall(): string {
-        return this.use('begin_host_call', '', 'Start of a call of the host that executes the state machine.', body => {
+        return this.use('begin_host_call', [], 'Start of a call of the host that executes the state machine.', body => {
             if (this.outEvents.length > 0) {
                 body.add('int i;');
                 body.block(`for (i = 0; i < ${this.macro}_EVENT_COUNT; i++)`, ['h->out_raised[i] = false;']);
@@ -1699,7 +906,7 @@ class CGenerator implements CExpressionContext {
     }
 
     private beginStep(): string {
-        return this.use('begin_step', '', 'Start of a step: no state has been entered or exited yet.', body => {
+        return this.use('begin_step', [], 'Start of a step: no state has been entered or exited yet.', body => {
             body.add('int i;');
             body.block(`for (i = 0; i < ${this.macro}_STATE_COUNT; i++)`, ['h->entered[i] = false;', 'h->exited[i] = false;']);
             body.add('h->microsteps = 0;');
@@ -1707,7 +914,7 @@ class CGenerator implements CExpressionContext {
     }
 
     private step(): string {
-        return this.use('step', '', 'A step (docs/semantics.md §4): the reactions of the state machine, then the active states top down.', body => {
+        return this.use('step', [], 'A step (docs/semantics.md §4): the reactions of the state machine, then the active states top down.', body => {
             body.add(`${this.beginStep()}(h);`, 'h->in_step = true;');
             this.localReactions(this.machine, body);
             const states = this.regionStates(this.machine);
@@ -1727,7 +934,7 @@ class CGenerator implements CExpressionContext {
     }
 
     private clearPresent(): string {
-        return this.use('clear_present', '', 'Clears the events of a step.', body => {
+        return this.use('clear_present', [], 'Clears the events of a step.', body => {
             body.add('int i;');
             if (this.hasEvents) {
                 body.block(`for (i = 0; i < ${this.macro}_EVENT_COUNT; i++)`, ['h->present[i] = false;']);
@@ -1738,19 +945,10 @@ class CGenerator implements CExpressionContext {
         });
     }
 
-    private microstep(): string {
-        return this.use('microstep', '', 'Counts a transition; false (and an error) if there are too many in one step.', body => {
-            body.block(`if (++h->microsteps > ${this.macro}_MAX_MICROSTEPS)`, [
-                this.errorCall('loop', `More than ${this.maxMicrosteps} transitions in one step; the state machine seems to loop`),
-                'return false;'
-            ]);
-            body.add('return true;');
-        }, 'sc_boolean');
-    }
 
     /** Event driven: a queued item is an event (`< EVENT_COUNT`) or a time event (`EVENT_COUNT + timer`). */
     private enqueue(): string {
-        return this.use('enqueue', ', int host, int item', 'Appends an event to the internal queue (host = 0) or the queue of in events raised during a step (host = 1).', body => {
+        return this.use('enqueue', ['int host', 'int item'], 'Appends an event to the internal queue (host = 0) or the queue of in events raised during a step (host = 1).', body => {
             body.add('int *queue = host ? h->host_queue : h->internal_queue;');
             body.add('int head = host ? h->host_queue_head : h->internal_queue_head;');
             body.add('int *count = host ? &h->host_queue_count : &h->internal_queue_count;');
@@ -1760,7 +958,7 @@ class CGenerator implements CExpressionContext {
     }
 
     private processQueued(): string {
-        return this.use('process', ', int item', 'Event driven: a step in which only the given event (or time event) is present.', body => {
+        return this.use('process', ['int item'], 'Event driven: a step in which only the given event (or time event) is present.', body => {
             body.block(`if (!h->running || h->active[${this.regionId(this.machine)}] == ${this.finalState})`, ['return;']);
             const flags: string[] = [];
             if (this.hasEvents) {
@@ -1780,7 +978,7 @@ class CGenerator implements CExpressionContext {
     }
 
     private drainQueues(): string {
-        return this.use('drain_queues', '', 'Event driven: processes the queued internal events, then the in events raised meanwhile by the host.', body => {
+        return this.use('drain_queues', [], 'Event driven: processes the queued internal events, then the in events raised meanwhile by the host.', body => {
             body.add('int steps = 0;');
             const loop = new CBlock();
             loop.add('int item;');
@@ -1825,10 +1023,12 @@ class CGenerator implements CExpressionContext {
         });
         lines.push('};', '');
         // helpers
-        const functions = [...this.functions.values()].sort((a, b) => a.order - b.order);
+        const functions = this.sortedFunctions();
+        const signature = (fn: GeneratedFunction) =>
+            `static ${cType(fn.returnType)} ${fn.name}(${this.cTypeName} *h${fn.params.map(p => `, ${p}`).join('')})`;
         lines.push('/* ---- Prototypes ---- */', '');
         for (const fn of functions) {
-            lines.push(`${fn.signature};`);
+            lines.push(`${signature(fn)};`);
         }
         lines.push('');
         const helpers = HELPER_ORDER.filter(h => this.helpers.has(h));
@@ -1840,7 +1040,8 @@ class CGenerator implements CExpressionContext {
         }
         lines.push('/* ---- State machine ---- */', '');
         for (const fn of functions) {
-            lines.push(`/* ${fn.comment} */`, `${fn.signature} {`, ...indent(fn.body.lines), '}', '');
+            const body = fn.body.lines.some(line => /\bh\b/.test(line)) ? fn.body.lines : ['(void)h;', ...fn.body.lines];
+            lines.push(`/* ${fn.comment} */`, `${signature(fn)} {`, ...indent(body), '}', '');
         }
         lines.push('/* ---- API ---- */', '');
         for (const block of publicFunctions) {
@@ -1849,8 +1050,8 @@ class CGenerator implements CExpressionContext {
         return alignComments(lines).join('\n');
     }
 
-    private helperSource(helper: CHelper): string[] {
-        const t = this.typeName;
+    private helperSource(helper: Helper): string[] {
+        const t = this.cTypeName;
         const m = this.macro;
         switch (helper) {
             case 'int_add':
@@ -1995,7 +1196,7 @@ class CGenerator implements CExpressionContext {
     }
 }
 
-const HELPER_ORDER: CHelper[] = ['int_add', 'int_sub', 'int_mul', 'int_neg', 'int_div', 'int_mod', 'int_shl', 'int_shr',
+const HELPER_ORDER: Helper[] = ['int_add', 'int_sub', 'int_mul', 'int_neg', 'int_div', 'int_mod', 'int_shl', 'int_shr',
     'real_to_int', 'real_round', 'str_nonnull', 'str_assign', 'str_concat', 'raise_internal', 'raise_out'];
 
 const C_RESERVED_STATE_NAMES = ['NO_STATE', 'FINAL_STATE'];
@@ -2016,41 +1217,3 @@ typedef const char *sc_string;
 
 #endif /* SC_TYPES_H_ */
 `;
-
-function capitalize(text: string): string {
-    return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
-function wrap(condition: string): string {
-    return /^[\w\->[\]().]+$/.test(condition) && !condition.includes(' ') ? condition : `(${condition})`;
-}
-
-const ALIGN_MARK = '\u0000';
-
-/** Marker for comments aligned in a column (see {@link alignComments}). */
-function spaces(): string {
-    return ALIGN_MARK;
-}
-
-/** Aligns the trailing comments of consecutive lines containing the alignment mark. */
-function alignComments(lines: string[]): string[] {
-    const result = [...lines];
-    let start = 0;
-    while (start < result.length) {
-        if (!result[start].includes(ALIGN_MARK)) {
-            start++;
-            continue;
-        }
-        let end = start;
-        while (end < result.length && result[end].includes(ALIGN_MARK)) {
-            end++;
-        }
-        const width = Math.max(...result.slice(start, end).map(l => l.indexOf(ALIGN_MARK))) + 1;
-        for (let i = start; i < end; i++) {
-            const [code, comment] = result[i].split(ALIGN_MARK);
-            result[i] = code.padEnd(width) + comment;
-        }
-        start = end;
-    }
-    return result;
-}

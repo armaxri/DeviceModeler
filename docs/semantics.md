@@ -20,7 +20,7 @@ as **Deviation**.
 
 ## 2. Data
 
-- Types: `integer` (64-bit signed in the interpreter, `int64_t` in C), `real` (double), `boolean`,
+- Types: `integer` (64-bit signed in the interpreter, `int64_t` in C and C++), `real` (double), `boolean`,
   `string`, `void`. Integer division truncates toward zero; `%` has the sign of the dividend.
   An `integer` is implicitly converted to `real` where a `real` is expected (mixed arithmetic,
   comparisons, assignments, arguments, event values), never the other way around (use
