@@ -13,7 +13,7 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 - ✅ Composite states, orthogonal regions, choice, junction, shallow and deep history, final states
 - ✅ PlantUML export, SVG export, CLI
 
-## Phase 1 – Language parity with itemis CREATE 🚧
+## Phase 1 – Language parity with itemis CREATE ✅
 
 - ✅ Definition section: `namespace`, annotations, named and unnamed interfaces, `internal` scope
 - ✅ Declarations: `in`/`out`/internal events with payload types, `var`, `var readonly`, `const`,
@@ -28,17 +28,18 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
   assignments, calls, raise/valueof, triggers, annotations, ambiguous names)
 - 📋 Imports of other statecharts / header files
 
-## Phase 2 – Structure parity 🚧
+## Phase 2 – Structure parity ✅
 
 - ✅ Entry points (`entry E` + `# >E`), exit nodes (`exit X` + `# X>`), synchronization (`sync`)
-- 🚧 Diagram rendering and palette tools for the new pseudo states
-- 🚧 Definition section shown as a box in the diagram
-- 🚧 Transition priorities shown in the diagram
+- ✅ Diagram rendering and palette tools for the new pseudo states
+- ✅ Definition section shown as a box in the diagram (with an "Add declaration" form)
+- ✅ Transition priorities shown in the diagram (toggle in the toolbar)
+- 📋 Reorder priorities from the diagram
 - 📋 Submachines (a state that references another statechart)
 - 💭 State names with spaces (currently mapped to identifiers and the original name kept as the
   description)
 
-## Phase 3 – Migration from itemis CREATE 🚧
+## Phase 3 – Migration from itemis CREATE ✅
 
 - ✅ `.sct` importer (CLI `hsm import`, "Open…" in the web editor); 201 of the 215 `.sct` files of
   the upstream itemis repository imported without syntax or linking errors (before the grammar
@@ -56,15 +57,15 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
   event-driven, parent-first and child-first
 - ✅ Interpreter with a virtual clock (`hsm simulate`)
 - ✅ Shared conformance suite (scenario tests) for the interpreter and all code generators
-- 📋 Simulation in the web editor: raise events, inspect and change variables, advance time,
+- 🚧 Simulation in the web editor: raise events, inspect and change variables, advance time,
   animated active states and taken transitions, breakpoints
 - 📋 `@SuperSteps`, `@EventBuffering`, `@InEventQueue`
 
-## Phase 5 – Code generation and testing 📋
+## Phase 5 – Code generation and testing 🚧
 
-- 📋 C code generator (timer service and operation callbacks), verified against the conformance
+- 🚧 C code generator (timer service and operation callbacks), verified against the conformance
   suite by compiling and running the scenarios
-- 📋 Unit test language for statecharts (like SCTUnit) with a test runner in the CLI and the editor
+- 🚧 Unit test language for statecharts (like SCTUnit) with a test runner in the CLI and the editor
 - 💭 Further generator targets (C++, Java, Python, TypeScript) depending on demand
 - 💭 Generator configuration model (like itemis `.sgen` files)
 
