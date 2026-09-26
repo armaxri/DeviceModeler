@@ -24,7 +24,7 @@ export interface LayoutOptionsInput {
     elk?: unknown;
 }
 
-export type DiagramNodeKind = 'state' | 'region' | 'initial' | 'final' | 'choice' | 'junction' | 'history' | 'deephistory';
+export type DiagramNodeKind = 'state' | 'region' | 'initial' | 'final' | 'choice' | 'junction' | 'history' | 'deephistory' | 'sync' | 'entry' | 'exit';
 
 export interface DiagramNode {
     id: string;

@@ -5,8 +5,8 @@ import { FitToScreenAction, SelectAction, SelectAllAction, CenterAction } from '
 import type { AstNode } from 'langium';
 import {
     EditError, ModelEditor, generatePlantUml, isScopeContainer, isValidIdentifier, isPseudoState, isRegion, isState, isStateMachine,
-    isTransition, isVertex, layoutStateMachine, parseTransitionLabel, scopeOf, MACHINE_ID,
-    type DeletionTarget, type DiagramNode, type DiagramNodeKind, type EdgeRouting, type EditResult, type LayoutDirection, type LayoutResult,
+    isTransition, isVertex, layoutStateMachine, scopeOf, transitionLabel, MACHINE_ID,
+    nodeText as nodeTextOf, type DeletionTarget, type DiagramNode, type DiagramNodeKind, type EdgeRouting, type EditResult, type LayoutDirection, type LayoutResult,
     type ParsedModel, type ScopeContainer, type TransitionSource, type TransitionTarget, type Vertex
 } from 'hsm-language';
 import { HsmLanguageSupport, LANGUAGE_ID } from './language-support.js';
@@ -799,13 +799,7 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         const isInitial = 'initialOf' in source;
         const finish = (label: string | undefined) => {
             this.pendingSource = undefined;
-            const parts = label ? parseTransitionLabel(label) : {};
-            if (typeof parts === 'string') {
-                this.setStatus(parts, 'error');
-                this.render();
-                return;
-            }
-            this.applyEdit(editor => editor.addTransition(source, target, parts)).then(done => {
+            this.applyEdit(editor => editor.addTransition(source, target, label)).then(done => {
                 if (!done) {
                     this.render();
                 }
@@ -819,11 +813,7 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         showInlineEditor({
             rect: { left: event.clientX - 90, top: event.clientY - 15, width: 180, height: 30 },
             value: '',
-            placeholder: 'event [guard] / effect',
-            validate: value => {
-                const parts = parseTransitionLabel(value);
-                return typeof parts === 'string' ? parts : undefined;
-            },
+            placeholder: 'trigger [guard] / effect',
             commit: value => finish(value),
             cancel: () => finish(undefined)
         });
@@ -982,18 +972,9 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
             const rect = labelElement.getBoundingClientRect();
             showInlineEditor({
                 rect,
-                value: this.transitionLabelText(node),
-                placeholder: 'event [guard] / effect',
-                validate: value => {
-                    const parts = parseTransitionLabel(value);
-                    return typeof parts === 'string' ? parts : undefined;
-                },
-                commit: value => {
-                    const parts = parseTransitionLabel(value);
-                    if (typeof parts !== 'string') {
-                        this.applyEdit(editor => editor.updateTransitionLabel(node, parts));
-                    }
-                }
+                value: nodeTextOf(node.spec),
+                placeholder: 'trigger [guard] / effect',
+                commit: value => this.applyEdit(editor => editor.updateTransitionLabel(node, value))
             });
         } else if (isVertex(node)) {
             const scale = diagramNode ? bounds.width / diagramNode.width : 1;
@@ -1036,18 +1017,8 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         return undefined;
     }
 
-    transitionLabelText(transition: { event?: string, guard?: string, effect?: string }): string {
-        const parts: string[] = [];
-        if (transition.event) {
-            parts.push(transition.event);
-        }
-        if (transition.guard !== undefined) {
-            parts.push(`[${transition.guard}]`);
-        }
-        if (transition.effect !== undefined) {
-            parts.push(`/ ${transition.effect}`);
-        }
-        return parts.join(' ');
+    transitionLabelText(transition: import('hsm-language').Transition): string {
+        return transitionLabel(transition);
     }
 
     // -----------------------------------------------------------------------------------------

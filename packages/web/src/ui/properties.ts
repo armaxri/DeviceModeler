@@ -1,7 +1,7 @@
 import type { AstNode } from 'langium';
 import {
-    allTransitions, allVertices, isPseudoState, isRegion, isState, isStateAction, isInternalTransition, isStateMachine, isTransition,
-    parseTransitionLabel, scopeOf, containerName,
+    allTransitions, allVertices, isPseudoState, isRegion, isState, isStateMachine, isTransition,
+    nodeText, qualifiedName, scopeOf, stateAction, containerName,
     type DiagramNodeKind, type EditResult, type ModelEditor, type ScopeContainer, type StateMachine, type Vertex
 } from 'hsm-language';
 import type { Issue } from '../diagram/model.js';
@@ -137,15 +137,14 @@ function machinePanel(model: StateMachine | undefined, host: PropertiesHost): HT
 }
 
 function statePanel(state: import('hsm-language').State, info: SelectionInfo, host: PropertiesHost): HTMLElement[] {
-    const action = (kind: 'entry' | 'exit' | 'do') =>
-        state.behaviors.find(b => isStateAction(b) && b.kind === kind) as { action: string } | undefined;
-    const actionField = (kind: 'entry' | 'exit' | 'do', label: string) => field(label, h('input', {
-        value: action(kind)?.action ?? '',
-        placeholder: kind === 'do' ? 'activity()' : `${kind}Action()`,
+    const actionField = (kind: 'entry' | 'exit', label: string) => field(label, h('input', {
+        value: nodeText(stateAction(state, kind)?.effect),
+        placeholder: `e.g. x = 0; ${kind}Action()`,
         spellcheck: 'false',
         onChange: (e: Event) => host.applyEdit(editor => editor.setStateAction(state, kind, (e.target as HTMLInputElement).value))
     }));
-    const internal = state.behaviors.filter(isInternalTransition);
+    const simpleActions = [stateAction(state, 'entry'), stateAction(state, 'exit')];
+    const internal = state.reactions.filter(r => !simpleActions.includes(r));
     const composite = state.vertices.length > 0 || state.regions.length > 0;
     const container = scopeOf(state);
     const isInitial = container.transitions.some(t => t.initial && t.target?.ref === state);
@@ -161,9 +160,8 @@ function statePanel(state: import('hsm-language').State, info: SelectionInfo, ho
         })),
         actionField('entry', 'Entry action'),
         actionField('exit', 'Exit action'),
-        actionField('do', 'Do activity'),
         internal.length > 0
-            ? field('Internal transitions', h('div', { class: 'hint' }, ...internal.map(t => h('div', {}, h('code', {}, labelText(t))))))
+            ? field('Local reactions', h('div', { class: 'hint' }, ...internal.map(r => h('div', {}, h('code', {}, nodeText(r))))))
             : undefined,
         h('div', { class: 'actions' },
             h('button', { onClick: () => host.applyEdit(editor => editor.addVertex(state, 'state')) }, 'Add sub state'),
@@ -176,39 +174,30 @@ function statePanel(state: import('hsm-language').State, info: SelectionInfo, ho
 
 function transitionPanel(transition: import('hsm-language').Transition, info: SelectionInfo, host: PropertiesHost): HTMLElement[] {
     const model = info.model!;
-    const names = allVertices(model).map(v => v.name).sort((a, b) => a.localeCompare(b));
+    const names = allVertices(model).map(v => qualifiedName(v)).sort((a, b) => a.localeCompare(b));
     const endSelect = (end: 'source' | 'target') => {
         const pseudo = end === 'source' ? transition.initial : transition.final;
         if (pseudo) {
             return h('select', { disabled: true }, h('option', {}, end === 'source' ? '[*] initial' : '[*] final'));
         }
-        const current = (end === 'source' ? transition.source : transition.target)?.ref?.name;
+        const currentVertex = (end === 'source' ? transition.source : transition.target)?.ref;
+        const current = currentVertex && qualifiedName(currentVertex);
         const select = h('select', {}, ...names.map(name => h('option', { value: name }, name)));
         select.value = current ?? '';
         select.addEventListener('change', () => {
-            const vertex = allVertices(model).find(v => v.name === select.value);
+            const vertex = allVertices(model).find(v => qualifiedName(v) === select.value);
             if (vertex) {
                 host.applyEdit(editor => editor.reconnectTransition(transition, end, vertex));
             }
         });
         return select;
     };
-    const commitLabel = () => {
-        const parts = {
-            event: event.value.trim() || undefined,
-            guard: guard.value.trim() || undefined,
-            effect: effect.value.trim() || undefined
-        };
-        if (parts.event && typeof parseTransitionLabel(parts.event) === 'string') {
-            event.setCustomValidity('invalid event name');
-            return;
-        }
-        event.setCustomValidity('');
-        host.applyEdit(editor => editor.updateTransitionLabel(transition, parts));
-    };
-    const event = h('input', { value: transition.event ?? '', placeholder: 'event', spellcheck: 'false', onChange: commitLabel });
-    const guard = h('input', { value: transition.guard ?? '', placeholder: 'condition', spellcheck: 'false', onChange: commitLabel });
-    const effect = h('input', { value: transition.effect ?? '', placeholder: 'action()', spellcheck: 'false', onChange: commitLabel });
+    const spec = h('input', {
+        value: nodeText(transition.spec),
+        placeholder: 'trigger, trigger [guard] / effect',
+        spellcheck: 'false',
+        onChange: () => host.applyEdit(editor => editor.updateTransitionLabel(transition, spec.value))
+    });
     const sourceName = transition.initial ? '[*]' : transition.source?.ref?.name ?? '?';
     const targetName = transition.final ? '[*]' : transition.target?.ref?.name ?? '?';
     return [
@@ -217,9 +206,7 @@ function transitionPanel(transition: import('hsm-language').Transition, info: Se
         ...problems(info.issue),
         field('Source', endSelect('source')),
         field('Target', endSelect('target')),
-        field('Trigger (event)', event),
-        field('Guard', guard),
-        field('Effect', effect),
+        field('Reaction (triggers [guard] / effect)', spec),
         h('div', { class: 'actions' },
             h('button', { class: 'danger', onClick: () => host.deleteSelection() }, 'Delete'))
     ];
@@ -237,9 +224,4 @@ function pseudoEndPanel(info: SelectionInfo, container: ScopeContainer, host: Pr
         h('div', { class: 'hint' }, ...transitions.map(t => h('div', {}, h('code', {}, `${t.initial ? '[*]' : t.source?.ref?.name} -> ${t.final ? '[*]' : t.target?.ref?.name}`)))),
         h('div', { class: 'actions' }, h('button', { class: 'danger', onClick: () => host.deleteSelection() }, 'Delete'))
     ];
-}
-
-function labelText(t: { event?: string, guard?: string, effect?: string }): string {
-    return [t.event, t.guard !== undefined ? `[${t.guard}]` : undefined, t.effect !== undefined ? `/ ${t.effect}` : undefined]
-        .filter(Boolean).join(' ');
 }

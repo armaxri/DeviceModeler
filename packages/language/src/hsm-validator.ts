@@ -1,4 +1,4 @@
-import type { ValidationAcceptor, ValidationChecks } from 'langium';
+import type { AstNode, ValidationAcceptor, ValidationChecks } from 'langium';
 import * as ast from './generated/ast.js';
 import type { HsmServices } from './hsm-module.js';
 import {
@@ -21,15 +21,29 @@ export function registerValidationChecks(services: HsmServices): void {
 
 export class HsmValidator {
 
+    /** Names of vertices must be unique within their container (siblings), regions are transparent. */
     checkUniqueNames(machine: ast.StateMachine, accept: ValidationAcceptor): void {
-        const seen = new Map<string, ast.Vertex>();
+        const byParent = new Map<AstNode, Map<string, ast.Vertex>>();
         for (const vertex of allVertices(machine)) {
-            const existing = seen.get(vertex.name);
-            if (existing) {
-                accept('error', `Duplicate name '${vertex.name}'. Names of states must be unique within a state machine.`,
+            const parent = ast.isRegion(vertex.$container) ? vertex.$container.$container : vertex.$container;
+            const seen = byParent.get(parent) ?? new Map<string, ast.Vertex>();
+            byParent.set(parent, seen);
+            if (seen.has(vertex.name)) {
+                accept('error', `Duplicate name '${vertex.name}'. Sibling states must have different names.`,
                     { node: vertex, property: 'name' });
             } else {
                 seen.set(vertex.name, vertex);
+            }
+        }
+        const declarations = new Map<string, ast.Declaration>();
+        for (const scope of machine.scopes) {
+            for (const declaration of scope.declarations) {
+                const name = ast.isInterfaceScope(scope) && scope.name ? `${scope.name}.${declaration.name}` : declaration.name;
+                if (declarations.has(name)) {
+                    accept('error', `Duplicate declaration '${name}'.`, { node: declaration, property: 'name' });
+                } else {
+                    declarations.set(name, declaration);
+                }
             }
         }
     }
@@ -49,7 +63,8 @@ export class HsmValidator {
                 accept('error', `Only one initial transition is allowed in ${containerName(container)}.`, { node: t, property: 'initial' });
             }
         }
-        if (container.vertices.length > 0 && initials.length === 0) {
+        const hasEntryPoints = container.vertices.some(v => ast.isPseudoState(v) && v.kind === 'entry');
+        if (container.vertices.length > 0 && initials.length === 0 && !hasEntryPoints) {
             const message = `${capitalize(containerName(container))} has no initial transition ('[*] -> ...').`;
             if (ast.isRegion(container)) {
                 accept('warning', message, { node: container, keyword: 'region' });
@@ -69,47 +84,90 @@ export class HsmValidator {
     }
 
     checkStateActions(state: ast.State, accept: ValidationAcceptor): void {
-        const seen = new Set<string>();
-        for (const behavior of state.behaviors) {
-            if (ast.isStateAction(behavior)) {
-                if (seen.has(behavior.kind)) {
-                    accept('warning', `State '${state.name}' has more than one '${behavior.kind}' action.`, { node: behavior, property: 'kind' });
+        for (const reaction of state.reactions) {
+            for (const trigger of reaction.triggers) {
+                if (ast.isBuiltinTrigger(trigger) && (trigger.kind === 'else' || trigger.kind === 'default')) {
+                    accept('error', `'${trigger.kind}' can only be used on transitions leaving a choice.`, { node: trigger, property: 'kind' });
                 }
-                seen.add(behavior.kind);
             }
         }
     }
 
     checkPseudoState(pseudo: ast.PseudoState, accept: ValidationAcceptor): void {
-        const machine = scopeOf(pseudo);
-        const outgoing = allTransitions(rootOf(pseudo)).filter(t => t.source?.ref === pseudo);
+        const container = scopeOf(pseudo);
+        const transitions = allTransitions(rootOf(pseudo));
+        const outgoing = transitions.filter(t => t.source?.ref === pseudo);
+        const incoming = transitions.filter(t => t.target?.ref === pseudo);
         switch (pseudo.kind) {
             case 'history':
             case 'deephistory':
-                if (ast.isStateMachine(machine)) {
+                if (ast.isStateMachine(container)) {
                     accept('error', 'History pseudo states must be placed inside a composite state.', { node: pseudo, property: 'kind' });
                 }
                 if (outgoing.length > 1) {
                     accept('error', 'A history pseudo state may have at most one outgoing (default) transition.', { node: pseudo, property: 'name' });
                 }
                 for (const t of outgoing) {
-                    if (t.event || t.guard !== undefined) {
-                        accept('warning', 'The default transition of a history pseudo state should not have a trigger or guard.', { node: t, property: 'event' });
+                    if (hasTrigger(t) || hasGuard(t)) {
+                        accept('warning', 'The default transition of a history pseudo state should not have a trigger or guard.', { node: t, property: 'spec' });
                     }
                 }
                 break;
             case 'choice':
-            case 'junction':
+            case 'junction': {
                 if (outgoing.length === 0) {
                     accept('error', `${capitalize(pseudo.kind)} '${pseudo.name}' needs at least one outgoing transition.`, { node: pseudo, property: 'name' });
                 }
                 for (const t of outgoing) {
-                    if (t.event) {
-                        accept('warning', `Transitions leaving ${pseudo.kind} '${pseudo.name}' must not have a trigger.`, { node: t, property: 'event' });
+                    if (t.spec?.triggers.some(trigger => !isDefaultTrigger(trigger))) {
+                        accept('warning', `Transitions leaving ${pseudo.kind} '${pseudo.name}' must not have a trigger (except 'else' / 'default').`, { node: t, property: 'spec' });
                     }
                 }
-                if (outgoing.length > 1 && outgoing.every(t => t.guard !== undefined)) {
-                    accept('info', `Consider adding an 'else' branch (a transition without guard) to ${pseudo.kind} '${pseudo.name}'.`, { node: pseudo, property: 'name' });
+                const defaults = outgoing.filter(t => !hasGuard(t));
+                if (defaults.length > 1) {
+                    for (const t of defaults.slice(1)) {
+                        accept('warning', `${capitalize(pseudo.kind)} '${pseudo.name}' has more than one default ('else') branch.`, { node: t, property: 'spec' });
+                    }
+                }
+                if (outgoing.length > 0 && defaults.length === 0) {
+                    accept('info', `Consider adding an 'else' branch to ${pseudo.kind} '${pseudo.name}'.`, { node: pseudo, property: 'name' });
+                }
+                break;
+            }
+            case 'entry':
+                if (ast.isStateMachine(container)) {
+                    accept('warning', 'Named entry points should be placed inside a composite state.', { node: pseudo, property: 'kind' });
+                }
+                if (outgoing.length !== 1) {
+                    accept('error', `Entry point '${pseudo.name}' needs exactly one outgoing transition.`, { node: pseudo, property: 'name' });
+                }
+                for (const t of [...outgoing, ...incoming]) {
+                    if (t.source?.ref === pseudo && (hasTrigger(t) || hasGuard(t))) {
+                        accept('warning', 'The transition leaving an entry point must not have a trigger or guard.', { node: t, property: 'spec' });
+                    }
+                }
+                if (incoming.length > 0) {
+                    accept('error', `Entry point '${pseudo.name}' cannot be the target of a transition. Use '# >${pseudo.name}' on a transition to the composite state.`, { node: incoming[0], property: 'target' });
+                }
+                break;
+            case 'exit':
+                if (ast.isStateMachine(container)) {
+                    accept('error', 'Exit nodes must be placed inside a composite state.', { node: pseudo, property: 'kind' });
+                }
+                if (outgoing.length > 0) {
+                    accept('error', `Exit node '${pseudo.name}' cannot have outgoing transitions. Use '# ${pseudo.name}>' on a transition leaving the composite state.`, { node: outgoing[0], property: 'source' });
+                }
+                break;
+            case 'sync':
+                if (incoming.length === 0 || outgoing.length === 0) {
+                    accept('error', `Synchronization '${pseudo.name}' needs incoming and outgoing transitions.`, { node: pseudo, property: 'name' });
+                } else if (incoming.length === 1 && outgoing.length === 1) {
+                    accept('warning', `Synchronization '${pseudo.name}' should fork (several outgoing) or join (several incoming) transitions.`, { node: pseudo, property: 'name' });
+                }
+                for (const t of outgoing) {
+                    if (hasTrigger(t)) {
+                        accept('warning', 'Transitions leaving a synchronization must not have a trigger.', { node: t, property: 'spec' });
+                    }
                 }
                 break;
         }
@@ -124,10 +182,10 @@ export class HsmValidator {
         const target = transition.target?.ref;
         const source = transition.source?.ref;
         if (transition.initial) {
-            if (transition.event || transition.guard !== undefined) {
-                accept('warning', 'Initial transitions must not have a trigger or guard.', { node: transition, property: transition.event ? 'event' : 'guard' });
+            if (hasTrigger(transition) || hasGuard(transition)) {
+                accept('warning', 'Initial transitions must not have a trigger or guard.', { node: transition, property: 'spec' });
             }
-            if (target && target.$container !== container) {
+            if (target && scopeOf(target) !== container) {
                 accept('warning', `The initial transition should target a direct sub state of ${containerName(container)}.`, { node: transition, property: 'target' });
             }
         }
@@ -137,25 +195,48 @@ export class HsmValidator {
         if (source && ast.isPseudoState(source) && (source.kind === 'history' || source.kind === 'deephistory') && target && !isAncestorOrSelf(source.$container, target)) {
             accept('warning', 'The default transition of a history pseudo state should stay within its composite state.', { node: transition, property: 'target' });
         }
+        const sourceIsChoice = source && ast.isPseudoState(source) && (source.kind === 'choice' || source.kind === 'junction');
+        for (const trigger of transition.spec?.triggers ?? []) {
+            if (isDefaultTrigger(trigger) && !sourceIsChoice) {
+                accept('error', `'${trigger.kind}' can only be used on transitions leaving a choice.`, { node: trigger, property: 'kind' });
+            } else if (ast.isBuiltinTrigger(trigger) && (trigger.kind === 'entry' || trigger.kind === 'exit')) {
+                accept('error', `'${trigger.kind}' can only be used in local reactions of a state.`, { node: trigger, property: 'kind' });
+            }
+        }
         if (source && target) {
             const sourceRegion = enclosingRegion(source);
             const targetRegion = enclosingRegion(target);
+            const sync = (v: ast.Vertex) => ast.isPseudoState(v) && v.kind === 'sync';
             if (sourceRegion && targetRegion && sourceRegion !== targetRegion
-                && sourceRegion.$container === targetRegion.$container) {
+                && sourceRegion.$container === targetRegion.$container && !sync(source) && !sync(target)) {
                 accept('error', `Transitions between orthogonal regions are not allowed ('${source.name}' -> '${target.name}').`, { node: transition, property: 'target' });
+            }
+        }
+        if (transition.entryPoint) {
+            const entry = target && ast.isState(target) ? findPseudo(target, 'entry', transition.entryPoint) : undefined;
+            if (!entry) {
+                accept('error', `'${target?.name ?? 'target'}' has no entry point '${transition.entryPoint}'.`, { node: transition, property: 'entryPoint' });
+            }
+        }
+        if (transition.exitPoint) {
+            const exit = source && ast.isState(source) ? findPseudo(source, 'exit', transition.exitPoint) : undefined;
+            if (!exit) {
+                accept('error', `'${source?.name ?? 'source'}' has no exit node '${transition.exitPoint}'.`, { node: transition, property: 'exitPoint' });
             }
         }
     }
 
     checkDeterminism(transition: ast.Transition, accept: ValidationAcceptor): void {
         const source = transition.source?.ref;
-        if (!source || !transition.event || transition.guard !== undefined) {
+        const triggers = transition.spec?.triggers.filter(ast.isEventTrigger).map(t => t.event.$refText) ?? [];
+        if (!source || triggers.length === 0 || hasGuard(transition)) {
             return;
         }
         const conflicts = allTransitions(rootOf(transition)).filter(t => t !== transition
-            && t.source?.ref === source && t.event === transition.event && t.guard === undefined);
+            && t.source?.ref === source && !hasGuard(t)
+            && t.spec?.triggers.some(trigger => ast.isEventTrigger(trigger) && triggers.includes(trigger.event.$refText)));
         if (conflicts.length > 0) {
-            accept('warning', `Non-deterministic: '${source.name}' has several unguarded transitions for event '${transition.event}'.`, { node: transition, property: 'event' });
+            accept('warning', `'${source.name}' has several unguarded transitions for the same event; the first one in the text has priority.`, { node: transition, property: 'spec' });
         }
     }
 
@@ -189,6 +270,24 @@ function rootOf(node: ast.Vertex | ast.Transition): ast.StateMachine {
         current = current.$container as { $container?: unknown };
     }
     return current as ast.StateMachine;
+}
+
+function hasTrigger(transition: ast.Transition): boolean {
+    return (transition.spec?.triggers.length ?? 0) > 0;
+}
+
+function hasGuard(transition: ast.Transition): boolean {
+    return transition.spec?.guard !== undefined;
+}
+
+function isDefaultTrigger(trigger: ast.Trigger): trigger is ast.BuiltinTrigger {
+    return ast.isBuiltinTrigger(trigger) && (trigger.kind === 'else' || trigger.kind === 'default');
+}
+
+/** Named entry point / exit node of a composite state (also inside its regions). */
+export function findPseudo(state: ast.State, kind: 'entry' | 'exit', name: string): ast.PseudoState | undefined {
+    const candidates = [...state.vertices, ...state.regions.flatMap(r => r.vertices)];
+    return candidates.find((v): v is ast.PseudoState => ast.isPseudoState(v) && v.kind === kind && v.name === name);
 }
 
 function capitalize(text: string): string {

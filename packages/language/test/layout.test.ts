@@ -10,7 +10,7 @@ function flatten(nodes: DiagramNode[], parentX = 0, parentY = 0): Array<DiagramN
 
 describe('layout', () => {
     for (const direction of ['DOWN', 'RIGHT'] as const) {
-        for (const file of ['traffic-light.hsm', 'cd-player.hsm', 'keyboard.hsm']) {
+        for (const file of ['traffic-light.hsm', 'cd-player.hsm', 'keyboard.hsm', 'door.hsm']) {
             test(`${file} (${direction})`, async () => {
                 const parsed = await parse(example(file));
                 const { graph, elements } = await layoutStateMachine(parsed.model, { direction });

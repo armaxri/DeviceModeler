@@ -1,7 +1,8 @@
-import { AstUtils, GrammarUtils, type AstNode, type CstNode } from 'langium';
+import { AstUtils, GrammarUtils, type AstNode, type CstNode, type Reference } from 'langium';
 import * as ast from '../generated/ast.js';
+import { qualifiedName, referenceName } from '../hsm-scope.js';
 import {
-    allTransitions, allVertices, commonContainer, getStateMachine, initialTransitions, isAncestorOrSelf, scopeOf,
+    allTransitions, allVertices, commonContainer, initialTransitions, isScopeContainer, isAncestorOrSelf, scopeOf,
     type ScopeContainer
 } from '../model-utils.js';
 
@@ -27,12 +28,6 @@ export class EditError extends Error { }
 
 export type NewVertexKind = 'state' | ast.PseudoStateKind;
 
-export interface TransitionLabelParts {
-    event?: string;
-    guard?: string;
-    effect?: string;
-}
-
 /** Special end points of a transition: the initial or final pseudo state of a container. */
 export type TransitionSource = ast.Vertex | { initialOf: ScopeContainer };
 export type TransitionTarget = ast.Vertex | { finalOf: ScopeContainer };
@@ -41,8 +36,9 @@ export type TransitionTarget = ast.Vertex | { finalOf: ScopeContainer };
 export type DeletionTarget = AstNode | { initialOf: ScopeContainer } | { finalOf: ScopeContainer };
 
 export const HSM_KEYWORDS = new Set([
-    'statemachine', 'state', 'region', 'choice', 'junction', 'history', 'deephistory', 'entry', 'exit', 'do', 'on'
-]);
+    'statemachine', 'namespace', 'state', 'region', 'choice', 'junction', 'history', 'deephistory', 'sync', 'entry', 'exit',
+    'interface', 'internal', 'in', 'out', 'event', 'var', 'const', 'readonly', 'operation',
+    'after', 'every', 'always', 'oncycle', 'else', 'default', 'raise', 'valueof', 'active', 'as', 'true', 'false']);
 
 const ID_REGEX = /^[_a-zA-Z]\w*$/;
 
@@ -81,64 +77,10 @@ export function mapOffset(offset: number, edits: TextEdit[]): number {
     return offset + delta;
 }
 
-/**
- * Parses a transition label in the notation `event [guard] / effect`.
- * All parts are optional. Returns an error message if the text cannot be parsed.
- */
-export function parseTransitionLabel(text: string): TransitionLabelParts | string {
-    let rest = text.trim();
-    const result: TransitionLabelParts = {};
-    const eventMatch = /^[_a-zA-Z]\w*/.exec(rest);
-    if (eventMatch) {
-        result.event = eventMatch[0];
-        rest = rest.substring(eventMatch[0].length).trim();
-    }
-    if (rest.startsWith('[')) {
-        let depth = 0;
-        let end = -1;
-        for (let i = 0; i < rest.length; i++) {
-            if (rest[i] === '[') {
-                depth++;
-            } else if (rest[i] === ']') {
-                depth--;
-                if (depth === 0) {
-                    end = i;
-                    break;
-                }
-            }
-        }
-        if (end < 0) {
-            return 'Missing \']\' after guard.';
-        }
-        result.guard = rest.substring(1, end).trim();
-        rest = rest.substring(end + 1).trim();
-    }
-    if (rest.startsWith('/')) {
-        result.effect = rest.substring(1).trim();
-        rest = '';
-    }
-    if (rest.length > 0) {
-        return `Unexpected text '${rest}'. Expected: event [guard] / effect`;
-    }
-    if (result.event && HSM_KEYWORDS.has(result.event)) {
-        return `'${result.event}' is a keyword and cannot be used as event name.`;
-    }
-    return result;
-}
-
-/** Formats the label part of a transition, including the leading colon. */
-export function formatTransitionLabel(parts: TransitionLabelParts): string {
-    const segments: string[] = [];
-    if (parts.event) {
-        segments.push(parts.event);
-    }
-    if (parts.guard !== undefined && parts.guard !== '') {
-        segments.push(`[${quote(parts.guard)}]`);
-    }
-    if (parts.effect !== undefined && parts.effect !== '') {
-        segments.push(`/ ${quote(parts.effect)}`);
-    }
-    return segments.length > 0 ? ` : ${segments.join(' ')}` : '';
+/** Formats the label part of a transition (`trigger [guard] / effect`), including the leading colon. */
+export function formatTransitionLabel(spec: string | undefined): string {
+    const text = spec?.replace(/\s+/g, ' ').trim();
+    return text ? ` : ${text}` : '';
 }
 
 /**
@@ -160,7 +102,7 @@ export class ModelEditor {
     addVertex(target: ScopeContainer, kind: NewVertexKind, name?: string): EditResult {
         const container = ast.isState(target) && target.regions.length > 0 ? target.regions[0] : target;
         const vertexName = name ?? this.freshName(defaultNamePrefix(kind));
-        this.checkNewName(vertexName);
+        this.checkNewName(vertexName, container);
         const text = kind === 'state' ? `state ${vertexName}` : `${kind} ${vertexName}`;
         const { edit, memberOffset } = this.insertMember(container, [text], 'afterVertices');
         return { edits: [edit], selectOffset: memberOffset, createdName: vertexName };
@@ -180,8 +122,8 @@ export class ModelEditor {
             return indent + this.nodeText(node, indent) + (comment ? ' ' + comment : '');
         };
         const byOffset = (a: AstNode, b: AstNode) => a.$cstNode!.offset - b.$cstNode!.offset;
-        for (const behavior of [...state.behaviors].sort(byOffset)) {
-            lines.push(withComment(behavior, inner));
+        for (const reaction of [...state.reactions].sort(byOffset)) {
+            lines.push(withComment(reaction, inner));
         }
         lines.push(inner + 'region {');
         for (const member of [...state.vertices, ...state.transitions].sort(byOffset)) {
@@ -197,7 +139,7 @@ export class ModelEditor {
         return { edits: [edit], selectOffset: open + 1 + secondRegion };
     }
 
-    addTransition(source: TransitionSource, target: TransitionTarget, label: TransitionLabelParts = {}): EditResult {
+    addTransition(source: TransitionSource, target: TransitionTarget, label?: string): EditResult {
         let container: ScopeContainer;
         if ('initialOf' in source) {
             container = source.initialOf;
@@ -206,8 +148,8 @@ export class ModelEditor {
         } else {
             container = commonContainer(scopeOf(source), scopeOf(target));
         }
-        const sourceText = 'initialOf' in source ? '[*]' : source.name;
-        const targetText = 'finalOf' in target ? '[*]' : target.name;
+        const sourceText = 'initialOf' in source ? '[*]' : referenceName(source, container);
+        const targetText = 'finalOf' in target ? '[*]' : referenceName(target, container);
         const text = `${sourceText} -> ${targetText}${formatTransitionLabel(label)}`;
         const { edit, memberOffset } = this.insertMember(container, [text], 'end');
         return { edits: [edit], selectOffset: memberOffset };
@@ -221,7 +163,7 @@ export class ModelEditor {
             const targetNode = existing.target?.$refNode ?? GrammarUtils.findNodeForProperty(existing.$cstNode, 'target');
             if (targetNode) {
                 return {
-                    edits: [{ offset: targetNode.offset, length: targetNode.length, text: vertex.name }],
+                    edits: [{ offset: targetNode.offset, length: targetNode.length, text: referenceName(vertex, container) }],
                     selectOffset: existing.$cstNode!.offset
                 };
             }
@@ -233,17 +175,25 @@ export class ModelEditor {
         if (newName === vertex.name) {
             return { edits: [] };
         }
-        this.checkNewName(newName);
+        this.checkNewName(newName, vertex.$container, vertex);
         const nameNode = GrammarUtils.findNodeForProperty(vertex.$cstNode, 'name');
         if (!nameNode) {
             throw new EditError(`Cannot rename '${vertex.name}'.`);
         }
         const edits: TextEdit[] = [{ offset: nameNode.offset, length: nameNode.length, text: newName }];
-        for (const transition of allTransitions(this.machine)) {
-            for (const ref of [transition.source, transition.target]) {
-                if (ref?.ref === vertex && ref.$refNode) {
-                    edits.push({ offset: ref.$refNode.offset, length: ref.$refNode.length, text: newName });
-                }
+        // references use (partially) qualified names: replace the segment which denotes the renamed vertex
+        const depth = qualifiedName(vertex).split('.').length - 1;
+        for (const ref of vertexReferences(this.machine)) {
+            const target = ref.ref;
+            if (!target || !ref.$refNode || !isAncestorOrSelf(vertex, target)) {
+                continue;
+            }
+            const targetSegments = qualifiedName(target).split('.');
+            const refSegments = ref.$refText.split('.');
+            const index = depth - (targetSegments.length - refSegments.length);
+            if (index >= 0 && index < refSegments.length && refSegments[index] === vertex.name) {
+                refSegments[index] = newName;
+                edits.push({ offset: ref.$refNode.offset, length: ref.$refNode.length, text: refSegments.join('.') });
             }
         }
         return { edits, selectOffset: mapOffset(vertex.$cstNode!.offset, edits) };
@@ -275,43 +225,43 @@ export class ModelEditor {
         return value ? { edits: [{ offset: nameNode.end, length: 0, text: ` ${quote(value)}` }] } : { edits: [] };
     }
 
-    /** Sets, replaces or (with an empty action) removes the entry/exit/do action of a state. */
-    setStateAction(state: ast.State, kind: ast.StateAction['kind'], action: string | undefined): EditResult {
-        const existing = state.behaviors.find((b): b is ast.StateAction => ast.isStateAction(b) && b.kind === kind);
-        const value = action?.trim() ? action.trim() : undefined;
+    /** Sets, replaces or (with an empty effect) removes the `entry /` or `exit /` reaction of a state. */
+    setStateAction(state: ast.State, kind: 'entry' | 'exit', effect: string | undefined): EditResult {
+        const existing = stateAction(state, kind);
+        const value = effect?.replace(/\s+/g, ' ').trim() || undefined;
         if (existing) {
             if (!value) {
                 return { edits: [this.deletionEdit(existing.$cstNode!)] };
             }
-            const actionNode = GrammarUtils.findNodeForProperty(existing.$cstNode, 'action')!;
-            return { edits: [{ offset: actionNode.offset, length: actionNode.length, text: quote(value) }] };
+            const effectNode = existing.effect.$cstNode!;
+            return { edits: [{ offset: effectNode.offset, length: effectNode.length, text: value }] };
         }
         if (!value) {
             return { edits: [] };
         }
-        // keep the canonical order entry, exit, do
-        const order = ['entry', 'exit', 'do'];
-        const predecessors = state.behaviors.filter(b => ast.isStateAction(b) && order.indexOf(b.kind) < order.indexOf(kind));
-        const text = `${kind} / ${quote(value)}`;
-        if (predecessors.length > 0) {
-            const anchor = predecessors[predecessors.length - 1].$cstNode!;
-            const offset = this.endOfLineAfter(anchor.end);
+        const text = `${kind} / ${value}`;
+        const entry = kind === 'exit' ? stateAction(state, 'entry') : undefined;
+        if (entry) {
+            const offset = this.endOfLineAfter(entry.$cstNode!.end);
             return { edits: [{ offset, length: 0, text: `\n${this.childIndent(state)}${text}` }] };
         }
         const { edit } = this.insertMember(state, [text], 'start');
         return { edits: [edit] };
     }
 
-    /** Replaces trigger, guard and effect of a transition. */
-    updateTransitionLabel(transition: ast.Transition, label: TransitionLabelParts): EditResult {
+    /** Replaces the reaction specification (`triggers [guard] / effect`) of a transition. */
+    updateTransitionLabel(transition: ast.Transition, spec: string | undefined): EditResult {
         const cst = transition.$cstNode!;
         const arrow = GrammarUtils.findNodeForKeyword(cst, '->')!;
         const targetNode = transition.final
             ? GrammarUtils.findNodeForProperty(cst, 'final')
             : transition.target?.$refNode ?? GrammarUtils.findNodeForProperty(cst, 'target');
-        const end = targetNode ? targetNode.end : arrow.end;
+        const start = targetNode ? targetNode.end : arrow.end;
+        const hash = GrammarUtils.findNodeForKeyword(cst, '#');
+        const end = hash ? hash.offset : cst.end;
+        const suffix = hash ? ' ' : '';
         return {
-            edits: [{ offset: end, length: cst.end - end, text: formatTransitionLabel(label) }],
+            edits: [{ offset: start, length: end - start, text: formatTransitionLabel(spec) + suffix }],
             selectOffset: cst.offset
         };
     }
@@ -325,7 +275,7 @@ export class ModelEditor {
         if (!node) {
             throw new EditError('Cannot reconnect the transition.');
         }
-        return { edits: [{ offset: node.offset, length: node.length, text: vertex.name }], selectOffset: cst.offset };
+        return { edits: [{ offset: node.offset, length: node.length, text: referenceName(vertex, scopeOf(transition)) }], selectOffset: cst.offset };
     }
 
     /** Moves a vertex (including its content) into another container. */
@@ -424,12 +374,17 @@ export class ModelEditor {
         return `${prefix}${index}`;
     }
 
-    private checkNewName(name: string): void {
+    /** Checks that `name` is a valid identifier and not used by a sibling in the given container. */
+    private checkNewName(name: string, container: AstNode, except?: ast.Vertex): void {
         if (!isValidIdentifier(name)) {
             throw new EditError(`'${name}' is not a valid name. Use letters, digits and '_' (no keywords).`);
         }
-        if (allVertices(getStateMachine(this.machine)).some(v => v.name === name)) {
-            throw new EditError(`A state named '${name}' already exists.`);
+        const owner = ast.isRegion(container) ? container.$container : container;
+        const siblings = ast.isState(owner)
+            ? [...owner.vertices, ...owner.regions.flatMap(r => r.vertices)]
+            : isScopeContainer(owner) ? owner.vertices : [];
+        if (siblings.some(v => v !== except && v.name === name)) {
+            throw new EditError(`A state named '${name}' already exists here.`);
         }
     }
 
@@ -468,7 +423,7 @@ export class ModelEditor {
     private members(container: ScopeContainer): AstNode[] {
         const result: AstNode[] = [...container.vertices, ...container.transitions];
         if (ast.isState(container)) {
-            result.push(...container.behaviors, ...container.regions);
+            result.push(...container.reactions, ...container.regions);
         }
         return result.filter(n => n.$cstNode).sort((a, b) => a.$cstNode!.offset - b.$cstNode!.offset);
     }
@@ -610,6 +565,30 @@ function detectIndentUnit(text: string): string {
     return unit && unit.length >= 2 && unit.length <= 8 ? unit : '    ';
 }
 
+/** All references to vertices (transition end points and `active(...)` expressions). */
+function vertexReferences(machine: ast.StateMachine): Array<Reference<ast.Vertex>> {
+    const result: Array<Reference<ast.Vertex>> = [];
+    for (const node of AstUtils.streamAllContents(machine)) {
+        if (ast.isTransition(node)) {
+            if (node.source) {
+                result.push(node.source);
+            }
+            if (node.target) {
+                result.push(node.target);
+            }
+        } else if (ast.isActiveExpression(node)) {
+            result.push(node.state);
+        }
+    }
+    return result;
+}
+
+/** The unguarded `entry /` or `exit /` reaction of a state. */
+export function stateAction(state: ast.State, kind: 'entry' | 'exit'): ast.LocalReaction | undefined {
+    return state.reactions.find(r => r.guard === undefined && r.triggers.length === 1
+        && ast.isBuiltinTrigger(r.triggers[0]) && r.triggers[0].kind === kind);
+}
+
 function defaultNamePrefix(kind: NewVertexKind): string {
     switch (kind) {
         case 'state': return 'State';
@@ -617,5 +596,8 @@ function defaultNamePrefix(kind: NewVertexKind): string {
         case 'junction': return 'Junction';
         case 'history': return 'H';
         case 'deephistory': return 'DeepH';
+        case 'sync': return 'Sync';
+        case 'entry': return 'Entry';
+        case 'exit': return 'Exit';
     }
 }

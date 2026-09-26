@@ -1,5 +1,5 @@
 import * as ast from '../generated/ast.js';
-import { transitionLabel, type ScopeContainer } from '../model-utils.js';
+import { nodeText, transitionLabel, type ScopeContainer } from '../model-utils.js';
 
 /**
  * Generates a PlantUML state diagram (`@startuml ... @enduml`) for the given state machine.
@@ -56,12 +56,8 @@ function generateVertex(vertex: ast.Vertex, indent: string, lines: string[]): vo
     if (vertex.description) {
         lines.push(`${indent}${vertex.name} : ${vertex.description}`);
     }
-    for (const behavior of vertex.behaviors) {
-        if (ast.isStateAction(behavior)) {
-            lines.push(`${indent}${vertex.name} : ${behavior.kind} / ${behavior.action}`);
-        } else {
-            lines.push(`${indent}${vertex.name} : ${transitionLabel(behavior)}`);
-        }
+    for (const reaction of vertex.reactions) {
+        lines.push(`${indent}${vertex.name} : ${nodeText(reaction)}`);
     }
 }
 

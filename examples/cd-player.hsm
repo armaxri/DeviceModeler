@@ -3,37 +3,48 @@
  * resumes the mode it was in before.
  */
 statemachine CdPlayer "Hierarchical CD player" {
+    interface:
+        in event play
+        in event pause
+        in event stop
+        in event eject
+        in event powerOff
+        in event trackEnd
+        var track : integer = 1
+        var tracks : integer = 0
+        operation discInserted() : boolean
+        operation startMotor() : void
+        operation stopMotor() : void
+
     [*] -> Closed
 
     state Closed {
         [*] -> Stopped
 
         history H
-        state Stopped
+        state Stopped {
+            entry / track = 1
+        }
         state Active {
             [*] -> Playing
             state Playing {
-                entry / "startMotor()"
-                do / "play()"
+                entry / startMotor()
+                exit / stopMotor()
+                trackEnd [track < tracks] / track += 1
             }
-            state Paused {
-                entry / "stopMotor()"
-            }
+            state Paused
             Playing -> Paused : pause
-            Paused -> Playing : pause
+            Paused -> Playing : pause, play
         }
         choice HasDisc
 
         Stopped -> HasDisc : play
-        HasDisc -> Active : [ "discInserted()" ]
-        HasDisc -> Stopped
+        HasDisc -> Active : [discInserted() && tracks > 0]
+        HasDisc -> Stopped : else
         Active -> Stopped : stop
     }
 
-    state Open "Tray is open" {
-        entry / "openTray()"
-        exit / "closeTray()"
-    }
+    state Open "Tray is open"
 
     Closed -> Open : eject
     Open -> H : eject

@@ -8,6 +8,9 @@ import * as langium from 'langium';
 
 export const HsmTerminals = {
     WS: /\s+/,
+    HEX: /0[xX][0-9a-fA-F]+/,
+    REAL: /[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?/,
+    INT: /[0-9]+/,
     ID: /[_a-zA-Z][\w]*/,
     STRING: /"(\\.|[^"\\])*"|'(\\.|[^'\\])*'/,
     ML_COMMENT: /\/\*[\s\S]*?\*\//,
@@ -17,55 +20,492 @@ export const HsmTerminals = {
 export type HsmTerminalNames = keyof typeof HsmTerminals;
 
 export type HsmKeywordNames =
+    | "!"
+    | "!="
+    | "#"
+    | "%"
+    | "%="
+    | "&"
+    | "&&"
+    | "&="
+    | "("
+    | ")"
+    | "*"
+    | "*="
+    | "+"
+    | "+="
+    | ","
+    | "-"
+    | "-="
     | "->"
+    | "."
+    | "..."
     | "/"
+    | "/="
     | ":"
+    | ";"
+    | "<"
+    | "<<"
+    | "<<="
+    | "<="
+    | "="
+    | "=="
+    | ">"
+    | ">="
+    | ">>"
+    | ">>="
+    | "?"
+    | "@"
     | "["
     | "[*]"
     | "]"
+    | "^"
+    | "^="
+    | "active"
+    | "after"
+    | "always"
+    | "as"
     | "choice"
+    | "const"
     | "deephistory"
-    | "do"
+    | "default"
+    | "else"
     | "entry"
+    | "event"
+    | "every"
     | "exit"
+    | "false"
     | "history"
+    | "in"
+    | "interface"
+    | "internal"
     | "junction"
-    | "on"
+    | "namespace"
+    | "oncycle"
+    | "operation"
+    | "out"
+    | "raise"
+    | "readonly"
     | "region"
     | "state"
     | "statemachine"
+    | "sync"
+    | "true"
+    | "valueof"
+    | "var"
     | "{"
-    | "}";
+    | "|"
+    | "|="
+    | "||"
+    | "}"
+    | "~";
 
 export type HsmTokenNames = HsmTerminalNames | HsmKeywordNames;
 
-export type Behavior = InternalTransition | StateAction;
-
-export const Behavior = {
-    $type: 'Behavior'
-} as const;
-
-export function isBehavior(item: unknown): item is Behavior {
-    return reflection.isInstance(item, Behavior.$type);
+export interface ActiveExpression extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $type: 'ActiveExpression';
+    state: langium.Reference<Vertex>;
 }
 
-export interface InternalTransition extends langium.AstNode {
+export const ActiveExpression = {
+    $type: 'ActiveExpression',
+    state: 'state'
+} as const;
+
+export function isActiveExpression(item: unknown): item is ActiveExpression {
+    return reflection.isInstance(item, ActiveExpression.$type);
+}
+
+export interface Annotation extends langium.AstNode {
+    readonly $container: StateMachine;
+    readonly $type: 'Annotation';
+    arguments: Array<Expression>;
+    name: string;
+}
+
+export const Annotation = {
+    $type: 'Annotation',
+    arguments: 'arguments',
+    name: 'name'
+} as const;
+
+export function isAnnotation(item: unknown): item is Annotation {
+    return reflection.isInstance(item, Annotation.$type);
+}
+
+export interface Argument extends langium.AstNode {
+    readonly $container: ElementReference;
+    readonly $type: 'Argument';
+    parameter?: string;
+    value: Expression;
+}
+
+export const Argument = {
+    $type: 'Argument',
+    parameter: 'parameter',
+    value: 'value'
+} as const;
+
+export function isArgument(item: unknown): item is Argument {
+    return reflection.isInstance(item, Argument.$type);
+}
+
+export interface AssignmentExpression extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $type: 'AssignmentExpression';
+    left: Expression;
+    operator: AssignmentOperator;
+    value: Expression;
+}
+
+export const AssignmentExpression = {
+    $type: 'AssignmentExpression',
+    left: 'left',
+    operator: 'operator',
+    value: 'value'
+} as const;
+
+export function isAssignmentExpression(item: unknown): item is AssignmentExpression {
+    return reflection.isInstance(item, AssignmentExpression.$type);
+}
+
+export type AssignmentOperator = '%=' | '&=' | '*=' | '+=' | '-=' | '/=' | '<<=' | '=' | '>>=' | '^=' | '|=';
+
+export function isAssignmentOperator(item: unknown): item is AssignmentOperator {
+    return item === '=' || item === '+=' || item === '-=' || item === '*=' || item === '/=' || item === '%=' || item === '<<=' || item === '>>=' || item === '&=' || item === '|=' || item === '^=';
+}
+
+export interface BinaryExpression extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $type: 'BinaryExpression';
+    left: Expression;
+    operator: '!=' | '%' | '&&' | '&' | '*' | '+' | '-' | '/' | '<' | '<<' | '<=' | '==' | '>' | '>=' | '>>' | '^' | '|' | '||';
+    right: Expression;
+}
+
+export const BinaryExpression = {
+    $type: 'BinaryExpression',
+    left: 'left',
+    operator: 'operator',
+    right: 'right'
+} as const;
+
+export function isBinaryExpression(item: unknown): item is BinaryExpression {
+    return reflection.isInstance(item, BinaryExpression.$type);
+}
+
+export interface BoolLiteral extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $type: 'BoolLiteral';
+    value: 'false' | 'true';
+}
+
+export const BoolLiteral = {
+    $type: 'BoolLiteral',
+    value: 'value'
+} as const;
+
+export function isBoolLiteral(item: unknown): item is BoolLiteral {
+    return reflection.isInstance(item, BoolLiteral.$type);
+}
+
+export interface BuiltinTrigger extends langium.AstNode {
+    readonly $container: LocalReaction | ReactionSpec;
+    readonly $type: 'BuiltinTrigger';
+    kind: 'always' | 'default' | 'else' | 'entry' | 'exit' | 'oncycle';
+}
+
+export const BuiltinTrigger = {
+    $type: 'BuiltinTrigger',
+    kind: 'kind'
+} as const;
+
+export function isBuiltinTrigger(item: unknown): item is BuiltinTrigger {
+    return reflection.isInstance(item, BuiltinTrigger.$type);
+}
+
+export interface CastExpression extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $type: 'CastExpression';
+    operand: Expression;
+    type: TypeReference;
+}
+
+export const CastExpression = {
+    $type: 'CastExpression',
+    operand: 'operand',
+    type: 'type'
+} as const;
+
+export function isCastExpression(item: unknown): item is CastExpression {
+    return reflection.isInstance(item, CastExpression.$type);
+}
+
+export interface ConditionalExpression extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $type: 'ConditionalExpression';
+    condition: Expression;
+    falseCase: Expression;
+    trueCase: Expression;
+}
+
+export const ConditionalExpression = {
+    $type: 'ConditionalExpression',
+    condition: 'condition',
+    falseCase: 'falseCase',
+    trueCase: 'trueCase'
+} as const;
+
+export function isConditionalExpression(item: unknown): item is ConditionalExpression {
+    return reflection.isInstance(item, ConditionalExpression.$type);
+}
+
+export type Declaration = EventDeclaration | OperationDeclaration | VariableDeclaration;
+
+export const Declaration = {
+    $type: 'Declaration'
+} as const;
+
+export function isDeclaration(item: unknown): item is Declaration {
+    return reflection.isInstance(item, Declaration.$type);
+}
+
+export interface Effect extends langium.AstNode {
+    readonly $container: LocalReaction | ReactionSpec;
+    readonly $type: 'Effect';
+    statements: Array<Statement>;
+}
+
+export const Effect = {
+    $type: 'Effect',
+    statements: 'statements'
+} as const;
+
+export function isEffect(item: unknown): item is Effect {
+    return reflection.isInstance(item, Effect.$type);
+}
+
+export interface ElementReference extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $type: 'ElementReference';
+    arguments: Array<Argument>;
+    call: boolean;
+    element: langium.Reference<Declaration>;
+}
+
+export const ElementReference = {
+    $type: 'ElementReference',
+    arguments: 'arguments',
+    call: 'call',
+    element: 'element'
+} as const;
+
+export function isElementReference(item: unknown): item is ElementReference {
+    return reflection.isInstance(item, ElementReference.$type);
+}
+
+export interface EventDeclaration extends langium.AstNode {
+    readonly $container: InterfaceScope | InternalScope;
+    readonly $type: 'EventDeclaration';
+    direction?: 'in' | 'out';
+    name: string;
+    type?: TypeReference;
+}
+
+export const EventDeclaration = {
+    $type: 'EventDeclaration',
+    direction: 'direction',
+    name: 'name',
+    type: 'type'
+} as const;
+
+export function isEventDeclaration(item: unknown): item is EventDeclaration {
+    return reflection.isInstance(item, EventDeclaration.$type);
+}
+
+export interface EventTrigger extends langium.AstNode {
+    readonly $container: LocalReaction | ReactionSpec;
+    readonly $type: 'EventTrigger';
+    event: langium.Reference<EventDeclaration>;
+}
+
+export const EventTrigger = {
+    $type: 'EventTrigger',
+    event: 'event'
+} as const;
+
+export function isEventTrigger(item: unknown): item is EventTrigger {
+    return reflection.isInstance(item, EventTrigger.$type);
+}
+
+export type Expression = ActiveExpression | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ElementReference | Literal | ParenthesizedExpression | UnaryExpression | ValueOfExpression;
+
+export const Expression = {
+    $type: 'Expression'
+} as const;
+
+export function isExpression(item: unknown): item is Expression {
+    return reflection.isInstance(item, Expression.$type);
+}
+
+export interface ExpressionStatement extends langium.AstNode {
+    readonly $container: Effect;
+    readonly $type: 'ExpressionStatement';
+    expression: Expression;
+}
+
+export const ExpressionStatement = {
+    $type: 'ExpressionStatement',
+    expression: 'expression'
+} as const;
+
+export function isExpressionStatement(item: unknown): item is ExpressionStatement {
+    return reflection.isInstance(item, ExpressionStatement.$type);
+}
+
+export interface HexLiteral extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $type: 'HexLiteral';
+    value: string;
+}
+
+export const HexLiteral = {
+    $type: 'HexLiteral',
+    value: 'value'
+} as const;
+
+export function isHexLiteral(item: unknown): item is HexLiteral {
+    return reflection.isInstance(item, HexLiteral.$type);
+}
+
+export interface InterfaceScope extends langium.AstNode {
+    readonly $container: StateMachine;
+    readonly $type: 'InterfaceScope';
+    declarations: Array<Declaration>;
+    name?: string;
+}
+
+export const InterfaceScope = {
+    $type: 'InterfaceScope',
+    declarations: 'declarations',
+    name: 'name'
+} as const;
+
+export function isInterfaceScope(item: unknown): item is InterfaceScope {
+    return reflection.isInstance(item, InterfaceScope.$type);
+}
+
+export interface InternalScope extends langium.AstNode {
+    readonly $container: StateMachine;
+    readonly $type: 'InternalScope';
+    declarations: Array<Declaration>;
+}
+
+export const InternalScope = {
+    $type: 'InternalScope',
+    declarations: 'declarations'
+} as const;
+
+export function isInternalScope(item: unknown): item is InternalScope {
+    return reflection.isInstance(item, InternalScope.$type);
+}
+
+export interface IntLiteral extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $type: 'IntLiteral';
+    value: number;
+}
+
+export const IntLiteral = {
+    $type: 'IntLiteral',
+    value: 'value'
+} as const;
+
+export function isIntLiteral(item: unknown): item is IntLiteral {
+    return reflection.isInstance(item, IntLiteral.$type);
+}
+
+export type Literal = BoolLiteral | HexLiteral | IntLiteral | RealLiteral | StringLiteral;
+
+export const Literal = {
+    $type: 'Literal'
+} as const;
+
+export function isLiteral(item: unknown): item is Literal {
+    return reflection.isInstance(item, Literal.$type);
+}
+
+export interface LocalReaction extends langium.AstNode {
     readonly $container: State;
-    readonly $type: 'InternalTransition';
-    effect?: string;
-    event: string;
-    guard?: string;
+    readonly $type: 'LocalReaction';
+    effect: Effect;
+    guard?: Expression;
+    triggers: Array<Trigger>;
 }
 
-export const InternalTransition = {
-    $type: 'InternalTransition',
+export const LocalReaction = {
+    $type: 'LocalReaction',
     effect: 'effect',
-    event: 'event',
-    guard: 'guard'
+    guard: 'guard',
+    triggers: 'triggers'
 } as const;
 
-export function isInternalTransition(item: unknown): item is InternalTransition {
-    return reflection.isInstance(item, InternalTransition.$type);
+export function isLocalReaction(item: unknown): item is LocalReaction {
+    return reflection.isInstance(item, LocalReaction.$type);
+}
+
+export interface OperationDeclaration extends langium.AstNode {
+    readonly $container: InterfaceScope | InternalScope;
+    readonly $type: 'OperationDeclaration';
+    name: string;
+    parameters: Array<Parameter>;
+    returnType?: TypeReference;
+}
+
+export const OperationDeclaration = {
+    $type: 'OperationDeclaration',
+    name: 'name',
+    parameters: 'parameters',
+    returnType: 'returnType'
+} as const;
+
+export function isOperationDeclaration(item: unknown): item is OperationDeclaration {
+    return reflection.isInstance(item, OperationDeclaration.$type);
+}
+
+export interface Parameter extends langium.AstNode {
+    readonly $container: OperationDeclaration;
+    readonly $type: 'Parameter';
+    name: string;
+    type: TypeReference;
+    varArgs: boolean;
+}
+
+export const Parameter = {
+    $type: 'Parameter',
+    name: 'name',
+    type: 'type',
+    varArgs: 'varArgs'
+} as const;
+
+export function isParameter(item: unknown): item is Parameter {
+    return reflection.isInstance(item, Parameter.$type);
+}
+
+export interface ParenthesizedExpression extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $type: 'ParenthesizedExpression';
+    expression: Expression;
+}
+
+export const ParenthesizedExpression = {
+    $type: 'ParenthesizedExpression',
+    expression: 'expression'
+} as const;
+
+export function isParenthesizedExpression(item: unknown): item is ParenthesizedExpression {
+    return reflection.isInstance(item, ParenthesizedExpression.$type);
 }
 
 export interface PseudoState extends langium.AstNode {
@@ -85,10 +525,67 @@ export function isPseudoState(item: unknown): item is PseudoState {
     return reflection.isInstance(item, PseudoState.$type);
 }
 
-export type PseudoStateKind = 'choice' | 'deephistory' | 'history' | 'junction';
+export type PseudoStateKind = 'choice' | 'deephistory' | 'entry' | 'exit' | 'history' | 'junction' | 'sync';
 
 export function isPseudoStateKind(item: unknown): item is PseudoStateKind {
-    return item === 'choice' || item === 'junction' || item === 'history' || item === 'deephistory';
+    return item === 'choice' || item === 'junction' || item === 'history' || item === 'deephistory' || item === 'sync' || item === 'entry' || item === 'exit';
+}
+
+export type QualifiedName = string;
+
+export function isQualifiedName(item: unknown): item is QualifiedName {
+    return typeof item === 'string';
+}
+
+export interface RaiseStatement extends langium.AstNode {
+    readonly $container: Effect;
+    readonly $type: 'RaiseStatement';
+    event: langium.Reference<EventDeclaration>;
+    value?: Expression;
+}
+
+export const RaiseStatement = {
+    $type: 'RaiseStatement',
+    event: 'event',
+    value: 'value'
+} as const;
+
+export function isRaiseStatement(item: unknown): item is RaiseStatement {
+    return reflection.isInstance(item, RaiseStatement.$type);
+}
+
+export interface ReactionSpec extends langium.AstNode {
+    readonly $container: Transition;
+    readonly $type: 'ReactionSpec';
+    effect?: Effect;
+    guard?: Expression;
+    triggers: Array<Trigger>;
+}
+
+export const ReactionSpec = {
+    $type: 'ReactionSpec',
+    effect: 'effect',
+    guard: 'guard',
+    triggers: 'triggers'
+} as const;
+
+export function isReactionSpec(item: unknown): item is ReactionSpec {
+    return reflection.isInstance(item, ReactionSpec.$type);
+}
+
+export interface RealLiteral extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $type: 'RealLiteral';
+    value: string;
+}
+
+export const RealLiteral = {
+    $type: 'RealLiteral',
+    value: 'value'
+} as const;
+
+export function isRealLiteral(item: unknown): item is RealLiteral {
+    return reflection.isInstance(item, RealLiteral.$type);
 }
 
 export interface Region extends langium.AstNode {
@@ -110,12 +607,22 @@ export function isRegion(item: unknown): item is Region {
     return reflection.isInstance(item, Region.$type);
 }
 
+export type Scope = InterfaceScope | InternalScope;
+
+export const Scope = {
+    $type: 'Scope'
+} as const;
+
+export function isScope(item: unknown): item is Scope {
+    return reflection.isInstance(item, Scope.$type);
+}
+
 export interface State extends langium.AstNode {
     readonly $container: Region | State | StateMachine;
     readonly $type: 'State';
-    behaviors: Array<Behavior>;
     description?: string;
     name: string;
+    reactions: Array<LocalReaction>;
     regions: Array<Region>;
     transitions: Array<Transition>;
     vertices: Array<Vertex>;
@@ -123,9 +630,9 @@ export interface State extends langium.AstNode {
 
 export const State = {
     $type: 'State',
-    behaviors: 'behaviors',
     description: 'description',
     name: 'name',
+    reactions: 'reactions',
     regions: 'regions',
     transitions: 'transitions',
     vertices: 'vertices'
@@ -135,35 +642,24 @@ export function isState(item: unknown): item is State {
     return reflection.isInstance(item, State.$type);
 }
 
-export interface StateAction extends langium.AstNode {
-    readonly $container: State;
-    readonly $type: 'StateAction';
-    action: string;
-    kind: 'do' | 'entry' | 'exit';
-}
-
-export const StateAction = {
-    $type: 'StateAction',
-    action: 'action',
-    kind: 'kind'
-} as const;
-
-export function isStateAction(item: unknown): item is StateAction {
-    return reflection.isInstance(item, StateAction.$type);
-}
-
 export interface StateMachine extends langium.AstNode {
     readonly $type: 'StateMachine';
+    annotations: Array<Annotation>;
     description?: string;
     name: string;
+    namespace?: QualifiedName;
+    scopes: Array<Scope>;
     transitions: Array<Transition>;
     vertices: Array<Vertex>;
 }
 
 export const StateMachine = {
     $type: 'StateMachine',
+    annotations: 'annotations',
     description: 'description',
     name: 'name',
+    namespace: 'namespace',
+    scopes: 'scopes',
     transitions: 'transitions',
     vertices: 'vertices'
 } as const;
@@ -172,31 +668,155 @@ export function isStateMachine(item: unknown): item is StateMachine {
     return reflection.isInstance(item, StateMachine.$type);
 }
 
+export type Statement = ExpressionStatement | RaiseStatement;
+
+export const Statement = {
+    $type: 'Statement'
+} as const;
+
+export function isStatement(item: unknown): item is Statement {
+    return reflection.isInstance(item, Statement.$type);
+}
+
+export interface StringLiteral extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $type: 'StringLiteral';
+    value: string;
+}
+
+export const StringLiteral = {
+    $type: 'StringLiteral',
+    value: 'value'
+} as const;
+
+export function isStringLiteral(item: unknown): item is StringLiteral {
+    return reflection.isInstance(item, StringLiteral.$type);
+}
+
+export interface TimeTrigger extends langium.AstNode {
+    readonly $container: LocalReaction | ReactionSpec;
+    readonly $type: 'TimeTrigger';
+    kind: 'after' | 'every';
+    unit: string;
+    value: Expression;
+}
+
+export const TimeTrigger = {
+    $type: 'TimeTrigger',
+    kind: 'kind',
+    unit: 'unit',
+    value: 'value'
+} as const;
+
+export function isTimeTrigger(item: unknown): item is TimeTrigger {
+    return reflection.isInstance(item, TimeTrigger.$type);
+}
+
 export interface Transition extends langium.AstNode {
     readonly $container: Region | State | StateMachine;
     readonly $type: 'Transition';
-    effect?: string;
-    event?: string;
+    entryPoint?: string;
+    exitPoint?: string;
     final: boolean;
-    guard?: string;
     initial: boolean;
     source?: langium.Reference<Vertex>;
+    spec?: ReactionSpec;
     target?: langium.Reference<Vertex>;
 }
 
 export const Transition = {
     $type: 'Transition',
-    effect: 'effect',
-    event: 'event',
+    entryPoint: 'entryPoint',
+    exitPoint: 'exitPoint',
     final: 'final',
-    guard: 'guard',
     initial: 'initial',
     source: 'source',
+    spec: 'spec',
     target: 'target'
 } as const;
 
 export function isTransition(item: unknown): item is Transition {
     return reflection.isInstance(item, Transition.$type);
+}
+
+export type Trigger = BuiltinTrigger | EventTrigger | TimeTrigger;
+
+export const Trigger = {
+    $type: 'Trigger'
+} as const;
+
+export function isTrigger(item: unknown): item is Trigger {
+    return reflection.isInstance(item, Trigger.$type);
+}
+
+export interface TypeReference extends langium.AstNode {
+    readonly $container: CastExpression | EventDeclaration | OperationDeclaration | Parameter | VariableDeclaration;
+    readonly $type: 'TypeReference';
+    name: string;
+}
+
+export const TypeReference = {
+    $type: 'TypeReference',
+    name: 'name'
+} as const;
+
+export function isTypeReference(item: unknown): item is TypeReference {
+    return reflection.isInstance(item, TypeReference.$type);
+}
+
+export interface UnaryExpression extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $type: 'UnaryExpression';
+    operand: Expression;
+    operator: '!' | '+' | '-' | '~';
+}
+
+export const UnaryExpression = {
+    $type: 'UnaryExpression',
+    operand: 'operand',
+    operator: 'operator'
+} as const;
+
+export function isUnaryExpression(item: unknown): item is UnaryExpression {
+    return reflection.isInstance(item, UnaryExpression.$type);
+}
+
+export interface ValueOfExpression extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | LocalReaction | ParenthesizedExpression | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration;
+    readonly $type: 'ValueOfExpression';
+    event: langium.Reference<EventDeclaration>;
+}
+
+export const ValueOfExpression = {
+    $type: 'ValueOfExpression',
+    event: 'event'
+} as const;
+
+export function isValueOfExpression(item: unknown): item is ValueOfExpression {
+    return reflection.isInstance(item, ValueOfExpression.$type);
+}
+
+export interface VariableDeclaration extends langium.AstNode {
+    readonly $container: InterfaceScope | InternalScope;
+    readonly $type: 'VariableDeclaration';
+    const: boolean;
+    initialValue?: Expression;
+    name: string;
+    readonly: boolean;
+    type?: TypeReference;
+}
+
+export const VariableDeclaration = {
+    $type: 'VariableDeclaration',
+    const: 'const',
+    initialValue: 'initialValue',
+    name: 'name',
+    readonly: 'readonly',
+    type: 'type'
+} as const;
+
+export function isVariableDeclaration(item: unknown): item is VariableDeclaration {
+    return reflection.isInstance(item, VariableDeclaration.$type);
 }
 
 export type Vertex = PseudoState | State;
@@ -210,41 +830,354 @@ export function isVertex(item: unknown): item is Vertex {
 }
 
 export type HsmAstType = {
-    Behavior: Behavior
-    InternalTransition: InternalTransition
+    ActiveExpression: ActiveExpression
+    Annotation: Annotation
+    Argument: Argument
+    AssignmentExpression: AssignmentExpression
+    BinaryExpression: BinaryExpression
+    BoolLiteral: BoolLiteral
+    BuiltinTrigger: BuiltinTrigger
+    CastExpression: CastExpression
+    ConditionalExpression: ConditionalExpression
+    Declaration: Declaration
+    Effect: Effect
+    ElementReference: ElementReference
+    EventDeclaration: EventDeclaration
+    EventTrigger: EventTrigger
+    Expression: Expression
+    ExpressionStatement: ExpressionStatement
+    HexLiteral: HexLiteral
+    IntLiteral: IntLiteral
+    InterfaceScope: InterfaceScope
+    InternalScope: InternalScope
+    Literal: Literal
+    LocalReaction: LocalReaction
+    OperationDeclaration: OperationDeclaration
+    Parameter: Parameter
+    ParenthesizedExpression: ParenthesizedExpression
     PseudoState: PseudoState
+    RaiseStatement: RaiseStatement
+    ReactionSpec: ReactionSpec
+    RealLiteral: RealLiteral
     Region: Region
+    Scope: Scope
     State: State
-    StateAction: StateAction
     StateMachine: StateMachine
+    Statement: Statement
+    StringLiteral: StringLiteral
+    TimeTrigger: TimeTrigger
     Transition: Transition
+    Trigger: Trigger
+    TypeReference: TypeReference
+    UnaryExpression: UnaryExpression
+    ValueOfExpression: ValueOfExpression
+    VariableDeclaration: VariableDeclaration
     Vertex: Vertex
 }
 
 export class HsmAstReflection extends langium.AbstractAstReflection {
     override readonly types = {
-        Behavior: {
-            name: Behavior.$type,
+        ActiveExpression: {
+            name: ActiveExpression.$type,
+            properties: {
+                state: {
+                    name: ActiveExpression.state,
+                    referenceType: Vertex.$type
+                }
+            },
+            superTypes: [Expression.$type]
+        },
+        Annotation: {
+            name: Annotation.$type,
+            properties: {
+                arguments: {
+                    name: Annotation.arguments,
+                    defaultValue: [],
+                    optional: true
+                },
+                name: {
+                    name: Annotation.name
+                }
+            },
+            superTypes: []
+        },
+        Argument: {
+            name: Argument.$type,
+            properties: {
+                parameter: {
+                    name: Argument.parameter,
+                    optional: true
+                },
+                value: {
+                    name: Argument.value
+                }
+            },
+            superTypes: []
+        },
+        AssignmentExpression: {
+            name: AssignmentExpression.$type,
+            properties: {
+                left: {
+                    name: AssignmentExpression.left
+                },
+                operator: {
+                    name: AssignmentExpression.operator
+                },
+                value: {
+                    name: AssignmentExpression.value
+                }
+            },
+            superTypes: [Expression.$type]
+        },
+        BinaryExpression: {
+            name: BinaryExpression.$type,
+            properties: {
+                left: {
+                    name: BinaryExpression.left
+                },
+                operator: {
+                    name: BinaryExpression.operator
+                },
+                right: {
+                    name: BinaryExpression.right
+                }
+            },
+            superTypes: [Expression.$type]
+        },
+        BoolLiteral: {
+            name: BoolLiteral.$type,
+            properties: {
+                value: {
+                    name: BoolLiteral.value
+                }
+            },
+            superTypes: [Literal.$type]
+        },
+        BuiltinTrigger: {
+            name: BuiltinTrigger.$type,
+            properties: {
+                kind: {
+                    name: BuiltinTrigger.kind
+                }
+            },
+            superTypes: [Trigger.$type]
+        },
+        CastExpression: {
+            name: CastExpression.$type,
+            properties: {
+                operand: {
+                    name: CastExpression.operand
+                },
+                type: {
+                    name: CastExpression.type
+                }
+            },
+            superTypes: [Expression.$type]
+        },
+        ConditionalExpression: {
+            name: ConditionalExpression.$type,
+            properties: {
+                condition: {
+                    name: ConditionalExpression.condition
+                },
+                falseCase: {
+                    name: ConditionalExpression.falseCase
+                },
+                trueCase: {
+                    name: ConditionalExpression.trueCase
+                }
+            },
+            superTypes: [Expression.$type]
+        },
+        Declaration: {
+            name: Declaration.$type,
             properties: {
             },
             superTypes: []
         },
-        InternalTransition: {
-            name: InternalTransition.$type,
+        Effect: {
+            name: Effect.$type,
             properties: {
-                effect: {
-                    name: InternalTransition.effect,
+                statements: {
+                    name: Effect.statements,
+                    defaultValue: []
+                }
+            },
+            superTypes: []
+        },
+        ElementReference: {
+            name: ElementReference.$type,
+            properties: {
+                arguments: {
+                    name: ElementReference.arguments,
+                    defaultValue: [],
                     optional: true
                 },
-                event: {
-                    name: InternalTransition.event
+                call: {
+                    name: ElementReference.call,
+                    defaultValue: false,
+                    optional: true
                 },
-                guard: {
-                    name: InternalTransition.guard,
+                element: {
+                    name: ElementReference.element,
+                    referenceType: Declaration.$type
+                }
+            },
+            superTypes: [Expression.$type]
+        },
+        EventDeclaration: {
+            name: EventDeclaration.$type,
+            properties: {
+                direction: {
+                    name: EventDeclaration.direction,
+                    optional: true
+                },
+                name: {
+                    name: EventDeclaration.name
+                },
+                type: {
+                    name: EventDeclaration.type,
                     optional: true
                 }
             },
-            superTypes: [Behavior.$type]
+            superTypes: [Declaration.$type]
+        },
+        EventTrigger: {
+            name: EventTrigger.$type,
+            properties: {
+                event: {
+                    name: EventTrigger.event,
+                    referenceType: EventDeclaration.$type
+                }
+            },
+            superTypes: [Trigger.$type]
+        },
+        Expression: {
+            name: Expression.$type,
+            properties: {
+            },
+            superTypes: []
+        },
+        ExpressionStatement: {
+            name: ExpressionStatement.$type,
+            properties: {
+                expression: {
+                    name: ExpressionStatement.expression
+                }
+            },
+            superTypes: [Statement.$type]
+        },
+        HexLiteral: {
+            name: HexLiteral.$type,
+            properties: {
+                value: {
+                    name: HexLiteral.value
+                }
+            },
+            superTypes: [Literal.$type]
+        },
+        IntLiteral: {
+            name: IntLiteral.$type,
+            properties: {
+                value: {
+                    name: IntLiteral.value
+                }
+            },
+            superTypes: [Literal.$type]
+        },
+        InterfaceScope: {
+            name: InterfaceScope.$type,
+            properties: {
+                declarations: {
+                    name: InterfaceScope.declarations,
+                    defaultValue: [],
+                    optional: true
+                },
+                name: {
+                    name: InterfaceScope.name,
+                    optional: true
+                }
+            },
+            superTypes: [Scope.$type]
+        },
+        InternalScope: {
+            name: InternalScope.$type,
+            properties: {
+                declarations: {
+                    name: InternalScope.declarations,
+                    defaultValue: [],
+                    optional: true
+                }
+            },
+            superTypes: [Scope.$type]
+        },
+        Literal: {
+            name: Literal.$type,
+            properties: {
+            },
+            superTypes: [Expression.$type]
+        },
+        LocalReaction: {
+            name: LocalReaction.$type,
+            properties: {
+                effect: {
+                    name: LocalReaction.effect
+                },
+                guard: {
+                    name: LocalReaction.guard,
+                    optional: true
+                },
+                triggers: {
+                    name: LocalReaction.triggers,
+                    defaultValue: [],
+                    optional: true
+                }
+            },
+            superTypes: []
+        },
+        OperationDeclaration: {
+            name: OperationDeclaration.$type,
+            properties: {
+                name: {
+                    name: OperationDeclaration.name
+                },
+                parameters: {
+                    name: OperationDeclaration.parameters,
+                    defaultValue: [],
+                    optional: true
+                },
+                returnType: {
+                    name: OperationDeclaration.returnType,
+                    optional: true
+                }
+            },
+            superTypes: [Declaration.$type]
+        },
+        Parameter: {
+            name: Parameter.$type,
+            properties: {
+                name: {
+                    name: Parameter.name
+                },
+                type: {
+                    name: Parameter.type
+                },
+                varArgs: {
+                    name: Parameter.varArgs,
+                    defaultValue: false,
+                    optional: true
+                }
+            },
+            superTypes: []
+        },
+        ParenthesizedExpression: {
+            name: ParenthesizedExpression.$type,
+            properties: {
+                expression: {
+                    name: ParenthesizedExpression.expression
+                }
+            },
+            superTypes: [Expression.$type]
         },
         PseudoState: {
             name: PseudoState.$type,
@@ -257,6 +1190,48 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
                 }
             },
             superTypes: [Vertex.$type]
+        },
+        RaiseStatement: {
+            name: RaiseStatement.$type,
+            properties: {
+                event: {
+                    name: RaiseStatement.event,
+                    referenceType: EventDeclaration.$type
+                },
+                value: {
+                    name: RaiseStatement.value,
+                    optional: true
+                }
+            },
+            superTypes: [Statement.$type]
+        },
+        ReactionSpec: {
+            name: ReactionSpec.$type,
+            properties: {
+                effect: {
+                    name: ReactionSpec.effect,
+                    optional: true
+                },
+                guard: {
+                    name: ReactionSpec.guard,
+                    optional: true
+                },
+                triggers: {
+                    name: ReactionSpec.triggers,
+                    defaultValue: [],
+                    optional: true
+                }
+            },
+            superTypes: []
+        },
+        RealLiteral: {
+            name: RealLiteral.$type,
+            properties: {
+                value: {
+                    name: RealLiteral.value
+                }
+            },
+            superTypes: [Literal.$type]
         },
         Region: {
             name: Region.$type,
@@ -278,20 +1253,26 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: []
         },
+        Scope: {
+            name: Scope.$type,
+            properties: {
+            },
+            superTypes: []
+        },
         State: {
             name: State.$type,
             properties: {
-                behaviors: {
-                    name: State.behaviors,
-                    defaultValue: [],
-                    optional: true
-                },
                 description: {
                     name: State.description,
                     optional: true
                 },
                 name: {
                     name: State.name
+                },
+                reactions: {
+                    name: State.reactions,
+                    defaultValue: [],
+                    optional: true
                 },
                 regions: {
                     name: State.regions,
@@ -311,27 +1292,29 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: [Vertex.$type]
         },
-        StateAction: {
-            name: StateAction.$type,
-            properties: {
-                action: {
-                    name: StateAction.action
-                },
-                kind: {
-                    name: StateAction.kind
-                }
-            },
-            superTypes: [Behavior.$type]
-        },
         StateMachine: {
             name: StateMachine.$type,
             properties: {
+                annotations: {
+                    name: StateMachine.annotations,
+                    defaultValue: [],
+                    optional: true
+                },
                 description: {
                     name: StateMachine.description,
                     optional: true
                 },
                 name: {
                     name: StateMachine.name
+                },
+                namespace: {
+                    name: StateMachine.namespace,
+                    optional: true
+                },
+                scopes: {
+                    name: StateMachine.scopes,
+                    defaultValue: [],
+                    optional: true
                 },
                 transitions: {
                     name: StateMachine.transitions,
@@ -346,24 +1329,50 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: []
         },
+        Statement: {
+            name: Statement.$type,
+            properties: {
+            },
+            superTypes: []
+        },
+        StringLiteral: {
+            name: StringLiteral.$type,
+            properties: {
+                value: {
+                    name: StringLiteral.value
+                }
+            },
+            superTypes: [Literal.$type]
+        },
+        TimeTrigger: {
+            name: TimeTrigger.$type,
+            properties: {
+                kind: {
+                    name: TimeTrigger.kind
+                },
+                unit: {
+                    name: TimeTrigger.unit
+                },
+                value: {
+                    name: TimeTrigger.value
+                }
+            },
+            superTypes: [Trigger.$type]
+        },
         Transition: {
             name: Transition.$type,
             properties: {
-                effect: {
-                    name: Transition.effect,
+                entryPoint: {
+                    name: Transition.entryPoint,
                     optional: true
                 },
-                event: {
-                    name: Transition.event,
+                exitPoint: {
+                    name: Transition.exitPoint,
                     optional: true
                 },
                 final: {
                     name: Transition.final,
                     defaultValue: false,
-                    optional: true
-                },
-                guard: {
-                    name: Transition.guard,
                     optional: true
                 },
                 initial: {
@@ -376,6 +1385,10 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
                     referenceType: Vertex.$type,
                     optional: true
                 },
+                spec: {
+                    name: Transition.spec,
+                    optional: true
+                },
                 target: {
                     name: Transition.target,
                     referenceType: Vertex.$type,
@@ -383,6 +1396,70 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
                 }
             },
             superTypes: []
+        },
+        Trigger: {
+            name: Trigger.$type,
+            properties: {
+            },
+            superTypes: []
+        },
+        TypeReference: {
+            name: TypeReference.$type,
+            properties: {
+                name: {
+                    name: TypeReference.name
+                }
+            },
+            superTypes: []
+        },
+        UnaryExpression: {
+            name: UnaryExpression.$type,
+            properties: {
+                operand: {
+                    name: UnaryExpression.operand
+                },
+                operator: {
+                    name: UnaryExpression.operator
+                }
+            },
+            superTypes: [Expression.$type]
+        },
+        ValueOfExpression: {
+            name: ValueOfExpression.$type,
+            properties: {
+                event: {
+                    name: ValueOfExpression.event,
+                    referenceType: EventDeclaration.$type
+                }
+            },
+            superTypes: [Expression.$type]
+        },
+        VariableDeclaration: {
+            name: VariableDeclaration.$type,
+            properties: {
+                const: {
+                    name: VariableDeclaration.const,
+                    defaultValue: false,
+                    optional: true
+                },
+                initialValue: {
+                    name: VariableDeclaration.initialValue,
+                    optional: true
+                },
+                name: {
+                    name: VariableDeclaration.name
+                },
+                readonly: {
+                    name: VariableDeclaration.readonly,
+                    defaultValue: false,
+                    optional: true
+                },
+                type: {
+                    name: VariableDeclaration.type,
+                    optional: true
+                }
+            },
+            superTypes: [Declaration.$type]
         },
         Vertex: {
             name: Vertex.$type,

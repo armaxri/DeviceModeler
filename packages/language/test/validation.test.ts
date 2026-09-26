@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { errors, example, parse, warnings } from './helpers.js';
 
 describe('examples', () => {
-    for (const file of ['traffic-light.hsm', 'cd-player.hsm', 'keyboard.hsm']) {
+    for (const file of ['traffic-light.hsm', 'cd-player.hsm', 'keyboard.hsm', 'door.hsm']) {
         test(`${file} is valid`, async () => {
             const parsed = await parse(example(file));
             expect(parsed.hasSyntaxErrors).toBe(false);
@@ -18,8 +18,8 @@ describe('linking', () => {
             [*] -> A
             state A { [*] -> A1 state A1 }
             state B
-            B -> A1 : go
-            A1 -> B : back
+            B -> A1
+            A1 -> B
         }`);
         expect(errors(parsed)).toEqual([]);
         expect(parsed.model.transitions[1].target?.ref?.name).toBe('A1');
@@ -34,7 +34,9 @@ describe('linking', () => {
 describe('validation', () => {
     test('duplicate names', async () => {
         const parsed = await parse(`statemachine M { [*] -> A state A state B { [*] -> A state A } }`);
-        expect(errors(parsed)).toContain(`Duplicate name 'A'. Names of states must be unique within a state machine.`);
+        expect(errors(parsed)).toEqual([]);
+        const siblings = await parse(`statemachine M { [*] -> A state A state B { [*] -> C state C state C } }`);
+        expect(errors(siblings)).toContain(`Duplicate name 'C'. Sibling states must have different names.`);
     });
 
     test('multiple initial transitions', async () => {
@@ -51,14 +53,14 @@ describe('validation', () => {
         const parsed = await parse(`statemachine M { [*] -> S state S {
             region { [*] -> A state A }
             region { [*] -> B state B }
-            A -> B : x
+            A -> B
         } }`);
         expect(errors(parsed).join()).toContain('Transitions between orthogonal regions are not allowed');
     });
 
     test('non-deterministic transitions', async () => {
-        const parsed = await parse(`statemachine M { [*] -> A state A state B A -> B : e B -> A : x A -> A : e }`);
-        expect(warnings(parsed).join()).toContain(`Non-deterministic: 'A' has several unguarded transitions for event 'e'`);
+        const parsed = await parse(`statemachine M { interface: in event e in event x [*] -> A state A state B A -> B : e B -> A : x A -> A : e }`);
+        expect(warnings(parsed).join()).toContain(`'A' has several unguarded transitions for the same event`);
     });
 
     test('history on top level', async () => {

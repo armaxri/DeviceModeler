@@ -1,7 +1,8 @@
 import type { AstNode } from 'langium';
 import type { ELK as ElkApi, ElkExtendedEdge, ElkNode, LayoutOptions } from 'elkjs/lib/elk-api.js';
 import * as ast from '../generated/ast.js';
-import { scopeOf, transitionLabel, type ScopeContainer } from '../model-utils.js';
+import { nodeText, scopeOf, transitionLabel, type ScopeContainer } from '../model-utils.js';
+import { qualifiedName } from '../hsm-scope.js';
 import type {
     DiagramEdge, DiagramGraph, DiagramNode, DiagramNodeKind, LayoutDirection, LayoutOptionsInput, LayoutResult, Point, TextMeasure, TextStyle
 } from './diagram-model.js';
@@ -23,7 +24,10 @@ export const DiagramMetrics = {
         choice: 26,
         junction: 12,
         history: 26,
-        deephistory: 26
+        deephistory: 26,
+        sync: 44,
+        entry: 16,
+        exit: 16
     } as Record<string, number>
 };
 
@@ -223,10 +227,19 @@ class DiagramBuilder {
     }
 
     private createVertex(vertex: ast.Vertex, parentId: string, parentElk: ElkNode): DiagramNode {
-        const id = this.uniqueId(vertex.name || '#unnamed');
+        const id = this.uniqueId(vertex.name ? qualifiedName(vertex) : '#unnamed');
         if (ast.isPseudoState(vertex)) {
             const node = this.pseudoNode(id, vertex.kind as DiagramNodeKind, DiagramMetrics.pseudoSize[vertex.kind] ?? 20);
             node.name = vertex.name;
+            if (vertex.kind === 'sync') {
+                // synchronization bar perpendicular to the layout direction
+                const thickness = 7;
+                if (this.options.direction === 'DOWN') {
+                    node.height = thickness;
+                } else {
+                    node.width = thickness;
+                }
+            }
             this.register(node, this.elkLeaf(id, node), parentId, parentElk, vertex);
             return node;
         }
@@ -496,12 +509,8 @@ export function stateBodyLines(state: ast.State): string[] {
     if (state.description) {
         lines.push(...state.description.split(/\r?\n/));
     }
-    for (const behavior of state.behaviors) {
-        if (ast.isStateAction(behavior)) {
-            lines.push(`${behavior.kind} / ${behavior.action}`);
-        } else {
-            lines.push(transitionLabel(behavior));
-        }
+    for (const reaction of state.reactions) {
+        lines.push(nodeText(reaction));
     }
     return lines;
 }

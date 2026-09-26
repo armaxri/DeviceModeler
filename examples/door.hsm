@@ -1,0 +1,60 @@
+// Entry points, exit nodes and synchronization (fork / join) in the style of itemis CREATE.
+statemachine Door {
+    @EventDriven
+    @ChildFirstExecution
+
+    interface:
+        in event open
+        in event close
+        in event obstacle
+        in event motorStopped
+        out event alarm
+        var cycles : integer = 0
+
+    [*] -> Closed
+
+    state Closed {
+        entry / cycles += 1
+    }
+
+    state Moving {
+        entry Opening
+        entry Closing
+        exit Blocked
+
+        state Up
+        state Down
+        Opening -> Up
+        Closing -> Down
+        Up -> Blocked : obstacle
+        Down -> Blocked : obstacle
+    }
+
+    state Service {
+        region Lock {
+            [*] -> Unlocked
+            state Unlocked
+            state Locked
+            Unlocked -> Locked : close
+        }
+        region Light {
+            [*] -> Off
+            state Off
+            state On
+            Off -> On : open
+        }
+    }
+
+    sync Fork
+    sync Join
+
+    Closed -> Moving : open # >Opening
+    Moving.Up -> Closed : motorStopped
+    Moving.Down -> Closed : motorStopped
+    Moving -> Fork : / raise alarm # Blocked>
+    Fork -> Service.Locked
+    Fork -> Service.On
+    Service.Locked -> Join
+    Service.On -> Join
+    Join -> Closed
+}

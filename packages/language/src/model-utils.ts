@@ -106,19 +106,25 @@ export function enclosingRegion(node: AstNode): Region | undefined {
     return AstUtils.getContainerOfType(node.$container, isRegion);
 }
 
-/** Label of a transition in the notation `event [guard] / effect`. */
-export function transitionLabel(t: { event?: string, guard?: string, effect?: string }): string {
-    const parts: string[] = [];
-    if (t.event) {
-        parts.push(t.event);
+/** Source text of an AST node with normalized white space (e.g. `ev [x > 3] / x += 1`). */
+export function nodeText(node: AstNode | undefined): string {
+    const cst = node?.$cstNode;
+    if (!cst) {
+        return '';
     }
-    if (t.guard !== undefined) {
-        parts.push(`[${t.guard}]`);
+    return cst.text.replace(/\s+/g, ' ').trim();
+}
+
+/** Label of a transition (`trigger, trigger [guard] / effect`), without source and target. */
+export function transitionLabel(transition: Transition): string {
+    const spec = nodeText(transition.spec);
+    if (transition.entryPoint) {
+        return `${spec} # >${transition.entryPoint}`.trim();
     }
-    if (t.effect !== undefined) {
-        parts.push(`/ ${t.effect}`);
+    if (transition.exitPoint) {
+        return `${spec} # ${transition.exitPoint}>`.trim();
     }
-    return parts.join(' ');
+    return spec;
 }
 
 /** Human readable name of the given container, used in messages. */
