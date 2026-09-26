@@ -1,0 +1,76 @@
+# Roadmap
+
+Goal: HSM Modeler becomes a replacement for **itemis CREATE** (formerly YAKINDU Statechart
+Tools): the same statechart language and semantics, plus a web-based graphical editor with a
+PlantUML-like look.
+
+Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be decided
+
+## Phase 0 – Foundation ✅
+
+- ✅ Langium language, ELK layout, Sprotty diagram with PlantUML look, Monaco editor
+- ✅ Graphical editing as text edits (undo, comments and formatting preserved)
+- ✅ Composite states, orthogonal regions, choice, junction, shallow and deep history, final states
+- ✅ PlantUML export, SVG export, CLI
+
+## Phase 1 – Language parity with itemis CREATE 🚧
+
+- ✅ Definition section: `namespace`, annotations, named and unnamed interfaces, `internal` scope
+- ✅ Declarations: `in`/`out`/internal events with payload types, `var`, `var readonly`, `const`,
+  operations with (named, variable-length) parameters
+- ✅ Expression language: logical, bitwise, relational, arithmetic, conditional, assignments,
+  `raise`, `valueof`, `active`, casts (`as`)
+- ✅ Reactions: multiple triggers, `after`/`every` time triggers, `entry`, `exit`, `always`,
+  `oncycle`, `else`/`default`, guards, multi-statement effects, local reactions
+- ✅ Partially qualified state names (`Active.Playing`); the same simple name may appear in
+  different composite states
+- 🚧 Type system and full validation of expressions and declarations
+- 📋 Imports of other statecharts / header files
+
+## Phase 2 – Structure parity 🚧
+
+- ✅ Entry points (`entry E` + `# >E`), exit nodes (`exit X` + `# X>`), synchronization (`sync`)
+- 🚧 Diagram rendering and palette tools for the new pseudo states
+- 🚧 Definition section shown as a box in the diagram
+- 🚧 Transition priorities shown in the diagram
+- 📋 Submachines (a state that references another statechart)
+- 💭 State names with spaces (currently mapped to identifiers and the original name kept as the
+  description)
+
+## Phase 3 – Migration from itemis CREATE 🚧
+
+- 🚧 `.sct` importer (CLI `hsm import`, "Open…" in the web editor)
+- 📋 Import test suite based on real-world models from users
+- 💭 Keep manual layout from `.sct` notation models (saved positions)
+
+## Phase 4 – Execution 🚧
+
+- ✅ Execution semantics specified in [docs/semantics.md](docs/semantics.md): cycle-based and
+  event-driven, parent-first and child-first
+- 🚧 Interpreter with a virtual clock (`hsm simulate`)
+- 🚧 Shared conformance suite (scenario tests) for the interpreter and all code generators
+- 📋 Simulation in the web editor: raise events, inspect and change variables, advance time,
+  animated active states and taken transitions, breakpoints
+- 📋 `@SuperSteps`, `@EventBuffering`, `@InEventQueue`
+
+## Phase 5 – Code generation and testing 📋
+
+- 📋 C code generator (timer service and operation callbacks), verified against the conformance
+  suite by compiling and running the scenarios
+- 📋 Unit test language for statecharts (like SCTUnit) with a test runner in the CLI and the editor
+- 💭 Further generator targets (C++, Java, Python, TypeScript) depending on demand
+- 💭 Generator configuration model (like itemis `.sgen` files)
+
+## Phase 6 – Tooling 💭
+
+- 💭 VS Code extension (Langium language server + `sprotty-vscode` diagram)
+- 💭 Multi-file projects and workspaces in the web editor
+- 💭 Manual layout adjustments stored in the model
+- 💭 Coverage of states and transitions from simulation and tests
+
+## Open questions
+
+- Which code generator targets are needed first?
+- Is simulation or SCTUnit-style testing used in current projects?
+- Are hand-arranged diagram layouts important, or is automatic layout acceptable?
+- Is deep C/C++ header integration (using C types in the statechart) required?
