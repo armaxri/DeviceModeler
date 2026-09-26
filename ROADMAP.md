@@ -4,7 +4,7 @@ Goal: HSM Modeler becomes a replacement for **itemis CREATE** (formerly YAKINDU 
 Tools): the same statechart language and semantics, plus a web-based graphical editor with a
 PlantUML-like look.
 
-Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be decided
+Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be decided · 🧪 experimental (separate branch)
 
 ## Phase 0 – Foundation ✅
 
@@ -49,7 +49,9 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 - 📋 Remaining gaps: `null`, type aliases, transitions handling several exit nodes or entry points at
   once, entry points with the same name in several orthogonal regions
 - 📋 Import test suite based on real-world models from users
-- 💭 Keep manual layout from `.sct` notation models (saved positions)
+- 🧪 Keep manual layout from `.sct` notation models (saved positions): experimental on the branch
+  `claude/manual-layout` – positions, sizes, region orientation and bend points are imported into
+  `<model>.hsm.layout` ([docs/manual-layout.md](docs/manual-layout.md))
 
 ## Phase 4 – Execution ✅
 
@@ -87,7 +89,9 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 
 - 💭 VS Code extension (Langium language server + `sprotty-vscode` diagram)
 - 💭 Multi-file projects and workspaces in the web editor
-- 💭 Manual layout adjustments stored in the model
+- 🧪 Manual layout adjustments: experimental on the branch `claude/manual-layout` – stored in a sidecar
+  file `<model>.hsm.layout` instead of the model; move / resize states, bend points, label offsets,
+  auto-arrange / reset, undo shared with the text ([docs/manual-layout.md](docs/manual-layout.md))
 - 💭 Coverage of states and transitions from simulation and tests
 
 ## Open questions

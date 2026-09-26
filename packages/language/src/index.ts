@@ -10,6 +10,7 @@ export * from './model-utils.js';
 export * from './generator/plantuml.js';
 export * from './diagram/diagram-model.js';
 export * from './diagram/layout.js';
+export * from './diagram/manual-layout.js';
 export * from './edit/model-edits.js';
 export * from './hsm-linker.js';
 export * from './hsm-expression-validator.js';

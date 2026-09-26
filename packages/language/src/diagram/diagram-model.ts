@@ -58,6 +58,8 @@ export interface DiagramNode {
     regions?: boolean;
     /** Index of a region within its state. */
     index?: number;
+    /** Regions (manual layout): where the separator line to the previous region is drawn (default: by layout direction). */
+    separator?: 'top' | 'left';
     children: DiagramNode[];
 }
 

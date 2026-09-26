@@ -7,13 +7,18 @@ import {
     EditError, ModelEditor, allVertices, applyEdits, definitionRange, generatePlantUml, isEventDeclaration, isInterfaceScope, isOperationDeclaration,
     isScopeContainer, isValidIdentifier, isPseudoState, isRegion, isState, isStateMachine, isTransition, isVertex, layoutStateMachine,
     qualifiedName, scopeOf, siblingVertices, transitionLabel, finalNodeId, DEFINITION_ID, MACHINE_ID,
-    nodeText as nodeTextOf, type DeletionTarget, type DiagramNode, type DiagramNodeKind, type EdgeRouting, type EditResult, type LayoutDirection, type LayoutResult,
+    nodeText as nodeTextOf, type DeletionTarget, type DiagramEdge, type DiagramNode, type DiagramNodeKind, type EdgeRouting, type EditResult, type LayoutDirection, type LayoutResult,
     type NewVertexKind, type ParsedModel, type ScopeContainer, type TransitionSource, type TransitionTarget, type Vertex
 } from 'hsm-language';
 import { importSct } from 'hsm-language';
+import {
+    LAYOUT_FILE_EXTENSION, applyManualLayout, captureLayout, cloneManualLayout as cloneLayout, contentOrigin, createManualLayout, layoutFileName, parseManualLayout, serializeManualLayout,
+    toFrameCoordinates, type ManualLayout, type Point
+} from 'hsm-language';
 import { EDITOR_THEMES, HsmLanguageSupport, LANGUAGE_ID, describeSyntaxProblem } from './language-support.js';
 import { createDiagramContainer } from './diagram/di.config.js';
-import type { DiagramCallbacks } from './diagram/listeners.js';
+import type { DiagramCallbacks, DragInfo } from './diagram/listeners.js';
+import { LayoutHistory, TrackingModelEditor, applyKeyChanges, loadStoredLayout, movedId, storeLayout } from './diagram/manual-layout-support.js';
 import { toSchema, type Issue } from './diagram/model.js';
 import { canvasTextMeasure } from './diagram/text-measure.js';
 import { createWorkerElk } from './diagram/elk.js';
@@ -61,8 +66,15 @@ const TOOLS: Array<ToolDescription | 'separator'> = [
 
 interface ModelState {
     parsed: ParsedModel;
+    /** The automatic layout (reused for changes of the manual layout). */
+    auto: LayoutResult;
+    /** The diagram shown: the automatic layout or the manual layout applied to it. */
     layout: LayoutResult;
+    /** Manual layout mode: all nodes pinned at their current positions (the base of layout changes). */
+    effective?: ManualLayout;
     nodes: Map<string, DiagramNode>;
+    /** diagram id -> id of the parent node (MACHINE_ID for top-level nodes) */
+    parents: Map<string, string>;
     issues: Map<string, Issue>;
 }
 
@@ -107,6 +119,11 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
     private fileName = 'statemachine.hsm';
     /** Fit the diagram to the screen once the next layout has been rendered. */
     private fitOnNextRender = false;
+    /** The layout of the current file (sidecar `.hsm.layout`, kept in the local storage); undefined: automatic layout. */
+    private manualLayout?: ManualLayout;
+    private readonly layoutHistory = new LayoutHistory();
+    /** `alternativeVersionId` of the text model after the last change. */
+    private textVersion = 1;
 
     private tool: Tool = 'select';
     private stickyTool = false;
@@ -184,12 +201,15 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         });
         this.decorations = this.editor.createDecorationsCollection();
         byId('file-name').textContent = this.fileName;
-        this.editor.onDidChangeModelContent(() => {
+        this.manualLayout = loadStoredLayout(this.fileName);
+        this.textVersion = this.editor.getModel()!.getAlternativeVersionId();
+        this.editor.onDidChangeModelContent(event => {
             try {
                 localStorage.setItem(STORAGE_TEXT, this.editor.getValue());
             } catch {
                 // storage is not available
             }
+            this.trackTextHistory(event);
             if (!this.applyingEdit) {
                 this.scheduleUpdate();
             }
@@ -248,16 +268,24 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
                 this.loadText(example.text, example.fileName);
             }
         });
-        byId('btn-new').addEventListener('click', () => this.loadText(EMPTY_MODEL, 'statemachine.hsm'));
+        byId('btn-new').addEventListener('click', () => this.loadText(EMPTY_MODEL, 'statemachine.hsm', null));
         const fileInput = byId<HTMLInputElement>('file-input');
         byId('btn-open').addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', async () => {
-            const file = fileInput.files?.[0];
+            const files = [...fileInput.files ?? []];
+            // a layout file (`model.hsm.layout`) can be opened together with its model or alone (for the current model)
+            const layoutFile = files.find(f => f.name.endsWith(LAYOUT_FILE_EXTENSION));
+            const file = files.find(f => f !== layoutFile);
+            if (layoutFile && !file) {
+                await this.openLayoutFile(layoutFile);
+                fileInput.value = '';
+                return;
+            }
             if (file && /\.sct$/i.test(file.name)) {
-                // itemis CREATE / YAKINDU statechart: convert to HSM text
+                // itemis CREATE / YAKINDU statechart: convert to HSM text (and the diagram into a manual layout)
                 try {
-                    const { text, warnings } = importSct(await file.text());
-                    this.loadText(text, file.name.replace(/\.sct$/i, '.hsm'));
+                    const { text, warnings, layout } = importSct(await file.text());
+                    this.loadText(text, file.name.replace(/\.sct$/i, '.hsm'), layout ?? null);
                     warnings.forEach(warning => console.warn(`${file.name}: ${warning}`));
                     this.setStatus(warnings.length > 0 ? `Imported ${file.name} with ${warnings.length} warning(s): ${warnings.join(' ')}` : `Imported ${file.name}.`,
                         warnings.length > 0 ? 'warning' : 'info');
@@ -265,11 +293,26 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
                     this.setStatus(`Import of ${file.name} failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
                 }
             } else if (file) {
-                this.loadText(await file.text(), file.name);
+                let layout: ManualLayout | undefined;
+                if (layoutFile) {
+                    try {
+                        layout = parseManualLayout(await layoutFile.text());
+                    } catch (error) {
+                        this.setStatus(`${layoutFile.name}: ${error instanceof Error ? error.message : String(error)}`, 'error');
+                    }
+                }
+                this.loadText(await file.text(), file.name, layout);
             }
             fileInput.value = '';
         });
-        byId('btn-save').addEventListener('click', () => download(this.fileName, this.editor.getValue(), 'text/plain'));
+        byId('btn-save').addEventListener('click', () => {
+            download(this.fileName, this.editor.getValue(), 'text/plain');
+            if (this.manualLayout) {
+                // the layout is saved next to the model (sidecar file)
+                setTimeout(() => download(layoutFileName(this.fileName), serializeManualLayout(this.manualLayout!), 'application/json'), 300);
+            }
+        });
+        this.bindLayoutControls();
         byId('btn-undo').addEventListener('click', () => this.undo());
         byId('btn-redo').addEventListener('click', () => this.redo());
         byId('btn-format').addEventListener('click', () => this.editor.getAction('editor.action.formatDocument')?.run());
@@ -279,6 +322,11 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         direction.addEventListener('change', () => {
             this.settings.direction = direction.value as LayoutDirection;
             this.saveSettings();
+            if (this.manualLayout) {
+                // new elements of a manual layout are placed in this direction
+                this.manualLayout = { ...this.manualLayout, direction: this.settings.direction };
+                storeLayout(this.fileName, this.manualLayout);
+            }
             this.fitOnNextRender = true;
             this.update(true);
         });
@@ -450,9 +498,9 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         if (!forceLayout && this.state?.parsed.text === text) {
             return;
         }
-        let layout: LayoutResult;
+        let auto: LayoutResult;
         try {
-            layout = await layoutStateMachine(parsed.model, {
+            auto = await layoutStateMachine(parsed.model, {
                 direction: this.settings.direction,
                 routing: this.settings.routing,
                 measure: canvasTextMeasure,
@@ -468,13 +516,9 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         if (version !== this.updateVersion) {
             return;
         }
-        const nodes = new Map<string, DiagramNode>();
-        const collect = (node: DiagramNode) => {
-            nodes.set(node.id, node);
-            node.children.forEach(collect);
-        };
-        layout.graph.children.forEach(collect);
-        this.state = { parsed, layout, nodes, issues: this.computeIssues(parsed, layout, nodes) };
+        this.state = this.createState(parsed, auto);
+        const layout = this.state.layout;
+        const nodes = this.state.nodes;
 
         // keep the selection for elements which still exist
         for (const id of [...this.selection]) {
@@ -506,6 +550,40 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         }
     }
 
+    /** The diagram of the model: the automatic layout, adjusted by the manual layout in the manual layout mode. */
+    private createState(parsed: ParsedModel, auto: LayoutResult): ModelState {
+        let layout: LayoutResult = auto;
+        let effective: ManualLayout | undefined;
+        if (this.manualLayout?.mode === 'manual') {
+            const result = applyManualLayout(auto, this.manualLayout, { direction: this.settings.direction, measure: canvasTextMeasure });
+            layout = result;
+            effective = result.effective;
+        }
+        const nodes = new Map<string, DiagramNode>();
+        const parents = new Map<string, string>();
+        const collect = (node: DiagramNode, parent: string) => {
+            nodes.set(node.id, node);
+            parents.set(node.id, parent);
+            node.children.forEach(child => collect(child, node.id));
+        };
+        layout.graph.children.forEach(child => collect(child, MACHINE_ID));
+        return { parsed, auto, layout, effective, nodes, parents, issues: this.computeIssues(parsed, layout, nodes) };
+    }
+
+    /** Applies a changed manual layout (the automatic layout of the unchanged text is reused). */
+    private relayout(): void {
+        if (!this.state) {
+            return;
+        }
+        this.state = this.createState(this.state.parsed, this.state.auto);
+        for (const id of [...this.selection]) {
+            if (!this.state.layout.elements.has(id)) {
+                this.selection.delete(id);
+            }
+        }
+        this.render();
+    }
+
     private async render(): Promise<void> {
         if (!this.state) {
             return;
@@ -518,7 +596,8 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
             pendingSource: this.pendingSource,
             activeStates: flags?.active,
             recentTransitions: flags?.recent,
-            breakpoints: flags?.breakpoints
+            breakpoints: flags?.breakpoints,
+            manualLayout: this.isManualLayout()
         });
         if (!this.rendered) {
             this.rendered = true;
@@ -607,9 +686,12 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
 
     /**
      * Computes text edits based on the current model and applies them to the editor
-     * (undoable with Ctrl+Z), then updates the diagram.
+     * (undoable with Ctrl+Z), then updates the diagram. If there is a manual layout, its keys follow
+     * renamed, moved and deleted elements (`layoutChange` may adjust it further, e.g. the position of a
+     * moved state); the layout change is undone together with the text edit.
      */
-    async applyEdit(producer: (editor: ModelEditor, state: ModelState) => EditResult | undefined): Promise<boolean> {
+    async applyEdit(producer: (editor: ModelEditor, state: ModelState) => EditResult | undefined,
+        layoutChange?: (layout: ManualLayout) => ManualLayout): Promise<boolean> {
         if (this.simulation) {
             this.setStatus('Stop the simulation to edit the model.', 'warning');
             return false;
@@ -622,8 +704,9 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
             return false;
         }
         let result: EditResult | undefined;
+        const editor = new TrackingModelEditor(this.state.parsed.text, this.state.parsed.model, this.state.layout.ids);
         try {
-            result = producer(new ModelEditor(this.state.parsed.text, this.state.parsed.model), this.state);
+            result = producer(editor, this.state);
         } catch (error) {
             if (error instanceof EditError) {
                 this.setStatus(error.message, 'error');
@@ -645,6 +728,7 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
             const end = model.getPositionAt(edit.offset + edit.length);
             return { range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column), text: edit.text, forceMoveMarkers: true };
         });
+        const layoutBase = this.manualLayout && (this.state.effective ? { ...this.state.effective, mode: this.manualLayout.mode } : this.manualLayout);
         this.applyingEdit = true;
         try {
             this.editor.pushUndoStop();
@@ -652,6 +736,11 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
             this.editor.pushUndoStop();
         } finally {
             this.applyingEdit = false;
+        }
+        if (layoutBase && (editor.changes.length > 0 || layoutChange)) {
+            let layout = applyKeyChanges(layoutBase, editor.changes);
+            layout = layoutChange ? layoutChange(layout) : layout;
+            this.setLayout(layout, { record: true, linked: true, relayout: false });
         }
         this.pendingSelectOffset = result.selectOffset;
         await this.update();
@@ -726,9 +815,19 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         this.undoRedo('redo');
     }
 
-    /** Undo / redo on the text model, also when the editor does not have the focus. */
+    /**
+     * Undo / redo on the text model, also when the editor does not have the focus. Layout changes are
+     * undone first if they were made after the last text edit (the text still has the version it had then).
+     */
     private undoRedo(command: 'undo' | 'redo'): void {
         if (this.simulation) {
+            return;
+        }
+        const version = this.editor.getModel()!.getAlternativeVersionId();
+        const entry = command === 'undo' ? this.layoutHistory.layoutUndo(version) : this.layoutHistory.layoutRedo(version);
+        if (entry) {
+            this.setLayout(command === 'undo' ? entry.before : entry.after, { record: false });
+            this.setStatus(`${command === 'undo' ? 'Undid' : 'Redid'} the layout change.`);
             return;
         }
         const model = this.editor.getModel() as unknown as Partial<Record<'undo' | 'redo', () => void>> | null;
@@ -741,9 +840,18 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         }
     }
 
-    private loadText(text: string, fileName: string): void {
+    /**
+     * Loads a model. `layout`: its manual layout (undefined: the layout stored for the file name, null: none).
+     */
+    private loadText(text: string, fileName: string, layout?: ManualLayout | null): void {
         this.stopSimulation();
         this.fileName = fileName;
+        this.layoutHistory.clear();
+        this.manualLayout = layout === undefined ? loadStoredLayout(fileName) : layout ?? undefined;
+        if (layout !== undefined) {
+            storeLayout(fileName, this.manualLayout);
+        }
+        this.updateLayoutControls();
         byId('file-name').textContent = fileName;
         try {
             localStorage.setItem(STORAGE_FILE, fileName);
@@ -754,6 +862,7 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         this.pendingSource = undefined;
         this.fitOnNextRender = true;
         this.editor.setValue(text);
+        this.layoutHistory.clear();
         this.update(true);
     }
 
@@ -1011,9 +1120,19 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         }
     }
 
-    dragEnd(draggedId: string, dropTargetId: string | undefined): void {
+    /**
+     * A vertex was dragged. Automatic layout: dropping it onto another state (or region, or the canvas)
+     * moves it there in the model, otherwise the computed layout is restored. Manual layout: the moved
+     * vertices keep their new positions; with Shift held, the vertex is moved into the state below the mouse.
+     */
+    dragEnd(draggedId: string, dropTargetId: string | undefined, info: DragInfo): void {
         if (this.simulation) {
             this.render();
+            return;
+        }
+        const manual = this.isManualLayout();
+        if (manual && !info.shiftKey) {
+            this.moveNodes(info);
             return;
         }
         const vertex = this.astOf(draggedId);
@@ -1025,11 +1144,28 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
         }
         const targetContainer = isState(dropNode) && dropNode.regions.length === 0 ? dropNode : container;
         if (targetContainer === vertex.$container) {
-            // no structural change: restore the computed layout
-            this.render();
+            // no structural change: restore the computed layout (manual layout: keep the new position)
+            if (manual) {
+                this.moveNodes(info);
+            } else {
+                this.render();
+            }
             return;
         }
-        this.applyEdit(editor => editor.moveVertex(vertex, targetContainer)).then(done => {
+        const moved = info.moved.find(m => m.id === draggedId);
+        const layoutChange = (layout: ManualLayout): ManualLayout => {
+            const id = movedId(vertex, targetContainer);
+            const nodes = { ...layout.nodes };
+            delete nodes[id];
+            const parent = this.state?.layout.ids.get(isState(targetContainer) && targetContainer.regions.length > 0 ? targetContainer.regions[0] : targetContainer);
+            if (manual && moved && parent) {
+                // the position where it was dropped, relative to the new parent
+                const origin = this.absolutePosition(parent);
+                nodes[id] = this.clampToParent(parent, { x: moved.absoluteX - origin.x, y: moved.absoluteY - origin.y });
+            }
+            return { ...layout, nodes };
+        };
+        this.applyEdit(editor => editor.moveVertex(vertex, targetContainer), layoutChange).then(done => {
             if (!done) {
                 this.render();
             }
@@ -1221,6 +1357,236 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
     }
 
     // -----------------------------------------------------------------------------------------
+    // Manual layout (experimental): positions stored in a sidecar file, see docs/manual-layout.md
+
+    isManualLayout(): boolean {
+        return this.manualLayout?.mode === 'manual' && !this.simulation;
+    }
+
+    private bindLayoutControls(): void {
+        byId('btn-layout-auto').addEventListener('click', () => this.setLayoutMode('auto'));
+        byId('btn-layout-manual').addEventListener('click', () => this.setLayoutMode('manual'));
+        byId('btn-arrange').addEventListener('click', () => this.autoArrange());
+        byId('btn-reset-layout').addEventListener('click', () => this.resetLayout());
+        this.updateLayoutControls();
+    }
+
+    private updateLayoutControls(): void {
+        const manual = this.manualLayout?.mode === 'manual';
+        byId('btn-layout-auto').classList.toggle('active', !manual);
+        byId('btn-layout-manual').classList.toggle('active', manual);
+        byId('btn-arrange').hidden = !manual;
+        byId('btn-reset-layout').hidden = !this.manualLayout;
+        byId('diagram-area').classList.toggle('manual-layout', manual);
+    }
+
+    /** Switches between the automatic and the manual layout; the manual layout starts with the current diagram. */
+    setLayoutMode(mode: 'auto' | 'manual'): void {
+        if (!this.state || this.simulation || (this.manualLayout?.mode ?? 'auto') === mode) {
+            return;
+        }
+        if (mode === 'auto') {
+            this.setLayout({ ...this.manualLayout!, mode: 'auto' }, { record: true });
+            this.setStatus('Automatic layout. The manual layout is kept: switch back to Manual to use it again.');
+            return;
+        }
+        const layout = this.manualLayout && Object.keys(this.manualLayout.nodes).length > 0
+            ? { ...this.manualLayout, mode: 'manual' as const }
+            : captureLayout(this.state.auto.graph, this.settings.direction);
+        this.setLayout(layout, { record: true });
+        this.setStatus('Manual layout: drag states to move them (hold Shift while dropping to move a state into another state), '
+            + 'drag the corner of a selected state to resize it, double-click a transition to add a bend point.');
+    }
+
+    /** Arranges everything automatically and keeps the result as the manual layout. */
+    autoArrange(): void {
+        if (!this.state || this.simulation) {
+            return;
+        }
+        this.setLayout(captureLayout(this.state.auto.graph, this.settings.direction), { record: true });
+        this.setStatus('Arranged automatically – the positions can be adjusted by hand (Ctrl+Z restores the previous layout).');
+    }
+
+    /** Discards the manual layout. */
+    resetLayout(): void {
+        if (!this.manualLayout || this.simulation) {
+            return;
+        }
+        this.setLayout(undefined, { record: true });
+        this.setStatus('Automatic layout – the manual layout was discarded (Ctrl+Z restores it).');
+    }
+
+    private async openLayoutFile(file: File): Promise<void> {
+        try {
+            const layout = parseManualLayout(await file.text());
+            this.setLayout(layout, { record: true });
+            this.setStatus(`Layout ${file.name} applied to ${this.fileName}.`);
+        } catch (error) {
+            this.setStatus(`${file.name}: ${error instanceof Error ? error.message : String(error)}`, 'error');
+        }
+    }
+
+    /**
+     * Replaces the manual layout. `record`: add the change to the undo history (`linked`: it belongs to
+     * the text edit just made); `relayout`: show it now (not necessary if the text changes as well).
+     */
+    private setLayout(layout: ManualLayout | undefined, options: { record: boolean, linked?: boolean, relayout?: boolean }): void {
+        if (options.record) {
+            this.layoutHistory.push({
+                before: this.manualLayout,
+                after: layout,
+                textVersion: this.editor.getModel()!.getAlternativeVersionId(),
+                linked: options.linked ?? false
+            });
+        }
+        this.manualLayout = layout;
+        storeLayout(this.fileName, layout);
+        this.updateLayoutControls();
+        if (options.relayout ?? true) {
+            this.relayout();
+        }
+    }
+
+    /** Changes the current manual layout (all nodes pinned at their current positions). */
+    private changeLayout(change: (layout: ManualLayout) => void): void {
+        if (!this.state || !this.isManualLayout()) {
+            return;
+        }
+        const layout = cloneLayout(this.state.effective ?? this.manualLayout ?? createManualLayout());
+        change(layout);
+        this.setLayout(layout, { record: true });
+    }
+
+    /** Keeps the layout history in sync with undo / redo in the text editor. */
+    private trackTextHistory(event: monaco.editor.IModelContentChangedEvent): void {
+        const version = this.editor.getModel()!.getAlternativeVersionId();
+        let entry;
+        if (event.isUndoing) {
+            entry = this.layoutHistory.textUndone(this.textVersion);
+        } else if (event.isRedoing) {
+            entry = this.layoutHistory.textRedone(version);
+        } else {
+            this.layoutHistory.textEdited();
+        }
+        this.textVersion = version;
+        if (entry) {
+            this.setLayout(event.isUndoing ? entry.before : entry.after, { record: false, relayout: false });
+        }
+    }
+
+    private absolutePosition(id: string): Point {
+        let x = 0;
+        let y = 0;
+        for (let current: string | undefined = id; current && current !== MACHINE_ID; current = this.state?.parents.get(current)) {
+            const node = this.state?.nodes.get(current);
+            x += node?.x ?? 0;
+            y += node?.y ?? 0;
+        }
+        return { x, y };
+    }
+
+    /** Keeps a position inside the content area of the parent (below the name of a state). */
+    private clampToParent(parentId: string | undefined, position: Point): Point {
+        const origin = contentOrigin(parentId ? this.state?.nodes.get(parentId) : undefined);
+        return { x: Math.max(origin.x, position.x), y: Math.max(origin.y, position.y) };
+    }
+
+    private moveNodes(info: DragInfo): void {
+        const state = this.state;
+        if (!state) {
+            return;
+        }
+        const moves = info.moved.filter(m => state.nodes.has(m.id));
+        if (moves.length === 0) {
+            this.render();
+            return;
+        }
+        this.changeLayout(layout => {
+            for (const move of moves) {
+                const position = this.clampToParent(state.parents.get(move.id), { x: move.x, y: move.y });
+                layout.nodes[move.id] = { ...layout.nodes[move.id], ...position };
+            }
+        });
+    }
+
+    resizeEnd(id: string, width: number, height: number): void {
+        this.changeLayout(layout => {
+            const node = this.state?.nodes.get(id);
+            layout.nodes[id] = { ...(layout.nodes[id] ?? { x: node?.x ?? 0, y: node?.y ?? 0 }), width, height };
+        });
+    }
+
+    /** The bend points of a transition as shown (a spline has none that could be moved). */
+    private shownBends(edgeId: string): { edge: DiagramEdge, bends: Point[] } | undefined {
+        const edge = this.state?.layout.graph.edges.find(e => e.id === edgeId);
+        return edge ? { edge, bends: edge.routing === 'spline' ? [] : edge.points.slice(1, -1).map(p => ({ ...p })) } : undefined;
+    }
+
+    private storeBends(edge: DiagramEdge, bends: Point[]): void {
+        const graph = this.state?.layout.graph;
+        if (!graph) {
+            return;
+        }
+        this.changeLayout(layout => {
+            const entry = { ...layout.edges[edge.id] };
+            if (bends.length > 0) {
+                entry.bends = bends.map(p => toFrameCoordinates(graph, edge, p));
+            } else {
+                delete entry.bends;
+            }
+            if (entry.bends || entry.label) {
+                layout.edges[edge.id] = entry;
+            } else {
+                delete layout.edges[edge.id];
+            }
+        });
+    }
+
+    bendMoved(edgeId: string, index: number, point: Point): void {
+        const shown = this.shownBends(edgeId);
+        if (shown && index >= 0 && index < shown.bends.length) {
+            shown.bends[index] = point;
+            this.storeBends(shown.edge, shown.bends);
+        }
+    }
+
+    bendAdded(edgeId: string, point: Point): void {
+        const shown = this.shownBends(edgeId);
+        if (!shown) {
+            return;
+        }
+        // insert the point into the segment of the route which is nearest to it
+        const points = [shown.edge.points[0], ...shown.bends, shown.edge.points[shown.edge.points.length - 1]];
+        let best = 0;
+        let bestDistance = Number.POSITIVE_INFINITY;
+        for (let i = 0; i + 1 < points.length; i++) {
+            const d = segmentDistance(point, points[i], points[i + 1]);
+            if (d < bestDistance) {
+                best = i;
+                bestDistance = d;
+            }
+        }
+        shown.bends.splice(best, 0, point);
+        this.storeBends(shown.edge, shown.bends);
+    }
+
+    bendRemoved(edgeId: string, index: number): void {
+        const shown = this.shownBends(edgeId);
+        if (shown && index >= 0 && index < shown.bends.length) {
+            shown.bends.splice(index, 1);
+            this.storeBends(shown.edge, shown.bends);
+        }
+    }
+
+    labelMoved(edgeId: string, dx: number, dy: number): void {
+        this.changeLayout(layout => {
+            const entry = { ...layout.edges[edgeId] };
+            entry.label = { x: (entry.label?.x ?? 0) + dx, y: (entry.label?.y ?? 0) + dy };
+            layout.edges[edgeId] = entry;
+        });
+    }
+
+    // -----------------------------------------------------------------------------------------
     // Simulation
 
     /** Starts the simulation mode: the model must not contain errors (warnings are fine). */
@@ -1286,7 +1652,8 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
     private setEditingControlsEnabled(enabled: boolean): void {
         const controls = [
             ...byId('palette').querySelectorAll<HTMLButtonElement>('button'),
-            ...['btn-undo', 'btn-redo', 'btn-format', 'direction-select', 'routing-select', 'priorities-toggle'].map(id => byId<HTMLButtonElement>(id))
+            ...['btn-undo', 'btn-redo', 'btn-format', 'direction-select', 'routing-select', 'priorities-toggle',
+                'btn-layout-auto', 'btn-layout-manual', 'btn-arrange', 'btn-reset-layout'].map(id => byId<HTMLButtonElement>(id))
         ];
         for (const control of controls) {
             control.disabled = !enabled;
@@ -1519,4 +1886,13 @@ export class HsmApp implements PropertiesHost, DiagramCallbacks {
             element.textContent = '';
         }, 6000);
     }
+}
+
+/** Distance of a point from the line segment a-b. */
+function segmentDistance(p: Point, a: Point, b: Point): number {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const length = dx * dx + dy * dy;
+    const t = length > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / length)) : 0;
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }

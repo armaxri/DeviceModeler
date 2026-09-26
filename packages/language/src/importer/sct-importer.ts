@@ -2,7 +2,8 @@
  * Importer for itemis CREATE / YAKINDU Statechart Tools models (`.sct` files).
  *
  * An `.sct` file is an EMF XMI document which contains the statechart (`sgraph:Statechart`) and
- * its diagram (`notation:Diagram`). Only the statechart is imported, the layout is ignored.
+ * its diagram (`notation:Diagram`). The statechart is converted into HSM text, the positions and sizes
+ * of the diagram are converted into a manual layout (`.hsm.layout`, see `diagram/manual-layout.ts`).
  * The definition section and all reactions use the same syntax as the HSM language, so they are
  * copied (re-indented and slightly normalized). The structure is translated as follows:
  *
@@ -20,6 +21,9 @@
  * | final state                          | `Source -> [*]`                       |
  */
 import { HSM_KEYWORDS } from '../edit/model-edits.js';
+import { DEFINITION_ID, DiagramMetrics, MACHINE_ID } from '../diagram/layout.js';
+import { createManualLayout, type ManualLayout, type NodeLayout } from '../diagram/manual-layout.js';
+import type { Point } from '../diagram/diagram-model.js';
 import { parseXml, type XmlElement } from './xml.js';
 
 export interface SctImportOptions {
@@ -27,6 +31,8 @@ export interface SctImportOptions {
     mainStateName?: string;
     /** Indentation unit of the generated text (default four spaces). */
     indent?: string;
+    /** Convert the diagram (`notation:Diagram`) into a manual layout (default true). */
+    layout?: boolean;
 }
 
 export interface SctImportResult {
@@ -34,6 +40,8 @@ export interface SctImportResult {
     text: string;
     /** Everything that could not be imported 1:1 (renamed states, unsupported features, ...). */
     warnings: string[];
+    /** Positions and sizes of the itemis diagram (if the file contains one), to be stored as `<model>.hsm.layout`. */
+    layout?: ManualLayout;
 }
 
 /** Converts the content of an itemis CREATE `.sct` file into HSM text. */
@@ -60,6 +68,8 @@ interface RegionNode extends ContainerBase {
     kind: 'region';
     name?: string;
     state: StateNode;
+    /** `xmi:id` of the region (layout import). */
+    id?: string;
 }
 
 type PseudoKind = 'choice' | 'junction' | 'history' | 'deephistory' | 'sync' | 'entry' | 'exit';
@@ -110,6 +120,8 @@ interface TransitionNode {
     exitPoint?: string;
     container: Container;
     order: [number, number];
+    /** `xmi:id` of the itemis transition (layout import). */
+    elementId?: string;
 }
 
 const TIME_OR_NAME_TRIGGER = String.raw`(?:(?:after|every)\s+[^,\[\]/]+?|[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)`;
@@ -129,8 +141,9 @@ class SctImporter {
     private machine!: MachineNode;
     private statechartName = '';
     private orderCounter = 0;
+    private topRegions: XmlElement[] = [];
 
-    constructor(options: SctImportOptions) {
+    constructor(private readonly options: SctImportOptions) {
         this.indentUnit = options.indent ?? '    ';
         this.mainStateName = options.mainStateName ?? 'Main';
     }
@@ -161,7 +174,8 @@ class SctImporter {
         }
         lines.push(...this.emitBody(this.machine, 1));
         lines.push('}');
-        return { text: collapseBlankLines(lines).join('\n') + '\n', warnings: this.warnings };
+        const layout = this.options.layout === false ? undefined : new NotationImporter(this.machine, this.implicitById, this.topRegions).run(root);
+        return { text: collapseBlankLines(lines).join('\n') + '\n', warnings: this.warnings, ...(layout ? { layout } : {}) };
     }
 
     private warn(message: string): void {
@@ -175,6 +189,7 @@ class SctImporter {
 
     private buildStructure(statechart: XmlElement): void {
         const regions = statechart.children.filter(c => c.name === 'regions');
+        this.topRegions = regions;
         if (regions.length === 1) {
             this.convertRegion(regions[0], this.machine, []);
         } else if (regions.length > 1) {
@@ -195,7 +210,7 @@ class SctImporter {
         }
         const originalName = region.attributes['name']?.trim() || undefined;
         const name = originalName ? sanitizeName(originalName) : undefined;
-        const node: RegionNode = { kind: 'region', name, state, vertices: [], transitions: [] };
+        const node: RegionNode = { kind: 'region', name, state, vertices: [], transitions: [], id: region.attributes['xmi:id'] };
         if (originalName && name !== originalName) {
             this.warn(`Region '${originalName}' of '${state.originalName ?? state.name}' was renamed to '${name}'.`);
         }
@@ -433,8 +448,9 @@ class SctImporter {
         } else {
             return [];
         }
+        const elementId = element.attributes['xmi:id'];
         return exitPoints.map(exitPoint => ({
-            source: transitionSource, target: target!, spec, entryPoint, exitPoint, container, order
+            source: transitionSource, target: target!, spec, entryPoint, exitPoint, container, order, elementId
         }));
     }
 
@@ -1101,4 +1117,232 @@ function splitEntryExitSpec(specification: string): { reaction: string, entries:
         }
     }
     return { reaction: specification.substring(0, hash).trim(), entries, exits };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Layout (notation model)
+
+/** Height of the name of a top-level region in itemis CREATE (above its compartment). */
+const ITEMIS_REGION_HEADER = 20;
+/** Size assumed for itemis shapes without explicit size (used for bend points only). */
+const ITEMIS_DEFAULT_SIZE = { state: { width: 80, height: 50 }, pseudo: { width: 15, height: 15 } };
+
+interface Bounds {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
+/**
+ * Converts the `notation:Diagram` of an `.sct` file into a manual layout. Shapes in itemis CREATE are
+ * positioned relative to the compartment of their region; in HSM relative to their composite state
+ * (or region), below its name. The positions are therefore offset by the padding of the container;
+ * the layout engine moves the content further down if the state has a taller body compartment.
+ * Bend points are imported for transitions between vertices of the same container.
+ */
+class NotationImporter {
+
+    private readonly layout = createManualLayout('manual', 'DOWN');
+    /** semantic `xmi:id` -> notation view */
+    private readonly views = new Map<string, XmlElement>();
+    /** diagram id -> container diagram id, itemis bounds and offset of the container */
+    private readonly placed = new Map<string, { parent: string, bounds: Bounds, offset: Point, pseudo: boolean }>();
+
+    constructor(
+        private readonly machine: MachineNode,
+        private readonly implicit: Map<string, ImplicitVertex>,
+        private readonly topRegions: XmlElement[]
+    ) { }
+
+    run(root: XmlElement): ManualLayout | undefined {
+        const diagram = root.children.find(c => c.name === 'notation:Diagram');
+        if (!diagram) {
+            return undefined;
+        }
+        const collect = (element: XmlElement) => {
+            for (const child of element.children) {
+                if (child.name === 'children' && child.attributes['element']) {
+                    this.views.set(child.attributes['element'], child);
+                }
+                collect(child);
+            }
+        };
+        collect(diagram);
+
+        const text = diagram.children.find(c => c.name === 'children' && c.attributes['type'] === 'StatechartText');
+        const textBounds = text && boundsOf(text);
+        if (textBounds) {
+            this.layout.nodes[DEFINITION_ID] = { x: textBounds.x, y: textBounds.y };
+        }
+        const regionBounds = this.topRegions.map(r => boundsOf(this.views.get(r.attributes['xmi:id'] ?? '')));
+        if (this.topRegions.length === 1) {
+            const bounds = regionBounds[0] ?? { x: 0, y: 0, width: -1, height: -1 };
+            this.placeContent(this.machine, MACHINE_ID, { x: bounds.x, y: bounds.y + ITEMIS_REGION_HEADER });
+        } else if (this.topRegions.length > 1) {
+            // the regions were wrapped into a generated composite state
+            const main = this.machine.vertices.find((v): v is StateNode => v.kind === 'state' && !v.element);
+            const known = regionBounds.filter((b): b is Bounds => b !== undefined);
+            if (main && known.length > 0) {
+                const x = Math.min(...known.map(b => b.x));
+                const y = Math.min(...known.map(b => b.y));
+                const spreadX = Math.max(...known.map(b => b.x)) - x;
+                const spreadY = Math.max(...known.map(b => b.y)) - y;
+                this.layout.nodes[main.name] = { x, y, regions: spreadX > spreadY ? 'horizontal' : 'vertical' };
+                main.regions.forEach((region, index) => {
+                    const bounds = regionBounds[index];
+                    const id = `${main.name}#region${index + 1}`;
+                    if (bounds && bounds.width > 0 && bounds.height > 0) {
+                        this.layout.nodes[id] = { x: 0, y: 0, width: bounds.width, height: bounds.height };
+                    }
+                    this.placeContent(region, id, this.regionOffset(region));
+                });
+            }
+        }
+        this.importBendPoints(diagram);
+        return Object.keys(this.layout.nodes).length > 0 ? this.layout : undefined;
+    }
+
+    private regionOffset(region: RegionNode): Point {
+        const pad = DiagramMetrics.regionPadding;
+        return { x: pad, y: pad + (region.name ? DiagramMetrics.lineHeight.body : 0) };
+    }
+
+    /** Stores the positions of the vertices of a container (relative to the container in HSM). */
+    private placeContent(container: Container, containerId: string, offset: Point): void {
+        for (const vertex of container.vertices) {
+            const bounds = boundsOf(this.views.get(vertex.id));
+            if (!bounds || !vertex.id) {
+                continue;
+            }
+            const id = diagramId(vertex);
+            const entry: NodeLayout = { x: bounds.x + offset.x, y: bounds.y + offset.y };
+            if (vertex.kind === 'state' && bounds.width > 0 && bounds.height > 0) {
+                entry.width = bounds.width;
+                entry.height = bounds.height;
+            }
+            this.layout.nodes[id] = entry;
+            this.placed.set(id, { parent: containerId, bounds, offset, pseudo: vertex.kind !== 'state' });
+            if (vertex.kind !== 'state') {
+                continue;
+            }
+            if (vertex.regions.length > 0) {
+                const horizontal = this.views.get(vertex.id)?.children.some(c => c.name === 'styles'
+                    && c.attributes['name'] === 'isHorizontal' && c.attributes['booleanValue'] === 'true');
+                entry.regions = horizontal ? 'horizontal' : 'vertical';
+                vertex.regions.forEach((region, index) => this.placeContent(region, `${id}#region${index + 1}`, this.regionOffset(region)));
+            } else if (vertex.vertices.length > 0) {
+                const m = DiagramMetrics;
+                this.placeContent(vertex, id, { x: m.compositePadding, y: m.headerHeight + m.compositePadding });
+            }
+        }
+        let final = false;
+        for (const [viewId, vertex] of this.implicit) {
+            if (vertex.container !== container || (vertex.kind === 'final' && final)) {
+                continue;
+            }
+            const bounds = boundsOf(this.views.get(viewId));
+            if (!bounds) {
+                continue;
+            }
+            final ||= vertex.kind === 'final';
+            const id = `${containerId}#${vertex.kind}`;
+            this.layout.nodes[id] = { x: bounds.x + offset.x, y: bounds.y + offset.y };
+            this.placed.set(id, { parent: containerId, bounds, offset, pseudo: true });
+        }
+    }
+
+    /**
+     * Bend points of transitions between vertices of the same container. In the notation model they are
+     * stored relative to the anchor points of source and target (GMF `RelativeBendpoints`); the average
+     * of both is used since the exact sizes of the itemis shapes are often unknown.
+     */
+    private importBendPoints(diagram: XmlElement): void {
+        const edgeViews = new Map<string, XmlElement>();
+        for (const edge of diagram.children.filter(c => c.name === 'edges')) {
+            if (edge.attributes['element']) {
+                edgeViews.set(edge.attributes['element'], edge);
+            }
+        }
+        const counts = new Map<string, number>();
+        const visit = (container: Container) => {
+            const initials = container.transitions.filter(t => t.source === 'initial');
+            const others = container.transitions.filter(t => t.source !== 'initial').sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1]);
+            for (const transition of [...initials, ...others]) {
+                const source = transition.source === 'initial' ? `${containerId(transition.container)}#initial` : diagramId(transition.source);
+                const target = transition.target === 'final' ? `${containerId(transition.container)}#final` : diagramId(transition.target);
+                const base = `${source}->${target}`;
+                const count = counts.get(base) ?? 0;
+                counts.set(base, count + 1);
+                const id = count === 0 ? base : `${base}~${count}`;
+                const view = transition.elementId ? edgeViews.get(transition.elementId) : undefined;
+                if (view && !transition.entryPoint && !transition.exitPoint) {
+                    this.importEdge(id, source, target, view);
+                }
+            }
+            for (const vertex of container.vertices) {
+                if (vertex.kind === 'state') {
+                    visit(vertex);
+                    vertex.regions.forEach(visit);
+                }
+            }
+        };
+        visit(this.machine);
+    }
+
+    private importEdge(id: string, sourceId: string, targetId: string, view: XmlElement): void {
+        const source = this.placed.get(sourceId);
+        const target = this.placed.get(targetId);
+        const bendpoints = view.children.find(c => c.name === 'bendpoints')?.attributes['points'] ?? '';
+        const relative = [...bendpoints.matchAll(/\[([^\]]*)\]/g)].map(m => m[1].split(',').map(v => Number(v.trim())));
+        if (!source || !target || source.parent !== target.parent || relative.length < 3
+            || relative.some(p => p.length !== 4 || p.some(v => !Number.isFinite(v)))) {
+            return;
+        }
+        const sourceRef = anchorPoint(source.bounds, source.pseudo, view.children.find(c => c.name === 'sourceAnchor'));
+        const targetRef = anchorPoint(target.bounds, target.pseudo, view.children.find(c => c.name === 'targetAnchor'));
+        const offset = source.offset;
+        const bends = relative.slice(1, -1).map(([sx, sy, tx, ty]) => ({
+            x: (sourceRef.x + sx + targetRef.x + tx) / 2 + offset.x,
+            y: (sourceRef.y + sy + targetRef.y + ty) / 2 + offset.y
+        }));
+        this.layout.edges[id] = { bends };
+    }
+}
+
+function boundsOf(view: XmlElement | undefined): Bounds | undefined {
+    const constraint = view?.children.find(c => c.name === 'layoutConstraint' && c.attributes['xsi:type'] === 'notation:Bounds');
+    if (!constraint) {
+        return undefined;
+    }
+    const number = (name: string, fallback: number) => {
+        const value = Number(constraint.attributes[name]);
+        return constraint.attributes[name] !== undefined && Number.isFinite(value) ? value : fallback;
+    };
+    return { x: number('x', 0), y: number('y', 0), width: number('width', -1), height: number('height', -1) };
+}
+
+/** The reference point of a transition end in itemis coordinates (IdentityAnchor `(fx,fy)` or the center). */
+function anchorPoint(bounds: Bounds, pseudo: boolean, anchor: XmlElement | undefined): Point {
+    const defaults = pseudo ? ITEMIS_DEFAULT_SIZE.pseudo : ITEMIS_DEFAULT_SIZE.state;
+    const width = bounds.width > 0 ? bounds.width : defaults.width;
+    const height = bounds.height > 0 ? bounds.height : defaults.height;
+    const match = /^\(\s*([-\d.eE]+)\s*,\s*([-\d.eE]+)\s*\)$/.exec(anchor?.attributes['id'] ?? '');
+    const fx = match ? Number(match[1]) : 0.5;
+    const fy = match ? Number(match[2]) : 0.5;
+    return { x: bounds.x + width * fx, y: bounds.y + height * fy };
+}
+
+/** Id of a vertex in the HSM diagram: its qualified name. */
+function diagramId(vertex: VertexNode): string {
+    return qualifiedSegments(vertex).join('.');
+}
+
+/** Id of a container in the HSM diagram (`#machine`, a state or `<state>#region<n>`). */
+function containerId(container: Container): string {
+    switch (container.kind) {
+        case 'machine': return MACHINE_ID;
+        case 'state': return diagramId(container);
+        case 'region': return `${diagramId(container.state)}#region${container.state.regions.indexOf(container) + 1}`;
+    }
 }

@@ -17,9 +17,9 @@
                 <option value="">Examples…</option>
             </select>
             <button id="btn-new" title="New state machine">New</button>
-            <button id="btn-open" title="Open a .hsm file or import an itemis CREATE .sct file">Open…</button>
-            <button id="btn-save" title="Download the model (.hsm)">Save</button>
-            <input type="file" id="file-input" accept=".hsm,.txt,.sct" hidden />
+            <button id="btn-open" title="Open a .hsm file (optionally together with its .hsm.layout) or import an itemis CREATE .sct file">Open…</button>
+            <button id="btn-save" title="Download the model (.hsm) and its manual layout (.hsm.layout)">Save</button>
+            <input type="file" id="file-input" accept=".hsm,.txt,.sct,.layout" multiple hidden />
         </div>
         <div class="group">
             <button id="btn-undo" title="Undo (Ctrl+Z)">↶</button>
@@ -50,6 +50,15 @@
                     <option value="dark">Dark</option>
                 </select>
             </label>
+        </div>
+        <div class="group" id="layout-group">
+            <span class="label-text layout-label">Positions</span>
+            <span class="segmented" role="group" aria-label="Layout mode">
+                <button id="btn-layout-auto" title="Automatic layout (ELK): positions are computed from the model">Auto</button>
+                <button id="btn-layout-manual" title="Manual layout (experimental): states keep the positions they are dragged to (saved as .hsm.layout next to the model)">Manual</button>
+            </span>
+            <button id="btn-arrange" title="Arrange all elements automatically and keep the result as manual layout" hidden>Auto-arrange</button>
+            <button id="btn-reset-layout" title="Discard the manual layout and return to the automatic layout" hidden>Reset</button>
         </div>
         <div class="spacer"></div>
         <div class="group">

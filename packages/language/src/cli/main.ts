@@ -6,7 +6,7 @@ import { createHsmServices } from '../hsm-module.js';
 import { HsmModelLoader } from '../hsm-document.js';
 import { generatePlantUml } from '../generator/plantuml.js';
 import { generateC } from '../generator/c/index.js';
-import { layoutStateMachine } from '../diagram/layout.js';
+import { layoutFileName, layoutStateMachineWithLayout, parseManualLayout, serializeManualLayout, type ManualLayout } from '../diagram/manual-layout.js';
 import { importSct } from '../importer/sct-importer.js';
 import { StatechartInterpreter } from '../simulation/interpreter.js';
 import { formatTraceEntry, runScenario, validateScenario, type ScenarioStep } from '../simulation/scenario.js';
@@ -96,10 +96,17 @@ export function createProgram(): Command {
     program.command('layout')
         .argument('<file>', '.hsm file')
         .option('-d, --direction <direction>', 'DOWN or RIGHT', 'DOWN')
+        .option('-l, --layout <file>', 'manual layout (default: <file>.layout if it exists)')
+        .option('--auto', 'ignore the manual layout')
         .description('prints the computed diagram layout as JSON')
-        .action(async (file: string, options: { direction: 'DOWN' | 'RIGHT' }) => {
+        .action(async (file: string, options: { direction: 'DOWN' | 'RIGHT', layout?: string, auto?: boolean }) => {
             const { parsed } = await load(file);
-            const { graph } = await layoutStateMachine(parsed.model, { direction: options.direction });
+            let manual: ManualLayout | undefined;
+            const layoutFile = options.layout ?? layoutFileName(file);
+            if (!options.auto && (options.layout || await exists(layoutFile))) {
+                manual = parseManualLayout(await fs.readFile(layoutFile, 'utf-8'));
+            }
+            const { graph } = await layoutStateMachineWithLayout(parsed.model, { direction: options.direction }, manual);
             console.log(JSON.stringify(graph, undefined, 2));
         });
 
@@ -159,18 +166,32 @@ export function createProgram(): Command {
     program.command('import')
         .argument('<file>', 'itemis CREATE / YAKINDU statechart (.sct)')
         .option('-o, --out <file>', 'output file (default: <file>.hsm)')
-        .description('converts an itemis CREATE (.sct) statechart into an .hsm model')
-        .action(async (file: string, options: { out?: string }) => {
-            const { text, warnings } = importSct(await fs.readFile(file, 'utf-8'));
+        .option('--no-layout', 'do not write the diagram layout (<out>.layout)')
+        .description('converts an itemis CREATE (.sct) statechart into an .hsm model (and its diagram into <out>.layout)')
+        .action(async (file: string, options: { out?: string, layout: boolean }) => {
+            const { text, warnings, layout } = importSct(await fs.readFile(file, 'utf-8'), { layout: options.layout });
             for (const warning of warnings) {
                 console.error(`${file}: warning: ${warning}`);
             }
             const out = options.out ?? file.replace(/\.sct$/, '') + '.hsm';
             await fs.writeFile(out, text);
             console.log(`Generated ${out}`);
+            if (layout) {
+                await fs.writeFile(layoutFileName(out), serializeManualLayout(layout));
+                console.log(`Generated ${layoutFileName(out)}`);
+            }
         });
 
     return program;
+}
+
+async function exists(file: string): Promise<boolean> {
+    try {
+        await fs.access(file);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 /** Short text of a scenario step, e.g. `raise play` or `expect {"active":["Closed"]}`. */

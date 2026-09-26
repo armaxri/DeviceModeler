@@ -655,3 +655,32 @@ body.ui-dark #properties .problems li.error { background: #3d1f1f; color: #ffb4b
     #splitter { cursor: row-resize; }
     #properties { display: none; }
 }
+
+/* ---- manual layout (experimental) ---- */
+
+.toolbar .layout-label {
+    color: var(--ui-muted);
+}
+
+.toolbar .segmented {
+    display: inline-flex;
+}
+
+.toolbar .segmented button {
+    border-radius: 0;
+}
+
+.toolbar .segmented button:first-child {
+    border-radius: 6px 0 0 6px;
+}
+
+.toolbar .segmented button:last-child {
+    border-radius: 0 6px 6px 0;
+    margin-left: -1px;
+}
+
+.toolbar .segmented button.active {
+    background: var(--ui-accent);
+    border-color: var(--ui-accent);
+    color: #fff;
+}

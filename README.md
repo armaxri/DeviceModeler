@@ -281,6 +281,38 @@ order of calls, mocks with sequences of values, calling operations of the state 
 | Undo / redo | `Ctrl+Z` / `Ctrl+Y` (shared with the text editor) |
 | Keep a tool active | hold `Shift` while choosing it, `Esc` to go back to selection |
 
+## Manual layout (experimental)
+
+🧪 By default the diagram is laid out automatically (ELK). With *Positions: Manual* in the toolbar the
+diagram can be arranged by hand instead; the automatic layout is not affected as long as no manual
+layout is active. Design, format and trade-offs: [docs/manual-layout.md](docs/manual-layout.md).
+
+- The positions are stored next to the model in `<model>.hsm.layout` (JSON, keyed by qualified names),
+  the `.hsm` text stays free of layout information. The web editor keeps the layout per file in the
+  browser; *Save* downloads the model and its `.hsm.layout`, *Open…* accepts both files together.
+- Switching to *Manual* starts from the current automatic layout. *Auto-arrange* re-runs the automatic
+  layout and keeps it as manual layout, *Reset* discards the manual layout, *Auto* shows the automatic
+  layout but keeps the manual one for later.
+- Elements without a stored position (e.g. new states) are placed automatically near their siblings;
+  composite states grow when their content does not fit. Transitions keep their automatic route while
+  their end points are arranged as in the automatic layout, otherwise they become straight lines
+  through their bend points.
+
+| Action (manual layout) | How |
+| --- | --- |
+| Move a state, pseudo state or the definitions box | drag it (attached transitions follow) |
+| Move a state into another state | hold `Shift` while dropping it |
+| Resize a state | select it, drag the handle at the bottom right corner |
+| Add / move / remove a bend point | select the transition; double-click its line / drag the point / double-click the point |
+| Move a transition label | select the transition, drag its label |
+| Undo / redo | `Ctrl+Z` / `Ctrl+Y` in the diagram – layout changes and text edits in the order they were made |
+
+Renames, moves and deletions done in the diagram update the layout; renames typed in the text editor do
+not (the element is then placed automatically). Importing an itemis CREATE `.sct` file keeps the
+arrangement of its diagram. On the command line, `hsm layout model.hsm` uses `model.hsm.layout` if it
+exists (`--layout <file>`, `--auto`), and `hsm import` writes the `.hsm.layout` next to the model
+(`--no-layout` to skip it).
+
 ## Simulation
 
 Click **▶ Simulate** in the toolbar (the model must not contain errors; warnings are fine). The text
@@ -465,10 +497,11 @@ node packages/language/bin/cli.js import TrafficLight.sct -o TrafficLight.hsm   
 ```
 
 In the web editor, `Open…` accepts `.sct` files as well; warnings are shown in the status bar. From
-code, use `importSct(xml)` of `hsm-language`, which returns `{ text, warnings }` (no DOM needed).
+code, use `importSct(xml)` of `hsm-language`, which returns `{ text, warnings, layout }` (no DOM needed).
 
 The definition section and all reactions are copied as they are (both languages use the same
-syntax); the diagram layout of the `.sct` file is ignored. The structure is mapped as follows:
+syntax); the diagram of the `.sct` file becomes a manual layout (🧪 experimental, `<out>.hsm.layout`,
+see [Manual layout](#manual-layout-experimental)). The structure is mapped as follows:
 
 | itemis CREATE                                   | HSM                                                                 |
 |-------------------------------------------------|---------------------------------------------------------------------|

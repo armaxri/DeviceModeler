@@ -61,6 +61,8 @@ export class VertexNode extends SNodeImpl {
     active = false;
     /** Simulation: a breakpoint is set on the state. */
     breakpoint = false;
+    /** Manual layout: the state shows a resize handle when it is selected. */
+    resizable = false;
 }
 
 export class TransitionEdge extends SChildElementImpl {
@@ -78,6 +80,8 @@ export class TransitionEdge extends SChildElementImpl {
     taken = false;
     /** Simulation: a breakpoint is set on the transition. */
     breakpoint = false;
+    /** Manual layout: the bend points can be moved when the transition is selected. */
+    editable = false;
 }
 
 export function isVertexNode(element: SModelElementImpl | undefined): element is VertexNode {
@@ -98,6 +102,8 @@ export interface SchemaOptions {
     recentTransitions?: ReadonlySet<string>;
     /** Simulation: ids of the elements with a breakpoint. */
     breakpoints?: ReadonlySet<string>;
+    /** Manual layout mode: states can be resized, bend points of transitions moved. */
+    manualLayout?: boolean;
 }
 
 /** Converts the layouted diagram into the sprotty model schema. */
@@ -116,7 +122,8 @@ export function toSchema(graph: DiagramGraph, options: SchemaOptions): SModelRoo
         headerHeight: node.headerHeight ?? 0,
         composite: node.composite ?? false,
         regionIndex: node.index ?? 0,
-        separator,
+        separator: node.separator ?? separator,
+        resizable: (options.manualLayout ?? false) && node.kind === 'state',
         selected: options.selected.has(node.id),
         issue: options.issues.get(node.id),
         pendingSource: options.pendingSource === node.id,
@@ -136,6 +143,7 @@ export function toSchema(graph: DiagramGraph, options: SchemaOptions): SModelRoo
         issue: options.issues.get(edge.id),
         taken: options.recentTransitions?.has(edge.id) ?? false,
         breakpoint: options.breakpoints?.has(edge.id) ?? false,
+        editable: options.manualLayout ?? false,
         children: []
     } as SModelElement);
     return {
