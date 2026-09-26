@@ -3,7 +3,7 @@ import {
     type SModelElementImpl
 } from 'sprotty';
 import type { SModelElement, SModelRoot } from 'sprotty-protocol';
-import type { DiagramEdge, DiagramGraph, DiagramNode, DiagramNodeKind, Point } from 'hsm-language';
+import type { DiagramEdge, DiagramGraph, DiagramLabel, DiagramNode, DiagramNodeKind, Point } from 'hsm-language';
 
 export type IssueSeverity = 'error' | 'warning';
 
@@ -23,11 +23,15 @@ export const DiagramTypes = {
     junction: 'node:junction',
     history: 'node:history',
     deephistory: 'node:deephistory',
+    sync: 'node:sync',
+    entry: 'node:entry',
+    exit: 'node:exit',
+    definition: 'node:definition',
     transition: 'edge:transition'
-} as const;
+} as const satisfies Record<DiagramNodeKind | 'graph' | 'transition', string>;
 
 export function nodeType(kind: DiagramNodeKind): string {
-    return `node:${kind}`;
+    return DiagramTypes[kind];
 }
 
 export class StateMachineGraph extends SGraphImpl {
@@ -41,6 +45,10 @@ export class VertexNode extends SNodeImpl {
     kind: DiagramNodeKind = 'state';
     name?: string;
     body: string[] = [];
+    /** Full text of shortened / wrapped body lines (tooltips). */
+    bodyTitles: Array<string | undefined> = [];
+    /** Name label next to the node (entry points, exit nodes), relative to the node. */
+    label?: DiagramLabel;
     headerHeight = 26;
     composite = false;
     regionIndex = 0;
@@ -89,6 +97,8 @@ export function toSchema(graph: DiagramGraph, options: SchemaOptions): SModelRoo
         kind: node.kind,
         name: node.name,
         body: node.body ?? [],
+        bodyTitles: node.bodyTitles ?? [],
+        label: node.label,
         headerHeight: node.headerHeight ?? 0,
         composite: node.composite ?? false,
         regionIndex: node.index ?? 0,

@@ -3,6 +3,34 @@ import { HsmModelLoader, HsmMonarchSyntax, type ParsedModel } from 'hsm-language
 import type { Diagnostic, Range, TextEdit } from 'vscode-languageserver-types';
 
 export const LANGUAGE_ID = 'hsm';
+export const EDITOR_THEMES = { light: 'hsm-light', dark: 'hsm-dark' } as const;
+
+export interface SyntaxProblem {
+    message: string;
+    /** Offset of the offending token (the length of the text at the end of the input). */
+    offset: number;
+    /** Text of the offending token. */
+    found?: string;
+}
+
+/**
+ * A short description of a syntax error in the text inserted at `[start, end)`,
+ * e.g. `incomplete – ']' expected` or `unexpected '/'`.
+ */
+export function describeSyntaxProblem(problem: SyntaxProblem, start: number, end: number): string {
+    const expected = /Expecting token of type --> (.*?) <--/.exec(problem.message)?.[1];
+    const suffix = expected ? ` – ${expected} expected` : '';
+    if (problem.found === undefined && !/but found/.test(problem.message)) {
+        return problem.message;
+    }
+    if (problem.offset >= end || problem.found === undefined) {
+        return `incomplete${suffix || ' – an expression is expected'}`;
+    }
+    if (problem.offset < start) {
+        return problem.message;
+    }
+    return `unexpected '${problem.found}'${suffix}`;
+}
 const DOCUMENT_URI = 'memory:///model.hsm';
 
 /**
@@ -29,13 +57,45 @@ export class HsmLanguageSupport {
         return result;
     }
 
+    /**
+     * Messages of the lexer and parser errors of the given text (empty if it is syntactically valid).
+     * Only the parser is used: no document is created and the linked model is not affected.
+     */
+    syntaxErrors(text: string): SyntaxProblem[] {
+        const result = this.loader.services.Hsm.parser.LangiumParser.parse(text);
+        return [
+            ...result.lexerErrors.map(e => ({ message: e.message, offset: e.offset })),
+            ...result.parserErrors.map(e => {
+                const token = e.token;
+                const eof = token.tokenType?.name === 'EOF' || Number.isNaN(token.startOffset);
+                return { message: e.message, offset: eof ? text.length : token.startOffset, found: eof ? undefined : token.image };
+            })
+        ];
+    }
+
     private async document(model: monaco.editor.ITextModel) {
         return (await this.parse(model.getValue())).document;
     }
 
     registerLanguage(): void {
         monaco.languages.register({ id: LANGUAGE_ID, extensions: ['.hsm'], aliases: ['HSM', 'hsm'] });
-        monaco.languages.setMonarchTokensProvider(LANGUAGE_ID, HsmMonarchSyntax as monaco.languages.IMonarchLanguage);
+        monaco.languages.setMonarchTokensProvider(LANGUAGE_ID, monarchSyntax());
+        monaco.editor.defineTheme(EDITOR_THEMES.light, {
+            base: 'vs', inherit: true, colors: {},
+            rules: [
+                { token: 'annotation', foreground: '9c5d00' },
+                { token: 'type', foreground: '267f99' },
+                { token: 'operator', foreground: '555555' }
+            ]
+        });
+        monaco.editor.defineTheme(EDITOR_THEMES.dark, {
+            base: 'vs-dark', inherit: true, colors: {},
+            rules: [
+                { token: 'annotation', foreground: 'dcdcaa' },
+                { token: 'type', foreground: '4ec9b0' },
+                { token: 'operator', foreground: 'c8c8c8' }
+            ]
+        });
         monaco.languages.setLanguageConfiguration(LANGUAGE_ID, {
             comments: { lineComment: '//', blockComment: ['/*', '*/'] },
             brackets: [['{', '}'], ['[', ']']],
@@ -54,7 +114,7 @@ export class HsmLanguageSupport {
         const services = this.loader.services.Hsm;
 
         monaco.languages.registerCompletionItemProvider(LANGUAGE_ID, {
-            triggerCharacters: ['>', ' ', '/'],
+            triggerCharacters: ['>', ' ', '/', '.', '('],
             provideCompletionItems: async (model, position) => {
                 const document = await this.document(model);
                 const list = await services.lsp.CompletionProvider?.getCompletion(document, {
@@ -150,6 +210,42 @@ export class HsmLanguageSupport {
             endColumn: d.range.end.character + 1
         })));
     }
+}
+
+type MonarchRule = { regex?: RegExp, include?: string, action?: { token?: string, cases?: Record<string, { token: string }> } };
+
+/**
+ * The generated Monarch grammar, adjusted for nicer highlighting: numbers, annotations (`@EventDriven`),
+ * built-in type names and the `[*]` pseudo state.
+ */
+function monarchSyntax(): monaco.languages.IMonarchLanguage {
+    const generated = HsmMonarchSyntax as unknown as { tokenizer: Record<string, MonarchRule[]> };
+    const rename: Record<string, string> = { HEX: 'number.hex', REAL: 'number.float', ID: 'identifier' };
+    const initial = generated.tokenizer.initial.map((rule): MonarchRule => {
+        const action = rule.action;
+        if (action?.token && rename[action.token]) {
+            return { ...rule, action: { ...action, token: rename[action.token] } };
+        }
+        if (action?.cases?.['@default']?.token === 'ID') {
+            return {
+                ...rule,
+                action: { cases: { '@keywords': { token: 'keyword' }, '@typeNames': { token: 'type' }, '@default': { token: 'identifier' } } }
+            };
+        }
+        return rule;
+    });
+    return {
+        ...HsmMonarchSyntax,
+        typeNames: ['integer', 'real', 'boolean', 'string', 'void'],
+        tokenizer: {
+            ...generated.tokenizer,
+            initial: [
+                { regex: /@[_a-zA-Z]\w*/, action: { token: 'annotation' } },
+                { regex: /\[\*\]/, action: { token: 'keyword' } },
+                ...initial
+            ]
+        }
+    } as unknown as monaco.languages.IMonarchLanguage;
 }
 
 function toMonacoRange(range: Range): monaco.IRange {

@@ -1,6 +1,6 @@
-import { AstUtils, type AstNode } from 'langium';
+import { AstUtils, GrammarUtils, type AstNode, type CstNode } from 'langium';
 import {
-    isRegion, isState, isStateMachine, isTransition, isVertex,
+    isInternalScope, isPseudoState, isRegion, isState, isStateMachine, isTransition, isVertex,
     type Region, type State, type StateMachine, type Transition, type Vertex
 } from './generated/ast.js';
 
@@ -138,4 +138,73 @@ export function containerName(container: ScopeContainer): string {
         const index = state.regions.indexOf(container) + 1;
         return container.name ? `region '${container.name}' of '${state.name}'` : `region #${index} of '${state.name}'`;
     }
+}
+
+/**
+ * Outgoing transitions of a vertex in priority order, i.e. in document order of the text
+ * (see docs/semantics.md §1).
+ */
+export function outgoingTransitions(vertex: Vertex): Transition[] {
+    return allTransitions(getStateMachine(vertex))
+        .filter(t => !t.initial && t.source?.ref === vertex)
+        .sort((a, b) => (a.$cstNode?.offset ?? 0) - (b.$cstNode?.offset ?? 0));
+}
+
+/**
+ * Priority (1-based) of a transition among the outgoing transitions of its source vertex, or
+ * `undefined` if the source has only one outgoing transition (or for initial transitions and forks).
+ */
+export function transitionPriority(transition: Transition, outgoing?: Transition[]): number | undefined {
+    const source = transition.source?.ref;
+    // all outgoing transitions of a fork (sync) are taken together: they have no priority
+    if (transition.initial || !source || (isPseudoState(source) && source.kind === 'sync')) {
+        return undefined;
+    }
+    const transitions = outgoing ?? outgoingTransitions(source);
+    return transitions.length > 1 ? transitions.indexOf(transition) + 1 : undefined;
+}
+
+/** Whether the state machine has a definition section (namespace, annotations, interfaces, internal scope). */
+export function hasDefinitionSection(machine: StateMachine): boolean {
+    return !!machine.namespace || machine.annotations.length > 0 || machine.scopes.length > 0;
+}
+
+/**
+ * Text lines of the definition section with normalized white space, e.g.
+ * `['@CycleBased(100)', 'interface:', '  in event powerOn', ...]`. Declarations are indented
+ * by two spaces.
+ */
+export function definitionLines(machine: StateMachine): string[] {
+    const lines: string[] = [];
+    if (machine.namespace) {
+        lines.push(`namespace ${machine.namespace}`);
+    }
+    for (const annotation of machine.annotations) {
+        lines.push(nodeText(annotation));
+    }
+    for (const scope of machine.scopes) {
+        lines.push(isInternalScope(scope) ? 'internal:' : scope.name ? `interface ${scope.name}:` : 'interface:');
+        for (const declaration of scope.declarations) {
+            lines.push(`  ${nodeText(declaration)}`);
+        }
+    }
+    return lines;
+}
+
+/** Text range (offsets) of the definition section, if the state machine has one. */
+export function definitionRange(machine: StateMachine): { offset: number, end: number } | undefined {
+    const cst = machine.$cstNode;
+    if (!cst || !hasDefinitionSection(machine)) {
+        return undefined;
+    }
+    const nodes = [
+        machine.namespace ? GrammarUtils.findNodeForKeyword(cst, 'namespace') : undefined,
+        machine.namespace ? GrammarUtils.findNodeForProperty(cst, 'namespace') : undefined,
+        ...machine.annotations.map(a => a.$cstNode),
+        ...machine.scopes.map(s => s.$cstNode)
+    ].filter((n): n is CstNode => !!n);
+    if (nodes.length === 0) {
+        return undefined;
+    }
+    return { offset: Math.min(...nodes.map(n => n.offset)), end: Math.max(...nodes.map(n => n.end)) };
 }

@@ -28,20 +28,23 @@
         </div>
         <div class="group">
             <label><span class="label-text">Layout</span>
-                <select id="direction-select">
+                <select id="direction-select" title="Layout direction">
                     <option value="DOWN">Top → bottom</option>
                     <option value="RIGHT">Left → right</option>
                 </select>
             </label>
             <label><span class="label-text">Edges</span>
-                <select id="routing-select">
+                <select id="routing-select" title="Edge routing">
                     <option value="SPLINES">Splines</option>
                     <option value="ORTHOGONAL">Orthogonal</option>
                     <option value="POLYLINE">Polyline</option>
                 </select>
             </label>
+            <label class="toggle" title="Show the priorities of transitions leaving a state with several outgoing transitions">
+                <input type="checkbox" id="priorities-toggle" checked /><span>Priorities</span>
+            </label>
             <label><span class="label-text">Theme</span>
-                <select id="theme-select">
+                <select id="theme-select" title="Theme">
                     <option value="classic">PlantUML classic</option>
                     <option value="modern">PlantUML modern</option>
                     <option value="dark">Dark</option>

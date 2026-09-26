@@ -9,29 +9,54 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
 
 ## Features
 
-- **Textual DSL** (Langium) with PlantUML-like notation: composite states, orthogonal regions,
-  initial / final states, choice, junction, shallow and deep history, entry / exit / do actions,
-  internal transitions and transitions with `event [guard] / effect`.
-- **Language services** in the browser: syntax highlighting, validation, code completion,
-  formatting, go to definition, find references and rename (Monaco editor).
-- **Validation**: duplicate names, missing or multiple initial transitions, transitions between
-  orthogonal regions, non-deterministic transitions, unreachable states, misplaced history states, …
-  Problems are shown in the editor *and* as markers in the diagram.
+- **Textual DSL** (Langium): the structure of the state machine (states, regions, transitions) uses a
+  PlantUML-like notation, the definition section and all reactions follow the statechart language of
+  [itemis CREATE](https://www.itemis.com/en/products/itemis-create/) (formerly YAKINDU Statechart Tools):
+  - **definition section**: interfaces (`in` / `out` events with optional payload types, variables,
+    constants, operations), named interfaces, an `internal` scope, `namespace` and annotations such as
+    `@EventDriven` or `@CycleBased(100)`
+  - **reactions** `trigger, trigger [guard] / effect` with event triggers, **time events**
+    (`after 10 s`, `every 200 ms`), `always`, `oncycle`, `entry`, `exit`, `else` / `default`
+  - an **expression language** for guards and effects: assignments (`=`, `+=`, …), arithmetic, logical,
+    bitwise and conditional operators, operation calls, `raise event : value`, `valueof(event)`,
+    `active(State)`, casts with `as`
+  - composite states, orthogonal regions, initial / final states, choice, junction, shallow and deep
+    history, **synchronization** (`sync`, fork / join), named **entry points** and **exit nodes**
+  - vertices are referenced by (partially) qualified names (`Playing`, `Active.Playing`,
+    `Closed.Active.Playing`), so the same simple name can be used in different composite states
+- **Language services** in the browser: syntax highlighting, validation, code completion (events,
+  variables, operations, qualified state names), formatting, go to definition, find references and
+  rename (Monaco editor).
+- **Validation**: duplicate names, unresolved references, missing or multiple initial transitions,
+  transitions between orthogonal regions, non-deterministic transitions, unreachable states, misplaced
+  history states, entry points / exit nodes / synchronizations used incorrectly, … Problems are shown in
+  the editor *and* as markers in the diagram.
 - **Diagram** (Sprotty + ELK layered layout) in the style of PlantUML: rounded states with name and
-  action compartments, nested states, dashed region separators, black initial dots, bull's-eye final
-  states, choice diamonds and `H` / `H*` history circles. Themes: *PlantUML classic* (yellow/red),
-  *PlantUML modern* (gray) and *Dark*. Top-down or left-right layout, spline / orthogonal / polyline edges.
+  compartment of local reactions (long lines are wrapped, the full text is shown as tooltip), nested
+  states, dashed region separators, black initial dots, bull's-eye final states, choice diamonds,
+  `H` / `H*` history circles, black synchronization bars, hollow entry point circles and crossed exit
+  node circles with their names. The **definition section** is shown as a box at the top left, like in
+  itemis CREATE. **Transition priorities** are shown like in itemis CREATE: if a vertex has several
+  outgoing transitions, their labels are prefixed with the priority (`1: ev [g] / a`; toggle
+  *Priorities* in the toolbar). Themes: *PlantUML classic* (yellow/red), *PlantUML modern* (gray) and
+  *Dark*. Top-down or left-right layout, spline / orthogonal / polyline edges.
 - **Graphical editing** – every diagram operation is translated into a minimal text edit, so comments
   and formatting are preserved and everything is undoable with `Ctrl+Z`:
-  - palette tools for states, regions, choice, junction, history, initial and final states and transitions
-  - double-click to rename a state or to edit the label of a transition (`event [guard] / effect`)
+  - palette tools for states, regions, choice, junction, history, synchronization, entry points, exit
+    nodes, initial and final states and transitions
+  - double-click to rename a state or to edit the label of a transition (`trigger [guard] / effect`,
+    with completion of event and variable names); labels and actions are checked for syntax errors
+    before they are applied
   - drag a state onto another state (or region) to nest it, onto the canvas to move it to the top level
-  - properties panel for names, descriptions, entry / exit / do actions, triggers, guards, effects and
-    to reconnect transitions
+  - properties panel for names, descriptions, entry / exit actions, reactions and to reconnect
+    transitions; the panel of the definition section adds declarations (events, variables, constants,
+    operations) to the right scope and creates `interface:` / `internal:` if necessary
   - `Del` deletes (including all attached transitions), `F2` renames
 - **Selection sync**: selecting an element in the diagram highlights its text, moving the cursor in the
   text selects the element in the diagram.
-- **Export**: standalone SVG, PlantUML (`.puml`, copy to clipboard or open on plantuml.com).
+- **Export**: standalone SVG, PlantUML (`.puml`, copy to clipboard or open on plantuml.com). Synchronizations
+  become `<<fork>>` / `<<join>>`, entry points / exit nodes `<<entryPoint>>` / `<<exitPoint>>`, the
+  definition section a legend.
 - **CLI** for validation, PlantUML generation and layout computation.
 
 ## Getting started
@@ -65,45 +90,91 @@ node packages/language/bin/cli.js layout examples/keyboard.hsm --direction RIGHT
 ```
 // comments like in Java / TypeScript
 statemachine CdPlayer "optional description" {
-    [*] -> Closed                                  // initial transition of the state machine
+    @CycleBased(200)                              // execution mode (default), or @EventDriven
+
+    interface:                                    // definition section
+        in event play
+        in event pause
+        in event eject
+        in event powerOff
+        in event trackEnd
+        out event finished : integer              // events may carry a value
+        var track : integer = 1
+        var tracks : integer = 0
+        operation discInserted() : boolean        // implemented by the host application
+        operation startMotor() : void
+
+    internal:
+        const MAX_TRACKS : integer = 99
+        event tick
+
+    [*] -> Closed                                 // initial transition of the state machine
 
     state Closed {
-        [*] -> Stopped                             // initial transition of the composite state
+        [*] -> Stopped                            // initial transition of the composite state
 
-        history H                                  // also: deephistory, choice, junction
-        state Stopped
+        history H                                 // also: deephistory, choice, junction, sync
+        state Stopped {
+            entry / track = 1                     // local reactions: trigger [guard] / effect
+        }
         state Active {
             [*] -> Playing
             state Playing {
-                entry / "startMotor()"             // entry, exit and do actions
-                do / "play()"
-                on volumeUp / "louder()"           // internal transition
+                entry / startMotor()
+                trackEnd [track < tracks] / track += 1
+                every 1 s / raise tick
             }
             state Paused
             Playing -> Paused : pause
-            Paused -> Playing : pause
+            Paused -> Playing : pause, play       // several triggers
+            Paused -> Stopped : after 30 s        // time event
         }
         choice HasDisc
 
         Stopped -> HasDisc : play
-        HasDisc -> Active : [ "discInserted()" ]  // guard only
-        HasDisc -> Stopped                         // else branch
+        HasDisc -> Active : [discInserted() && tracks > 0]   // guard only
+        HasDisc -> Stopped : else                 // taken if no other branch is enabled
     }
 
-    state Open "Tray is open"                      // description shown in the state
+    state Open "Tray is open"                     // description shown in the state
 
     Closed -> Open : eject
-    Open -> H : eject                              // re-enter the last active sub state
-    Closed -> [*] : powerOff                       // transition to the final state
+    Open -> H : eject                             // re-enter the last active sub state
+    Closed -> [*] : powerOff / raise finished : track   // transition to the final state
 }
 ```
 
-- State names are unique within a state machine, so transitions can refer to any state regardless of
-  its nesting level – just like in PlantUML. Transitions may be declared in any scope; `[*]` refers to
-  the initial (as source) or final (as target) state of the scope the transition is declared in.
-- Orthogonal regions: `state S { region A { ... } region B { ... } }` (regions may be unnamed).
-- Guards and effects are string literals so that they can contain arbitrary code of a target language.
-- See [`examples/`](examples) for more.
+- **Definition section**: `interface:`, named interfaces
+  (`interface Pedestrian:` – their members are referenced as `Pedestrian.request`) and `internal:`
+  with `in event`, `out event`, `event`, `var`, `var readonly`, `const` and `operation` declarations.
+  Types: `integer`, `real`, `boolean`, `string`, `void`. It may start with `namespace a.b` and
+  annotations: `@CycleBased(period)`, `@EventDriven`, `@ParentFirstExecution`, `@ChildFirstExecution`.
+- **Reactions** (transition labels and local reactions of states) have the form
+  `trigger, trigger [guard] / effect`; every part is optional (a local reaction needs the effect).
+  Triggers: events, `after n unit` / `every n unit` (units `s`, `ms`, `us`, `ns`), `always`,
+  `oncycle`, `entry` / `exit` (local reactions only), `else` / `default` (transitions leaving a choice).
+  Effects are `;`-separated statements: expressions (assignments, operation calls) and
+  `raise event` / `raise event : value`.
+- **Expressions**: `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `<<=`, `>>=`, `&=`, `|=`, `^=`, `? :`, `||`,
+  `&&`, `|`, `^`, `&`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `<<`, `>>`, `+`, `-`, `*`, `/`, `%`, `!`,
+  `~`, `as` casts, literals (`true`, `42`, `0x1F`, `1.5`, `"text"`), `valueof(event)` and
+  `active(State)`.
+- **States** are referenced by (partially) qualified names: `Playing`, `Active.Playing` or
+  `Closed.Active.Playing`. A name is resolved in the scope of the transition first and then outwards,
+  so sibling states must have different names, but states in different composite states may share a
+  simple name. Transitions may be declared in any scope; `[*]` refers to the initial (as source) or
+  final (as target) state of the scope the transition is declared in.
+- **Orthogonal regions**: `state S { region A { ... } region B { ... } }` (regions may be unnamed).
+- **Entry points and exit nodes** (inside a composite state `C`): `entry E` / `exit X`. A transition
+  to `C` ending with `# >E` enters `C` via `E`; when `X` is reached, `C` is left by the transition
+  `C -> ... # X>`.
+- **Synchronization**: `sync S` joins several incoming transitions (from orthogonal regions) and forks
+  into several outgoing transitions.
+- **Priorities**: the outgoing transitions of a vertex are checked in the order of the text; the first
+  enabled one is taken.
+- The execution semantics are specified in [`docs/semantics.md`](docs/semantics.md). See
+  [`examples/`](examples) for more: `door.hsm` shows entry points, exit nodes and fork / join,
+  `traffic-light.hsm` time events and named interfaces, `keyboard.hsm` orthogonal regions.
 
 ## Editing in the diagram
 
@@ -113,9 +184,13 @@ statemachine CdPlayer "optional description" {
 | Add a sub state | *State* tool, click on the parent state (a simple state becomes composite) |
 | Add a region | *Region* tool (`R`), click on a state – existing sub states are moved into the first region |
 | Add choice / junction / history | `C` / `J` / `H` / `D`, then click on the target container |
+| Add a synchronization (fork / join) | `B`, then click on the target container |
+| Add an entry point / exit node | `E` / `X`, then click on the composite state |
+| Add a declaration (event, variable, …) | click the definitions box, use *Add declaration* in the properties panel |
+| Show / hide transition priorities | *Priorities* in the toolbar |
 | Initial state | *Initial* tool (`I`), click on the state that should be entered first |
 | Final state | *Final* tool (`F`), click on the state that should get a transition to the final state |
-| Add a transition | *Transition* tool (`T`), click the source, then the target, then type the label |
+| Add a transition | *Transition* tool (`T`), click the source, then the target, then type the label (`Tab` completes names) |
 | Rename / edit label | double-click or `F2` |
 | Move into another state | drag and drop |
 | Delete | `Del` / `Backspace` or the trash button |
@@ -129,10 +204,10 @@ packages/
   language/     Langium language (no DOM dependencies, runs in Node.js and in the browser)
     src/hsm.langium           grammar
     src/hsm-validator.ts      validation rules
-    src/hsm-scope.ts          global state names
+    src/hsm-scope.ts          name resolution (qualified state names, declarations)
     src/hsm-formatter.ts      formatter
     src/diagram/layout.ts     AST -> PlantUML-like diagram model, laid out with ELK
-    src/edit/model-edits.ts   structural edits (add, move, rename, delete, …) as text edits
+    src/edit/model-edits.ts   structural edits (add, move, rename, delete, add declaration, …) as text edits
     src/generator/plantuml.ts PlantUML generator
     src/cli/main.ts           command line interface
   web/          Vite app: Monaco editor + Sprotty diagram
@@ -141,6 +216,7 @@ packages/
     src/diagram/              Sprotty model, views (PlantUML look), mouse / selection listeners
     src/ui/                   properties panel, inline editor, SVG / PlantUML export
 examples/       sample state machines
+docs/           execution semantics
 ```
 
 The text is the single source of truth. On every change it is parsed and validated by the Langium

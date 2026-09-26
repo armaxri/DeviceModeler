@@ -25,7 +25,7 @@ function movableVertex(target: SModelElementImpl): VertexNode | undefined {
     while (current && !isVertexNode(current)) {
         current = 'parent' in current ? (current as { parent?: SModelElementImpl }).parent : undefined;
     }
-    if (current && isVertexNode(current) && !['region', 'initial', 'final'].includes(current.kind)) {
+    if (current && isVertexNode(current) && !['region', 'initial', 'final', 'definition'].includes(current.kind)) {
         return current;
     }
     return undefined;
