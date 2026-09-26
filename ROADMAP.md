@@ -69,6 +69,18 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 
 ## Phase 5 – Code generation and testing ✅
 
+- ✅ **C++ code generator – the primary target** (`hsm generate cpp`, `generateCpp()`): a class per state
+  machine in the style of itemis CREATE (`<Class>.h` / `.cpp` plus the runtime header `sc_statemachine.h`),
+  named interfaces as nested classes, operation callbacks, out event flags and observables, timer service
+  interface with ns precision, `isStateActive(State)`, runtime errors as `sc::StatemachineError` exceptions
+  (the step is aborted like in the interpreter) or an error handler for code without exceptions; C++17
+  (`--std 11` for C++11), no global state, no RTTI, dynamic memory only in `std::string` and the event
+  queues (`std::deque`). Verified against the complete conformance suite (g++ with `-Wall -Wextra -Wpedantic
+  -Werror -Wshadow -Wconversion`, clang++, optionally with sanitizers). The C and C++ generators share
+  the analysis and the structure of the generated code (`src/generator/common`)
+  - 📋 still missing: generating GoogleTest tests from `.hsmtest` unit tests (`hsm generate cpp --gtest`),
+    a thread-safe wrapper / event queue for multi-threaded hosts, a fixed-capacity queue option (no heap)
+    for event driven machines on small targets
 - ✅ C code generator (`hsm generate c`, `generateC()`): C99 without dynamic memory or global state,
   timer service and operations as host functions, error hook; verified against the complete
   conformance suite by compiling (gcc / clang, `-Wall -Wextra -Wpedantic -Werror`) and running
@@ -80,7 +92,8 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
   `hsm test` in the CLI (JUnit XML reports) and tests for all examples. Limitations: not run in the web
   editor yet; no `@Ignore`, packages / imports, call order verification or mock value sequences;
   operations of the state machine cannot be called from tests
-- 💭 Further generator targets (C++, Java, Python, TypeScript) depending on demand
+- 💭 Further generator targets (Java, Python, TypeScript) depending on demand; they can build on the shared
+  generator core (`src/generator/common`)
 - 💭 Generator configuration model (like itemis `.sgen` files)
 
 ## Phase 6 – Tooling 💭
@@ -92,7 +105,7 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 
 ## Open questions
 
-- Which code generator targets are needed first?
+- Which further code generator targets are needed (C++ and C are available)?
 - Is simulation or SCTUnit-style testing used in current projects?
 - Are hand-arranged diagram layouts important, or is automatic layout acceptable?
 - Is deep C/C++ header integration (using C types in the statechart) required?

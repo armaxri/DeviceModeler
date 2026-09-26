@@ -65,6 +65,9 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
 - **CLI** for validation, PlantUML generation and layout computation.
 - **Unit tests** for state machines in the style of SCTUnit (`.hsmtest` files, see [Unit tests](#unit-tests)),
   executed by the interpreter, with JUnit XML reports for CI.
+- **Code generation** for **C++** (a class per state machine like itemis CREATE, see
+  [Code generation (C++)](#code-generation-c)) and C99, both verified against the conformance suite of the
+  interpreter by compiling and running every scenario.
 
 ## Getting started
 
@@ -94,7 +97,8 @@ node packages/language/bin/cli.js import model.sct -o model.hsm   # itemis CREAT
 node packages/language/bin/cli.js simulate examples/cd-player.hsm -e play,eject,eject   # run the interpreter
 node packages/language/bin/cli.js simulate examples/door.hsm --script packages/language/test/scenarios/example-door.json
 node packages/language/bin/cli.js test examples/tests/*.hsmtest --machine examples --junit report.xml   # unit tests
-node packages/language/bin/cli.js generate c examples/traffic-light.hsm -o gen   # C code, see below
+node packages/language/bin/cli.js generate cpp examples/traffic-light.hsm -o gen   # C++ code, see below
+node packages/language/bin/cli.js generate c examples/traffic-light.hsm -o gen     # C code
 ```
 
 ## The language
@@ -318,6 +322,8 @@ packages/
     src/diagram/layout.ts     AST -> PlantUML-like diagram model, laid out with ELK
     src/edit/model-edits.ts   structural edits (add, move, rename, delete, add declaration, …) as text edits
     src/generator/plantuml.ts PlantUML generator
+    src/generator/common/     shared part of the C / C++ generators (analysis, states, transitions, expressions)
+    src/generator/cpp/        C++ code generator and scenario test harness generator
     src/generator/c/          C code generator and scenario test harness generator
     src/importer/             itemis CREATE (.sct) importer with a small XML parser
     src/simulation/           interpreter (docs/semantics.md) with virtual clock, scenario runner
@@ -344,117 +350,200 @@ model, which triggers the same pipeline again – so undo / redo, comments and f
 Possible next steps: a VS Code extension (the language package can be used by a Langium language server
 together with `sprotty-vscode`) and code generation for further target languages (see [ROADMAP.md](ROADMAP.md)).
 
-## Code generation (C)
+## Code generation (C++)
 
-`hsm generate c model.hsm -o gen` (or `generateC(machine, options)` of `hsm-language`) generates C99
-code in the spirit of the itemis CREATE C generator: `sc_types.h` (`sc_integer` = `int64_t`,
-`sc_real` = `double`, `sc_boolean` = `bool`, `sc_string` = `const char *`) and one `.h` / `.c` pair
-per state machine, named after the state machine in snake case (`TrafficLight` →
-`traffic_light.h`, prefix `traffic_light_`; option `--prefix`). The code implements
-[`docs/semantics.md`](docs/semantics.md) exactly like the interpreter: every scenario of the
-conformance suite is compiled with gcc (`-std=c99 -Wall -Wextra -Wpedantic -Werror`) and run by
-`npm test`, the examples are also compiled with clang. It uses no dynamic memory and no global
-state – everything is in the handle struct – and consists of readable functions per state
-(`enter_…`, `exit_…`, `react_…`), region and transition, with comments naming them.
+C++ is the primary code generation target. `hsm generate cpp model.hsm -o gen` (or
+`generateCpp(machine, options)` of `hsm-language`) generates code in the spirit of the itemis CREATE C++
+generator: one class per state machine in `<Class>.h` / `<Class>.cpp` (`TrafficLight.h`,
+`TrafficLight.cpp`) plus the shared runtime header `sc_statemachine.h` (`sc::integer` = `int64_t`,
+`sc::real` = `double`, `sc::boolean` = `bool`, `sc::string` = `std::string`, the interfaces
+`sc::StatemachineInterface`, `sc::TimedInterface`, `sc::TimerServiceInterface`, observers and errors).
+Options: `--namespace a::b` (default: the `namespace` of the model, `""` for none), `--class-name`,
+`--std 11` (the code is written for C++17; with `--std 11` it also compiles as C++11 – the only
+difference are nested namespace definitions).
 
-Generated API (for `TrafficLight`; `@EventDriven` machines process each event when it is raised):
+The code implements [`docs/semantics.md`](docs/semantics.md) exactly like the interpreter: every scenario
+of the conformance suite is compiled with g++ (`-std=c++17 -Wall -Wextra -Wpedantic -Werror -Wshadow
+-Wconversion`, checked with clang++ too) and run by `npm test`; the examples are also compiled as C++11
+and with `-fno-exceptions`. The class uses no global state and no RTTI; it allocates dynamic memory
+only in `std::string` values and, for `@EventDriven` machines, in the `std::deque` event queues. It is readable: private member functions per
+state (`enter_…`, `exit_…`, `react_…`), region and transition, with comments naming them. It is not
+thread-safe: call it from one thread (or synchronize the calls).
 
-| Function | |
+Generated API (for `TrafficLight` of [`examples/traffic-light.hsm`](examples/traffic-light.hsm)):
+
+| Member | |
 |---|---|
-| `void traffic_light_init(TrafficLight *h)` | initializes the handle (call first) |
-| `void traffic_light_enter(TrafficLight *h)` / `traffic_light_exit` | enters / exits the state machine |
-| `void traffic_light_run_cycle(TrafficLight *h)` | one run cycle (cycle based: call every `TRAFFIC_LIGHT_CYCLE_PERIOD_MS`) |
-| `void traffic_light_raise_powerOn(TrafficLight *h)` | raises an in event (typed events take a value); named interfaces: `traffic_light_Pedestrian_raise_request` |
-| `sc_boolean traffic_light_is_raised_lightsChanged(const TrafficLight *h)` | whether an out event was raised in the last call; value: `traffic_light_get_lightsChanged_value` |
-| `traffic_light_set_out_event_observer(h, callback)` | optional callback for every out event (`TrafficLightEvent` id) |
-| `traffic_light_get_x` / `traffic_light_set_x`, `traffic_light_Pedestrian_get_waiting`, `traffic_light_internal_get_lights` | variables and constants (setters only for writable variables) |
-| `traffic_light_is_state_active(h, TrafficLight_Operating_Red)`, `traffic_light_is_final`, `traffic_light_is_active` | state queries (`TrafficLightState` enum) |
-| `void traffic_light_raise_time_event(TrafficLight *h, TrafficLightTimerId timer)` | called by the timer service when a timer expires |
+| `void enter()`, `void exit()` | enters / exits the state machine (`sc::StatemachineInterface`) |
+| `void runCycle()` | one run cycle; call it every `TrafficLight::cyclePeriodMs` ms (`@EventDriven`: each event is processed when it is raised, `runCycle()` performs a step without events) |
+| `bool isActive()`, `bool isFinal()`, `bool isStateActive(State s)` | state queries, `enum class State { Off, Operating, Operating_Red, … }` |
+| `void raise_powerOn()` | raises an in event of the unnamed interface (typed events take the value) |
+| `bool isRaised_lightsChanged()`, `sc::integer get_lightsChanged_value()` | whether an out event was raised in the last call of `enter`, `exit`, `runCycle`, `raiseTimeEvent` or (event driven) `raise_…`, and its value |
+| `sc::rx::Observable<sc::integer>& getLightsChanged()` | out event observable: `subscribe(observer)` with an `sc::rx::Observer<T>` (`sc::rx::Observer<void>` for events without value) that is notified immediately; no dynamic memory, an observer observes one observable at a time and unsubscribes itself when it is destroyed |
+| `get_x()`, `set_x(v)` | variables and constants of the unnamed interface (no setter for constants and `readonly` variables) |
+| `Pedestrian& getPedestrian()` | a named interface: nested class `TrafficLight::Pedestrian` with the same members (`getPedestrian().raise_request()`, `get_waiting()`, …) |
+| `setOperationCallback(OperationCallback*)`, `setInternalOperationCallback(InternalOperationCallback*)`, `getPedestrian().setOperationCallback(Pedestrian::OperationCallback*)` | the operations: the host implements the abstract callback classes (like the operation callbacks of itemis CREATE); without a callback an operation returns the default value of its return type |
+| `setTimerService(sc::TimerServiceInterface*)`, `raiseTimeEvent(sc::eventid)` | time events (`sc::TimedInterface`, only for machines with time events): the state machine calls `setTimer(machine, event, durationNs, periodic)` / `unsetTimer(machine, event)` of the timer service (durations in nanoseconds), the host calls `raiseTimeEvent(event)` when a timer expires |
+| `setErrorHandler(sc::ErrorHandler*)` | runtime errors, see below |
 
-The host implements the **required functions** (like the operation callbacks of itemis CREATE):
-operations `traffic_light_<op>` / `traffic_light_<Interface>_<op>` / `traffic_light_internal_<op>`
-with the handle as first argument (variable arguments are passed as count and array), the timer
-service `traffic_light_set_timer(h, timer, duration_ns, periodic)` / `traffic_light_unset_timer(h, timer)`
-(only for machines with time events; durations in nanoseconds) and the error hook
-`traffic_light_on_error(h, error, message)`. Runtime errors of the semantics (a choice without
-enabled branch, a composite state without initial transition, an exit node without transition,
-division by zero, too many transitions in one step, a full event queue, a string that does not fit
-its buffer) are reported to the hook; after it returns the machine continues with the failed part
-skipped (the choice is not left, the division yields 0, the string is truncated). The handle has a
-`user_data` pointer for the host, e.g. to find its timers when there are several instances.
+Operations with variable-length parameters receive them as `std::initializer_list<T>` (no allocation).
+Strings are passed as `const sc::string&` and returned by value. The internal scope is private; tests can
+read and write it through a struct `TrafficLightInternals` (a friend of the class they may define).
 
-Strings (variables, event values, concatenation results) are stored in buffers of
-`<PREFIX>_STRING_CAPACITY` bytes (default 64, generator option `stringCapacity` or `-D`), the event
-queues of event driven machines hold `<PREFIX>_QUEUE_CAPACITY` events (default 16), and loops are
-stopped after `<PREFIX>_MAX_MICROSTEPS` transitions (default 1000).
+**Runtime errors** of the semantics (a choice without enabled branch, a composite state without initial
+transition, an exit node without transition, division by zero, a shift out of range, too many transitions
+in one step, …) throw an `sc::StatemachineError` (derived from `std::runtime_error`, with `kind()`) whose
+message has the format of the interpreter (`Choice 'C' has no enabled outgoing transition (line 12: 'choice C')`).
+Like in the interpreter, the step is aborted and the state machine stays usable (its configuration may be
+inconsistent). For code without exceptions, set an `sc::ErrorHandler`: it receives the error and the
+machine continues with the failed part skipped like the C code (a division yields 0, the choice is not
+left). Without handler and without exceptions (`-fno-exceptions`) an error calls `std::abort()`.
 
-```c
-#include <stdio.h>
-#include "traffic_light.h"
+A complete host with a timer service based on `std::chrono`, an operation callback and an observer
+(compiled and run by `npm test`):
 
-typedef struct {
-    sc_boolean active, periodic;
-    sc_integer remaining_ns, period_ns;
-} Timer;
+```cpp
+#include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <thread>
+#include <vector>
+#include "TrafficLight.h"
 
-static Timer timers[TRAFFIC_LIGHT_TIMER_COUNT];
+using Clock = std::chrono::steady_clock;
 
-/* timer service */
-void traffic_light_set_timer(TrafficLight *h, TrafficLightTimerId timer, sc_integer duration_ns, sc_boolean periodic) {
-    (void)h;
-    timers[timer].active = true;
-    timers[timer].periodic = periodic;
-    timers[timer].remaining_ns = duration_ns;
-    timers[timer].period_ns = duration_ns;
-}
+// Timer service: the host checks the timers before every run cycle.
+class TimerService : public sc::TimerServiceInterface {
+public:
+    void setTimer(sc::TimedInterface* machine, sc::eventid event, sc::integer durationNs, bool periodic) override {
+        unsetTimer(machine, event);
+        const std::chrono::nanoseconds period(durationNs);
+        timers.push_back(Timer{machine, event, Clock::now() + period, period, periodic});
+    }
 
-void traffic_light_unset_timer(TrafficLight *h, TrafficLightTimerId timer) {
-    (void)h;
-    timers[timer].active = false;
-}
+    void unsetTimer(sc::TimedInterface* machine, sc::eventid event) override {
+        timers.erase(std::remove_if(timers.begin(), timers.end(), [&](const Timer& timer) {
+            return timer.machine == machine && timer.event == event;
+        }), timers.end());
+    }
 
-/* operation switchOn of the internal scope */
-void traffic_light_internal_switchOn(TrafficLight *h, sc_integer mask) {
-    (void)h;
-    printf("lights: %d\n", (int)mask);
-}
-
-void traffic_light_on_error(TrafficLight *h, TrafficLightError error, const char *message) {
-    (void)h;
-    fprintf(stderr, "state machine error %d: %s\n", (int)error, message);
-}
-
-int main(void) {
-    const sc_integer period_ns = TRAFFIC_LIGHT_CYCLE_PERIOD_MS * INT64_C(1000000);
-    TrafficLight light;
-    int i;
-
-    traffic_light_init(&light);
-    traffic_light_enter(&light);
-    traffic_light_raise_powerOn(&light);
-    for (;;) {
-        /* ... wait for the next cycle (TRAFFIC_LIGHT_CYCLE_PERIOD_MS), e.g. a timer interrupt ... */
-        for (i = 0; i < TRAFFIC_LIGHT_TIMER_COUNT; i++) {
-            if (timers[i].active && (timers[i].remaining_ns -= period_ns) <= 0) {
-                traffic_light_raise_time_event(&light, (TrafficLightTimerId)i);
-                if (timers[i].periodic) {
-                    timers[i].remaining_ns += timers[i].period_ns;
-                } else {
-                    timers[i].active = false;
-                }
+    // Raises the time events of all expired timers.
+    void raiseExpired() {
+        const Clock::time_point now = Clock::now();
+        std::vector<Timer> expired;
+        for (auto it = timers.begin(); it != timers.end();) {
+            if (it->due > now) {
+                ++it;
+                continue;
+            }
+            expired.push_back(*it);
+            if (it->periodic) {
+                it->due += it->period;
+                ++it;
+            } else {
+                it = timers.erase(it);
             }
         }
-        traffic_light_run_cycle(&light);
-        if (traffic_light_is_raised_lightsChanged(&light)) {
-            printf("lights changed: %d\n", (int)traffic_light_get_lightsChanged_value(&light));
+        for (const Timer& timer : expired) {
+            timer.machine->raiseTimeEvent(timer.event);
         }
     }
+
+private:
+    struct Timer {
+        sc::TimedInterface* machine;
+        sc::eventid event;
+        Clock::time_point due;
+        std::chrono::nanoseconds period;
+        bool periodic;
+    };
+    std::vector<Timer> timers;
+};
+
+// Operation switchOn of the internal scope.
+class Lights : public TrafficLight::InternalOperationCallback {
+public:
+    void switchOn(sc::integer mask) override {
+        std::printf("lights: %d\n", static_cast<int>(mask));
+    }
+};
+
+// Observer of the out event lightsChanged.
+class LightsChanged : public sc::rx::Observer<sc::integer> {
+public:
+    void next(const sc::integer& lights) override {
+        std::printf("lights changed: %d\n", static_cast<int>(lights));
+    }
+};
+
+int main() {
+    TrafficLight light;
+    TimerService timerService;
+    Lights lights;
+    LightsChanged lightsChanged;
+    light.setTimerService(&timerService);
+    light.setInternalOperationCallback(&lights);
+    light.getLightsChanged().subscribe(lightsChanged);
+
+    try {
+        light.enter();
+        light.raise_powerOn();
+        Clock::time_point next = Clock::now();
+        for (int cycle = 0; cycle < 600; cycle++) { // one minute
+            next += std::chrono::milliseconds(TrafficLight::cyclePeriodMs);
+            std::this_thread::sleep_until(next);
+            timerService.raiseExpired();
+            if (cycle == 300 && light.isStateActive(TrafficLight::State::Operating_Green)) {
+                light.getPedestrian().raise_request(); // a pedestrian presses the button
+            }
+            light.runCycle();
+        }
+        light.exit();
+    } catch (const sc::StatemachineError& error) {
+        std::fprintf(stderr, "state machine error: %s\n", error.what());
+        return 1;
+    }
+    return 0;
 }
 ```
 
-The test harnesses are generated from the scenarios by `generateScenarioHarness(api, scenario)`
-(mocked operations with scripted results, a virtual timer service); `HSM_CFLAGS='-O2
--fsanitize=address,undefined' npm test` runs them with sanitizers.
+```bash
+node packages/language/bin/cli.js generate cpp examples/traffic-light.hsm -o gen
+g++ -std=c++17 -Wall -Wextra -Igen -o traffic-light main.cpp gen/TrafficLight.cpp
+```
+
+The test harnesses are generated from the scenarios by `generateCppScenarioHarness(api, scenario)`
+(mocked operation callbacks with scripted results, a virtual timer service, observers recording the out
+events); `HSM_CXXFLAGS='-O1 -fsanitize=address,undefined' npm test` runs them with sanitizers.
+
+## Code generation (C)
+
+C is also available: `hsm generate c model.hsm -o gen` (or `generateC(machine, options)`) generates C99
+code in the spirit of the itemis CREATE C generator – `sc_types.h` and one `.h` / `.c` pair per state
+machine named after it in snake case (`traffic_light.h`, prefix `traffic_light_`; option `--prefix`).
+It shares the implementation of the semantics with the C++ generator (`src/generator/common`) and passes
+the same conformance suite (gcc and clang, `-std=c99 -Wall -Wextra -Wpedantic -Werror`). It uses no
+dynamic memory and no global state – everything is in the handle struct:
+
+| Function | |
+|---|---|
+| `traffic_light_init(&h)`, `traffic_light_enter(&h)`, `traffic_light_exit(&h)` | initializes the handle (first), enters / exits the state machine |
+| `traffic_light_run_cycle(&h)` | one run cycle (every `TRAFFIC_LIGHT_CYCLE_PERIOD_MS`) |
+| `traffic_light_raise_powerOn(&h)`, `traffic_light_Pedestrian_raise_request(&h)` | raises in events |
+| `traffic_light_is_raised_lightsChanged(&h)`, `traffic_light_get_lightsChanged_value(&h)`, `traffic_light_set_out_event_observer(&h, callback)` | out events |
+| `traffic_light_get_x` / `traffic_light_set_x`, `traffic_light_internal_get_lights` | variables and constants |
+| `traffic_light_is_state_active(&h, TrafficLight_Operating_Red)`, `traffic_light_is_final`, `traffic_light_is_active` | state queries |
+| `traffic_light_raise_time_event(&h, timer)` | called by the timer service when a timer expires |
+
+The host implements the **required functions**: the operations (`traffic_light_internal_switchOn(h, mask)`,
+variable arguments as count and array), the timer service `traffic_light_set_timer(h, timer, duration_ns,
+periodic)` / `traffic_light_unset_timer(h, timer)` and the error hook `traffic_light_on_error(h, error,
+message)`. Unlike C++, runtime errors do not abort the step: after the hook returns, the machine continues
+with the failed part skipped. Strings are stored in buffers of `<PREFIX>_STRING_CAPACITY` bytes (default
+64, longer strings are truncated with an error), the event queues of event driven machines hold
+`<PREFIX>_QUEUE_CAPACITY` events (default 16). The C harnesses are generated by
+`generateScenarioHarness(api, scenario)`; `HSM_CFLAGS='-O2 -fsanitize=address,undefined' npm test` runs
+them with sanitizers.
 
 ## Importing itemis CREATE models
 
