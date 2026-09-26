@@ -80,7 +80,8 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
   `hsm test` in the CLI (JUnit XML reports) and tests for all examples. Limitations: not run in the web
   editor yet; no `@Ignore`, packages / imports, call order verification or mock value sequences;
   operations of the state machine cannot be called from tests
-- 💭 Further generator targets (C++, Java, Python, TypeScript) depending on demand
+- 🚧 C++ code generator (primary target)
+- 💭 Further generator targets only on demand (currently none planned)
 - 💭 Generator configuration model (like itemis `.sgen` files)
 
 ## Phase 6 – Tooling 💭
@@ -90,9 +91,15 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 - 💭 Manual layout adjustments stored in the model
 - 💭 Coverage of states and transitions from simulation and tests
 
+## Decisions
+
+- **C++ is the only code generation target in use.** A C++ generator (itemis CREATE style, verified
+  against the conformance suite) is in progress; the C generator stays available.
+- **Hand-arranged layouts are evaluated on the separate branch `claude/manual-layout`** (sidecar
+  layout files, dragging / resizing, positions imported from `.sct` notation models). The main branch
+  keeps the automatic layout; the experiment is merged only if it proves worthwhile.
+
 ## Open questions
 
-- Which code generator targets are needed first?
 - Is simulation or SCTUnit-style testing used in current projects?
-- Are hand-arranged diagram layouts important, or is automatic layout acceptable?
-- Is deep C/C++ header integration (using C types in the statechart) required?
+- Is deep C/C++ header integration (using C/C++ types in the statechart) required?
