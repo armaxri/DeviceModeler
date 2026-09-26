@@ -1,9 +1,18 @@
 import {
-    AstUtils, DefaultScopeProvider, EMPTY_SCOPE, MapScope,
+    AstUtils, DefaultScopeProvider, DocumentCache, EMPTY_SCOPE, MapScope,
     type AstNode, type AstNodeDescription, type LangiumCoreServices, type ReferenceInfo, type Scope
 } from 'langium';
 import * as ast from './generated/ast.js';
 import { isScopeContainer, type ScopeContainer } from './model-utils.js';
+
+/** Scopes of one state machine, computed once per document version. */
+interface MachineScopes {
+    machine: ast.StateMachine;
+    /** Vertex scope per scope container (including the scopes of all enclosing containers). */
+    vertices: Map<ScopeContainer, Scope>;
+    events?: Scope;
+    elements?: Scope;
+}
 
 /**
  * Name resolution of the HSM language.
@@ -14,11 +23,17 @@ import { isScopeContainer, type ScopeContainer } from './model-utils.js';
  *   nearest vertex with a matching name wins.
  * - Declarations of the definition section are referenced by their simple name if they are declared
  *   in the unnamed interface or the internal scope, and by `Interface.name` for named interfaces.
+ *
+ * The scopes are cached per document (and state machine instance), so linking a big model is linear
+ * in the number of references instead of quadratic.
  */
 export class HsmScopeProvider extends DefaultScopeProvider {
 
+    protected readonly scopeCache: DocumentCache<string, MachineScopes>;
+
     constructor(services: LangiumCoreServices) {
         super(services);
+        this.scopeCache = new DocumentCache(services.shared);
     }
 
     override getScope(context: ReferenceInfo): Scope {
@@ -29,38 +44,82 @@ export class HsmScopeProvider extends DefaultScopeProvider {
             return this.vertexScope(container);
         }
         if (ast.isEventTrigger(container) || ast.isRaiseStatement(container) || ast.isValueOfExpression(container)) {
-            return this.declarationScope(container, ast.isEventDeclaration);
+            const scopes = this.machineScopes(container);
+            if (!scopes) {
+                return EMPTY_SCOPE;
+            }
+            return scopes.events ??= this.declarationScope(scopes.machine, ast.isEventDeclaration);
         }
         if (ast.isElementReference(container)) {
-            return this.declarationScope(container, d => ast.isVariableDeclaration(d) || ast.isOperationDeclaration(d));
+            const scopes = this.machineScopes(container);
+            if (!scopes) {
+                return EMPTY_SCOPE;
+            }
+            return scopes.elements ??= this.declarationScope(scopes.machine, d => ast.isVariableDeclaration(d) || ast.isOperationDeclaration(d));
         }
         return super.getScope(context);
     }
 
-    protected vertexScope(node: AstNode): Scope {
-        const descriptions: AstNodeDescription[] = [];
-        let current: AstNode | undefined = node;
-        while (current) {
-            if (isScopeContainer(current)) {
-                collectVertices(current, [], vertex => descriptions.push(this.descriptions.createDescription(vertex.vertex, vertex.name)));
-            }
-            current = current.$container;
-        }
-        // fallback: unique name suffixes anywhere in the state machine (e.g. `Playing` for `Closed.Active.Playing`)
-        const machine = AstUtils.getContainerOfType(node, ast.isStateMachine);
-        if (machine) {
-            for (const entry of globalSuffixes(machine)) {
-                descriptions.push(this.descriptions.createDescription(entry.vertex, entry.name));
-            }
-        }
-        return this.createScope(descriptions);
-    }
-
-    protected declarationScope(node: AstNode, filter: (declaration: ast.Declaration) => boolean): Scope {
+    /** The cached scopes of the state machine containing `node` (recomputed if the document was parsed again). */
+    protected machineScopes(node: AstNode): MachineScopes | undefined {
         const machine = AstUtils.getContainerOfType(node, ast.isStateMachine);
         if (!machine) {
+            return undefined;
+        }
+        const document = machine.$document;
+        if (!document) {
+            return { machine, vertices: new Map() };
+        }
+        const cached = this.scopeCache.get(document.uri, 'machine');
+        if (cached && cached.machine === machine) {
+            return cached;
+        }
+        const scopes: MachineScopes = { machine, vertices: new Map() };
+        this.scopeCache.set(document.uri, 'machine', scopes);
+        return scopes;
+    }
+
+    protected vertexScope(node: AstNode): Scope {
+        const scopes = this.machineScopes(node);
+        let container: AstNode | undefined = node;
+        while (container && !isScopeContainer(container)) {
+            container = container.$container;
+        }
+        if (!scopes || !container) {
             return EMPTY_SCOPE;
         }
+        return this.containerScope(container, scopes);
+    }
+
+    /** Vertices below `container` by their relative names, then the scope of the enclosing container. */
+    protected containerScope(container: ScopeContainer, scopes: MachineScopes): Scope {
+        const cached = scopes.vertices.get(container);
+        if (cached) {
+            return cached;
+        }
+        let parent: AstNode | undefined = container.$container;
+        while (parent && !isScopeContainer(parent)) {
+            parent = parent.$container;
+        }
+        const outer = parent
+            ? this.containerScope(parent, scopes)
+            // fallback: unique name suffixes anywhere in the state machine (e.g. `Playing` for `Closed.Active.Playing`)
+            : new MapScope(globalSuffixes(scopes.machine).map(entry => this.descriptions.createDescription(entry.vertex, entry.name)));
+        const names = new Set<string>();
+        const descriptions: AstNodeDescription[] = [];
+        collectVertices(container, [], entry => {
+            // the first vertex with a name wins (duplicates are reported by the validator)
+            if (!names.has(entry.name)) {
+                names.add(entry.name);
+                descriptions.push(this.descriptions.createDescription(entry.vertex, entry.name));
+            }
+        });
+        const scope = new MapScope(descriptions, outer);
+        scopes.vertices.set(container, scope);
+        return scope;
+    }
+
+    protected declarationScope(machine: ast.StateMachine, filter: (declaration: ast.Declaration) => boolean): Scope {
         const descriptions: AstNodeDescription[] = [];
         for (const scope of machine.scopes) {
             for (const declaration of scope.declarations) {
@@ -136,7 +195,12 @@ export function globalSuffixes(machine: ast.StateMachine): Array<{ vertex: ast.V
         const segments = name.split('.');
         for (let i = 1; i < segments.length; i++) {
             const suffix = segments.slice(i).join('.');
-            candidates.set(suffix, [...(candidates.get(suffix) ?? []), vertex]);
+            const vertices = candidates.get(suffix);
+            if (vertices) {
+                vertices.push(vertex);
+            } else {
+                candidates.set(suffix, [vertex]);
+            }
         }
     });
     return [...candidates.entries()]
@@ -157,4 +221,18 @@ export function referenceName(vertex: ast.Vertex, context: AstNode): string {
         }
     }
     return segments.join('.');
+}
+
+/**
+ * All vertices of the state machine whose (fully) qualified name is `name` or ends with `.name`,
+ * i.e. the candidates a (partially) qualified vertex name may denote.
+ */
+export function vertexCandidates(machine: ast.StateMachine, name: string): ast.Vertex[] {
+    const result: ast.Vertex[] = [];
+    collectVertices(machine, [], entry => {
+        if (entry.name === name || entry.name.endsWith(`.${name}`)) {
+            result.push(entry.vertex);
+        }
+    });
+    return result;
 }

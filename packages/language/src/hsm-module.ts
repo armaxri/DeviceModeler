@@ -4,13 +4,16 @@ import {
     type DefaultSharedModuleContext, type LangiumServices, type LangiumSharedServices, type PartialLangiumServices
 } from 'langium/lsp';
 import { HsmGeneratedModule, HsmGeneratedSharedModule } from './generated/module.js';
+import { HsmDocumentValidator, HsmExpressionValidator } from './hsm-expression-validator.js';
 import { HsmFormatter } from './hsm-formatter.js';
+import { HsmLinker } from './hsm-linker.js';
 import { HsmScopeProvider } from './hsm-scope.js';
 import { HsmValidator, registerValidationChecks } from './hsm-validator.js';
 
 export type HsmAddedServices = {
     validation: {
-        HsmValidator: HsmValidator
+        HsmValidator: HsmValidator,
+        HsmExpressionValidator: HsmExpressionValidator
     }
 };
 
@@ -18,10 +21,13 @@ export type HsmServices = LangiumServices & HsmAddedServices;
 
 export const HsmModule: Module<HsmServices, PartialLangiumServices & HsmAddedServices> = {
     references: {
-        ScopeProvider: (services) => new HsmScopeProvider(services)
+        ScopeProvider: (services) => new HsmScopeProvider(services),
+        Linker: (services) => new HsmLinker(services)
     },
     validation: {
-        HsmValidator: () => new HsmValidator()
+        DocumentValidator: (services) => new HsmDocumentValidator(services),
+        HsmValidator: () => new HsmValidator(),
+        HsmExpressionValidator: () => new HsmExpressionValidator()
     },
     lsp: {
         Formatter: () => new HsmFormatter()

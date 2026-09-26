@@ -11,3 +11,6 @@ export * from './generator/plantuml.js';
 export * from './diagram/diagram-model.js';
 export * from './diagram/layout.js';
 export * from './edit/model-edits.js';
+export * from './hsm-linker.js';
+export * from './hsm-expression-validator.js';
+export * from './hsm-typesystem.js';

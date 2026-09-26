@@ -17,6 +17,31 @@ export function registerValidationChecks(services: HsmServices): void {
         Transition: [validator.checkTransition, validator.checkDeterminism]
     };
     registry.register(checks, validator);
+
+    const expressions = services.validation.HsmExpressionValidator;
+    const expressionChecks: ValidationChecks<ast.HsmAstType> = {
+        StateMachine: [expressions.checkAnnotationCombinations, expressions.checkUnusedDeclarations],
+        Annotation: expressions.checkAnnotation,
+        InterfaceScope: expressions.checkInterfaceScope,
+        InternalScope: expressions.checkInternalScope,
+        TypeReference: expressions.checkTypeReference,
+        VariableDeclaration: expressions.checkVariable,
+        OperationDeclaration: expressions.checkOperation,
+        ReactionSpec: expressions.checkGuard,
+        LocalReaction: expressions.checkGuard,
+        EventTrigger: expressions.checkEventTrigger,
+        TimeTrigger: expressions.checkTimeTrigger,
+        ExpressionStatement: expressions.checkExpressionStatement,
+        RaiseStatement: expressions.checkRaise,
+        ValueOfExpression: expressions.checkValueOf,
+        AssignmentExpression: expressions.checkAssignment,
+        BinaryExpression: expressions.checkBinary,
+        UnaryExpression: expressions.checkUnary,
+        ConditionalExpression: expressions.checkConditional,
+        CastExpression: expressions.checkCast,
+        ElementReference: expressions.checkElementReference
+    };
+    registry.register(expressionChecks, expressions);
 }
 
 export class HsmValidator {
