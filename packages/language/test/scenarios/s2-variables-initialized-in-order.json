@@ -1,0 +1,23 @@
+{
+    "name": "s2-variables-initialized-in-order",
+    "description": "Variables and constants are initialized in declaration order on enter; defaults without initializer.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        var a : integer = 2",
+        "        var b : integer = a * 3",
+        "        var i : integer",
+        "        var r : real",
+        "        var f : boolean",
+        "        var s : string",
+        "    internal:",
+        "        const K : integer = b + 1",
+        "    [*] -> A",
+        "    state A",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"a": 2, "b": 6, "K": 7, "i": 0, "r": 0.0, "f": false, "s": ""}}}
+    ]
+}

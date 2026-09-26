@@ -1,0 +1,33 @@
+{
+    "name": "s4-child-first",
+    "description": "Child first: the child is processed first; the parent is not processed when a child took a transition.",
+    "text": [
+        "statemachine M {",
+        "    @ChildFirstExecution",
+        "    interface:",
+        "        in event e",
+        "        var log : string",
+        "    [*] -> P",
+        "    state P {",
+        "        e / log = log + \"p\"",
+        "        [*] -> C1",
+        "        state C1 {",
+        "            e / log = log + \"c\"",
+        "        }",
+        "        state C2",
+        "        C1 -> C2 : e / log = log + \"C\"",
+        "    }",
+        "    state Q",
+        "    P -> Q : e [log == \"x\"] / log = log + \"P\"",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "e"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.C2"], "variables": {"log": "C"}}},
+        {"raise": "e"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.C2"], "variables": {"log": "Cp"}}}
+    ]
+}

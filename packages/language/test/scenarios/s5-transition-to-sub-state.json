@@ -1,0 +1,27 @@
+{
+    "name": "s5-transition-to-sub-state",
+    "description": "A transition from a state to its own sub state exits and re-enters the state.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event e",
+        "        operation log(msg : string) : void",
+        "    [*] -> P",
+        "    state P {",
+        "        entry / log(\"enter P\")",
+        "        exit / log(\"exit P\")",
+        "        [*] -> A",
+        "        state A",
+        "        state B",
+        "    }",
+        "    P -> B : e",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"calls": ["log(\"enter P\")"]}},
+        {"raise": "e"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.B"], "calls": ["log(\"exit P\")", "log(\"enter P\")"]}}
+    ]
+}

@@ -1,0 +1,21 @@
+{
+    "name": "s2-integer-to-real-and-cast",
+    "description": "integer is converted to real implicitly; \"as integer\" truncates toward zero.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        var r : real = 3",
+        "        var i : integer",
+        "        var j : integer",
+        "        var mixed : real",
+        "    [*] -> A",
+        "    state A {",
+        "        entry / i = 2.9 as integer; j = -2.9 as integer; mixed = 1 + 0.5; r = r / 2",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"r": 1.5, "i": 2, "j": -2, "mixed": 1.5}}}
+    ]
+}

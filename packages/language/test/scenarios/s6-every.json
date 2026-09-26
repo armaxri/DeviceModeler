@@ -1,0 +1,22 @@
+{
+    "name": "s6-every",
+    "description": "every n unit fires periodically while the state is active.",
+    "text": [
+        "statemachine M {",
+        "    @CycleBased(100)",
+        "    interface:",
+        "        var n : integer",
+        "    [*] -> A",
+        "    state A {",
+        "        every 300 ms / n += 1",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"runFor": 1000},
+        {"expect": {"variables": {"n": 3}}},
+        {"runFor": 200},
+        {"expect": {"variables": {"n": 4}}}
+    ]
+}

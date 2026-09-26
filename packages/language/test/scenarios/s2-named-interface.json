@@ -1,0 +1,24 @@
+{
+    "name": "s2-named-interface",
+    "description": "Events and variables of named interfaces are referenced as Iface.name.",
+    "text": [
+        "statemachine M {",
+        "    interface Panel:",
+        "        in event press : integer",
+        "        out event shown : integer",
+        "        var count : integer",
+        "    [*] -> A",
+        "    state A {",
+        "        Panel.press / Panel.count += valueof(Panel.press); raise Panel.shown : Panel.count",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "Panel.press", "value": 2},
+        {"runCycle": true},
+        {"raise": "Panel.press", "value": 3},
+        {"runCycle": true},
+        {"expect": {"variables": {"Panel.count": 5}, "outEvents": ["Panel.shown(2)", "Panel.shown(5)"]}}
+    ]
+}

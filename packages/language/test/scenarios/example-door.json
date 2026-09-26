@@ -1,0 +1,20 @@
+{
+    "name": "example-door",
+    "description": "Door: event driven, child first, entry point, exit node, fork and join.",
+    "model": "../../../../examples/door.hsm",
+    "steps": [
+        {"enter": true},
+        {"expect": {"configuration": ["Closed"], "variables": {"cycles": 1}}},
+        {"raise": "open"},
+        {"expect": {"configuration": ["Moving.Up"]}},
+        {"raise": "obstacle"},
+        {"expect": {"configuration": ["Service.Locked", "Service.On"], "outEvents": ["alarm"]}},
+        {"raise": "motorStopped"},
+        {"expect": {"configuration": ["Service.Locked", "Service.On"]}},
+        {"raise": "serviceDone"},
+        {"expect": {"configuration": ["Closed"], "variables": {"cycles": 2}}},
+        {"raise": "open"},
+        {"raise": "motorStopped"},
+        {"expect": {"configuration": ["Closed"], "variables": {"cycles": 3}}}
+    ]
+}

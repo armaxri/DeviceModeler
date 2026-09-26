@@ -1,0 +1,21 @@
+{
+    "name": "s2-division-by-zero",
+    "description": "Integer division by zero is a runtime error.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "        var z : integer",
+        "        var r : integer",
+        "    [*] -> A",
+        "    state A {",
+        "        go / r = 1 / z",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "go"},
+        {"runCycle": true, "expectError": "Division by zero"}
+    ]
+}

@@ -1,0 +1,26 @@
+{
+    "name": "s7-choice-effects",
+    "description": "Choice: the incoming effect is executed before the guards are evaluated, then the outgoing effect.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "        var x : integer",
+        "        var log : string",
+        "    [*] -> A",
+        "    state A",
+        "    state Big",
+        "    state Small",
+        "    choice C",
+        "    A -> C : go / x = 10; log = log + \"in \"",
+        "    C -> Big : [x > 5] / log = log + \"big\"",
+        "    C -> Small : else / log = log + \"small\"",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Big"], "variables": {"log": "in big"}}}
+    ]
+}

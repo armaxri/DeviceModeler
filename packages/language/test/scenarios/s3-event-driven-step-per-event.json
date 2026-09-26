@@ -1,0 +1,26 @@
+{
+    "name": "s3-event-driven-step-per-event",
+    "description": "Event driven: every event raised by the host triggers its own step immediately.",
+    "text": [
+        "statemachine M {",
+        "    @EventDriven",
+        "    interface:",
+        "        in event a",
+        "        in event b",
+        "    [*] -> S1",
+        "    state S1",
+        "    state S2",
+        "    state S3",
+        "    S1 -> S2 : a",
+        "    S2 -> S3 : a",
+        "    S1 -> S3 : b",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "a"},
+        {"expect": {"configuration": ["S2"]}},
+        {"raise": "a"},
+        {"expect": {"configuration": ["S3"]}}
+    ]
+}

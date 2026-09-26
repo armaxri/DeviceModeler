@@ -1,0 +1,26 @@
+{
+    "name": "s3-cycle-out-events",
+    "description": "Cycle based: out events raised in a cycle are reported to the host.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "        out event done",
+        "        out event count : integer",
+        "    [*] -> A",
+        "    state A",
+        "    state B {",
+        "        entry / raise count : 2",
+        "    }",
+        "    A -> B : go / raise done",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"runCycle": true},
+        {"expect": {"outEvents": []}},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"outEvents": ["done", "count(2)"]}}
+    ]
+}

@@ -1,0 +1,24 @@
+{
+    "name": "s8-composite-without-initial",
+    "description": "Entering a composite state by default without initial transition is a runtime error.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "    [*] -> A",
+        "    state A",
+        "    state P {",
+        "        entry E",
+        "        state X",
+        "        state Y",
+        "        E -> X",
+        "    }",
+        "    A -> P : go",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "go"},
+        {"runCycle": true, "expectError": "has no initial transition"}
+    ]
+}

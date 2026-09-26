@@ -1,0 +1,25 @@
+{
+    "name": "s7-history-without-record-initial",
+    "description": "Without recorded history and without default transition the region is entered by its initial transition.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "    [*] -> Q",
+        "    state P {",
+        "        [*] -> A",
+        "        history H",
+        "        state A",
+        "        state B",
+        "    }",
+        "    state Q",
+        "    Q -> H : go",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.A"]}}
+    ]
+}

@@ -1,0 +1,20 @@
+{
+    "name": "s2-evaluation-order",
+    "description": "Expressions are evaluated left to right (operation calls happen in this order).",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        var r : integer",
+        "        operation f(x : integer) : integer",
+        "    [*] -> A",
+        "    state A {",
+        "        entry / r = f(1) - f(2) * f(3)",
+        "    }",
+        "}"
+    ],
+    "operations": {"f": [10, 2, 3]},
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"r": 4}, "calls": ["f(1)", "f(2)", "f(3)"]}}
+    ]
+}

@@ -1,0 +1,27 @@
+{
+    "name": "s4-parent-first-priority",
+    "description": "Parent first: a transition of the parent has priority over transitions of its sub states.",
+    "text": [
+        "statemachine M {",
+        "    @ParentFirstExecution",
+        "    interface:",
+        "        in event e",
+        "        var log : string",
+        "    [*] -> P",
+        "    state P {",
+        "        [*] -> C1",
+        "        state C1",
+        "        state C2",
+        "        C1 -> C2 : e / log = log + \"child\"",
+        "    }",
+        "    state Q",
+        "    P -> Q : e / log = log + \"parent\"",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "e"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Q"], "variables": {"log": "parent"}}}
+    ]
+}

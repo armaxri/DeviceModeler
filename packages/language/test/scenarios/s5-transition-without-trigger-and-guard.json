@@ -1,0 +1,25 @@
+{
+    "name": "s5-transition-without-trigger-and-guard",
+    "description": "A transition leaving a state without trigger and without guard is never taken.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "    [*] -> A",
+        "    state A",
+        "    state B",
+        "    state C",
+        "    A -> B",
+        "    A -> C : go",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"runCycle": true},
+        {"runCycle": true},
+        {"expect": {"configuration": ["A"]}},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["C"]}}
+    ]
+}

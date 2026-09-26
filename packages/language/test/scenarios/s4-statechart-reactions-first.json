@@ -1,0 +1,24 @@
+{
+    "name": "s4-statechart-reactions-first",
+    "description": "Local reactions of the state machine itself are executed in every step before the top-level region; its entry reactions on enter.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event e",
+        "        var log : string",
+        "    entry / log = \"init \"",
+        "    e / log = log + \"machine \"",
+        "    [*] -> A",
+        "    state A {",
+        "        e / log = log + \"state\"",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"log": "init "}}},
+        {"raise": "e"},
+        {"runCycle": true},
+        {"expect": {"variables": {"log": "init machine state"}}}
+    ]
+}

@@ -1,0 +1,23 @@
+{
+    "name": "s6-after",
+    "description": "after n unit fires once when the time since entering the source state has elapsed (cycle based: in the next cycle).",
+    "text": [
+        "statemachine M {",
+        "    @CycleBased(100)",
+        "    [*] -> A",
+        "    state A",
+        "    state B",
+        "    A -> B : after 1 s",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"advance": 999},
+        {"runCycle": true},
+        {"expect": {"configuration": ["A"]}},
+        {"advance": 1},
+        {"expect": {"configuration": ["A"]}},
+        {"runCycle": true},
+        {"expect": {"configuration": ["B"]}}
+    ]
+}

@@ -1,0 +1,39 @@
+{
+    "name": "s2-active-expression",
+    "description": "active(S) is true if S is in the active configuration (here in an orthogonal region).",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event toggle",
+        "        in event check",
+        "        var seen : integer",
+        "    [*] -> P",
+        "    state P {",
+        "        region R1 {",
+        "            [*] -> Off",
+        "            state Off",
+        "            state On",
+        "            Off -> On : toggle",
+        "            On -> Off : toggle",
+        "        }",
+        "        region R2 {",
+        "            [*] -> W",
+        "            state W {",
+        "                check [active(On)] / seen += 1",
+        "            }",
+        "        }",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "check"},
+        {"runCycle": true},
+        {"expect": {"variables": {"seen": 0}}},
+        {"raise": "toggle"},
+        {"runCycle": true},
+        {"raise": "check"},
+        {"runCycle": true},
+        {"expect": {"variables": {"seen": 1}}}
+    ]
+}

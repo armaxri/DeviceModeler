@@ -1,0 +1,27 @@
+{
+    "name": "s6-timer-restarted-on-reentry",
+    "description": "Timers are cancelled when the state is exited and restarted when it is entered again.",
+    "text": [
+        "statemachine M {",
+        "    @CycleBased(100)",
+        "    interface:",
+        "        in event reset",
+        "    [*] -> A",
+        "    state A",
+        "    state B",
+        "    A -> B : after 1 s",
+        "    A -> A : reset",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"runFor": 800},
+        {"raise": "reset"},
+        {"runFor": 100},
+        {"expect": {"configuration": ["A"]}},
+        {"runFor": 900},
+        {"expect": {"configuration": ["A"]}},
+        {"runFor": 100},
+        {"expect": {"configuration": ["B"]}}
+    ]
+}

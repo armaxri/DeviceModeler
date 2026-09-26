@@ -1,0 +1,13 @@
+{
+    "name": "example-cd-player-no-disc",
+    "description": "CD player: the else branch of the choice is taken when no disc is inserted.",
+    "model": "../../../../examples/cd-player.hsm",
+    "operations": {"discInserted": [false]},
+    "steps": [
+        {"enter": true},
+        {"set": {"tracks": 5}},
+        {"raise": "play"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Closed.Stopped"], "calls": ["discInserted()"]}}
+    ]
+}

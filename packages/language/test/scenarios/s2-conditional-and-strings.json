@@ -1,0 +1,20 @@
+{
+    "name": "s2-conditional-and-strings",
+    "description": "Conditional expressions and string concatenation.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        var n : integer = 3",
+        "        var s : string",
+        "        var t : string",
+        "    [*] -> A",
+        "    state A {",
+        "        entry / s = n > 2 ? \"big\" : \"small\"; t = s + \"/\" + (n == 3 ? \"three\" : \"other\") + \"/\" + s",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"s": "big", "t": "big/three/big"}}}
+    ]
+}

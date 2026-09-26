@@ -54,8 +54,8 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 
 - ✅ Execution semantics specified in [docs/semantics.md](docs/semantics.md): cycle-based and
   event-driven, parent-first and child-first
-- 🚧 Interpreter with a virtual clock (`hsm simulate`)
-- 🚧 Shared conformance suite (scenario tests) for the interpreter and all code generators
+- ✅ Interpreter with a virtual clock (`hsm simulate`)
+- ✅ Shared conformance suite (scenario tests) for the interpreter and all code generators
 - 📋 Simulation in the web editor: raise events, inspect and change variables, advance time,
   animated active states and taken transitions, breakpoints
 - 📋 `@SuperSteps`, `@EventBuffering`, `@InEventQueue`

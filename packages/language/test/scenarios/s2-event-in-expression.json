@@ -1,0 +1,32 @@
+{
+    "name": "s2-event-in-expression",
+    "description": "An event used in an expression is true if it is present in the current step.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event e1",
+        "        in event e2",
+        "        var x : integer = 1",
+        "        var both : integer",
+        "    [*] -> A",
+        "    state A {",
+        "        e2 [e1 && x > 0] / both += 1",
+        "    }",
+        "    state B",
+        "    A -> B : always [e1 && !e2]",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "e2"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["A"], "variables": {"both": 0}}},
+        {"raise": "e1"},
+        {"raise": "e2"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["A"], "variables": {"both": 1}}},
+        {"raise": "e1"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["B"]}}
+    ]
+}

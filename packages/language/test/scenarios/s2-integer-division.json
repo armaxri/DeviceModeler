@@ -1,0 +1,22 @@
+{
+    "name": "s2-integer-division",
+    "description": "Integer division truncates toward zero, % has the sign of the dividend.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        var q1 : integer",
+        "        var q2 : integer",
+        "        var m1 : integer",
+        "        var m2 : integer",
+        "        var rq : real",
+        "    [*] -> A",
+        "    state A {",
+        "        entry / q1 = 7 / 2; q2 = -7 / 2; m1 = -7 % 3; m2 = 7 % -3; rq = 7.0 / 2",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"q1": 3, "q2": -3, "m1": -1, "m2": 1, "rq": 3.5}}}
+    ]
+}

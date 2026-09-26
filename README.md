@@ -84,6 +84,8 @@ node packages/language/bin/cli.js validate examples/cd-player.hsm
 node packages/language/bin/cli.js plantuml examples/cd-player.hsm -o cd-player.puml
 node packages/language/bin/cli.js layout examples/keyboard.hsm --direction RIGHT
 node packages/language/bin/cli.js import model.sct -o model.hsm   # itemis CREATE import, see below
+node packages/language/bin/cli.js simulate examples/cd-player.hsm -e play,eject,eject   # run the interpreter
+node packages/language/bin/cli.js simulate examples/door.hsm --script packages/language/test/scenarios/example-door.json
 ```
 
 ## The language
@@ -211,6 +213,8 @@ packages/
     src/edit/model-edits.ts   structural edits (add, move, rename, delete, add declaration, …) as text edits
     src/generator/plantuml.ts PlantUML generator
     src/importer/             itemis CREATE (.sct) importer with a small XML parser
+    src/simulation/           interpreter (docs/semantics.md) with virtual clock, scenario runner
+    test/scenarios/           conformance suite shared with code generators (format: README.md there)
     src/cli/main.ts           command line interface
   web/          Vite app: Monaco editor + Sprotty diagram
     src/app.ts                controller: text -> Langium -> ELK (web worker) -> Sprotty, diagram edits -> text

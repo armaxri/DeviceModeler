@@ -1,0 +1,26 @@
+{
+    "name": "s7-final-state-machine",
+    "description": "Entering the final state of the top-level region makes the state machine final; no further steps are performed.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event stop",
+        "        var n : integer",
+        "    [*] -> A",
+        "    state A {",
+        "        always / n += 1",
+        "    }",
+        "    A -> [*] : stop",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"runCycle": true},
+        {"raise": "stop"},
+        {"runCycle": true},
+        {"expect": {"final": true, "configuration": [], "variables": {"n": 1}}},
+        {"runCycle": true},
+        {"runCycle": true},
+        {"expect": {"final": true, "variables": {"n": 1}}}
+    ]
+}

@@ -1,0 +1,38 @@
+{
+    "name": "s5-transition-into-nested-state",
+    "description": "Entering a nested target enters its ancestors outermost first; their other regions are entered by default.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event e",
+        "        operation log(msg : string) : void",
+        "    [*] -> A",
+        "    state A",
+        "    state P {",
+        "        entry / log(\"P\")",
+        "        region R1 {",
+        "            [*] -> X",
+        "            state X {",
+        "                entry / log(\"X\")",
+        "            }",
+        "            state Y {",
+        "                entry / log(\"Y\")",
+        "            }",
+        "        }",
+        "        region R2 {",
+        "            [*] -> Z",
+        "            state Z {",
+        "                entry / log(\"Z\")",
+        "            }",
+        "        }",
+        "    }",
+        "    A -> P.Y : e",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "e"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.Y", "P.Z"], "calls": ["log(\"P\")", "log(\"Y\")", "log(\"Z\")"]}}
+    ]
+}

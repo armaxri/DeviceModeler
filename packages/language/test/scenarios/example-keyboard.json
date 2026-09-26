@@ -1,0 +1,25 @@
+{
+    "name": "example-keyboard",
+    "description": "Keyboard: orthogonal regions, out event with value, exit reactions when the composite state is left.",
+    "model": "../../../../examples/keyboard.hsm",
+    "steps": [
+        {"enter": true},
+        {"expect": {"configuration": ["Active.CapsOff", "Active.NumOff"], "variables": {"CAPS": 1, "NUM": 2}}},
+        {"raise": "capsLock"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Active.CapsOn", "Active.NumOff"], "calls": ["setLed(1, true)"], "outEvents": ["led(1)"]}},
+        {"raise": "capsLock"},
+        {"raise": "numLock"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Active.CapsOff", "Active.NumOn"], "calls": ["setLed(1, false)", "setLed(2, true)"], "outEvents": []}},
+        {"raise": "suspend"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Suspended"], "calls": ["setLed(2, false)"]}},
+        {"raise": "wakeUp"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Active.CapsOff", "Active.NumOff"], "calls": []}},
+        {"raise": "unplug"},
+        {"runCycle": true},
+        {"expect": {"final": true, "configuration": []}}
+    ]
+}

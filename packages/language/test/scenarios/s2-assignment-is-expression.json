@@ -1,0 +1,20 @@
+{
+    "name": "s2-assignment-is-expression",
+    "description": "Assignments are expressions whose value is the assigned value; compound assignments.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        var a : integer",
+        "        var b : integer",
+        "        var c : integer = 10",
+        "    [*] -> A",
+        "    state A {",
+        "        entry / a = b = 3; c -= a; c *= 4; c /= 3; c %= 5",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"a": 3, "b": 3, "c": 4}}}
+    ]
+}

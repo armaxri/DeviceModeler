@@ -1,0 +1,35 @@
+{
+    "name": "s3-cycle-events-collected",
+    "description": "Cycle based: events raised by the host are collected and are present together in the next cycle.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event a",
+        "        in event b",
+        "        var log : string",
+        "    [*] -> S",
+        "    state S {",
+        "        region R1 {",
+        "            [*] -> X1",
+        "            state X1 {",
+        "                a / log = log + \"a\"",
+        "            }",
+        "        }",
+        "        region R2 {",
+        "            [*] -> X2",
+        "            state X2 {",
+        "                b / log = log + \"b\"",
+        "            }",
+        "        }",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "b"},
+        {"raise": "a"},
+        {"expect": {"variables": {"log": ""}}},
+        {"runCycle": true},
+        {"expect": {"variables": {"log": "ab"}}}
+    ]
+}
