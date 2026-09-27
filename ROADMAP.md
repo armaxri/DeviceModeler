@@ -101,7 +101,11 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 - 💭 VS Code extension (Langium language server + `sprotty-vscode` diagram)
 - 💭 Multi-file projects and workspaces in the web editor
 - 💭 Manual layout adjustments stored in the model
-- 💭 Coverage of states and transitions from simulation and tests
+- ✅ Model coverage of unit tests (`hsm test --coverage`): states, transitions, local reactions and guard
+  decisions with per-test attribution; text, JSON, LCOV, Cobertura and HTML reports, thresholds for CI;
+  `CoverageCollector` attachable to any interpreter
+  - 📋 still missing: diagrams in the HTML report (hook ready for the SVG renderer), coverage view in the
+    web simulation and the VS Code extension
 
 ## Decisions
 

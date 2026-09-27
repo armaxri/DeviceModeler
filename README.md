@@ -264,6 +264,74 @@ Not yet supported (compared to SCTUnit): `@Ignore`, `package` / imports, test su
 order of calls, mocks with sequences of values, calling operations of the state machine in a test,
 `assert` on time (`proceed` is the only way to advance time); the web editor does not run tests yet.
 
+## Coverage
+
+`hsm test --coverage` measures which parts of the state machines the unit tests exercise (like the
+coverage view of SCTUnit in itemis CREATE). Coverage is aggregated over all tests of all test files:
+
+| Metric | Covered when |
+| --- | --- |
+| **States** | the state was entered; final states count per region (`[*]`, `Active.[*]`, `S.r1.[*]`) |
+| **Transitions** | the transition was taken – every transition of the model, including initial transitions, choice / junction branches, history defaults, entry / exit point transitions and each branch of a fork / join |
+| **Reactions** | the local reaction was executed (`entry`, `exit`, `always`, `oncycle`, event and time reactions, also those of the state machine) |
+| **Guard decisions** | each guard of a transition or local reaction counts twice: covered once it was evaluated to `true` and once to `false` (guards are evaluated only when a trigger matched) |
+
+```bash
+hsm test examples/tests/*.hsmtest --coverage                          # text summary + coverage/lcov.info + coverage/html/
+hsm test tests/*.hsmtest --coverage-format text,cobertura --coverage-dir build/coverage
+hsm test tests/*.hsmtest --coverage-threshold states=100,transitions=90   # exit code 1 if not reached
+```
+
+Any `--coverage-*` option implies `--coverage`. Formats (`--coverage-format`, default `text,lcov,html`):
+
+| Format | Output | Use |
+| --- | --- | --- |
+| `text` | table per state machine (states, transitions, reactions, guard decisions) and the uncovered elements with line numbers, on stdout | console, CI logs |
+| `json` | `coverage.json`: totals and every element with id, kind, name, line, diagram id, hits and the covering tests, every guard with its true / false counts (schema version 1, see `toCoverageJson`) | own tooling |
+| `lcov` | `lcov.info`: one record per `.hsm` file; lines (`DA`) are the lines of states, transitions and reactions (a line counts as covered only if all its elements are), functions (`FN`) are the states, branches (`BRDA`) the guard decisions | VS Code (e.g. *Coverage Gutters*), GitHub (Codecov, Coveralls), `genhtml` |
+| `cobertura` | `cobertura-coverage.xml` with the same lines and branches, paths relative to the working directory | GitLab merge request coverage, Jenkins |
+| `html` | `html/index.html` and one self-contained page per state machine with all elements (covered / uncovered, hits, tests) and guards | browsing, CI artifacts |
+
+`--coverage-threshold` takes `states`, `transitions`, `reactions`, `guards` (or `all` / a single number)
+in percent and checks the totals over all state machines. Element ids are stable and equal the ids of the
+diagram elements (`Closed`, `Active.Playing`, `#machine#initial->Closed`, `Closed->Opened`, `Closed->Opened~1`
+for a second transition between the same vertices, `Service#region1#final`, reactions `Opened#reaction2`),
+so reports can be mapped onto the diagram.
+
+CI examples:
+
+```yaml
+# GitLab: test report and coverage in merge requests
+model-tests:
+  script:
+    - npx hsm test tests/*.hsmtest --junit report.xml --coverage-format text,cobertura --coverage-threshold transitions=90
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+```
+
+```yaml
+# GitHub Actions
+- run: npx hsm test tests/*.hsmtest --junit report.xml --coverage-format text,lcov,html --coverage-threshold states=100
+- uses: actions/upload-artifact@v4
+  if: always()
+  with: { name: model-coverage, path: coverage/ }
+- uses: codecov/codecov-action@v5        # optional: coverage/lcov.info
+  with: { files: coverage/lcov.info }
+```
+
+As API, `runTests(test, machine, { coverage: new CoverageCollector() })` collects the coverage of tests;
+a `CoverageCollector` can also be attached to any interpreter –
+`new StatechartInterpreter(machine, collector.attach(options))` – e.g. to show the coverage of a
+simulation session (`collector.highlight(machine)` returns the diagram element ids with the classes
+`hsm-covered` / `hsm-uncovered`). The report functions are `toCoverageText`, `toCoverageJson`, `toLcov`,
+`toCobertura` and `toCoverageHtml` (with an optional `renderDiagram(machine, highlight)` hook that embeds the
+highlighted diagram).
+
 ## Editing in the diagram
 
 | Action | How |

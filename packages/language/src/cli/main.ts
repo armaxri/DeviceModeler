@@ -162,6 +162,10 @@ export function createProgram(): Command {
         .option('-m, --machine <files...>', 'state machine files (.hsm) or directories; the .hsm files next to the test files are loaded automatically')
         .option('--junit <file>', 'writes a JUnit XML report')
         .option('-v, --verbose', 'prints the trace of every test')
+        .option('--coverage', 'collects the model coverage (states, transitions, reactions, guard decisions)')
+        .option('--coverage-dir <dir>', 'directory of the coverage reports (default: coverage)')
+        .option('--coverage-format <formats>', 'comma separated: text, json, lcov, cobertura, html (default: text,lcov,html)')
+        .option('--coverage-threshold <thresholds>', 'minimum coverage in %, e.g. states=100,transitions=90 (exit code 1 if not met)')
         .description('runs the unit tests of state machines')
         .action(async (files: string[], options: TestCommandOptions) => {
             process.exitCode = await runTestCommand(files, options);
