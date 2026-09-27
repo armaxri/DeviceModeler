@@ -106,8 +106,10 @@ interface TransitionNode {
     target: VertexNode | 'final';
     /** Normalized reaction text (lines), without `# ...` part. */
     spec: string[];
-    entryPoint?: string;
-    exitPoint?: string;
+    /** Entry points selected by the transition (`# >E1 >E2`; only the first one is used). */
+    entryPoints: string[];
+    /** Exit nodes handled by the transition (`# X1> X2>`). */
+    exitPoints: string[];
     container: Container;
     order: [number, number];
 }
@@ -184,7 +186,7 @@ class SctImporter {
             for (const region of regions) {
                 this.convertRegionOf(main, region, regions.length);
             }
-            this.machine.transitions.push({ source: 'initial', target: main, spec: [], container: this.machine, order: [-1, 0] });
+            this.machine.transitions.push({ source: 'initial', target: main, spec: [], entryPoints: [], exitPoints: [], container: this.machine, order: [-1, 0] });
         }
     }
 
@@ -283,16 +285,36 @@ class SctImporter {
         return pseudo;
     }
 
-    /** Assigns unique, valid names to all vertices (siblings are the vertices of all regions of a state). */
+    /**
+     * Assigns unique, valid names to all vertices (siblings are the vertices of all regions of a state).
+     * Entry points and exit nodes of different regions may keep the same name (like in itemis CREATE).
+     */
     private assignNames(owner: MachineNode | StateNode): void {
         const siblings = owner.kind === 'state' && owner.regions.length > 0
             ? owner.regions.flatMap(r => r.vertices)
             : owner.vertices;
         const used = new Set<string>();
+        const holders = new Map<string, VertexNode[]>();
+        const isPoint = (v: VertexNode) => v.kind === 'entry' || v.kind === 'exit';
+        const name = (vertex: VertexNode, base: string, alwaysNumber = false): string => {
+            const free = (candidate: string) => (holders.get(candidate) ?? [])
+                .every(h => isPoint(vertex) && h.kind === vertex.kind && h.container !== vertex.container);
+            let result: string;
+            if (!alwaysNumber && free(base)) {
+                result = base;
+            } else {
+                // `used` contains all names; skip names that are taken for this vertex
+                const scratch = new Set([...used].filter(n => !free(n)));
+                result = uniqueName(base, scratch, alwaysNumber);
+            }
+            used.add(result);
+            holders.set(result, [...holders.get(result) ?? [], vertex]);
+            return result;
+        };
         for (const vertex of siblings.filter(v => v.originalName)) {
             const original = vertex.originalName!;
             const base = sanitizeName(original);
-            vertex.name = uniqueName(base, used);
+            vertex.name = name(vertex, base);
             if (vertex.name !== original) {
                 const what = vertex.kind === 'state' ? 'State' : `${capitalize(vertex.kind)}`;
                 this.warn(`${what} '${original}' was renamed to '${vertex.name}'${base === vertex.name ? '' : ' (duplicate name)'}.`);
@@ -306,7 +328,7 @@ class SctImporter {
                 : vertex.kind === 'history' ? 'H'
                     : vertex.kind === 'deephistory' ? 'DH'
                         : capitalize(vertex.kind);
-            vertex.name = uniqueName(base, used, vertex.kind !== 'history' && vertex.kind !== 'deephistory');
+            vertex.name = name(vertex, base, vertex.kind !== 'history' && vertex.kind !== 'deephistory');
             if (vertex.kind === 'state') {
                 this.warn(`An unnamed state was named '${vertex.name}'.`);
             }
@@ -370,50 +392,49 @@ class SctImporter {
         const spec = this.normalizeReaction(splitLines(reaction), `transition leaving '${sourceName}'`);
 
         // a transition to a named entry point enters the composite state through the entry point
-        let entryPoint: string | undefined;
+        let entryPoints: string[] = [];
         if (target !== 'final' && target.kind === 'entry') {
             const entry = target;
             const owner = ownerState(entry.container);
             if (owner) {
-                entryPoint = entry.name;
+                entryPoints = [entry.name];
                 target = owner;
                 targetContainer = owner.container;
             }
         }
         if (entries.length > 0) {
-            if (entries.length > 1) {
-                this.warn(`Transition '${sourceName}' -> '${targetName(target)}' selects several entry points (${entries.join(', ')}); only '${entries[0]}' was kept.`);
-            }
             const history = this.namedHistory(target, entries[0]);
             if (history) {
                 // itemis CREATE can enter a state through a named history entry: HSM targets the history pseudo state
                 target = history;
                 targetContainer = history.container;
             } else if (entries[0] !== 'default' && this.namedPoints(target, 'entry').some(p => p.originalName === entries[0])) {
-                entryPoint = this.resolvePointName(target, 'entry', entries[0]);
+                // itemis CREATE uses only the first entry point; the others are kept (HSM warns about them, like itemis)
+                const entryTarget = target;
+                const known = entries.slice(1).filter(name => name !== 'default' && this.namedPoints(entryTarget, 'entry').some(p => p.originalName === name));
+                if (known.length < entries.length - 1) {
+                    this.warn(`Transition '${sourceName}' -> '${targetName(target)}' selects unknown entry points (${entries.slice(1).filter(e => !known.includes(e)).join(', ')}); they were dropped (only the first entry point is used).`);
+                }
+                entryPoints = [...new Set([entries[0], ...known].map(name => this.resolvePointName(entryTarget, 'entry', name)))];
             } else if (entries[0] !== 'default') {
                 this.warn(`'${targetName(target)}' has no entry point named '${entries[0]}'; the transition from '${sourceName}' enters it by default (like itemis CREATE).`);
             }
+            if (entries.length > 1 && entryPoints.length <= 1) {
+                this.warn(`Transition '${sourceName}' -> '${targetName(target)}' selects several entry points (${entries.join(', ')}); only '${entries[0]}' is used (like itemis CREATE).`);
+            }
         }
 
-        let exitPoints: Array<string | undefined> = [undefined];
+        let exitPoints: string[] = [];
         if (isVertexNode(source) && source.kind === 'state') {
             if (exits.length > 0) {
                 exitPoints = exits.flatMap(name => name === 'default'
                     ? this.unnamedPoints(source, 'exit')
                     : [this.resolvePointName(source, 'exit', name)]);
-                if (exits.length > 1) {
-                    this.warn(`Transition '${source.name}' -> '${targetName(target)}' handles several exit nodes (${exits.join(', ')}); it was duplicated for each exit node.`);
-                }
-            } else {
-                const defaultExits = this.unnamedPoints(source, 'exit');
-                if (defaultExits.length > 0 && !hasTrigger(reaction)) {
-                    exitPoints = defaultExits;
-                    if (defaultExits.length > 1) {
-                        this.warn(`Transition '${source.name}' -> '${targetName(target)}' handles several default exits; it was duplicated for each exit node.`);
-                    }
-                }
+            } else if (!hasTrigger(reaction)) {
+                // itemis CREATE: a transition without trigger and exit specification handles the default (unnamed) exits
+                exitPoints = this.unnamedPoints(source, 'exit');
             }
+            exitPoints = [...new Set(exitPoints)];
         } else if (exits.length > 0) {
             this.warn(`Exit node specification '# ${exits.join('> ')}>' on a transition leaving '${sourceName}' was ignored.`);
         }
@@ -433,9 +454,7 @@ class SctImporter {
         } else {
             return [];
         }
-        return exitPoints.map(exitPoint => ({
-            source: transitionSource, target: target!, spec, entryPoint, exitPoint, container, order
-        }));
+        return [{ source: transitionSource, target: target!, spec, entryPoints, exitPoints, container, order }];
     }
 
     /**
@@ -484,9 +503,7 @@ class SctImporter {
             this.warn(`'${targetName(state)}' has no ${kind === 'entry' ? 'entry point' : 'exit node'} named '${name}'.`);
             return sanitizeName(name);
         }
-        if (matches.length > 1) {
-            this.warn(`'${targetName(state)}' has ${matches.length} ${kind === 'entry' ? 'entry points' : 'exit nodes'} named '${name}' (in different regions); HSM uses only '${matches[0].name}' for '# ${kind === 'entry' ? '>' + name : name + '>'}'.`);
-        }
+        // several regions may have an entry point / exit node with this name: they all keep the name
         return matches[0].name;
     }
 
@@ -620,9 +637,8 @@ class SctImporter {
                 // local reactions of the statechart itself are placed after the definition section
                 machineReactions.push(...this.normalizeReaction([trimmed], 'the statechart'));
             } else {
-                if (/^alias\b/.test(trimmed)) {
-                    this.warn(`Type aliases are not supported: '${trimmed}'.`);
-                }
+                // itemis CREATE allows `event e : void` for events without value; HSM omits the type
+                converted = mapCode(converted, code => code.replace(/^(\s*(?:(?:in|out)\s+)?event\s+\w+)\s*:\s*void\b/, '$1'));
                 scopes.push(trimmed ? this.indentUnit + converted : '');
             }
         }
@@ -714,7 +730,8 @@ class SctImporter {
         const source = t.source === 'initial' ? '[*]' : this.referenceName(t.source, t.container);
         const target = t.target === 'final' ? '[*]' : this.referenceName(t.target, t.container);
         const spec = this.rewriteReaction(t.spec, t.container);
-        const suffix = t.entryPoint ? ` # >${t.entryPoint}` : t.exitPoint ? ` # ${t.exitPoint}>` : '';
+        const points = [...t.entryPoints.map(e => `>${e}`), ...t.exitPoints.map(x => `${x}>`)];
+        const suffix = points.length > 0 ? ` # ${points.join(' ')}` : '';
         if (spec.length === 0) {
             return [`${indent}${source} -> ${target}${suffix}`];
         }

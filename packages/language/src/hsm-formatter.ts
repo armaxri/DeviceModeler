@@ -24,8 +24,8 @@ export class HsmFormatter extends AbstractFormatter {
             const formatter = this.getNodeFormatter(node);
             formatter.keyword(':').prepend(Formatting.noSpace());
             formatter.properties('declarations').prepend(Formatting.indent({ allowMore: true }));
-        } else if (ast.isEventDeclaration(node) || ast.isVariableDeclaration(node) || ast.isParameter(node)) {
-            const formatter = this.getNodeFormatter<ast.EventDeclaration | ast.VariableDeclaration | ast.Parameter>(node);
+        } else if (ast.isEventDeclaration(node) || ast.isVariableDeclaration(node) || ast.isParameter(node) || ast.isTypeAliasDeclaration(node)) {
+            const formatter = this.getNodeFormatter<ast.EventDeclaration | ast.VariableDeclaration | ast.Parameter | ast.TypeAliasDeclaration>(node);
             formatter.keyword(':').surround(Formatting.oneSpace());
             formatter.keyword('=').surround(Formatting.oneSpace());
         } else if (ast.isOperationDeclaration(node)) {

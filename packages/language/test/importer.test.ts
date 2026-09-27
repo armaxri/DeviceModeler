@@ -6,7 +6,7 @@ import { qualifiedName } from '../src/hsm-scope.js';
 import { importSct } from '../src/importer/sct-importer.js';
 import { parseXml } from '../src/importer/xml.js';
 import { allTransitions, allVertices } from '../src/model-utils.js';
-import { parse } from './helpers.js';
+import { errors, parse } from './helpers.js';
 
 const fixtures = path.resolve(__dirname, 'importer/fixtures');
 
@@ -39,13 +39,8 @@ function countXml(xml: string) {
         }
     }).length;
     const transitions = [...model.matchAll(/<outgoingTransitions(?:\s+[\w:]+="[^"]*")*\s*\/?>/g)].map(m => m[0]);
-    // itemis allows one transition to handle several exit nodes (`# ex1 > ex2 >`): HSM needs one transition per exit node
-    const extraExitTransitions = transitions
-        .map(t => (attribute(t, 'specification') ?? '').replace(/&gt;/g, '>'))
-        .map(spec => spec.includes('#') ? (spec.substring(spec.indexOf('#')).match(/\w+\s*>/g) ?? []).length : 0)
-        .reduce((sum, exits) => sum + Math.max(0, exits - 1), 0);
     const topLevelRegions = (model.match(/^ {4}<regions\s/gm) ?? []).length;
-    return { states, pseudoStates, transitions: transitions.length + extraExitTransitions, topLevelRegions };
+    return { states, pseudoStates, transitions: transitions.length, topLevelRegions };
 }
 
 describe('sct fixtures', () => {
@@ -75,6 +70,44 @@ describe('sct fixtures', () => {
             }
         });
     }
+});
+
+describe('sct fixtures with null, type aliases and entry / exit specifications', () => {
+    const load = (file: string) => importAndParse(fs.readFileSync(path.join(fixtures, file), 'utf-8'));
+
+    test('NullCheck.sct: null literal', async () => {
+        const { text, parsed } = await load('NullCheck.sct');
+        expect(text).toContain('[null == null]');
+        expect(errors(parsed)).toEqual([]);
+    });
+
+    test('TypeAlias.sct: type aliases', async () => {
+        const { text, parsed, warnings } = await load('TypeAlias.sct');
+        expect(text).toContain('alias inti : integer');
+        expect(text).toContain('var myVar : inti');
+        expect(warnings.join('\n')).not.toContain('alias');
+        expect(errors(parsed)).toEqual([]);
+    });
+
+    test('state_multiple_entries.sct: entry points with the same name in orthogonal regions', async () => {
+        const { text, parsed, warnings } = await load('state_multiple_entries.sct');
+        expect(text.match(/entry failure/g)).toHaveLength(2);
+        expect(text).toContain('# >failure');
+        expect(warnings.join('\n')).not.toContain(`'failure'`);
+        expect(errors(parsed)).toEqual([]);
+    });
+
+    test('TransitionHandlesMultipleExits.sct: one transition handles several exit nodes', async () => {
+        const { parsed } = await load('TransitionHandlesMultipleExits.sct');
+        expect(allTransitions(parsed.model).some(t => t.exitPoints.length > 1)).toBe(true);
+        expect(errors(parsed)).toEqual([]);
+    });
+
+    test('OnlyOneEntryPointSpecIsUsed.sct: several entry points (the first one is used)', async () => {
+        const { parsed } = await load('OnlyOneEntryPointSpecIsUsed.sct');
+        expect(allTransitions(parsed.model).some(t => t.entryPoints.length > 1)).toBe(true);
+        expect(parsed.diagnostics.some(d => d.message.startsWith('Only the first entry point'))).toBe(true);
+    });
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -239,12 +272,60 @@ describe('sct importer', () => {
         expect(transitions).toContain('C -> A # done>');
         // the unnamed exit is the default exit: it is handled by transitions without trigger
         expect(transitions).toContain('C -> A # Exit1>');
-        // one itemis transition handling two exit nodes becomes two transitions
-        expect(transitions).toContain('C -> A : e # x1>');
-        expect(transitions).toContain('C -> A : e # x2>');
-        expect(warnings.join('\n')).toContain('handles several exit nodes (x1, x2)');
+        // one transition may handle several exit nodes (like in itemis CREATE)
+        expect(transitions).toContain('C -> A : e # x1> x2>');
+        expect(warnings.join('\n')).not.toContain('several exit nodes');
         // priority order of the transitions leaving C is kept
-        expect(transitions.filter(t => t.startsWith('C -> A'))).toEqual(['C -> A # done>', 'C -> A # Exit1>', 'C -> A : e # x1>', 'C -> A : e # x2>']);
+        expect(transitions.filter(t => t.startsWith('C -> A'))).toEqual(['C -> A # done>', 'C -> A # Exit1>', 'C -> A : e # x1> x2>']);
+    });
+
+    test('several entry points: only the first one is used', async () => {
+        const xml = statechart('interface:\nin event e',
+            region('main', entry('a'),
+                state('a', 'A', { transitions: [transition('b', 'e # >e1 >e2 >unknown')] }),
+                state('b', 'B', {
+                    regions: [
+                        region('r1', entry('b1'), vertex('Entry', 'e1', { name: 'e1' }, transition('b2')), state('b1', 'B1'), state('b2', 'B2')),
+                        region('r2', entry('b3'), vertex('Entry', 'e2', { name: 'e2' }, transition('b4')), state('b3', 'B3'), state('b4', 'B4'))
+                    ]
+                })));
+        const { warnings, parsed, syntaxErrors, linkingErrors } = await importAndParse(xml);
+        expect(syntaxErrors).toEqual([]);
+        expect(linkingErrors).toEqual([]);
+        expect(transitionTexts(allTransitions(parsed.model))).toContain('A -> B : e # >e1 >e2');
+        expect(warnings.join('\n')).toContain('selects unknown entry points (unknown)');
+        expect(parsed.diagnostics.map(d => d.message)).toContain(`Only the first entry point ('e1') is used; remove the others (like itemis CREATE).`);
+    });
+
+    test('entry points and exit nodes with the same name in several regions', async () => {
+        const xml = statechart('interface:\nin event e\nin event f',
+            region('main', entry('a'),
+                state('a', 'A', { transitions: [transition('c', 'e # >failure')] }),
+                state('c', 'C', {
+                    transitions: [transition('a', '# stop >'), transition('a', '')],
+                    regions: [
+                        region('r1', entry('c1'), vertex('Entry', 'f1', { name: 'failure' }, transition('c2')),
+                            state('c1', 'C1', { transitions: [transition('s1', 'e'), transition('d1', 'f')] }), state('c2', 'C2'),
+                            vertex('Exit', 's1', { name: 'stop' }), vertex('Exit', 'd1', {})),
+                        region('r2', entry('c3'), vertex('Entry', 'f2', { name: 'failure' }, transition('c4')),
+                            state('c3', 'C3', { transitions: [transition('s2', 'e'), transition('d2', 'f')] }), state('c4', 'C4'),
+                            vertex('Exit', 's2', { name: 'stop' }), vertex('Exit', 'd2', {}))
+                    ]
+                })));
+        const { text, warnings, parsed, syntaxErrors, linkingErrors } = await importAndParse(xml);
+        expect(syntaxErrors).toEqual([]);
+        expect(linkingErrors).toEqual([]);
+        expect(errors(parsed)).toEqual([]);
+        // the names are kept in both regions
+        expect(text.match(/entry failure/g)).toHaveLength(2);
+        expect(text.match(/exit stop/g)).toHaveLength(2);
+        expect(text.match(/exit Exit1/g)).toHaveLength(2);
+        expect(warnings.join('\n')).not.toContain('renamed');
+        const transitions = transitionTexts(allTransitions(parsed.model));
+        expect(transitions).toContain('A -> C : e # >failure');
+        expect(transitions).toContain('failure -> C2');
+        expect(transitions).toContain('failure -> C4');
+        expect(transitions.filter(t => t.startsWith('C -> A'))).toEqual(['C -> A # stop>', 'C -> A # Exit1>']);
     });
 
     test('entering through a named history, unknown entry points', async () => {
