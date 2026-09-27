@@ -1,6 +1,8 @@
-import type { AstNode, LangiumDocument } from 'langium';
+import type { AstNode, LangiumDocument, Reference } from 'langium';
 import * as ast from '../generated/ast.js';
 import { typeOfVariable } from '../hsm-typesystem.js';
+import { qualifiedName } from '../hsm-scope.js';
+import { instanceOfReference, referableName } from '../imports.js';
 import { SimulationError } from '../simulation/errors.js';
 import { ExpressionEvaluator, type EvaluationContext } from '../simulation/expressions.js';
 import { StatechartInterpreter, type TraceEntry } from '../simulation/interpreter.js';
@@ -107,6 +109,8 @@ class TestExecution {
     private calls: RecordedCall[] = [];
     private mocks = new Map<string, Mock[]>();
     private trace: string[] = [];
+    /** Out events of submachine instances raised during the last call of the interpreter (`motor.stopped`). */
+    private instanceOutEvents = new Set<string>();
     private budget = 0;
     private current?: AstNode;
 
@@ -190,10 +194,12 @@ class TestExecution {
         this.current = statement;
         switch (statement.$type) {
             case 'EnterStatement':
+                this.instanceOutEvents.clear();
                 this.log('> enter');
                 this.sim.enter();
                 break;
             case 'ExitStatement':
+                this.instanceOutEvents.clear();
                 this.log('> exit');
                 this.sim.exit();
                 break;
@@ -204,6 +210,7 @@ class TestExecution {
                 }
                 const value = statement.value ? this.evaluator.evaluate(statement.value) : undefined;
                 const name = this.sim.index.declarationName(event);
+                this.instanceOutEvents.clear();
                 this.log(`> raise ${name}${value === undefined ? '' : ` : ${formatValue(value)}`}`);
                 this.sim.raise(name, value);
                 break;
@@ -266,6 +273,7 @@ class TestExecution {
     private proceed(statement: ast.ProceedStatement): void {
         const amount = Number(this.evaluator.evaluate(statement.value));
         const unit = statement.unit;
+        this.instanceOutEvents.clear();
         this.log(`> proceed ${amount} ${unit}`);
         if (CYCLE_UNITS.includes(unit)) {
             if (!Number.isInteger(amount) || amount < 0) {
@@ -316,7 +324,7 @@ class TestExecution {
         if (!operation) {
             throw new SimulationError(`Unknown operation '${statement.operation.$refText}'`, statement);
         }
-        const name = this.sim.index.declarationName(operation);
+        const name = this.hostName(operation, statement.operation);
         const expected = statement.arguments.map(a => toHost(this.evaluator.evaluate(a))!);
         const matching = this.calls.filter(call => call.operation === name
             && (statement.arguments.length === 0 || sameValues(call.args, expected))).length;
@@ -340,7 +348,7 @@ class TestExecution {
         if (!operation) {
             throw new SimulationError(`Unknown operation '${statement.operation.$refText}'`, statement);
         }
-        const name = this.sim.index.declarationName(operation);
+        const name = this.hostName(operation, statement.operation);
         const value = this.evaluator.evaluate(statement.value);
         const args = statement.withArguments ? statement.arguments.map(a => this.evaluator.evaluate(a)) : undefined;
         this.log(`> ${sourceText(statement)}`);
@@ -377,6 +385,15 @@ class TestExecution {
     // -----------------------------------------------------------------------------------------
     // Expressions
 
+    /**
+     * The name of a declaration of the state machine for the interpreter API: `speed`, `Iface.x`, or
+     * `motor.speed` for a member of the submachine instance `motor` (referenced as `motor.speed`).
+     */
+    private hostName(declaration: ast.Declaration, reference: Reference | undefined): string {
+        const instance = reference ? instanceOfReference(reference, this.machine) : undefined;
+        return instance ? `${this.sim.index.declarationName(instance)}.${referableName(declaration)}` : this.sim.index.declarationName(declaration);
+    }
+
     private frame(): Map<ast.VariableDeclaration, Value> {
         return this.frames[this.frames.length - 1];
     }
@@ -394,10 +411,10 @@ class TestExecution {
                     }
                     return value;
                 }
-                const value = this.sim.getVariable(this.sim.index.declarationName(variable));
+                const value = this.sim.getVariable(this.hostName(variable, referenceOf(node)));
                 return fromHost(value, machineVariableType(variable, value), `Value of '${variable.name}'`, node)!;
             },
-            assignVariable: (variable, value, node) => {
+            assignVariable: (variable, value, node, reference) => {
                 if (builtinVariable(variable) || variable.const) {
                     throw new SimulationError(`Cannot assign to the constant '${variable.name}'`, node);
                 }
@@ -407,17 +424,24 @@ class TestExecution {
                     this.frame().set(variable, converted);
                     return converted;
                 }
-                const name = this.sim.index.declarationName(variable);
+                const name = this.hostName(variable, referenceOf(reference));
                 this.sim.setVariable(name, value);
                 const stored = this.sim.getVariable(name);
                 return fromHost(stored, machineVariableType(variable, stored), `Value of '${variable.name}'`, node)!;
             },
-            isEventPresent: event => {
-                const name = this.sim.index.declarationName(event);
-                return this.sim.outEvents.some(e => e.name === name);
+            isEventPresent: (event, node) => {
+                const name = this.hostName(event, referenceOf(node));
+                return this.sim.outEvents.some(e => e.name === name) || this.instanceOutEvents.has(name);
             },
-            eventValue: (event, node) => fromHost(this.sim.getEventValue(this.sim.index.declarationName(event)), declaredType(event.type), `Value of '${event.name}'`, node),
-            isActive: vertex => ast.isState(vertex) && this.sim.isActive(vertex),
+            eventValue: (event, node) => fromHost(this.sim.getEventValue(this.hostName(event, referenceOf(node))), declaredType(event.type), `Value of '${event.name}'`, node),
+            isActive: (vertex, node) => {
+                if (!ast.isState(vertex)) {
+                    return false;
+                }
+                const instance = ast.isActiveExpression(node) ? instanceOfReference(node.state, this.machine) : undefined;
+                // states of submachine instances: `motor.Running`
+                return instance ? this.sim.isActive(`${this.sim.index.declarationName(instance)}.${qualifiedName(vertex)}`) : this.sim.isActive(vertex);
+            },
             callOperation: (operation, _args, node) => {
                 throw new SimulationError(`The operation '${operation.name}' of the state machine cannot be called in a test`, node);
             },
@@ -431,6 +455,9 @@ class TestExecution {
     private onTrace(entry: TraceEntry): void {
         if (entry.kind === 'call') {
             this.calls.push({ operation: entry.operation, args: entry.args });
+        }
+        if (entry.kind === 'raise' && entry.direction === 'out' && this.sim && [...this.sim.instanceInterpreters.keys()].some(name => entry.event.startsWith(`${name}.`))) {
+            this.instanceOutEvents.add(entry.event);
         }
         this.log(formatTraceEntry(entry));
     }
@@ -453,6 +480,17 @@ function machineVariableType(variable: ast.VariableDeclaration, value: HostValue
         return type;
     }
     return typeof value === 'number' ? (Number.isInteger(value) ? 'integer' : 'real') : typeof value === 'boolean' ? 'boolean' : 'string';
+}
+
+/** The reference of a node referencing a declaration (`motor.speed`, `valueof(motor.failed)`). */
+function referenceOf(node: AstNode | undefined): Reference | undefined {
+    if (ast.isElementReference(node)) {
+        return node.element;
+    }
+    if (ast.isValueOfExpression(node)) {
+        return node.event;
+    }
+    return undefined;
 }
 
 function isLiteral(expression: ast.Expression): boolean {

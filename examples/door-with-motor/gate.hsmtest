@@ -1,0 +1,63 @@
+// Unit tests of the gate and its motor instance (submachine, docs/semantics.md §9).
+// Run with: hsm test examples/door-with-motor/gate.hsmtest --machine examples/door-with-motor/gate.hsm
+testclass GateTest for statemachine Gate {
+
+    @SetUp
+    operation init() {
+        enter
+    }
+
+    @Test
+    operation opensWhenTheMotorRuns() {
+        raise open
+        proceed 1 cycle
+        assert active(Moving) && active(motor.Off) message "the motor instance is entered with Moving"
+        proceed 1 cycle
+        assert active(motor.Ramping) message "motor.start is processed in the next cycle"
+        proceed 1 s
+        assert active(Opened)
+        assert !active(motor.Running) message "the instance is exited with Moving"
+        assert lastSpeed == 3
+        assert motor.speed == 3
+        assert called motor.setPwm with (30)
+    }
+
+    @Test
+    operation opensFastThroughTheEntryPoint() {
+        raise openFast
+        proceed 1 cycle
+        assert active(motor.Ramping) message "'# >Run' enters the motor through its entry point Run"
+        assert motor.maxSpeed == 1
+        proceed 600 ms
+        assert active(Opened)
+        assert lastSpeed == 1
+    }
+
+    @Test
+    operation reportsAJammedMotor() {
+        raise open
+        proceed 2 cycles
+        proceed 400 ms
+        assert motor.speed == 2
+        raise jam
+        proceed 1 cycle
+        assert active(Error) message "the motor reached its exit node Failed"
+        assert faults == 1
+        assert alarm
+        assert lastSpeed == 2 && valueof(motor.failed) == 2
+    }
+
+    @Test
+    operation keepsTheMotorDataWhenReentered() {
+        motor.maxSpeed = 2
+        raise open
+        proceed 2 cycles
+        raise close
+        proceed 1 cycle
+        assert active(Closed)
+        raise open
+        proceed 1 cycle
+        assert motor.maxSpeed == 2 message "instances keep their variables"
+        assert active(motor.Off)
+    }
+}

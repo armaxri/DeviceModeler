@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { URI } from 'langium';
 import { NodeFileSystem } from 'langium/node';
 import { createHsmServices } from '../hsm-module.js';
 import { HsmModelLoader } from '../hsm-document.js';
@@ -28,6 +29,14 @@ async function load(file: string) {
             errors++;
         }
         console.error(`${file}:${d.range.start.line + 1}:${d.range.start.character + 1}: ${severity}: ${d.message}`);
+    }
+    // errors of imported state machines (see imports.ts)
+    for (const imported of parsed.imported) {
+        const importedFile = path.relative(process.cwd(), URI.parse(imported.uri).fsPath);
+        for (const d of imported.diagnostics.filter(d => d.severity === 1)) {
+            errors++;
+            console.error(`${importedFile}:${d.range.start.line + 1}:${d.range.start.character + 1}: error: ${d.message}`);
+        }
     }
     return { parsed, errors };
 }

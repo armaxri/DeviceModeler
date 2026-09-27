@@ -30,5 +30,5 @@ statemachine Motor {
     Ramping -> Running : [speed >= maxSpeed]
     Ramping -> Off : stop / raise stopped
     Running -> Off : stop / raise stopped
-    Running -> Failed : fault / raise failed : speed
+    Ramping -> Failed : fault / raise failed : speed
 }

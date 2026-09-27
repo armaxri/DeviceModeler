@@ -178,10 +178,18 @@ function referenceOf(node: MemberReferenceNode): Reference<AstNode> {
  * (default: the machine containing `node`).
  */
 export function referencedInstance(node: MemberReferenceNode, machine?: ast.StateMachine): ast.VariableDeclaration | undefined {
-    const reference = referenceOf(node);
-    const target = reference.ref;
     const context = machine ?? AstUtils.getContainerOfType(node, ast.isStateMachine);
-    if (!target || !context || AstUtils.findRootNode(target) === context) {
+    return context ? instanceOfReference(referenceOf(node), context) : undefined;
+}
+
+/**
+ * The submachine instance of `machine` through which a reference (`motor.start`) denotes a member of
+ * the instance's state machine, `undefined` for references to members of `machine` itself.
+ */
+export function instanceOfReference(reference: Reference<AstNode>, machine: ast.StateMachine): ast.VariableDeclaration | undefined {
+    const target = reference.ref;
+    const context = machine;
+    if (!target || AstUtils.findRootNode(target) === context) {
         return undefined;
     }
     const text = reference.$refText.replace(/\s+/g, '');
