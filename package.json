@@ -5,7 +5,8 @@
   "type": "module",
   "workspaces": [
     "packages/language",
-    "packages/web"
+    "packages/web",
+    "packages/vscode"
   ],
   "scripts": {
     "langium:generate": "npm run langium:generate -w packages/language",

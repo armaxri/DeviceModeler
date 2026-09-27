@@ -36,13 +36,19 @@ export const HsmModule: Module<HsmServices, PartialLangiumServices & HsmAddedSer
     }
 };
 
+/** Additional modules, e.g. language server features (semantic highlighting, hover) of an IDE integration. */
+export interface HsmServiceExtensions {
+    hsm?: Module<HsmServices, PartialLangiumServices>;
+    hsmTest?: Module<HsmTestServices, PartialLangiumServices>;
+}
+
 /**
  * Creates the full set of services required by the HSM language (`.hsm`) and its unit test
  * language (`.hsmtest`, see `testing/`). Both languages share the index, so test classes can
  * reference state machines of other documents.
  * Works in Node.js as well as in the browser (pass `EmptyFileSystem` there).
  */
-export function createHsmServices(context: DefaultSharedModuleContext = EmptyFileSystem): {
+export function createHsmServices(context: DefaultSharedModuleContext = EmptyFileSystem, extensions: HsmServiceExtensions = {}): {
     shared: LangiumSharedServices,
     Hsm: HsmServices,
     HsmTest: HsmTestServices
@@ -54,12 +60,14 @@ export function createHsmServices(context: DefaultSharedModuleContext = EmptyFil
     const Hsm = inject(
         createDefaultModule({ shared }),
         HsmGeneratedModule,
-        HsmModule
+        HsmModule,
+        extensions.hsm ?? {}
     );
     const HsmTest = inject(
         createDefaultModule({ shared }),
         HsmTestGeneratedModule,
-        HsmTestModule
+        HsmTestModule,
+        extensions.hsmTest ?? {}
     );
     shared.ServiceRegistry.register(Hsm);
     shared.ServiceRegistry.register(HsmTest);

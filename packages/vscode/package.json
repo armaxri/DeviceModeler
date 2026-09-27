@@ -1,0 +1,287 @@
+{
+  "name": "hsm-vscode",
+  "displayName": "HSM Modeler",
+  "description": "Hierarchical state machines (.hsm) and their unit tests (.hsmtest): language server, PlantUML-style diagram editor, C++ code generation, test runner and itemis CREATE import",
+  "version": "0.1.0",
+  "private": true,
+  "publisher": "hsm-modeler",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/arnemrichter/HSM"
+  },
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Visualization",
+    "Testing"
+  ],
+  "keywords": [
+    "statechart",
+    "state machine",
+    "hsm",
+    "itemis CREATE",
+    "YAKINDU",
+    "PlantUML"
+  ],
+  "main": "./dist/extension.cjs",
+  "activationEvents": [
+    "workspaceContains:**/*.hsm",
+    "workspaceContains:**/*.hsmtest",
+    "onWebviewPanel:hsm.diagram"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "hsm",
+        "aliases": [
+          "HSM",
+          "hsm"
+        ],
+        "extensions": [
+          ".hsm"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "hsmtest",
+        "aliases": [
+          "HSM Test",
+          "hsmtest"
+        ],
+        "extensions": [
+          ".hsmtest"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "hsm",
+        "scopeName": "source.hsm",
+        "path": "./syntaxes/hsm.tmLanguage.json"
+      },
+      {
+        "language": "hsmtest",
+        "scopeName": "source.hsmtest",
+        "path": "./syntaxes/hsmtest.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "hsm.openDiagram",
+        "title": "Open Diagram",
+        "category": "HSM",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "hsm.generateCpp",
+        "title": "Generate C++",
+        "category": "HSM"
+      },
+      {
+        "command": "hsm.runTests",
+        "title": "Run Tests",
+        "category": "HSM",
+        "icon": "$(run-all)"
+      },
+      {
+        "command": "hsm.importSct",
+        "title": "Import itemis CREATE Model (.sct)",
+        "category": "HSM"
+      },
+      {
+        "command": "hsm.exportSvg",
+        "title": "Export Diagram as SVG",
+        "category": "HSM"
+      },
+      {
+        "command": "hsm.exportPlantUml",
+        "title": "Export as PlantUML",
+        "category": "HSM"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "hsm.openDiagram",
+          "when": "editorLangId == hsm",
+          "group": "navigation"
+        },
+        {
+          "command": "hsm.runTests",
+          "when": "editorLangId == hsmtest",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "hsm.openDiagram",
+          "when": "editorLangId == hsm",
+          "group": "hsm@1"
+        },
+        {
+          "command": "hsm.generateCpp",
+          "when": "editorLangId == hsm",
+          "group": "hsm@2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "hsm.openDiagram",
+          "when": "resourceExtname == .hsm",
+          "group": "hsm@1"
+        },
+        {
+          "command": "hsm.generateCpp",
+          "when": "resourceExtname == .hsm",
+          "group": "hsm@2"
+        },
+        {
+          "command": "hsm.exportPlantUml",
+          "when": "resourceExtname == .hsm",
+          "group": "hsm@3"
+        },
+        {
+          "command": "hsm.runTests",
+          "when": "resourceExtname == .hsmtest",
+          "group": "hsm@1"
+        },
+        {
+          "command": "hsm.importSct",
+          "when": "resourceExtname == .sct",
+          "group": "hsm@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "HSM Modeler",
+      "properties": {
+        "hsm.diagram.autoOpen": {
+          "type": "boolean",
+          "default": false,
+          "description": "Open the diagram beside the editor whenever an .hsm file is opened in an editor."
+        },
+        "hsm.diagram.theme": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "classic",
+            "modern",
+            "dark"
+          ],
+          "enumDescriptions": [
+            "Follow the VS Code color theme: light themes use `#hsm.diagram.lightTheme#`, dark and high contrast themes the dark diagram theme",
+            "PlantUML classic (yellow / red)",
+            "PlantUML modern (gray)",
+            "Dark"
+          ],
+          "default": "auto",
+          "markdownDescription": "Theme of the diagram. `auto` follows the VS Code color theme."
+        },
+        "hsm.diagram.lightTheme": {
+          "type": "string",
+          "enum": [
+            "classic",
+            "modern",
+            "dark"
+          ],
+          "default": "classic",
+          "markdownDescription": "Diagram theme used with light VS Code color themes when `#hsm.diagram.theme#` is `auto`."
+        },
+        "hsm.diagram.direction": {
+          "type": "string",
+          "enum": [
+            "DOWN",
+            "RIGHT"
+          ],
+          "enumDescriptions": [
+            "Top to bottom",
+            "Left to right"
+          ],
+          "default": "DOWN",
+          "description": "Layout direction of the diagram."
+        },
+        "hsm.diagram.edgeRouting": {
+          "type": "string",
+          "enum": [
+            "SPLINES",
+            "ORTHOGONAL",
+            "POLYLINE"
+          ],
+          "default": "SPLINES",
+          "description": "Routing of the transitions in the diagram."
+        },
+        "hsm.diagram.priorities": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the priorities of transitions leaving a vertex with several outgoing transitions."
+        },
+        "hsm.diagram.showProperties": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the properties panel next to the diagram."
+        },
+        "hsm.cpp.outputDirectory": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Output directory of **HSM: Generate C++**, relative to the model file (absolute paths and `${workspaceFolder}` are supported). Empty: the directory of the model. A generator configuration file (`*.hsmgen.json`) next to the model takes precedence."
+        },
+        "hsm.cpp.namespace": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "markdownDescription": "Namespace of the generated C++ class (e.g. `app::sm`). `null`: the namespace of the model; empty string: the global namespace."
+        },
+        "hsm.cpp.standard": {
+          "type": "string",
+          "enum": [
+            "17",
+            "11"
+          ],
+          "default": "17",
+          "description": "C++ standard of the generated code."
+        },
+        "hsm.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the HSM language server."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.webview.json",
+    "test": "vitest run",
+    "test:integration": "node test/integration/run.mjs",
+    "package": "node scripts/build.mjs && node scripts/package.mjs"
+  },
+  "dependencies": {
+    "hsm-language": "0.1.0",
+    "hsm-web": "0.1.0",
+    "langium": "~4.4.0",
+    "vscode-languageclient": "~10.1.2",
+    "vscode-languageserver": "~10.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "@types/vscode": "~1.95.0",
+    "@vscode/test-electron": "~3.1.0",
+    "@vscode/vsce": "~3.9.2",
+    "esbuild": "~0.28.2",
+    "vite": "~7.3.6",
+    "vitest": "~3.2.7",
+    "vscode-jsonrpc": "~9.0.3"
+  }
+}

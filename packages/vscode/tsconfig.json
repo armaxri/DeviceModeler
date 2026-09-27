@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "types": ["node", "vscode"],
+    "noEmit": true,
+    "declaration": false,
+    "paths": {
+      "hsm-language": ["../language/src/index.ts"]
+    }
+  },
+  "include": ["src/extension/**/*.ts", "src/server/**/*.ts", "src/common/**/*.ts", "test/**/*.ts", "vitest.config.ts"]
+}

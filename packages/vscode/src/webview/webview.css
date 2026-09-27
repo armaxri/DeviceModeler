@@ -1,0 +1,99 @@
+/*
+ * Diagram webview: the styles of the web app (app.css, diagram.css, simulation.css) with the
+ * colors of the user interface taken from the VS Code theme. The diagram itself keeps its
+ * PlantUML themes (theme-classic / theme-modern / theme-dark).
+ */
+:root, body.ui-dark {
+    --ui-bg: var(--vscode-editor-background);
+    --ui-panel: var(--vscode-sideBar-background, var(--vscode-editor-background));
+    --ui-border: var(--vscode-panel-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.35)));
+    --ui-text: var(--vscode-foreground);
+    --ui-muted: var(--vscode-descriptionForeground);
+    --ui-select: var(--vscode-focusBorder);
+    --ui-input: var(--vscode-input-background);
+    --ui-hover: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
+}
+
+body {
+    padding: 0;
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size, 13px);
+}
+
+body.vscode-dark, body.vscode-high-contrast {
+    color-scheme: dark;
+}
+
+button, select {
+    height: 24px;
+    border-radius: 2px;
+    color: var(--vscode-button-secondaryForeground, var(--ui-text));
+    background: var(--vscode-button-secondaryBackground, var(--ui-panel));
+    border: 1px solid var(--vscode-button-border, transparent);
+}
+
+button:hover {
+    background: var(--vscode-button-secondaryHoverBackground, var(--ui-hover));
+}
+
+select {
+    color: var(--vscode-dropdown-foreground, var(--ui-text));
+    background: var(--vscode-dropdown-background, var(--ui-input));
+    border-color: var(--vscode-dropdown-border, var(--ui-border));
+}
+
+button:disabled, select:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.toolbar {
+    gap: 8px;
+    padding: 4px 8px;
+    flex-wrap: wrap;
+}
+
+.toolbar .file-name {
+    font-weight: 600;
+    color: var(--ui-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 30ch;
+}
+
+main {
+    grid-template-columns: 1fr;
+}
+
+#diagram-pane.hide-properties {
+    grid-template-columns: auto 1fr;
+}
+
+#diagram-pane.hide-properties #properties {
+    display: none;
+}
+
+#properties {
+    width: 260px;
+}
+
+#properties input, #properties select, #properties textarea {
+    color: var(--vscode-input-foreground, var(--ui-text));
+    background: var(--vscode-input-background, var(--ui-input));
+    border-color: var(--vscode-input-border, var(--ui-border));
+}
+
+#statusbar .error { color: var(--vscode-errorForeground, #d32f2f); }
+#statusbar .warning { color: var(--vscode-editorWarning-foreground, #b7791f); }
+#statusbar .ok { color: var(--vscode-testing-iconPassed, #2e7d32); }
+
+.inline-editor input {
+    color: var(--vscode-input-foreground, inherit);
+    background: var(--vscode-input-background, #fff);
+}
+
+.toolbar label.toggle {
+    height: 24px;
+    border-radius: 2px;
+}
