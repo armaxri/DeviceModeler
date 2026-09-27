@@ -24,6 +24,10 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
     history, **synchronization** (`sync`, fork / join), named **entry points** and **exit nodes**
   - vertices are referenced by (partially) qualified names (`Playing`, `Active.Playing`,
     `Closed.Active.Playing`), so the same simple name can be used in different composite states
+  - **imports** of other state machines (submachine instances) and of **C/C++ headers**: models use the
+    enums, structs, type aliases and constants of the application's headers (`var mode : motor::Mode`,
+    `pos.x = motor::kHome.x`), in the simulator, the unit tests and the generated C++ code (see
+    [C/C++ header imports](#cc-header-imports))
 - **Language services** in the browser: syntax highlighting, validation, code completion (events,
   variables, operations, qualified state names), formatting, go to definition, find references and
   rename (Monaco editor).
@@ -299,7 +303,8 @@ statemachine CdPlayer "optional description" {
 - The execution semantics are specified in [`docs/semantics.md`](docs/semantics.md). See
   [`examples/`](examples) for more: `door.hsm` shows entry points, exit nodes and fork / join,
   `traffic-light.hsm` time events and named interfaces, `keyboard.hsm` orthogonal regions,
-  [`door-with-motor/`](examples/door-with-motor) imports and submachines.
+  [`door-with-motor/`](examples/door-with-motor) imports and submachines, [`cpp-types/`](examples/cpp-types)
+  the types and constants of a C++ header.
 
 ### Imports and submachines
 
@@ -332,8 +337,7 @@ statemachine Motor {                              statemachine Gate {
   the beginning of the state machine body (before or after `namespace`). Paths are resolved relative to the
   importing file; the name of the imported state machine is a type. Missing files, import cycles, duplicate
   machine names and imports of the importing machine itself are errors. C/C++ headers (`import "types.h"`,
-  `.hpp`, …) are accepted but not supported yet (info diagnostic; they are the next step, see
-  [docs/cpp-integration.md](docs/cpp-integration.md)).
+  `.hpp`, …) import types and constants, see [C/C++ header imports](#cc-header-imports).
 - **Instances** (`var motor : Motor`, in any scope; no initial value, not `const`) are used only through
   the **interfaces** of their state machine: `raise motor.start` (its `in` events), `motor.stopped` as
   trigger or condition and `valueof(motor.failed)` (its `out` events), `motor.speed` (read and assign its
@@ -362,6 +366,85 @@ statemachine Motor {                              statemachine Gate {
   opens the file of its state machine.
 - The **C and C++ generators do not support submachine instances yet**; they report
   "Submachine instances are not supported by the C/C++ generator yet".
+
+### C/C++ header imports
+
+A model can import C/C++ headers of the application and use their **types and constants** – enums (also
+`enum class`), structs with data members, `typedef` / `using` aliases, `constexpr` / `const` constants in
+namespaces. Operations stay callbacks (functions and classes with methods of the headers are not used).
+Example: [`examples/cpp-types`](examples/cpp-types) (a header, a model and its unit tests; it is also part of
+the [CMake example](#example)).
+
+```
+// motor_types.h                                   // controller.hsm
+namespace motor {                                  statemachine Controller {
+/// Operating mode.                                    import "motor_types.h"
+enum class Mode : std::uint8_t { Off, Slow, Fast };    interface:
+struct Position {                                          in event moveTo : motor::Position
+    std::int32_t x = 0;                                    in event setMode : motor::Mode
+    std::int32_t y = 0;                                    var mode : motor::Mode = motor::Mode::Off
+};                                                         var target : motor::Position = motor::kHome
+using Rpm = std::uint16_t;                                 var speed : motor::Rpm
+constexpr Rpm kMaxSpeed = 3000;                            var small : uint8_t
+constexpr Position kHome{10, 20};                          operation drive(p : motor::Position) : boolean
+}                                                      [*] -> Idle
+                                                       state Idle
+                                                       state Moving
+                                                       Idle -> Moving : moveTo [valueof(moveTo).x < 500]
+                                                           / target = valueof(moveTo); target.y += 1; speed = motor::kMaxSpeed
+                                                       Moving -> Idle : setMode [valueof(setMode) == motor::Mode::Off]
+                                                   }
+```
+
+- **Names**: C++ names are written with `::`, fully qualified from the global namespace: types
+  (`motor::Mode`, `motor::Rpm`), enumerators (`motor::Mode::Fast`; enumerators of unscoped enums also as
+  `motor::kStall`), constants (`motor::kMaxSpeed`, static members `motor::Limits::kVersion`). Names of the
+  global namespace are written `::Color` in expressions (types also `Color`). The `<cstdint>` / `<cstddef>`
+  typedefs (`uint8_t`, `std::int32_t`, `size_t`, …) are always known; C++ keywords like `int` or `double`
+  are not type names of models (use `integer`, `real` or a typedef).
+- **Types**: integer types are `integer`, whose values are converted to the C++ type when they are stored
+  (a variable, member, event value or parameter of type `uint8_t` wraps around like in C++; constant values
+  out of range are warnings); arithmetic uses 64-bit integers like all HSM integers. `float` / `double` are
+  `real` (`float` rounds to single precision), `bool` is `boolean`, `std::string` is `string`
+  (`const char*` / `std::string_view` constants can be read). **Enums** are types of their own: values are
+  compared with `==` / `!=`; unscoped enum values convert to `integer` (flags: `faults | motor::kJam`);
+  `x as motor::Mode` / `mode as integer` convert. **Structs**: members are read and assigned (`pos.x`,
+  `cfg.timing.periodMs = 5`, `valueof(e).x`, `measure().y`), structs are assigned as a whole, not compared
+  (no `==`). **Arrays** (`std::array<T, N>`, `T[N]` members): elements `a[i]` (checked: an index out of bounds is
+  a runtime error). Unions, pointers, templates (other than `std::array`) and the like are errors where used.
+- **Values**: variables of C++ types are initialized like `T{}` (default member initializers, zero otherwise,
+  the enumerator with value 0). Hosts, scenarios and operation callbacks exchange plain values: enum values as
+  the qualified enumerator name (`"motor::Mode::Fast"`, set also as `"Fast"` or a number), structs as objects
+  (members that are not given keep their default), arrays as arrays. Traces show `motor::Mode::Fast` and
+  `{x: 1, y: 2}`. The simulation panel of the web app and of VS Code edits enum values with a drop-down and the
+  members of structs in expandable editors; the unit test language uses the same names and values
+  (`assert mode == motor::Mode::Fast`, `mock measure returns (motor::kHome)`, `p.x = 3` for a local struct).
+- **Headers** are searched relative to the importing model, then in the **include paths**; the headers they
+  include (`#include "…"` / `<…>` found in the include paths) are analyzed too and their declarations are
+  visible. The settings of the analysis are configured in the `headers` block of `hsm.gen.json` (include
+  paths relative to the file, predefined macros for `#if`, the data model of the target, e.g. 32-bit `long`
+  on microcontrollers):
+
+  ```json
+  { "models": ["models/*.hsm"], "cpp": {},
+    "headers": { "includePaths": ["include"], "defines": { "USE_CAN": "1" }, "dataModel": { "longBits": 32, "pointerBits": 32 } } }
+  ```
+
+  The nearest `hsm.gen.json` / `*.hsm.gen.json` in the directory of a model or a parent directory applies (CLI,
+  language server); `hsm validate|simulate|test|generate|layout|plantuml` add `-I <dir>`, `-D NAME[=VALUE]` and
+  `--data-model lp64|llp64|ilp32`, VS Code the settings `hsm.headers.includePaths` / `hsm.headers.defines` /
+  `hsm.headers.dataModel`, CMake `hsm_generate(… INCLUDE_DIRS … DEFINES …)`. A missing header is an error at
+  the import, errors in the header are reported there with their location (`motor_types.h:12:5: …`);
+  `hsm cpp-header <files>` prints what the analyzer extracts. The supported C++ subset is described in
+  [docs/cpp-integration.md](docs/cpp-integration.md).
+- **Tools**: hover shows the declaration, value and documentation comment of the header, go to definition
+  opens the header (VS Code), completion after `motor::` lists the names of the namespace / enum and after
+  `pos.` the members. The language server re-reads a header when it changes on disk and revalidates the models
+  importing it; the web app accepts headers in *Open…* (they are added to its virtual file list).
+- **Generated C++** `#include`s the headers and uses the types by their names (`motor::Mode mode`,
+  `void raise_moveTo(const motor::Position& value)`, `std::uint8_t get_small() const`), enumerators and
+  constants by name, stores with `static_cast` to the declared type. The **C generator** reports
+  "C++ header types are not supported by the C generator".
 
 ## Unit tests
 
@@ -620,6 +703,11 @@ host is the VS Code document (see [VS Code extension](#vs-code-extension)).
   computed with `ModelEditor` and applied to the document as `WorkspaceEdit`s, so undo, the dirty
   state and git behave as for typed changes. The diagram follows the VS Code color theme (light:
   PlantUML classic, configurable with `hsm.diagram.lightTheme`; dark: dark theme).
+- **C/C++ header imports**: headers are read from disk (and re-read when they change: the importing models are
+  validated again), hover shows their declarations with documentation, go to definition opens the header,
+  completion after `ns::`. Include paths, defines and the data model come from the `headers` block of the
+  nearest `hsm.gen.json` and the settings `hsm.headers.includePaths` / `hsm.headers.defines` /
+  `hsm.headers.dataModel`; the diagram webview gets the headers from the extension.
 - **HSM: Generate C++** uses a generator configuration (`hsm.gen.json` / `*.hsm.gen.json` that lists
   the model, searched from the model directory up to the workspace folder) with the same generator code
   as `hsm generate`, otherwise the settings `hsm.cpp.outputDirectory`, `hsm.cpp.namespace` and
@@ -654,7 +742,9 @@ generator: one class per state machine in `<Class>.h` / `<Class>.cpp` (`TrafficL
 `sc::StatemachineInterface`, `sc::TimedInterface`, `sc::TimerServiceInterface`, observers and errors).
 Options: `--namespace a::b` (default: the `namespace` of the model, `""` for none), `--class-name`,
 `--std 11` (the code is written for C++17; with `--std 11` it also compiles as C++11 – the only
-difference are nested namespace definitions).
+difference are nested namespace definitions). Models importing C/C++ headers ([C/C++ header
+imports](#cc-header-imports)) get `#include`s of the headers and use their types, enumerators and constants
+by name.
 
 The code implements [`docs/semantics.md`](docs/semantics.md) exactly like the interpreter: every scenario
 of the conformance suite is compiled with g++ (`-std=c++17 -Wall -Wextra -Wpedantic -Werror -Wshadow
@@ -866,6 +956,7 @@ completion and validation in editors (`"$schema"`); unknown properties are error
         "licenseHeaderFile": "LICENSE-HEADER.txt"
     },
     "c": { "outDir": "src-gen/c" },
+    "headers": { "includePaths": ["include"], "defines": { "USE_CAN": "1" } },
     "writeOnlyIfChanged": true
 }
 ```
@@ -881,6 +972,7 @@ completion and validation in editors (`"$schema"`); unknown properties are error
 | `licenseHeader` / `licenseHeaderFile` | text (string or array of lines) or file put at the top of every generated file; wrapped in `/* … */` unless it already starts with `//` or `/*` |
 | `maxMicrosteps` | maximum number of transitions per step (default 1000) |
 | `writeOnlyIfChanged` | default `true`: files whose content did not change are not rewritten, so their modification time is kept and build systems do not recompile them |
+| `headers` | analysis of imported C/C++ headers ([C/C++ header imports](#cc-header-imports)): `includePaths` (relative to the configuration), `defines` (`"NAME": "value"`), `dataModel` (`longBits`, `pointerBits`: 32 or 64, `charSigned`). Also used by the other commands and the language server for the models below the configuration |
 
 Files generated by several models (the runtime header) are written once; two models generating the same
 file with different contents (e.g. the same class name) is an error. Nothing is written if a model has
@@ -892,7 +984,7 @@ hsm generate cpp                   # only the cpp target
 hsm generate --config sm.hsm.gen.json -o build/gen   # another configuration, all outputs into build/gen
 hsm generate --check               # writes nothing, exit 1 if a file is missing or out of date (for CI)
 hsm generate --list-outputs        # writes nothing, prints the absolute paths of the generated files
-hsm generate --list-inputs         # prints the configuration, the models and license header files
+hsm generate --list-inputs         # prints the configuration, the models, imported files (.hsm, C/C++ headers) and license header files
 hsm generate cpp model.hsm -o gen  # without configuration (as before; --config adds its cpp options)
 ```
 
@@ -932,7 +1024,7 @@ hsm_add_tests(TARGET statemachines TESTS tests/traffic-light.hsmtest MODELS mode
 ```
 
 `hsm_generate(TARGET <target> [MODELS <file.hsm>...] [CONFIG <file>] [GENERATOR cpp|c] [OUTPUT_DIR <dir>]
-[NAMESPACE <ns>] [STD 17|11] [PREFIX <prefix>])`:
+[NAMESPACE <ns>] [STD 17|11] [PREFIX <prefix>] [INCLUDE_DIRS <dir>...] [DEFINES <NAME[=VALUE]>...])`:
 
 - generates the code **at build time** into `OUTPUT_DIR` (default
   `${CMAKE_CURRENT_BINARY_DIR}/hsm_generated/<target>`), adds the generated files to the sources of the
@@ -948,9 +1040,13 @@ hsm_add_tests(TARGET statemachines TESTS tests/traffic-light.hsmtest MODELS mode
   changing the configuration file re-runs CMake as well;
 - with `CONFIG`, the models and options of the configuration are used (`MODELS` replaces its models, the
   other arguments override its options); its `outDir` is ignored in favor of `OUTPUT_DIR`. Globs are
-  expanded at configure time: re-run CMake after adding a model file.
+  expanded at configure time: re-run CMake after adding a model file;
+- models importing **C/C++ headers**: the headers (and the headers they include) are dependencies, too.
+  `INCLUDE_DIRS` / `DEFINES` are passed to `hsm` (`-I` / `-D`) and added to the include directories / compile
+  definitions of the target; the generated header includes a header by its import path if it is found in
+  an include directory, otherwise by its path relative to `OUTPUT_DIR`.
 
-`hsm_add_tests(TARGET <name> TESTS <file.hsmtest>... [MODELS <file.hsm>...] [JUNIT_DIR <dir>])` registers
+`hsm_add_tests(TARGET <name> TESTS <file.hsmtest>... [MODELS <file.hsm>...] [JUNIT_DIR <dir>] [INCLUDE_DIRS <dir>...] [DEFINES …])` registers
 a CTest test `<name>.<file stem>` (label `hsm`) per test file that runs `hsm test` with a JUnit report in
 `JUNIT_DIR` (default `${CMAKE_CURRENT_BINARY_DIR}/hsm_test_results`).
 
@@ -960,13 +1056,15 @@ a CTest test `<name>.<file stem>` (label `hsm`) per test file that runs `hsm tes
 (generated with the configuration [`examples/cmake/hsm.gen.json`](examples/cmake/hsm.gen.json): `.hpp` /
 `.cc` files with a license header) as static libraries, an application with a `std::chrono` timer service
 and operation callbacks ([`main.cpp`](examples/cmake/main.cpp)), a C++ test driving both classes with a
-virtual clock and the `.hsmtest` unit tests of both models:
+virtual clock and the `.hsmtest` unit tests of both models. The conveyor of
+[`examples/cpp-types`](examples/cpp-types) imports a C++ header; its generated class uses the header's types
+(tested by [`tests/conveyor_test.cpp`](examples/cmake/tests/conveyor_test.cpp)):
 
 ```bash
 npm ci && npm run build -w packages/language
 cmake -S examples/cmake -B build/cmake-example -G Ninja      # or "Unix Makefiles"
 cmake --build build/cmake-example
-ctest --test-dir build/cmake-example --output-on-failure     # statemachine_tests, models.traffic-light, models.cd-player
+ctest --test-dir build/cmake-example --output-on-failure     # statemachine_tests, conveyor_test, models.*, conveyor.conveyor
 build/cmake-example/traffic_light 30                         # runs the traffic light for 30 s
 ```
 

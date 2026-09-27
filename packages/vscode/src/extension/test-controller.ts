@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
 import { CoverageCollector, type MachineCoverage, type WorkspaceFile } from 'hsm-language';
+import { vscodeHeaderSettings } from './diagram-panel.js';
 import { discoverTests, failureMessage, lineCoverage, runHsmTests, type TextRange } from './logic/tests.js';
 
 const EXCLUDE = '**/{node_modules,out,dist,build}/**';
@@ -164,6 +165,7 @@ export class HsmTestController implements vscode.Disposable {
             }
             const { results, problems } = await runHsmTests(models, testFiles, {
                 coverage,
+                headers: vscodeHeaderSettings(undefined),
                 filter: (uri, testClass, test) => !token.isCancellationRequested && itemOf(uri, testClass, test) !== undefined,
                 onResult: result => {
                     const item = itemOf(result.uri, result.testClass, result.name);

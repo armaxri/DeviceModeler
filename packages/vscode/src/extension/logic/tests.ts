@@ -1,9 +1,11 @@
 import { GrammarUtils, type AstNode, type LangiumDocument } from 'langium';
 import type { Diagnostic } from 'vscode-languageserver-types';
 import {
-    createHsmServices, hasAnnotation, HsmTestWorkspace, runTests, type CoverageCollector, type MachineCoverage, type TestModel, type TestResult,
+    createHsmServices, hasAnnotation, HsmTestWorkspace, runTests, type CppHeaderSettings, type CoverageCollector, type MachineCoverage, type TestModel, type TestResult,
     type WorkspaceFile
 } from 'hsm-language';
+// Node-only part of the language package (not exported from its index because the web app bundles the index)
+import { installNodeHeaderSupport } from '../../../../language/src/node/cpp-headers-node.js';
 
 export interface TextRange {
     start: { line: number, character: number };
@@ -73,6 +75,8 @@ export interface HsmTestRunOptions {
     onTrace?: (line: string) => void;
     /** Collects the model coverage of the executed tests. */
     coverage?: CoverageCollector;
+    /** Settings of imported C/C++ headers (the VS Code settings `hsm.headers.*`). */
+    headers?: CppHeaderSettings;
 }
 
 /**
@@ -82,7 +86,10 @@ export interface HsmTestRunOptions {
  */
 export async function runHsmTests(models: readonly WorkspaceFile[], testFiles: readonly WorkspaceFile[], options: HsmTestRunOptions = {}): Promise<HsmTestRunResult> {
     const testUris = new Set(testFiles.map(file => file.uri));
-    const workspace = new HsmTestWorkspace(createHsmServices());
+    const services = createHsmServices();
+    // imported C/C++ headers: read from disk, settings of hsm.gen.json and of the VS Code settings
+    installNodeHeaderSupport(services.shared, { settings: options.headers });
+    const workspace = new HsmTestWorkspace(services);
     const documents = await workspace.load([...models.filter(model => !testUris.has(model.uri)), ...testFiles]);
     const results: TestResult[] = [];
     const problems: TestFileProblem[] = [];

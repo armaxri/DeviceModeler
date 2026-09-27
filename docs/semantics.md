@@ -59,6 +59,7 @@ as **Deviation**.
   in the current step.
 - `x++` / `x--` increment / decrement the numeric variable `x`; the value of the expression is the
   value before the operation.
+- Values of **imported C/C++ types** (enums, structs, arrays, integer widths) follow §10.
 
 ## 3. Execution modes
 
@@ -340,3 +341,44 @@ instance (they are raised by the state machine).
 
 The conformance scenarios `s9-*` of `packages/language/test/scenarios` cover these rules (the C and C++
 generators do not support submachine instances yet and skip them).
+
+## 10. Types and constants of C/C++ headers
+
+`import "motor_types.h"` makes the types and constants of a C/C++ header usable in a model
+([docs/cpp-integration.md](cpp-integration.md) describes the supported C++ subset and the tools).
+
+- **Integer types** (`std::uint8_t`, `int`, `char`, aliases of them) are `integer`. Expressions are
+  evaluated with 64-bit integers as always (§2); a value is **converted to the C++ type of the place it is
+  stored in** – a variable, a struct member, an array element, an event value, an argument of an operation
+  – like the implicit conversion in C++: it wraps around to the width of the type (two's complement:
+  `uint8_t u = 250; u += 10` gives `4`, `int8_t` `120 + 10` gives `-126`). Constant values out of the range
+  of the type are warnings of the validator. `x as uint8_t` converts explicitly (wrap-around), the result is
+  an `integer`.
+- `float` is `real`, values stored in `float` places are rounded to single precision (`0.1` becomes
+  `0.10000000149011612`); `double` / `long double` are `real`. `bool` is `boolean`. `std::string` is `string`;
+  `const char*` and `std::string_view` constants can be read as strings, but no place can have these types.
+- **Enums** are types of their own. A value is the numeric value of an enumerator (also values without
+  enumerator after a cast). Values of the same enum are compared with `==` / `!=`; values of **unscoped**
+  enums are integers in arithmetic, bitwise and relational operations and are assignable to `integer` /
+  `real` (C++ integral promotion), values of `enum class` are not. `n as motor::Mode` converts an integer (or
+  the value of another enum) to an enum value (wrapped to the underlying type), `mode as integer` the other
+  way round. The default value is `T{}`, i.e. the value `0`.
+- **Structs** are values (copied on assignment, never shared): members are read and assigned (`pos.x`,
+  `cfg.timing.periodMs += 1`, `pos.x++`); an assignment to a member changes only that member of the variable.
+  Structs are assigned as a whole (same type), **not compared** (C++ aggregates have no `==`). The default
+  value is `T{}`: the default member initializers, zero (`0`, `0.0`, `false`, `""`, the value `0` of enums,
+  `T{}` of nested structs) for the other members.
+- **Arrays** (`std::array<T, N>`, `T[N]` members): elements `a[i]` are read and assigned; an index outside
+  `0..N-1` is a runtime error ("Index … is out of bounds"). `std::array` values are assigned as a whole,
+  C arrays only element by element. The default value has `N` default elements.
+- **Constants** and enumerators of the headers (`motor::kMaxSpeed`, `motor::Mode::Fast`, `motor::kHome`)
+  have the values computed by the analyzer with C++ semantics (widths, promotions, wrap-around of the
+  header's constant expressions).
+- **Host values**: enum values are exchanged as the qualified name of the first enumerator with the value
+  (`"motor::Mode::Fast"`; a number if there is none); the host may also give the simple name or the number.
+  Structs are objects with one entry per member (members the host does not give get their default value),
+  arrays are arrays. Canonical text (traces, scenarios, calls): `motor::Mode::Fast`, `motor::Mode(7)` for a
+  value without enumerator, `{x: 1, y: 2}`, `[1, 2, 3]`.
+
+The conformance scenarios `s10-cpp-*` cover these rules (the C generator does not support C++ types and skips
+them).

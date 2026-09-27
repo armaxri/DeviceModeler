@@ -32,9 +32,20 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 - ✅ Imports of other state machines (`import "motor.hsm"`, also `import: "a.hsm" "b.hsm"`): resolved
   relative to the importing file, loaded transitively (CLI, tests, language server, VS Code webview, a
   virtual file list in the web editor); missing files, cycles and duplicate names are reported
-- 📋 **Next: C++ header imports** (`import "motor_types.h"` is accepted, reported as "not supported yet";
-  the analyzer exists, see [docs/cpp-integration.md](docs/cpp-integration.md) and the import resolution API
-  there)
+- ✅ **C++ header imports** (`import "motor_types.h"`, [docs/cpp-integration.md](docs/cpp-integration.md)):
+  enums / enum classes, structs, `typedef` / `using` aliases and constants of namespaces are types and values
+  of models (`var mode : motor::Mode = motor::Mode::Off`, `pos.x`, `a[i]`, `motor::kMaxSpeed`); C++ integer
+  widths are kept as storage types (wrap-around on assignment, range warnings), enums compare with `==` / `!=`,
+  structs are assigned as a whole; interpreter, unit tests, scenarios (14 `s10-cpp-*`), C++ generator
+  (`#include`s the headers, uses the types by name), hover / definition / completion, include paths, defines
+  and data model in the `headers` block of `hsm.gen.json`, `-I` / `-D` / `--data-model`, VS Code settings,
+  headers re-read on change; web app: headers in the virtual file list, editors for enum and struct values
+  in the simulation. Example [`examples/cpp-types`](examples/cpp-types) (also built by the CMake example)
+  - 📋 still missing: struct literals (`motor::Position{1, 2}`), `==` of structs with a user-defined
+    `operator==`, C headers for the C generator (C enums / structs / typedefs), templates other than
+    `std::array`, whole-array assignment of C arrays, unsaved header edits in VS Code (headers are read from
+    disk), viewing headers in the web editor, go to definition into headers in the web editor
+  - 💭 functions of headers as operations (callbacks generated from declarations)
 
 ## Phase 2 – Structure parity ✅
 
@@ -113,7 +124,8 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
   every scenario. Limitations: strings live in fixed-size buffers (`<PREFIX>_STRING_CAPACITY`,
   longer strings are truncated with an error), fixed-size event queues (`<PREFIX>_QUEUE_CAPACITY`),
   runtime errors do not abort the step (the failed operation is skipped, see README), typed out
-  events are always reported with their value
+  events are always reported with their value, no C/C++ header types (a diagnostic; the `s10-cpp-*`
+  scenarios are skipped)
 - ✅ Unit test language for statecharts (like SCTUnit, `.hsmtest`) with a test runner on the interpreter,
   `hsm test` in the CLI (JUnit XML reports) and tests for all examples. Limitations: not run in the web
   editor yet; no `@Ignore`, packages / imports, call order verification or mock value sequences;

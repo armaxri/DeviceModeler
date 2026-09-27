@@ -1,8 +1,10 @@
-# C++ integration (design note)
+# C++ integration
 
-Status: the **C++ header analyzer** (`packages/language/src/cpp-header/`) is implemented and
-tested. The language integration (grammar, scoping, type system, interpreter, generators) is the
-next step; this note describes the analyzer, the supported C++ subset and the proposed integration.
+Status: **implemented**. The C++ header analyzer (`packages/language/src/cpp-header/`) and the language
+integration (grammar, linking, type system, validation, interpreter, unit tests, scenarios, C++ generator,
+language server, web app, VS Code webview) are done. This note describes the analyzer, the supported C++
+subset and the integration with the decisions taken (§4); the user documentation is in the
+[README](../README.md#cc-header-imports), the semantics in [semantics.md §10](semantics.md).
 
 ## 1. Goal
 
@@ -150,8 +152,8 @@ with the macros defined so far in the header, the predefined macros (`__cplusplu
 (e.g. an undefined function-like macro) is reported as a warning and treated as false.
 
 Consequence: a header whose declarations depend on configuration macros defined in other headers
-(`#if CONFIG_USE_CAN`) is analyzed with the macro undefined, unless it is passed in `defines`.
-The integration should allow configuring defines (e.g. in the generator configuration).
+(`#if CONFIG_USE_CAN`) is analyzed with the macro undefined, unless it is passed in `defines`
+(`headers.defines` of `hsm.gen.json`, `-D`, `hsm.headers.defines`, see §4.7).
 
 ### 3.2 Constant expressions
 
@@ -191,108 +193,172 @@ The widths of `long`, `size_t` etc. depend on the target: `CppTypeIndex` uses LP
   producing unbalanced braces may confuse the parser (it recovers at the next declaration).
 - `sizeof` of classes is unknown (layout and padding are not computed).
 
-## 4. Proposed language integration
+## 4. Language integration (implemented)
 
 ### 4.1 Syntax
 
-- **Import**: `import "motor_types.h"` in the header of the state machine (after `namespace`,
-  before the annotations), several allowed. Paths are relative to the model file, then to include
-  directories of the generator configuration (`includeDirs`). Quoted `#include`s of an imported
-  header are **not** imported transitively for name lookup, but they are analyzed so that constants
-  used by the imported header can be evaluated (`CppHeader.includes`).
-- **C++ names use `::`** and are always written fully qualified from the global namespace, e.g.
-  `motor::Mode`, `motor::Mode::Fast`, `motor::kMaxSpeed`, `::HAL_OK` or `HAL_OK` for global names.
-  `::` does not clash with the `.`-qualified vertex names of HSM. A grammar rule
-  `CppName: ID ('::' ID)*` for type references and element references; `TypeReference` becomes
-  `name=CppName` (built-in type names stay `ID`).
-- **Types**: `var mode : motor::Mode`, `in event moved : motor::Position`,
-  `operation f(p : motor::Position) : motor::Rpm`.
-- **Values**: enumerators `motor::Mode::Fast` (unscoped ones also `motor::kStall`), constants
-  `motor::kMaxSpeed`, struct constants `motor::kParkPosition`.
-- **Member access**: `pos.x`, `valueof(moveTo).x`, nested `cfg.timing.periodMs`; assignment to
-  members `target.x = 5` (the grammar needs a postfix `.` member access and an assignable
-  left-hand side of the form `variable(.member)*`).
-- **Struct literals** (optional, later): `motor::Position{1, 2, 3}` or construction via constants
-  and member assignment only in a first version.
+- **Import**: `import "motor_types.h"` (several paths, also `import: "a.h" "b.hsm"`) at the beginning of the
+  state machine body, like the imports of state machines. Headers are searched relative to the model, then
+  in the include paths (§4.7). The headers they include (`#include "x.h"` relative to the including header,
+  then in the include paths; `#include <x.h>` in the include paths; not found: ignored, e.g. `<cstdint>`) are
+  analyzed too and **their declarations are visible** – as in C++, includes are transitive.
+- **C++ names use `::`** and are written fully qualified from the global namespace:
+  - types (grammar `TypeReference: name=TypeReferenceName`, `TypeReferenceName: '::'? ID (('.' | '::') ID)*`):
+    `motor::Mode`, `::Color` or `Color` for the global namespace, `std::uint16_t`, `uint8_t`;
+  - values (grammar `CppReference: name=CppName`, `CppName: '::' ID ('::' ID)* | ID '::' ID ('::' ID)*`, a
+    primary expression): enumerators `motor::Mode::Fast` (of unscoped enums also `motor::kStall`), constants
+    `motor::kMaxSpeed`, static members `motor::Limits::kVersion`. **Decision:** names of the global namespace
+    need the leading `::` in expressions (`::HAL_OK`) – a plain identifier is an HSM declaration; the
+    linking error of an unresolved all-caps / `k…` name suggests `::NAME`.
+  - `::` does not clash with the `.`-qualified names of HSM (`Iface.x`, `motor.start`, `Active.Playing`).
+- **Member and element access**: a postfix `AccessExpression` (`receiver.member`, `receiver[index]`) after
+  primary expressions: `valueof(e).x`, `measure().y`, `motor::kHome.x`, `a[i]`, `cfg.gains[1]`.
+  **Decision:** after a name, `pos.x.y` is still parsed as the (`.`-qualified) name of the `ElementReference`
+  (so `Iface.x` and `motor.speed` keep working unchanged); the linker (`memberAwareCandidate` in
+  `hsm-linker.ts`, also used by the test language) resolves the **longest prefix that names a variable**
+  when the whole name does not resolve and records the rest as member path (`referenceMembers(ref)` in
+  `cpp-types.ts`). Consumers (type system, validator, interpreter, generators, hover) treat an element
+  reference with members like a chain of member accesses. Unknown members are errors of the validator
+  (`'motor::Position' has no member 'q' (members: x, y, z)`), a member path on an instance says which
+  interface member is missing.
+- **Assignments** to members and elements: `target.x = 5`, `cfg.timing.retries -= 1`, `pos.x++`,
+  `buffer[i] = v` (the test language: `p.z = 3`, `a[0] = 1`).
+- **Casts**: `n as motor::Mode`, `mode as integer`, `x as uint8_t` (wraps).
+- **Not implemented**: struct literals (`motor::Position{1, 2}`) – values are built from constants, event
+  values, operation results and member assignments.
 
-### 4.2 Scoping and linking
+### 4.2 Resolution and linking
 
-`HsmScopeProvider` resolves `CppName`s via a `CppTypeIndex` per document (built from the imported
-headers, cached per header content, invalidated on change; the language server should watch the
-header files). `lookup(name)` gives the declaration: enum / record / alias for types, enumerator
-/ constant for values. Go-to-definition uses `fileName` + `nameRange`, hover uses `doc` and
-`describeCppType`, completion after `motor::` uses `members('motor')`.
+- `HsmImportResolver.resolveHeader` finds the header in the `CppHeaderStore` of the services
+  (`cpp-headers.ts`: texts by URI, a synchronous `reader`, the settings, caches of parsed headers and
+  indexes) and loads it with its includes (`loadHeaderClosure`). `ResolvedImport.header` is
+  `{ found, searched, headers }`; the resolver registers one `CppTypeIndex` per state machine
+  (`cppImports(machine)`, cached by the versions of the header texts and the settings). Without header
+  imports an empty index is used (it knows the fundamental and `<cstdint>` types).
+- **Test documents** use the imports of the tested state machine (`contextMachine(node)`).
+- Type references are resolved in this order: built-in type, HSM alias, imported state machine, C++ type
+  (`cppTypeOfReference`). **Decision:** the `<cstdint>` / `<cstddef>` typedefs are always known (no import
+  needed); C++ keywords of fundamental types (`int`, `long`, `double`, `bool`, `char`, …) are **not** type
+  names of models (the error lists the HSM types; use `integer` / `real` / `int32_t`).
+- Validation of imports: a missing header is an error at the import path (with the searched locations and a
+  hint to the include path settings); errors of the analysis of the header (and its includes) are errors at
+  the import with the location (`motor_types.h:12:5: …`, at most 5), warnings are summarized as one info.
+  Errors of C++ names are not reported while a header import is unresolved.
+- `HsmDocumentBuilder.shouldRelink` relinks a machine when a header it uses changed (`headersChanged`: the
+  version of a header text or of the settings differs from the one the index was built with) or a header
+  import is unresolved.
 
 ### 4.3 Type system
 
-`HsmType` becomes a union of the built-in names and imported types. Proposed mapping of
-`CppResolvedType`:
+`HsmType` is `BuiltinTypeName | 'null' | 'instance' | 'error' | CppHsmType` where `CppHsmType` is
+`{ kind: 'enum' | 'struct' | 'array', cppName, resolved, index }` (identity: kind and qualified C++ name,
+compare with `sameType`). Mapping of `CppResolvedType` (`hsmTypeOfCpp`):
 
-| C++ | HSM | notes |
+| C++ | HSM | decisions |
 | --- | --- | --- |
-| `integer` | `integer` (with `bits`/`signed` kept for range checks and wrap-around) | assignments of out-of-range literals can be warned |
-| `real` | `real` | `float` rounds to 32 bit in the simulator (`Math.fround`) |
+| `integer` (≤ 64 bits) | `integer` | the width is the **storage type** of places (variables, members, elements, event values, parameters: `storageOfTarget` / `storageOfTypeReference` in `cpp-storage.ts`); assignments of constants out of range are **warnings** (`The value 300 is out of the range of uint8_t (0..255) of 'small'; it is converted to 44.`); 128-bit integers are unsupported |
+| `real` | `real` | `float` places round to single precision |
 | `boolean` | `boolean` | |
-| `string` | `string` | `const char*` constants only readable |
-| `enum` | new kind `enum` (identity = `cppName`) | only `==`/`!=` (and `<`… for unscoped); `as integer` converts; unscoped enums may convert implicitly to `integer` |
-| `struct` | new kind `struct` (identity = `cppName`) | assignable as a whole (same type), `==` not defined (C++ has no default `operator==` before C++20) |
-| `array` | not in the first version | fields of array type are visible but not accessible |
-| `unsupported` | error at the use site with `reason` | only when the type is used |
+| `string` | `string` | only `std::string` can be the type of a place; `const char*` / `std::string_view` constants are readable (a type reference to them is an error) |
+| `enum` | `CppHsmType` enum | `==` / `!=` between values of the same enum; **unscoped** enums are promoted to `integer` in arithmetic, bitwise and relational operators and assignable to `integer` / `real`; `enum class` values are not; `as` converts integer ↔ enum (and enum → other enum) |
+| `struct` | `CppHsmType` struct | members by name (public data members, inherited ones included); assignable as a whole (same type); **no `==`** (C++ aggregates have none before C++20; user-defined operators are not analyzed) |
+| `array` | `CppHsmType` array | element access `a[i]` (index: integer or unscoped enum; constant indices out of bounds are errors); `std::array` values are assignable as a whole, C arrays are not; no `==`; arrays of unknown length are unsupported |
+| `unsupported` | error where used | `The C++ type 'Foo' cannot be used: 'Foo' is not supported (union)` |
 
-Casts: `x as motor::Mode` (integer -> enum) for unscoped and scoped enums.
+Event payloads, operation parameters and return values may use all these types.
 
-### 4.4 Simulator
+### 4.4 Interpreter
 
-- Enum values are `bigint` (the enumerator value, as in C++); the interpreter keeps the enum type
-  of variables for display (`motor::Mode::Fast` instead of `10`) via `enumerators`.
-- Struct values are objects with one entry per field (`CppValue` of `defaultValue(type)` as
-  initial value: default member initializers, zero otherwise), copied on assignment.
-- Integers of imported integer types should wrap to their width on assignment
-  (`BigInt.asIntN/asUintN(bits, v)`), like the generated C++ code does.
-- Constants are read from `CppTypeIndex.constant(...)`; values that cannot be evaluated are
-  errors at the use site (the diagnostic of the analyzer explains why).
-- Scenarios / host values: enums as enumerator name or number, structs as JSON objects.
+- Runtime values (`simulation/values.ts`): `EnumValue { type, value: bigint }`, `StructValue { type, fields }`,
+  `ArrayValue { type, elements }` – immutable, so an assignment to a member creates a new struct value and
+  values are never shared between variables. `RuntimeType` adds the C++ integer / `float` storage types to
+  the built-in types: `convert` / `fromHost` wrap integers to the width (`BigInt.asIntN/asUintN`) and round
+  `float`s (`Math.fround`); arithmetic stays 64-bit (`int64`), exactly what the generated C++ does with
+  `sc::integer` arithmetic and conversions on assignment.
+- Defaults: `T{}` from `CppTypeIndex.defaultValue` (`fromCppValue` converts analyzer values), constants from
+  `CppTypeIndex.constant`.
+- Host values (API, callbacks, scenarios, simulation panels): enum → qualified enumerator name (a number if
+  the value has no enumerator); input also the simple name or a number. Struct → object (missing members get
+  their default, unknown members are errors), array → array. `getValue(name)` / `getVariableType(name)` give
+  the runtime values and types (for UIs). Canonical text (`formatValue`): `motor::Mode::Fast`,
+  `motor::Mode(7)`, `{x: 1, y: 2}`, `[1, 2]`.
+- Element access outside the bounds is a runtime error (`Index 3 is out of bounds 0..2`).
 
 ### 4.5 C++ generator
 
-- `#include "motor_types.h"` (the import path as written, or relative to the include directories)
-  in the generated header, before the class.
-- Types are emitted with `cppName` (fully qualified, e.g. `motor::Mode`, `std::int32_t`); aliases
-  may be emitted with their own qualified name to keep the user's spelling (`motor::Rpm`).
-- Enumerators and constants are emitted by their qualified name (`motor::Mode::Fast`,
-  `motor::kMaxSpeed`), not by value, so the generated code follows changes of the header.
-- Member access maps 1:1 (`pos.x`); event values of struct type are passed as `const T&`.
-- Arithmetic of imported integer types in guards: the generator keeps using `sc::integer` for
-  HSM `integer` arithmetic and converts on assignment (`static_cast<std::uint8_t>(…)`), which is
-  exactly the wrap-around the simulator implements.
-- The C generator can support imported C headers the same way (enums, structs, typedefs), but not
-  namespaces or `enum class`.
+- `#include "…"` of the imported headers in the generated header (after `sc_statemachine.h`). The path is the
+  import path if the header was found in an include directory or the output directory is the model's
+  directory; otherwise the path relative to the output directory (`hsm generate` computes it,
+  `CppGeneratorOptions.headerInclude` customizes it).
+- Declarations use the C++ spelling of the model (`motor::Rpm`, `::Color`; `<cstdint>` typedefs as
+  `std::uint8_t`): members, getters / setters (structs and arrays by `const T&`), event values and observables,
+  callback signatures. Enum / struct defaults `T{}`.
+- Expressions: enumerators and constants by their qualified names, member access 1:1, element access through
+  a generated `check_index` (reports `sc::ErrorKind::IndexOutOfBounds`, a new error kind), unscoped enum
+  operands `static_cast<sc::integer>(…)`, casts `static_cast<motor::Mode>(…)`; arithmetic in `sc::integer`,
+  stores into narrower places with `static_cast<std::uint8_t>(…)` (`-Wconversion` clean) – the wrap-around the
+  interpreter implements.
+- Scenario harness: `format` overloads for the enums, structs and arrays of the model (canonical text without
+  white space), literals of enum values and structs (`[] { motor::Position v{}; v.x = 1; return v; }()`),
+  member-wise comparison of struct expectations. The 14 `s10-cpp-*` scenarios are compiled with g++ (and
+  checked with clang++) one by one (their headers may declare the same names).
+- The **C generator** reports `C++ header types are not supported by the C generator` for any header import or
+  C++ type (also `uint8_t`); its conformance test skips exactly `CPP_TYPE_SCENARIOS` (`test/helpers.ts`).
+  (C headers for the C generator would be possible for C enums / structs / typedefs, not implemented.)
 
-### 4.6 Import resolution (implemented for `.hsm`, extension point for headers)
+### 4.6 Tools
 
-`import "…"` is implemented (`packages/language/src/imports.ts`, grammar rules `Import` / `ImportPath`):
-`import "a.hsm" "b.h"` and `import: "a.hsm"` are accepted at the beginning of the state machine body
-(before or after `namespace`). What exists and how headers plug in:
+- Hover (`cppHover` in `lsp/cpp-lsp.ts`, used by the language server and the web editor): the declaration
+  (`enum class motor::Mode` with its enumerators, `constexpr std::int32_t motor::kMaxSpeed = 6000`, struct
+  members with types), the documentation comment and the location in the header; also for each segment of a
+  qualified name (`motor` → namespace), for struct members in names and member accesses and for header import
+  paths.
+- Go to definition (`cppDefinition`): into the header (`fileName` + `nameRange` of the declaration); the
+  import path opens the header.
+- Completion (`HsmCompletionProvider`, both languages): after `ns::` the members of the namespace / class /
+  enum, after `::` the global names, after `var.` the members of a struct variable; otherwise Langium's
+  completion.
+- Semantic highlighting (VS Code): C++ types, enumerators and constants.
+- The definitions box of the diagram lists the imports.
 
-- `importKind(path)`: `'hsm'`, `'header'` (`.h`, `.hh`, `.hpp`, `.hxx`, `.h++`, `.inl`) or `'unsupported'`
-  (error). Header imports are currently reported as info "C/C++ header imports are not supported yet".
-- `resolveImportUri(documentUri, path)`: the path relative to the importing document (absolute paths kept).
-  Include directories of the generator configuration are not considered yet.
-- `HsmImportResolver` (service `references.ImportResolver`): `update(machine)` is called by `HsmLinker.link`
-  **before** a document is linked; it resolves all import paths (`resolve(machine)` → `ResolvedImport[]`:
-  `{ node, path, kind, uri, machine?, header? }`) and stores them in a registry keyed by the `StateMachine`
-  node. The pure functions `resolvedImports(machine)`, `importedMachines(machine)`, `machineType(typeRef)`
-  read that registry, so the type system, the scope provider and the interpreter need no services.
-  **Headers**: override `HsmImportResolver.resolveHeader(node, path, uri)` and return the analyzed header in
-  `ResolvedImport.header` (e.g. a `CppTypeIndex` built from the header text); `typeOfTypeReference` /
-  `HsmScopeProvider` can then look up `CppName`s through `resolvedImports(machine)`.
-- **Loading texts**: resolution is synchronous and only uses documents of the Langium workspace. `.hsm`
-  files are loaded beforehand: `HsmModelLoader.load(text, uri, { files })` and `HsmTestWorkspace` load
-  imported files transitively (`loadImports`: given texts, then `readFile` – the `FileSystemProvider` in
-  Node.js –, then previously loaded documents); the language server has all workspace files. Header texts
-  must be provided the same way (they are not Langium documents): e.g. extend `loadImports` to read
-  `kind === 'header'` paths into a header cache that `resolveHeader` uses, and send them to the VS Code
-  webview like the imported `.hsm` files (`collectImportedFiles` in `packages/vscode/src/extension/logic/imports.ts`,
-  `files` of the `text` message, `HsmModelService.setWorkspace`).
-- **Updates**: `HsmDocumentBuilder.shouldRelink` relinks a document when an imported file changed or an
-  import is unresolved; a header watcher would add the header URIs to the changed URIs.
+### 4.7 Hosts and settings
+
+**Decision:** the settings of the analysis are a `headers` block of the generator configuration
+`hsm.gen.json` (one configuration file per project, already used by the CLI, CMake and VS Code; a separate
+`hsm.config.json` would have duplicated the lookup):
+
+```json
+"headers": {
+    "includePaths": ["include", "../common/include"],
+    "defines": { "USE_CAN": "1", "NDEBUG": "" },
+    "dataModel": { "longBits": 32, "pointerBits": 32, "charSigned": false }
+}
+```
+
+Relative include paths are relative to the configuration file. For a model, the **nearest** `hsm.gen.json` /
+`*.hsm.gen.json` with a `headers` block in its directory or a parent directory applies (CLI, language server,
+VS Code webview; `hsm generate --config` uses the given configuration for its models). Global settings are
+combined with it: their include paths come after those of the configuration, their defines and data model
+override it.
+
+| host | headers | settings |
+| --- | --- | --- |
+| CLI (`hsm validate`, `simulate`, `test`, `generate`, `layout`, `plantuml`, `render`, `doc`) | read from disk (`installNodeHeaderSupport` in `src/node/cpp-headers-node.ts`: synchronous reader) | `hsm.gen.json`; `-I <dir>`, `-D NAME[=VALUE]`, `--data-model lp64`/`llp64`/`ilp32`; `hsm generate --list-inputs` lists the imported headers (CMake dependencies); CMake `INCLUDE_DIRS` / `DEFINES` |
+| API (`HsmModelLoader`, `HsmTestWorkspace`) | `files` / `readFile` (async, loaded before the build by `loadImports`, also the includes), header files given to `HsmTestWorkspace.load` | `HsmModelLoaderOptions.cppHeaders`, `cppHeaderStore(shared).settings` / `settingsProvider` |
+| VS Code language server | read from disk; the `**/*` file watcher of Langium invalidates changed headers and `hsm.gen.json` files; importing models are relinked and validated again | `hsm.gen.json`; settings `hsm.headers.includePaths` (relative to the workspace folder, `${workspaceFolder}`), `hsm.headers.defines`, `hsm.headers.dataModel` |
+| VS Code diagram webview | the extension sends the header texts (and their includes) with the imported `.hsm` files (`collectImportedFiles`) | the extension sends the effective settings (`headers` of the `text` message) |
+| Web app | the virtual file list: headers of the examples and headers opened with *Open…* (`.h`, `.hpp`, …; added to the list, not edited) | – |
+
+Unsaved changes of a header open in VS Code are not seen (headers are read from disk).
+
+### 4.8 Limitations
+
+- No struct literals, no `==` of structs (also with a user-defined `operator==`), no whole-array assignment
+  of C arrays, no pointers / references / unions / templates other than `std::array` / functions / methods.
+- Enum values without enumerator are shown as `motor::Mode(7)`; an enum with several enumerators of the same
+  value shows the first one.
+- `uint64_t` values above `INT64_MAX` are stored correctly but converted to `sc::integer` (wrapping) in
+  arithmetic, like in the generated code; host values are JS numbers (exact up to 2^53).
+- The C generator does not support header types; the C++ generator does not support submachine instances
+  (independent of headers).
+- The web editor cannot open or navigate into headers (hover works).

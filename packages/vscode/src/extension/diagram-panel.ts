@@ -442,9 +442,14 @@ export function headerSettingsFor(uri: vscode.Uri): CppHeaderSettings {
         return {};
     }
     headerConfigs.clear();
-    const folder = vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
+    return headerSettingsForModel(uri.fsPath, headerConfigs, vscodeHeaderSettings(uri));
+}
+
+/** The VS Code settings `hsm.headers.*` for a resource (without the settings of `hsm.gen.json`). */
+export function vscodeHeaderSettings(uri: vscode.Uri | undefined): CppHeaderSettings {
+    const folder = uri ? vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const section = vscode.workspace.getConfiguration('hsm', uri).get<HeaderSettingsSection>('headers');
-    return headerSettingsForModel(uri.fsPath, headerConfigs, headerSettingsFromSection(section, folder));
+    return headerSettingsFromSection(section, folder);
 }
 
 export async function readText(uri: string): Promise<string | undefined> {
