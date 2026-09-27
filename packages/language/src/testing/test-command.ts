@@ -8,6 +8,8 @@ import {
     COVERAGE_FORMATS, toCobertura, toCoverageHtml, toCoverageJson, toCoverageText, toLcov, type CoverageDiagramRenderer, type CoverageFormat
 } from './coverage-reports.js';
 import { toJUnitXml } from './junit.js';
+import { layoutStateMachine } from '../diagram/layout.js';
+import { renderSvg, type HighlightKind } from '../render/svg.js';
 import { HsmTestWorkspace, type WorkspaceFile } from './test-workspace.js';
 
 export interface TestCommandOptions {
@@ -175,7 +177,7 @@ async function writeCoverage(
                 break;
             case 'html': {
                 const pages = await toCoverageHtml(report, {
-                    ...reportOptions, renderDiagram: options.renderDiagram, diagramSource: machine => coverage.diagramSource(machine)
+                    ...reportOptions, renderDiagram: options.renderDiagram ?? renderCoverageDiagram, diagramSource: machine => coverage.diagramSource(machine)
                 });
                 for (const page of pages) {
                     const target = await write(path.join(path.dirname(COVERAGE_FILES.html), page.path), page.content);
@@ -201,3 +203,13 @@ async function hsmFilesIn(directory: string): Promise<string[]> {
     const entries = await fs.readdir(directory, { withFileTypes: true });
     return entries.filter(e => e.isFile() && e.name.endsWith('.hsm')).map(e => path.join(directory, e.name)).sort();
 }
+
+/** Default diagram of the HTML coverage report: the state machine with covered / uncovered elements highlighted. */
+export const renderCoverageDiagram: CoverageDiagramRenderer = async (machine, highlight) => {
+    const { graph } = await layoutStateMachine(machine);
+    const kinds = new Map<string, HighlightKind>();
+    for (const [id, cls] of Object.entries(highlight.classes)) {
+        kinds.set(id, cls === 'hsm-covered' ? 'covered' : 'uncovered');
+    }
+    return renderSvg(graph, { highlight: kinds, legend: true, xmlDeclaration: false });
+};

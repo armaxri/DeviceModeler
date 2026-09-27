@@ -12,7 +12,8 @@
     "build": "npm run build -w packages/language && npm run build -w packages/web",
     "dev": "npm run langium:generate && npm run dev -w packages/web",
     "test": "npm run test -w packages/language",
-    "typecheck": "npm run typecheck -w packages/language && npm run typecheck -w packages/web"
+    "typecheck": "npm run typecheck -w packages/language && npm run typecheck -w packages/web",
+    "docs:examples": "npm run build -w packages/language && node packages/language/bin/cli.js doc examples -o docs/examples --title \"Example state machines\""
   },
   "devDependencies": {
     "typescript": "~5.9.3"

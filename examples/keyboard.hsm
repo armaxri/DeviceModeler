@@ -1,4 +1,5 @@
 // Orthogonal regions: caps lock and num lock are independent of each other.
+/** LEDs of a keyboard; suspending the keyboard keeps the lock states. */
 statemachine Keyboard {
     interface:
         in event capsLock
@@ -7,6 +8,7 @@ statemachine Keyboard {
         in event wakeUp
         in event unplug
         out event led : integer
+        /** Switches the LED `led` (`CAPS` or `NUM`) on or off. */
         operation setLed(led : integer, on : boolean) : void
 
     internal:
@@ -38,6 +40,7 @@ statemachine Keyboard {
         }
     }
 
+    /** The keyboard is suspended: the LED states are kept. */
     state Suspended
 
     Active -> Suspended : suspend

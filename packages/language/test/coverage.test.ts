@@ -418,6 +418,10 @@ describe('hsm test --coverage', () => {
             TrafficLight: '7/7 11/11 7/7 2/2'
         });
         expectWellFormed(fs.readFileSync(path.join(dir, 'cobertura-coverage.xml'), 'utf-8'));
+        // the HTML pages contain the diagram with highlighted elements
+        const page = fs.readFileSync(path.join(dir, 'html/Door.html'), 'utf-8');
+        expect(page).toContain('<svg');
+        expect(page).toContain('hsm-covered');
     });
 
     test('thresholds which are not met fail the run', async () => {

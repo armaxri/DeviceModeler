@@ -12,6 +12,9 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 - ✅ Graphical editing as text edits (undo, comments and formatting preserved)
 - ✅ Composite states, orthogonal regions, choice, junction, shallow and deep history, final states
 - ✅ PlantUML export, SVG export, CLI
+- ✅ SVG rendering without a browser (`hsm render`, `renderSvg()`; same look and style sheet as the
+  editor, Helvetica metrics for the layout in Node.js) and model documentation (`hsm doc`: Markdown or HTML
+  with diagram, interface / state / transition tables, `/** */` doc comments, also shown on hover)
 
 ## Phase 1 – Language parity with itemis CREATE ✅
 
@@ -112,8 +115,8 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 - ✅ Model coverage of unit tests (`hsm test --coverage`): states, transitions, local reactions and guard
   decisions with per-test attribution; text, JSON, LCOV, Cobertura and HTML reports, thresholds for CI;
   `CoverageCollector` attachable to any interpreter
-  - 📋 still missing: diagrams in the HTML report (hook ready for the SVG renderer), coverage view in the
-    web simulation and the VS Code extension
+  - ✅ the HTML report shows the diagram with covered / uncovered elements (`renderSvg` highlights)
+  - 📋 still missing: coverage view in the web simulation and the VS Code extension
 
 ## Decisions
 
