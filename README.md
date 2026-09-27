@@ -72,6 +72,9 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
 - **Code generation** for **C++** (a class per state machine like itemis CREATE, see
   [Code generation (C++)](#code-generation-c)) and C99, both verified against the conformance suite of the
   interpreter by compiling and running every scenario.
+- **VS Code extension** (`packages/vscode`): language server for `.hsm` / `.hsmtest`, the diagram editor
+  of the web app next to the text editor, C++ generation, tests in the Test Explorer (with model
+  coverage) and the itemis CREATE import – see [VS Code extension](#vs-code-extension).
 - **Build integration**: a generator configuration file (`hsm.gen.json`, like the `.sgen` files of itemis
   CREATE), `hsm generate --check` for CI and CMake functions (`hsm_generate`, `hsm_add_tests`) that
   regenerate the code when a model changes (see [Build integration (CMake)](#build-integration-cmake)).
@@ -88,9 +91,10 @@ npm run dev        # starts the editor on http://localhost:5173
 Other scripts:
 
 ```bash
-npm test           # unit tests of the language package (parser, validation, edits, layout, generator)
-npm run build      # langium generate + TypeScript build + production build of the web app (packages/web/dist)
+npm test           # unit tests of the language package and of the VS Code extension
+npm run build      # langium generate + TypeScript build + web app (packages/web/dist) + extension bundles (packages/vscode/dist)
 npm run typecheck
+npm run package:vscode   # packages/vscode/hsm-vscode-<version>.vsix
 ```
 
 ### Command line
@@ -499,11 +503,16 @@ packages/
     test/scenarios/           conformance suite shared with code generators (format: README.md there)
     src/cli/main.ts           command line interface
   web/          Vite app: Monaco editor + Sprotty diagram
-    src/app.ts                controller: text -> Langium -> ELK (web worker) -> Sprotty, diagram edits -> text
+    src/app.ts                the web app: Monaco editor, toolbar, files; host of the diagram controller
+    src/diagram-controller.ts graphical editor: text -> Langium -> ELK (web worker) -> Sprotty, diagram edits -> text
+                              (independent of Monaco: also used by the VS Code webview via the DiagramHost interface)
+    src/model-service.ts      Langium parsing / validation of the model text in the browser
     src/language-support.ts   Langium services wired into Monaco (markers, completion, formatting, …)
     src/diagram/              Sprotty model, views (PlantUML look), mouse / selection listeners
     src/simulation/           simulation session: interpreter, real-time clock, logs, operation mocks, breakpoints
     src/ui/                   properties and simulation panels, inline editor, SVG / PlantUML export
+  vscode/       VS Code extension: language client + commands + test controller (extension host),
+                Langium language server (src/server), diagram webview reusing packages/web (src/webview)
 examples/       sample state machines, examples/tests: their unit tests, examples/cmake: CMake example
 cmake/          CMake integration (HsmGenerate.cmake: hsm_generate, hsm_add_tests)
 docs/           execution semantics
@@ -515,8 +524,47 @@ computed by ELK (layered algorithm with hierarchy support, in a web worker) and 
 custom views. Diagram interactions are turned into text edits by `ModelEditor` and applied to the Monaco
 model, which triggers the same pipeline again – so undo / redo, comments and formatting just work.
 
-Possible next steps: a VS Code extension (the language package can be used by a Langium language server
-together with `sprotty-vscode`) and code generation for further target languages (see [ROADMAP.md](ROADMAP.md)).
+The VS Code extension runs the same pipeline in its diagram webview; instead of the Monaco model its
+host is the VS Code document (see [VS Code extension](#vs-code-extension)).
+
+## VS Code extension
+
+`packages/vscode` is a VS Code extension for models and their unit tests (details in
+[packages/vscode/README.md](packages/vscode/README.md)):
+
+- **Language server** for `.hsm` and `.hsmtest` (Langium, separate Node process): diagnostics,
+  completion, hover with doc comments, definition, references, rename, formatting, outline, folding
+  and semantic highlighting. The whole workspace is indexed, so test classes resolve state machines of
+  other files. TextMate grammars and a language configuration (comments, brackets, `/** */` continuation).
+- **Diagram** (**HSM: Open Diagram** or the button in the editor title): the diagram editor of the web
+  app in a webview beside the text – updated while typing, selection sync in both directions, palette
+  tools, inline rename, delete, drag to nest, properties panel and simulation. Diagram edits are
+  computed with `ModelEditor` and applied to the document as `WorkspaceEdit`s, so undo, the dirty
+  state and git behave as for typed changes. The diagram follows the VS Code color theme (light:
+  PlantUML classic, configurable with `hsm.diagram.lightTheme`; dark: dark theme).
+- **HSM: Generate C++** uses a generator configuration (`hsm.gen.json` / `*.hsm.gen.json` that lists
+  the model, searched from the model directory up to the workspace folder) with the same generator code
+  as `hsm generate`, otherwise the settings `hsm.cpp.outputDirectory`, `hsm.cpp.namespace` and
+  `hsm.cpp.standard`. `hsm.gen.json` files are validated with the JSON schema.
+- **Tests** in the Test Explorer (all `@Test` operations of the workspace; failures with location and
+  trace; **HSM: Run Tests** for the active file) and a **Run with Model Coverage** profile that shows
+  covered states / transitions / reactions and guard decisions in the coverage view.
+- **HSM: Import itemis CREATE Model (.sct)**, **HSM: Export Diagram as SVG** (`renderSvg`),
+  **HSM: Export as PlantUML**.
+
+```bash
+npm run package:vscode    # builds and packages packages/vscode/hsm-vscode-0.1.0.vsix
+code --install-extension packages/vscode/hsm-vscode-0.1.0.vsix
+```
+
+Three bundles: `dist/extension.cjs` (extension host, esbuild), `dist/server.cjs` (language server,
+esbuild) and `dist/webview/` (Vite, the diagram controller, views and styles of `packages/web` – no
+code is duplicated). The tests (`npm test -w packages/vscode`) cover the edit conversion, the generator
+configuration resolution, test discovery / execution / coverage mapping and a language server round
+trip over stdio (initialize, diagnostics, cross-file linking, hover, definition, references, rename,
+formatting, symbols, folding, completion, semantic tokens). There are no tests in a real VS Code
+instance yet (`@vscode/test-electron` needs to download VS Code, which was not possible in the build
+environment).
 
 ## Code generation (C++)
 

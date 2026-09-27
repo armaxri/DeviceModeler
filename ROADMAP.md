@@ -107,16 +107,24 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
   - 📋 still missing: generated GoogleTest targets from `.hsmtest` files, verification on Windows / MSVC,
     shipping the CMake module with the npm package (currently the `cmake/` directory of the repository)
 
-## Phase 6 – Tooling 💭
+## Phase 6 – Tooling 🚧
 
-- 💭 VS Code extension (Langium language server + `sprotty-vscode` diagram)
+- ✅ VS Code extension (`packages/vscode`): Langium language server for `.hsm` / `.hsmtest` (workspace
+  index, hover with doc comments, rename, formatting, semantic highlighting, …), the diagram editor of
+  the web app as webview with selection sync and diagram edits applied as `WorkspaceEdit`s, theme
+  following VS Code, Generate C++ (`hsm.gen.json` or settings), tests and model coverage in the Test
+  Explorer, `.sct` import, SVG / PlantUML export, `.vsix` packaging
+  - limitations: no hand-arranged layout; the extension generates only the `cpp` target; no end-to-end
+    tests in a real VS Code instance (`@vscode/test-electron` could not download VS Code) – the language
+    server is tested over stdio, the webview bundle in Chromium with a mocked VS Code API
 - 💭 Multi-file projects and workspaces in the web editor
 - 💭 Manual layout adjustments stored in the model
 - ✅ Model coverage of unit tests (`hsm test --coverage`): states, transitions, local reactions and guard
   decisions with per-test attribution; text, JSON, LCOV, Cobertura and HTML reports, thresholds for CI;
   `CoverageCollector` attachable to any interpreter
   - ✅ the HTML report shows the diagram with covered / uncovered elements (`renderSvg` highlights)
-  - 📋 still missing: coverage view in the web simulation and the VS Code extension
+  - ✅ coverage view in the VS Code extension (Test Explorer coverage profile)
+  - 📋 still missing: coverage view in the web simulation
 
 ## Decisions
 
