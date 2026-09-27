@@ -272,14 +272,13 @@ describe.skipIf(!GXX && !CLANGXX)('C++ code generator: examples', () => {
         }, 60000);
     }
 
-    test('the usage example of the README compiles and runs', async () => {
-        const readme = fs.readFileSync(path.resolve(__dirname, '../../../README.md'), 'utf-8');
-        const section = readme.substring(readme.indexOf('## Code generation (C++)'));
-        const example = /```cpp\n([\s\S]*?)```/.exec(section)?.[1];
-        expect(example, 'C++ example in the README').toBeDefined();
+    test('the usage example of docs/cpp-generator.md compiles and runs', async () => {
+        const doc = fs.readFileSync(path.resolve(__dirname, '../../../docs/cpp-generator.md'), 'utf-8');
+        const example = /```cpp\n([\s\S]*?)```/.exec(doc)?.[1];
+        expect(example, 'C++ example in docs/cpp-generator.md').toBeDefined();
         const parsed = await parse(fs.readFileSync(path.join(exampleDirectory, 'traffic-light.hsm'), 'utf-8'));
         const result = generateCpp(parsed.model);
-        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cpp-readme-'));
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cpp-doc-'));
         try {
             writeFiles(directory, result);
             // a few cycles instead of a minute

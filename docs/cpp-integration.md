@@ -4,7 +4,7 @@ Status: **implemented**. The C++ header analyzer (`packages/language/src/cpp-hea
 integration (grammar, linking, type system, validation, interpreter, unit tests, scenarios, C++ generator,
 language server, web app, VS Code webview) are done. This note describes the analyzer, the supported C++
 subset and the integration with the decisions taken (§4); the user documentation is in the
-[README](../README.md#cc-header-imports), the semantics in [semantics.md §10](semantics.md).
+[language documentation](language.md#cc-header-imports), the semantics in [semantics.md §10](semantics.md).
 
 ## 1. Goal
 

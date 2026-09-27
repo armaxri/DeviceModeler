@@ -126,7 +126,7 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
   conformance suite by compiling (gcc / clang, `-Wall -Wextra -Wpedantic -Werror`) and running
   every scenario. Limitations: strings live in fixed-size buffers (`<PREFIX>_STRING_CAPACITY`,
   longer strings are truncated with an error), fixed-size event queues (`<PREFIX>_QUEUE_CAPACITY`),
-  runtime errors do not abort the step (the failed operation is skipped, see README), typed out
+  runtime errors do not abort the step (the failed operation is skipped, see docs/c-generator.md), typed out
   events are always reported with their value, no C/C++ header types (a diagnostic; the `s10-cpp-*`
   scenarios are skipped)
 - ✅ Unit test language for statecharts (like SCTUnit, `.hsmtest`) with a test runner on the interpreter,
