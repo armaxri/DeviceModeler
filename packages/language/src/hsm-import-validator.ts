@@ -63,7 +63,7 @@ export class HsmImportValidator {
             byUri.add(key);
             const imported = resolved.machine;
             if (!imported) {
-                const location = resolved.uri ? (resolved.uri.scheme === 'file' ? resolved.uri.fsPath : resolved.uri.toString()) : resolved.path;
+                const location = resolved.uri ? (resolved.uri.scheme === 'file' ? resolved.uri.fsPath : resolved.uri.path) : resolved.path;
                 accept('error', `Cannot resolve the import '${resolved.path}': the file '${location}' was not found.`, target);
                 continue;
             }

@@ -3,7 +3,7 @@ import {
     type SModelElementImpl
 } from 'sprotty';
 import type { SModelElement, SModelRoot } from 'sprotty-protocol';
-import type { DiagramEdge, DiagramGraph, DiagramLabel, DiagramNode, DiagramNodeKind, Point } from 'hsm-language';
+import type { DiagramEdge, DiagramGraph, DiagramLabel, DiagramNode, DiagramNodeKind, DiagramSubmachine, Point } from 'hsm-language';
 
 export type IssueSeverity = 'error' | 'warning';
 
@@ -61,6 +61,10 @@ export class VertexNode extends SNodeImpl {
     active = false;
     /** Simulation: a breakpoint is set on the state. */
     breakpoint = false;
+    /** A submachine state: its instance, state machine and the entry / exit points used by transitions. */
+    submachine?: DiagramSubmachine;
+    /** Simulation: the active states of the instance of a submachine state (replaces the instance line). */
+    instanceText?: string;
 }
 
 export class TransitionEdge extends SChildElementImpl {
@@ -98,6 +102,8 @@ export interface SchemaOptions {
     recentTransitions?: ReadonlySet<string>;
     /** Simulation: ids of the elements with a breakpoint. */
     breakpoints?: ReadonlySet<string>;
+    /** Simulation: the active states of the submachine instances by the id of their state (`motor: Running`). */
+    instanceTexts?: ReadonlyMap<string, string>;
 }
 
 /** Converts the layouted diagram into the sprotty model schema. */
@@ -122,6 +128,8 @@ export function toSchema(graph: DiagramGraph, options: SchemaOptions): SModelRoo
         pendingSource: options.pendingSource === node.id,
         active: options.activeStates?.has(node.id) ?? false,
         breakpoint: options.breakpoints?.has(node.id) ?? false,
+        submachine: node.submachine,
+        instanceText: options.instanceTexts?.get(node.id),
         children: node.children.map(convertNode)
     } as SModelElement);
     const convertEdge = (edge: DiagramEdge): SModelElement => ({

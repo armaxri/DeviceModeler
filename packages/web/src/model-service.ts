@@ -32,21 +32,47 @@ const DOCUMENT_URI = 'memory:///model.hsm';
 /**
  * Parses, links and validates the model text with the Langium services of the HSM language running
  * directly in the browser (no editor dependencies: used by the web app and the VS Code webview).
+ *
+ * Imports (`import "motor.hsm"`) are resolved relative to the URI of the edited document against
+ * the texts of the other files given with {@link setWorkspace} (the browser has no file system): the
+ * web app passes its examples and opened files, the VS Code webview the imported files read by the
+ * extension. Imports of other files are reported as "file not found".
  */
 export class HsmModelService {
 
     readonly loader = new HsmModelLoader();
     private latest?: ParsedModel;
+    private latestVersion = -1;
     private queue: Promise<unknown> = Promise.resolve();
+    private documentUri = DOCUMENT_URI;
+    private files: Record<string, string> = {};
+    private workspaceVersion = 0;
+
+    /** The URI of the edited document. */
+    get uri(): string {
+        return this.documentUri;
+    }
+
+    /**
+     * Sets the URI of the edited document (imports are resolved relative to it) and the texts of the
+     * other files it may import, by URI (or by path relative to the document).
+     */
+    setWorkspace(documentUri: string, files: Record<string, string>): void {
+        this.documentUri = documentUri;
+        this.files = { ...files };
+        this.workspaceVersion++;
+    }
 
     /** Parses, links and validates the text. Calls are serialized. */
     parse(text: string): Promise<ParsedModel> {
         const result = this.queue.then(async () => {
-            if (this.latest?.text === text) {
+            if (this.latest?.text === text && this.latestVersion === this.workspaceVersion) {
                 return this.latest;
             }
-            const parsed = await this.loader.load(text, DOCUMENT_URI);
+            const version = this.workspaceVersion;
+            const parsed = await this.loader.load(text, this.documentUri, { files: this.files });
             this.latest = parsed;
+            this.latestVersion = version;
             return parsed;
         });
         this.queue = result.catch(() => undefined);

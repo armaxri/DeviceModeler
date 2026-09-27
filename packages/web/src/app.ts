@@ -1,5 +1,5 @@
 import { monaco } from './monaco.js';
-import { generatePlantUml, importSct, type EdgeRouting, type LayoutDirection, type ParsedModel, type TextEdit } from 'hsm-language';
+import { generatePlantUml, importSct, type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ParsedModel, type TextEdit } from 'hsm-language';
 import { EDITOR_THEMES, HsmLanguageSupport, LANGUAGE_ID } from './language-support.js';
 import { DiagramController, type DiagramHost, type DiagramSettings, type StatusSeverity, type TextRange } from './diagram-controller.js';
 import { createWorkerElk } from './diagram/elk.js';
@@ -17,6 +17,11 @@ interface Settings extends DiagramSettings {
 const STORAGE_TEXT = 'hsm-modeler.text';
 const STORAGE_SETTINGS = 'hsm-modeler.settings';
 const STORAGE_FILE = 'hsm-modeler.file';
+const STORAGE_FILES = 'hsm-modeler.files';
+/** Directory of the virtual files of the web app: imports are resolved against it. */
+const FILE_BASE = 'memory:///';
+/** Value prefix of the files in the example list. */
+const FILE_OPTION = 'file:';
 
 /**
  * The web application: the Monaco text editor, the toolbar and the graphical editor
@@ -30,6 +35,11 @@ export class HsmApp implements DiagramHost {
     private cursorTimer?: ReturnType<typeof setTimeout>;
     private applyingEdit = false;
     private fileName = 'statemachine.hsm';
+    /**
+     * The virtual workspace: opened files and edited files by file name (flat, all in one directory).
+     * Imports (`import "motor.hsm"`) are resolved against these files and the examples.
+     */
+    private readonly files = new Map<string, string>();
     private settings: Settings = { direction: 'DOWN', routing: 'SPLINES', theme: 'classic', priorities: true };
     diagram!: DiagramController;
 
@@ -61,6 +71,12 @@ export class HsmApp implements DiagramHost {
                 Object.assign(this.settings, JSON.parse(stored));
             }
             this.fileName = localStorage.getItem(STORAGE_FILE) ?? this.fileName;
+            const files = JSON.parse(localStorage.getItem(STORAGE_FILES) ?? '{}') as Record<string, string>;
+            for (const [name, text] of Object.entries(files)) {
+                if (typeof text === 'string') {
+                    this.files.set(name, text);
+                }
+            }
         } catch {
             // storage is not available
         }
@@ -100,6 +116,7 @@ export class HsmApp implements DiagramHost {
         });
         this.decorations = this.editor.createDecorationsCollection();
         byId('file-name').textContent = this.fileName;
+        this.updateWorkspace();
         this.editor.onDidChangeModelContent(() => {
             try {
                 localStorage.setItem(STORAGE_TEXT, this.editor.getValue());
@@ -121,13 +138,19 @@ export class HsmApp implements DiagramHost {
 
     private bindToolbar(): void {
         const examples = byId<HTMLSelectElement>('example-select');
+        const exampleGroup = h('optgroup', { label: 'Examples' });
         for (const example of EXAMPLES) {
-            examples.append(h('option', { value: example.fileName }, example.title));
+            exampleGroup.append(h('option', { value: example.fileName }, example.title));
         }
+        examples.append(exampleGroup);
         examples.addEventListener('change', () => {
-            const example = EXAMPLES.find(e => e.fileName === examples.value);
+            const value = examples.value;
+            const example = EXAMPLES.find(e => e.fileName === value);
             examples.value = '';
-            if (example) {
+            if (value.startsWith(FILE_OPTION)) {
+                // a file of the virtual workspace (with its edits)
+                this.openFile(value.slice(FILE_OPTION.length));
+            } else if (example) {
                 this.loadText(example.text, example.fileName);
             }
         });
@@ -135,7 +158,21 @@ export class HsmApp implements DiagramHost {
         const fileInput = byId<HTMLInputElement>('file-input');
         byId('btn-open').addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', async () => {
-            const file = fileInput.files?.[0];
+            const selected = [...fileInput.files ?? []];
+            const models = selected.filter(f => !/\.sct$/i.test(f.name));
+            if (models.length > 1 || (models.length === 1 && selected.length > 1)) {
+                // several files: all of them are available for imports, the first one is edited
+                for (const model of models) {
+                    this.files.set(model.name, await model.text());
+                }
+                this.saveFiles();
+                const first = models[0];
+                this.loadText(this.files.get(first.name)!, first.name);
+                this.setStatus(`Opened ${first.name}; ${models.slice(1).map(m => m.name).join(', ')} can be imported (and opened from the list of examples and files).`);
+                fileInput.value = '';
+                return;
+            }
+            const file = selected[0];
             if (file && /\.sct$/i.test(file.name)) {
                 // itemis CREATE / YAKINDU statechart: convert to HSM text
                 try {
@@ -148,7 +185,9 @@ export class HsmApp implements DiagramHost {
                     this.setStatus(`Import of ${file.name} failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
                 }
             } else if (file) {
-                this.loadText(await file.text(), file.name);
+                this.files.set(file.name, await file.text());
+                this.saveFiles();
+                this.loadText(this.files.get(file.name)!, file.name);
             }
             fileInput.value = '';
         });
@@ -242,8 +281,20 @@ export class HsmApp implements DiagramHost {
     }
 
     private loadText(text: string, fileName: string): void {
+        if (this.diagram.simulation) {
+            this.diagram.stopSimulation();
+        }
+        // the edited text of the current file stays available (for imports and to switch back)
+        if (this.editor && fileName !== this.fileName && this.files.has(this.fileName)) {
+            this.files.set(this.fileName, this.editor.getValue());
+        }
+        if (!this.files.has(fileName) && (/\.hsm$/i.test(fileName))) {
+            this.files.set(fileName, text);
+        }
+        this.saveFiles();
         this.diagram.reset();
         this.fileName = fileName;
+        this.updateWorkspace();
         byId('file-name').textContent = fileName;
         try {
             localStorage.setItem(STORAGE_FILE, fileName);
@@ -259,6 +310,75 @@ export class HsmApp implements DiagramHost {
         if (position) {
             this.diagram.selectElementAtOffset(this.editor.getModel()!.getOffsetAt(position));
         }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Virtual workspace (imports)
+
+    /** The texts the edited file may import: the examples, overridden by the opened / edited files. */
+    private workspaceFiles(): Record<string, string> {
+        const files: Record<string, string> = {};
+        for (const example of EXAMPLES) {
+            files[FILE_BASE + example.fileName] = example.text;
+        }
+        for (const [name, text] of this.files) {
+            files[FILE_BASE + name] = text;
+        }
+        delete files[FILE_BASE + this.fileName];
+        return files;
+    }
+
+    /** Passes the virtual workspace to the language service and updates the file list. */
+    private updateWorkspace(): void {
+        if (this.editor && this.files.has(this.fileName)) {
+            this.files.set(this.fileName, this.editor.getValue());
+        }
+        this.language.setWorkspace(FILE_BASE + this.fileName, this.workspaceFiles());
+        this.updateFileList();
+    }
+
+    /** The file list: opened / edited files, the edited file and the files it imports. */
+    private updateFileList(imported: string[] = []): void {
+        const select = byId<HTMLSelectElement>('example-select');
+        const names = [...new Set([...this.files.keys(), this.fileName, ...imported])].filter(name => name !== this.fileName).sort();
+        if (select.dataset.files === names.join('\n')) {
+            return;
+        }
+        select.dataset.files = names.join('\n');
+        select.querySelector('optgroup.files')?.remove();
+        if (names.length > 0) {
+            select.append(h('optgroup', { label: 'Files (imports resolve against them)', class: 'files' },
+                ...names.map(name => h('option', { value: FILE_OPTION + name }, name))));
+        }
+    }
+
+    /** Opens a file of the virtual workspace or an example by file name; false if it is not available. */
+    private openFile(fileName: string): boolean {
+        const text = this.files.get(fileName) ?? EXAMPLES.find(e => e.fileName === fileName)?.text;
+        if (text === undefined) {
+            return false;
+        }
+        this.loadText(text, fileName);
+        return true;
+    }
+
+    private saveFiles(): void {
+        try {
+            localStorage.setItem(STORAGE_FILES, JSON.stringify(Object.fromEntries(this.files)));
+        } catch {
+            // storage is not available
+        }
+    }
+
+    /** Double-click on a submachine state: opens the file of its state machine if it is available. */
+    openStateMachine(submachine: DiagramSubmachine): boolean {
+        const fileName = submachine.uri?.startsWith('memory:') ? decodeURIComponent(submachine.uri.replace(/^.*\//, '')) : undefined;
+        if (fileName && this.openFile(fileName)) {
+            this.setStatus(`Opened ${fileName} (state machine ${submachine.machine} of the instance ${submachine.instance}).`);
+            return true;
+        }
+        this.setStatus(`The file of the state machine ${submachine.machine} is not available – open it with Open….`, 'warning');
+        return false;
     }
 
     // -----------------------------------------------------------------------------------------
@@ -282,6 +402,7 @@ export class HsmApp implements DiagramHost {
     }
 
     modelParsed(parsed: ParsedModel): void {
+        this.updateFileList(parsed.imported.map(i => decodeURIComponent(i.uri.replace(/^.*\//, ''))));
         HsmLanguageSupport.setMarkers(this.editor.getModel()!, parsed.diagnostics);
         this.showProblemCount(parsed);
     }

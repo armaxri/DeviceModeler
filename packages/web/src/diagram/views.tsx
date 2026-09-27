@@ -2,7 +2,7 @@
 import { injectable } from 'inversify';
 import { ShapeView, svg, type IView, type RenderingContext } from 'sprotty';
 import type { VNode } from 'snabbdom';
-import { DiagramMetrics, type Point } from 'hsm-language';
+import { DiagramMetrics, submachinePointPositions, type DiagramNode, type Point } from 'hsm-language';
 import type { Issue, TransitionEdge, VertexNode } from './model.js';
 
 const m = DiagramMetrics;
@@ -40,6 +40,36 @@ function breakpointMarker(enabled: boolean, x: number, y: number): VNode | undef
     </g>;
 }
 
+/** The submachine icon ("rake": two linked states) with its left edge at `x`, vertically centered at `y`. */
+function submachineIcon(x: number, y: number): VNode {
+    return <g class-submachine-icon={true}>
+        <title>Submachine state</title>
+        <rect x={x} y={y - 3} width={6} height={6} rx={1.5} ry={1.5} />
+        <rect x={x + 10} y={y - 3} width={6} height={6} rx={1.5} ry={1.5} />
+        <line x1={x + 6} y1={y} x2={x + 10} y2={y} />
+    </g>;
+}
+
+/** The entry points / exit nodes of the instance used by transitions, on the border of the state. */
+function submachinePoints(node: Readonly<VertexNode>): VNode[] {
+    const direction = node.separator === 'top' ? 'DOWN' : 'RIGHT';
+    const layoutNode = { width: node.size.width, height: node.size.height, headerHeight: node.headerHeight, submachine: node.submachine } as DiagramNode;
+    const r = m.submachinePointRadius;
+    const d = r * Math.SQRT1_2;
+    return submachinePointPositions(layoutNode, direction).map(point => {
+        const { x, y } = point;
+        const labelX = direction === 'DOWN' ? x + r + 2 : point.kind === 'entry' ? x - r - 2 : x + r + 2;
+        const labelY = direction === 'DOWN' ? (point.kind === 'entry' ? y - r - 1 : y + r + 10) : y - r - 1;
+        return <g class-submachine-point={true}>
+            <title>{`${point.kind === 'entry' ? 'Entry point' : 'Exit node'} ${point.name} of the submachine`}</title>
+            <circle class-entry-shape={point.kind === 'entry'} class-exit-shape={point.kind === 'exit'} cx={x} cy={y} r={r} />
+            {point.kind === 'exit' ? <path class-exit-cross={true} d={`M ${x - d},${y - d} L ${x + d},${y + d} M ${x - d},${y + d} L ${x + d},${y - d}`} /> : undefined}
+            <text class-submachine-point-label={true} x={labelX} y={labelY}
+                style={{ textAnchor: direction === 'RIGHT' && point.kind === 'entry' ? 'end' : 'start' }}>{point.name}</text>
+        </g>;
+    });
+}
+
 function vertexClasses(node: Readonly<VertexNode>): Record<string, boolean> {
     return {
         'class-active': node.active,
@@ -67,14 +97,21 @@ export class StateView extends ShapeView {
         const { width, height } = node.size;
         const header = node.headerHeight;
         const lineHeight = m.lineHeight.body;
-        return <g {...vertexClasses(node)} class-state={true} class-composite={node.composite}>
+        const submachine = node.submachine;
+        const name = submachine ? `${node.name ?? ''} : ${submachine.machine}` : node.name ?? '';
+        // simulation: the body line of the instance shows its active states
+        const lineText = (line: string, i: number) => submachine?.line === i && node.instanceText !== undefined ? node.instanceText : preserveIndent(line);
+        return <g {...vertexClasses(node)} class-state={true} class-composite={node.composite} class-submachine-state={!!submachine}>
             <rect class-state-shape={true} x={0} y={0} rx={12.5} ry={12.5} width={width} height={height} />
-            <text class-state-name={true} x={width / 2} y={baseline(0, header, m.fontSize.name)}>{node.name ?? ''}</text>
+            <text class-state-name={true} x={(width - (submachine ? m.submachineIconWidth : 0)) / 2} y={baseline(0, header, m.fontSize.name)}>{name}</text>
             <line class-state-separator={true} x1={0} y1={header} x2={width} y2={header} />
             {...node.body.map((line, i) =>
-                <text class-state-body={true} x={m.bodyPadding} y={baseline(header + m.bodyPadding + i * lineHeight, lineHeight, m.fontSize.body)}>
-                    {preserveIndent(line)}{node.bodyTitles[i] ? <title>{node.bodyTitles[i]}</title> : undefined}
+                <text class-state-body={true} class-submachine-instance={submachine?.line === i} x={m.bodyPadding} y={baseline(header + m.bodyPadding + i * lineHeight, lineHeight, m.fontSize.body)}>
+                    {lineText(line, i)}{submachine?.line === i ? <title>{`Submachine instance ${submachine.instance} of ${submachine.machine} – double-click to open the state machine`}</title>
+                        : node.bodyTitles[i] ? <title>{node.bodyTitles[i]}</title> : undefined}
                 </text>)}
+            {submachine ? submachineIcon(width - m.submachineIconWidth + 2, header / 2) : undefined}
+            {...(submachine ? submachinePoints(node) : [])}
             {context.renderChildren(node)}
             {issueMarker(node.issue, width - 4, 4)}
             {breakpointMarker(node.breakpoint, 9, 9)}

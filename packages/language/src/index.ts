@@ -6,6 +6,8 @@ export * from './hsm-validator.js';
 export * from './hsm-scope.js';
 export * from './hsm-formatter.js';
 export * from './hsm-document.js';
+export * from './imports.js';
+export * from './hsm-import-validator.js';
 export * from './model-utils.js';
 export * from './generator/plantuml.js';
 export * from './diagram/diagram-model.js';

@@ -1,4 +1,8 @@
-const files = import.meta.glob('../../../examples/*.hsm', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+const files = {
+    ...import.meta.glob('../../../examples/*.hsm', { query: '?raw', import: 'default', eager: true }),
+    // two files: the gate imports the motor (submachine instance)
+    ...import.meta.glob('../../../examples/door-with-motor/*.hsm', { query: '?raw', import: 'default', eager: true })
+} as Record<string, string>;
 
 export interface Example {
     fileName: string;
@@ -10,7 +14,9 @@ const TITLES: Record<string, string> = {
     'traffic-light.hsm': 'Traffic light (time events, interfaces)',
     'cd-player.hsm': 'CD player (history, choice)',
     'keyboard.hsm': 'Keyboard (orthogonal regions)',
-    'door.hsm': 'Door (entry / exit points, fork / join)'
+    'door.hsm': 'Door (entry / exit points, fork / join)',
+    'gate.hsm': 'Gate with a motor submachine (imports motor.hsm)',
+    'motor.hsm': 'Motor (submachine of the gate)'
 };
 
 export const EXAMPLES: Example[] = Object.entries(files)

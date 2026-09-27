@@ -174,6 +174,23 @@ export const DIAGRAM_CSS = `
     font-size: 12px;
 }
 
+/* ---- submachine states ---- */
+
+.submachine-icon rect,
+.submachine-icon line {
+    fill: none;
+    stroke: var(--hsm-state-stroke);
+    stroke-width: 1.2px;
+}
+
+.submachine-instance {
+    font-style: italic;
+}
+
+.submachine-point-label {
+    font-size: 11px;
+}
+
 /* ---- definition section ---- */
 
 .definition-shape {
