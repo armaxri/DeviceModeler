@@ -189,6 +189,38 @@ statemachine Door {
     });
 });
 
+describe('submachine instances: unit tests', () => {
+    test('assertions on members of instances and mocks of their operations', async () => {
+        const workspace = new HsmTestWorkspace();
+        const motor = 'statemachine Motor {\n    interface:\n        in event start\n        out event ready : integer\n        var speed : integer = 0\n'
+            + '        operation sensor() : integer\n    [*] -> Off\n    state Off\n    state On\n    Off -> On : start [sensor() > 5] / speed = sensor(); raise ready : speed\n}\n';
+        const gate = 'statemachine Gate {\n    import "motor.hsm"\n    interface:\n        in event open\n    internal:\n        var motor : Motor\n'
+            + '    [*] -> Closed\n    state Closed\n    state Moving : motor\n    Closed -> Moving : open / raise motor.start\n}\n';
+        const tests = `testclass GateTest for statemachine Gate {
+    @Test
+    operation motorStarts() {
+        mock motor.sensor returns (7)
+        enter
+        raise open
+        proceed 1 cycle
+        assert active(motor.Off) && !active(motor.On)
+        proceed 1 cycle
+        assert active(Gate.motor.On)
+        assert motor.ready && valueof(motor.ready) == 7
+        assert motor.speed == 7
+        assert called motor.sensor times 2
+        motor.speed = 1
+        assert motor.speed == 1
+    }
+}`;
+        const { documents, results } = await workspace.run([
+            { uri: 'memory:///unit/motor.hsm', text: motor }, { uri: 'memory:///unit/gate.hsm', text: gate }, { uri: 'memory:///unit/gate.hsmtest', text: tests }
+        ]);
+        expect(documents.flatMap(d => d.diagnostics.filter(x => x.severity === 1).map(x => x.message))).toEqual([]);
+        expect(results.map(r => `${r.status} ${r.message ?? ''}`.trim())).toEqual(['passed']);
+    });
+});
+
 describe('submachine instances: validation', () => {
     test('members of instances', async () => {
         const parsed = await check(`

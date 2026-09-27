@@ -192,7 +192,11 @@ export function instanceOfReference(reference: Reference<AstNode>, machine: ast.
     if (!target || AstUtils.findRootNode(target) === context) {
         return undefined;
     }
-    const text = reference.$refText.replace(/\s+/g, '');
+    let text = reference.$refText.replace(/\s+/g, '');
+    // tests may prefix state names with the name of the state machine (`Gate.motor.On`)
+    if (text.startsWith(`${context.name}.`) && !instanceVariables(context).some(i => text.startsWith(`${referableName(i)}.`))) {
+        text = text.slice(context.name.length + 1);
+    }
     let result: ast.VariableDeclaration | undefined;
     for (const instance of instanceVariables(context)) {
         const name = referableName(instance);
