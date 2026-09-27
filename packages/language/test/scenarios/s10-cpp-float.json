@@ -1,0 +1,36 @@
+{
+    "name": "s10-cpp-float",
+    "description": "Variables and members of type float store values rounded to single precision (the value is shown as double); double is real.",
+    "text": [
+        "statemachine M {",
+        "    import \"sensor.h\"",
+        "    interface:",
+        "        in event sample : real",
+        "        var celsius : sensor::Celsius",
+        "        var reading : sensor::Reading",
+        "        var exact : real",
+        "    [*] -> A",
+        "    state A",
+        "    A -> A : sample / celsius = valueof(sample); reading.value = valueof(sample) * 2; exact = valueof(sample)",
+        "}"
+    ],
+    "files": {
+        "sensor.h": [
+            "#pragma once",
+            "namespace sensor {",
+            "typedef float Celsius;",
+            "struct Reading {",
+            "    float value = 0.5f;",
+            "    double precise = 0.1;",
+            "};",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"celsius": 0.0, "reading": {"value": 0.5, "precise": 0.1}}}},
+        {"raise": "sample", "value": 0.1},
+        {"runCycle": true},
+        {"expect": {"variables": {"celsius": 0.10000000149011612, "reading": {"value": 0.20000000298023224}, "exact": 0.1}}}
+    ]
+}

@@ -1,7 +1,9 @@
 import { AstUtils, type AstNode } from 'langium';
 import * as ast from '../../generated/ast.js';
 import { qualifiedName } from '../../hsm-scope.js';
-import { instanceVariables } from '../../imports.js';
+import { importKind, instanceVariables } from '../../imports.js';
+import { storageOfTypeReference } from '../../cpp-storage.js';
+import type { CppResolvedType } from '../../cpp-header/model.js';
 import { typeOfVariable, type HsmType } from '../../hsm-typesystem.js';
 import { entryPointOf, nodeText, transitionLabel } from '../../model-utils.js';
 import { StatechartInterpreter, type ExecutionMode, type ExecutionOrder } from '../../simulation/interpreter.js';
@@ -32,12 +34,32 @@ export class GeneratorError extends Error {
 /** Message of the generator diagnostic for models with submachine instances (docs/semantics.md §9). */
 export const SUBMACHINES_NOT_SUPPORTED = 'Submachine instances are not supported by the C/C++ generator yet';
 
+/** Message of the C generator diagnostic for models using C/C++ header imports (docs/cpp-integration.md). */
+export const CPP_TYPES_NOT_SUPPORTED = 'C++ header types are not supported by the C generator';
+
+/**
+ * The first use of C/C++ header imports or C++ types in a state machine (a header import, a type
+ * reference resolved as C++ type, a C++ constant or enumerator), `undefined` if there is none.
+ */
+export function cppTypeUsage(machine: ast.StateMachine): AstNode | undefined {
+    const header = machine.imports.flatMap(i => i.paths).find(p => p.path && importKind(p.path) === 'header');
+    if (header) {
+        return header;
+    }
+    for (const node of AstUtils.streamAst(machine)) {
+        if (ast.isCppReference(node) || (ast.isTypeReference(node) && storageOfTypeReference(node) !== undefined)) {
+            return node;
+        }
+    }
+    return undefined;
+}
+
 /** Nanoseconds per time unit. */
 export const NS_PER_UNIT: Record<string, bigint> = { s: 1000000000n, ms: 1000000n, us: 1000n, ns: 1n };
 
 /** Kinds of runtime errors of the generated code (not every target has all of them). */
 export type ErrorKind = 'division_by_zero' | 'shift_out_of_range' | 'invalid_conversion' | 'no_enabled_transition'
-    | 'no_initial_transition' | 'invalid_time' | 'loop' | 'queue_overflow' | 'string_overflow';
+    | 'no_initial_transition' | 'invalid_time' | 'loop' | 'queue_overflow' | 'string_overflow' | 'index_out_of_bounds';
 
 export interface EnterTarget {
     vertex: TargetVertex;
@@ -323,6 +345,15 @@ export abstract class StatechartGenerator implements ExpressionContext {
 
     unsupported(message: string, node: AstNode): never {
         throw new GeneratorError(message, node);
+    }
+
+    /** No conversions to C++ storage types (only the C++ generator supports C++ types). */
+    storageCast(_storage: CppResolvedType | undefined, value: Code): string {
+        return value.text;
+    }
+
+    checkedIndex(_index: string, _length: number, node: AstNode): string {
+        return this.unsupported('Arrays of C++ types are not supported by this generator', node);
     }
 
     // -----------------------------------------------------------------------------------------

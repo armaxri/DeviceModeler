@@ -1,0 +1,43 @@
+{
+    "name": "s10-cpp-integer-widths",
+    "description": "Values assigned to variables and members of C++ integer types wrap around to the width of the type (like the conversion in C++); arithmetic is performed with 64-bit integers.",
+    "text": [
+        "statemachine M {",
+        "    import \"widths.h\"",
+        "    interface:",
+        "        in event add : integer",
+        "        var u8 : uint8_t = 250",
+        "        var i8 : std::int8_t = 120",
+        "        var u16 : w::Count",
+        "        var wide : integer",
+        "        var packet : w::Packet",
+        "    [*] -> A",
+        "    state A",
+        "    A -> A : add / u8 += valueof(add); i8 = i8 + valueof(add); u16 = u16 - valueof(add); wide = u8 + 1000; packet.checksum = u8 * 3; packet.length = -1",
+        "}"
+    ],
+    "files": {
+        "widths.h": [
+            "#pragma once",
+            "#include <cstdint>",
+            "namespace w {",
+            "using Count = std::uint16_t;",
+            "struct Packet {",
+            "    std::uint8_t checksum;",
+            "    std::uint32_t length;",
+            "};",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"u8": 250, "i8": 120, "u16": 0}}},
+        {"raise": "add", "value": 10},
+        {"runCycle": true},
+        {"expect": {"variables": {"u8": 4, "i8": -126, "u16": 65526, "wide": 1004, "packet": {"checksum": 12, "length": 4294967295}}}},
+        {"set": {"u8": 255}},
+        {"raise": "add", "value": 1},
+        {"runCycle": true},
+        {"expect": {"variables": {"u8": 0, "i8": -125, "u16": 65525, "wide": 1000, "packet": {"checksum": 0}}}}
+    ]
+}

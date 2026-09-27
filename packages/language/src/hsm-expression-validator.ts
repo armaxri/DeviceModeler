@@ -509,8 +509,10 @@ export class HsmExpressionValidator {
 
     checkBinary(expression: ast.BinaryExpression, accept: ValidationAcceptor): void {
         const operator = expression.operator;
-        const left = inferType(expression.left);
-        const right = inferType(expression.right);
+        // unscoped enums are integers in arithmetic, bitwise and relational operations (C++ promotion)
+        const equality = operator === '==' || operator === '!=';
+        const left = equality ? inferType(expression.left) : promotedType(inferType(expression.left));
+        const right = equality ? inferType(expression.right) : promotedType(inferType(expression.right));
         const requireOperands = (predicate: (type: HsmType) => boolean, description: string) => {
             for (const [side, type, node] of [['left', left, expression.left], ['right', right, expression.right]] as const) {
                 if (isValueType(type) && !predicate(type)) {
@@ -561,7 +563,7 @@ export class HsmExpressionValidator {
     }
 
     checkUnary(expression: ast.UnaryExpression, accept: ValidationAcceptor): void {
-        const type = inferType(expression.operand);
+        const type = promotedType(inferType(expression.operand));
         if (!isValueType(type)) {
             return;
         }

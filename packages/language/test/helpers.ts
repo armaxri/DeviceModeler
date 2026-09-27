@@ -47,3 +47,25 @@ export const SUBMACHINE_SCENARIOS: readonly string[] = [
     's9-time-events.json',
     's9-two-instances.json'
 ];
+
+/**
+ * The scenarios of C++ header imports (docs/cpp-integration.md). The C generator does not support
+ * C++ types: it reports the diagnostic `CPP_TYPES_NOT_SUPPORTED`, and the C generator conformance
+ * test skips exactly these scenarios (checked by the test). The C++ generator runs them.
+ */
+export const CPP_TYPE_SCENARIOS: readonly string[] = [
+    's10-cpp-aliases-and-namespaces.json',
+    's10-cpp-arrays.json',
+    's10-cpp-constants.json',
+    's10-cpp-enum-class.json',
+    's10-cpp-enum-unscoped-and-casts.json',
+    's10-cpp-float.json',
+    's10-cpp-include-chain.json',
+    's10-cpp-index-out-of-bounds.json',
+    's10-cpp-integer-widths.json',
+    's10-cpp-nested-member-assignment.json',
+    's10-cpp-operations.json',
+    's10-cpp-set-and-expect-values.json',
+    's10-cpp-struct-defaults.json',
+    's10-cpp-struct-members.json'
+];

@@ -1,0 +1,44 @@
+{
+    "name": "s10-cpp-struct-defaults",
+    "description": "Variables of imported struct types are initialized like T{} (default member initializers, nested structs, zero otherwise); struct constants; canonical text {x: 1, y: 2}.",
+    "text": [
+        "statemachine M {",
+        "    import \"geometry.h\"",
+        "    interface:",
+        "        out event moved : geo::Pose",
+        "        var pose : geo::Pose",
+        "        var home : geo::Point = geo::kHome",
+        "        var copy : geo::Pose = pose",
+        "    [*] -> A",
+        "    state A",
+        "    A -> A : always [pose.heading == 90] / pose.heading = 0; raise moved : pose",
+        "}"
+    ],
+    "files": {
+        "geometry.h": [
+            "#ifndef GEOMETRY_H",
+            "#define GEOMETRY_H",
+            "#include <cstdint>",
+            "namespace geo {",
+            "struct Point {",
+            "    std::int32_t x;",
+            "    std::int32_t y = -1;",
+            "};",
+            "struct Pose {",
+            "    Point position{3, 4};",
+            "    std::int16_t heading = 90;",
+            "    bool valid = true;",
+            "    double scale = 1.5;",
+            "};",
+            "inline constexpr Point kHome{7, 8};",
+            "}",
+            "#endif"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"pose": {"position": {"x": 3, "y": 4}, "heading": 90, "valid": true, "scale": 1.5}, "home": {"x": 7, "y": 8}, "copy": {"heading": 90}}}},
+        {"runCycle": true},
+        {"expect": {"variables": {"pose": {"heading": 0}}, "outEvents": ["moved({position: {x: 3, y: 4}, heading: 0, valid: true, scale: 1.5})"]}}
+    ]
+}

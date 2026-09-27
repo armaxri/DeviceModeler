@@ -1,0 +1,46 @@
+{
+    "name": "s10-cpp-constants",
+    "description": "Constants of imported headers (integer, real, boolean, string, computed constexpr, enumerators, static members of structs) in guards and effects.",
+    "text": [
+        "statemachine M {",
+        "    import \"limits.h\"",
+        "    interface:",
+        "        in event speed : integer",
+        "        var limited : integer",
+        "        var ratio : real",
+        "        var label : string",
+        "        var ok : boolean",
+        "    [*] -> A",
+        "    state A",
+        "    A -> A : speed [valueof(speed) > lim::kMaxSpeed] / limited = lim::kMaxSpeed; ratio = lim::kGearRatio; label = lim::kName; ok = lim::kEnabled",
+        "    A -> A : speed [valueof(speed) <= lim::kMaxSpeed] / limited = valueof(speed) + lim::Limits::kOffset; label = lim::kVersion; ok = !lim::kEnabled",
+        "}"
+    ],
+    "files": {
+        "limits.h": [
+            "#pragma once",
+            "#include <string>",
+            "#define LIM_SCALE 2",
+            "namespace lim {",
+            "constexpr int kBase = 1500;",
+            "constexpr int kMaxSpeed = kBase * LIM_SCALE;",
+            "constexpr double kGearRatio = 1.0 / 4.0;",
+            "constexpr const char* kName = \"limited\";",
+            "inline const std::string kVersion = \"v1\";",
+            "constexpr bool kEnabled = true;",
+            "struct Limits {",
+            "    static constexpr int kOffset = -7;",
+            "};",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"raise": "speed", "value": 3500},
+        {"runCycle": true},
+        {"expect": {"variables": {"limited": 3000, "ratio": 0.25, "label": "limited", "ok": true}}},
+        {"raise": "speed", "value": 100},
+        {"runCycle": true},
+        {"expect": {"variables": {"limited": 93, "label": "v1", "ok": false}}}
+    ]
+}

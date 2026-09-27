@@ -1,9 +1,11 @@
 import * as ast from '../../generated/ast.js';
-import { returnTypeOf, typeOfEvent, type HsmType } from '../../hsm-typesystem.js';
+import { returnTypeOf, typeOfEvent, typeOfParameter, typeOfVariable, type HsmType } from '../../hsm-typesystem.js';
 import type { Scenario, ScenarioExpectation, ScenarioStep, ScenarioValue } from '../../simulation/scenario.js';
 import { cInteger, cString, indent } from '../common/code.js';
-import { cppType } from './cpp-code.js';
+import { cppSpelling } from './cpp-code.js';
 import type { CppApi } from './cpp-generator.js';
+import { hsmTypeOfCpp, isCppType, type CppHsmType } from '../../cpp-types.js';
+import type { CppResolvedType } from '../../cpp-header/model.js';
 
 export interface CppHarnessOptions {
     /** Namespace of the harness code, which defines `int run()` there (default `hsm_scenario_harness`). */
@@ -79,6 +81,7 @@ class CppHarnessGenerator {
             '    failures++;',
             '}',
             '',
+            ...this.formatters(),
             ...this.callbacks(),
             ...this.observers(),
             ...this.timerService(),
@@ -117,7 +120,7 @@ class CppHarnessGenerator {
         const open = this.api.namespace ? [`namespace ${this.api.namespace} {`, ''] : [];
         lines.push(...open, '// Access to the internal scope (friend of the state machine class).', `struct ${this.api.internalsStruct} {`);
         for (const variable of this.index.variables().filter(v => this.api.isInternal(v))) {
-            const type = cppType(this.api.variableType(variable));
+            const type = this.api.declaredType(variable);
             const member = this.api.internalMember(variable);
             lines.push(
                 `    static ${type} get_${variable.name}(const ${this.api.className}& machine) {`,
@@ -149,7 +152,7 @@ class CppHarnessGenerator {
                 let first = true;
                 operation.parameters.forEach((parameter, k) => {
                     const parameterName = parameterNames[k];
-                    const format = `hsm_scenario::format(${parameter.varArgs ? 'hsm_value' : parameterName})`;
+                    const format = `${this.namespace}::format(${parameter.varArgs ? 'hsm_value' : parameterName})`;
                     if (parameter.varArgs) {
                         body.push(`for (const auto& hsm_value : ${parameterName}) {`, `    hsm_text += hsm_text.back() == '(' ? "" : ",";`, `    hsm_text += ${format};`, '}');
                     } else {
@@ -163,14 +166,14 @@ class CppHarnessGenerator {
                         const counter = `hsm_next${j}`;
                         counters.push(`std::size_t ${counter} = 0;`);
                         body.push(
-                            `static const ${cppType(returnType)} hsm_values[] = {${scripted.map(v => this.literal(v, returnType)).join(', ')}};`,
+                            `static const ${this.api.declaredType(operation)} hsm_values[] = {${scripted.map(v => this.literal(v, returnType)).join(', ')}};`,
                             `return hsm_values[${counter} < ${scripted.length} ? ${counter}++ : ${scripted.length - 1}];`
                         );
                     } else {
                         body.push(`return ${defaultLiteral(returnType)};`);
                     }
                 }
-                lines.push(`    ${cppType(returnType)} ${operation.name}(${this.api.operationParameters(operation)}) override {`, ...indent(body, 2), '    }');
+                lines.push(`    ${this.api.declaredType(operation)} ${operation.name}(${this.api.operationParameters(operation)}) override {`, ...indent(body, 2), '    }');
             });
             if (counters.length > 0) {
                 lines.push('', 'private:', ...indent(counters));
@@ -200,9 +203,9 @@ class CppHarnessGenerator {
             const name = this.index.declarationName(event);
             const type = typeOfEvent(event);
             const hasValue = type !== 'void' && type !== 'error';
-            lines.push(`class Observer${i} : public sc::rx::Observer<${hasValue ? cppType(type) : 'void'}> {`, 'public:');
+            lines.push(`class Observer${i} : public sc::rx::Observer<${hasValue ? this.api.declaredType(event) : 'void'}> {`, 'public:');
             if (hasValue) {
-                lines.push(`    void next(const ${cppType(type)}& value) override {`, `        out_events.push_back(${cString(`${name}(`)} + format(value) + ")");`, '    }');
+                lines.push(`    void next(const ${this.api.declaredType(event)}& value) override {`, `        out_events.push_back(${cString(`${name}(`)} + format(value) + ")");`, '    }');
             } else {
                 lines.push('    void next() override {', `        out_events.push_back(${cString(name)});`, '    }');
             }
@@ -489,20 +492,7 @@ class CppHarnessGenerator {
                 ? `${this.internalsName()}::get_${variable.name}(machine)`
                 : `machine.${this.api.interfaceAccess(variable)}${this.api.getter(variable)}()`;
             const type = this.api.variableType(variable);
-            let check: string;
-            switch (type) {
-                case 'real':
-                    check = typeof value === 'number' ? `!same_real(${getter}, ${realLiteral(value)})` : 'true';
-                    break;
-                case 'boolean':
-                    check = typeof value === 'boolean' ? `${getter} != ${value}` : 'true';
-                    break;
-                case 'string':
-                    check = typeof value === 'string' ? `${getter} != ${cString(value)}` : 'true';
-                    break;
-                default:
-                    check = typeof value === 'number' && Number.isInteger(value) ? `${getter} != ${cInteger(BigInt(value))}` : 'true';
-            }
+            const check = this.mismatch(getter, value, type);
             lines.push(
                 `if (${check}) {`,
                 `    ${fail(`${cString(`expected variable '${name}' = ${JSON.stringify(value)} but was `)} + format(${getter})`)}`,
@@ -536,7 +526,188 @@ class CppHarnessGenerator {
         return state;
     }
 
+    /** The condition that the value `actual` (C++ expression) differs from the expected value (structs: the listed members). */
+    private mismatch(actual: string, value: ScenarioValue, type: HsmType): string {
+        if (isCppType(type)) {
+            const resolved = type.resolved;
+            if (resolved.kind === 'enum') {
+                return `${actual} != ${this.literal(value, type)}`;
+            }
+            if (resolved.kind === 'struct') {
+                if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+                    return 'true';
+                }
+                const conditions = Object.entries(value).map(([member, expected]) => {
+                    const field = resolved.fields.find(f => f.name === member);
+                    const fieldType = field ? hsmTypeOfCpp(field.type, type.index).type : undefined;
+                    return field && fieldType ? this.mismatch(`${actual}.${member}`, expected, fieldType) : 'true';
+                });
+                return conditions.length === 0 ? 'false' : conditions.map(c => `(${c})`).join(' || ');
+            }
+            const element = hsmTypeOfCpp(resolved.element, type.index).type;
+            if (!Array.isArray(value) || !element || value.length !== resolved.length) {
+                return 'true';
+            }
+            return value.map((expected, i) => `(${this.mismatch(`${actual}[${i}]`, expected, element)})`).join(' || ') || 'false';
+        }
+        switch (type) {
+            case 'real':
+                return typeof value === 'number' ? `!same_real(${actual}, ${realLiteral(value)})` : 'true';
+            case 'boolean':
+                return typeof value === 'boolean' ? `${actual} != ${value}` : 'true';
+            case 'string':
+                return typeof value === 'string' ? `${actual} != ${cString(value)}` : 'true';
+            default:
+                return typeof value === 'number' && Number.isInteger(value) ? `${actual} != ${cInteger(BigInt(value))}` : 'true';
+        }
+    }
+
+    // ----- values of C++ types
+
+    /** The C++ types used by the state machine (and by their members), in dependency order. */
+    private cppTypes(): CppHsmType[] {
+        const result: CppHsmType[] = [];
+        const seen = new Set<string>();
+        const visit = (type: HsmType | undefined) => {
+            if (!isCppType(type) || seen.has(type.cppName) || type.cppName.includes('(anonymous)')) {
+                return;
+            }
+            seen.add(type.cppName);
+            const resolved = type.resolved;
+            if (resolved.kind === 'struct') {
+                resolved.fields.forEach(f => visit(hsmTypeOfCpp(f.type, type.index).type));
+            } else if (resolved.kind === 'array') {
+                visit(hsmTypeOfCpp(resolved.element, type.index).type);
+            }
+            result.push(type);
+        };
+        for (const variable of this.index.variables()) {
+            visit(typeOfVariable(variable));
+        }
+        for (const event of this.index.events()) {
+            visit(typeOfEvent(event));
+        }
+        for (const scope of this.api.operationScopes) {
+            for (const operation of scope.operations) {
+                visit(returnTypeOf(operation));
+                operation.parameters.forEach(p => visit(typeOfParameter(p)));
+            }
+        }
+        return result;
+    }
+
+    /** The C++ spelling of a type (for parameters of the format functions). */
+    private spelling(type: CppResolvedType, index: CppHsmType['index']): string {
+        if (type.kind === 'enum' || type.kind === 'struct') {
+            return type.cppName;
+        }
+        if (type.kind === 'array') {
+            return `std::array<${this.spelling(type.element, index)}, ${type.length ?? 0}>`;
+        }
+        return type.kind === 'string' ? 'sc::string' : cppSpelling(type);
+    }
+
+    /** The parameter declaration of a format function for a type (`const std::uint8_t (&value)[2]` for C arrays). */
+    private formatParameter(type: CppHsmType): string {
+        const resolved = type.resolved;
+        if (resolved.kind === 'enum') {
+            return `${type.cppName} value`;
+        }
+        if (resolved.kind === 'array' && !resolved.cppName.startsWith('std::array')) {
+            return `const ${this.spelling(resolved.element, type.index)} (&value)[${resolved.length ?? 0}]`;
+        }
+        return `const ${resolved.kind === 'array' ? this.spelling(resolved, type.index) : type.cppName}& value`;
+    }
+
+    /** `format` functions for the values of the C++ types (canonical text like the interpreter). */
+    private formatters(): string[] {
+        const types = this.cppTypes();
+        const lines: string[] = ['using hsm_scenario::format;', ''];
+        if (types.length === 0) {
+            return lines;
+        }
+        lines.push(...types.map(type => `std::string format(${this.formatParameter(type)});`), '');
+        for (const type of types) {
+            const resolved = type.resolved;
+            lines.push(`std::string format(${this.formatParameter(type)}) {`);
+            if (resolved.kind === 'enum') {
+                const seen = new Set<bigint>();
+                for (const enumerator of resolved.enumerators) {
+                    if (!seen.has(enumerator.value)) {
+                        seen.add(enumerator.value);
+                        lines.push(`    if (value == ${type.cppName}::${enumerator.name}) {`, `        return ${cString(`${type.cppName}::${enumerator.name}`)};`, '    }');
+                    }
+                }
+                lines.push(`    return ${cString(`${type.cppName}(`)} + std::to_string(static_cast<long long>(value)) + ")";`);
+            } else if (resolved.kind === 'struct') {
+                // without white space: the expected texts are compared without white space outside of strings
+                const parts = resolved.fields.map((f, i) => `${cString(`${i > 0 ? ',' : ''}${f.name}:`)} + format(value.${f.name})`);
+                lines.push(`    return std::string("{")${parts.map(p => ` + ${p}`).join('')} + "}";`);
+            } else {
+                lines.push(
+                    '    std::string result = "[";',
+                    `    for (std::size_t i = 0; i < ${resolved.length ?? 0}; i++) {`,
+                    '        result += (i > 0 ? "," : "") + format(value[i]);',
+                    '    }',
+                    '    return result + "]";'
+                );
+            }
+            lines.push('}', '');
+        }
+        return lines;
+    }
+
+    /** A C++ expression for a value of a C++ type given in a scenario (enumerator names, objects, arrays). */
+    private cppLiteral(value: ScenarioValue, type: CppHsmType): string {
+        const resolved = type.resolved;
+        if (resolved.kind === 'enum') {
+            if (typeof value === 'string') {
+                const name = value.trim().replace(/^::/, '');
+                const simple = name.startsWith(`${type.cppName}::`) ? name.slice(type.cppName.length + 2) : name;
+                const enumerator = resolved.enumerators.find(e => e.name === simple || e.qualifiedName === name);
+                if (!enumerator) {
+                    throw new Error(`'${value}' is not an enumerator of ${type.cppName}`);
+                }
+                return `${type.cppName}::${enumerator.name}`;
+            }
+            if (typeof value === 'number' && Number.isInteger(value)) {
+                return `static_cast<${type.cppName}>(${cInteger(BigInt(value))})`;
+            }
+            throw new Error(`${JSON.stringify(value)} is not a value of ${type.cppName}`);
+        }
+        const assignments: string[] = [];
+        const assign = (target: string, item: ScenarioValue, itemType: CppResolvedType) => {
+            const mapped = hsmTypeOfCpp(itemType, type.index).type;
+            if (isCppType(mapped) && mapped.kind !== 'enum') {
+                const inner = mapped.resolved;
+                if (inner.kind === 'struct' && typeof item === 'object' && item !== null && !Array.isArray(item)) {
+                    for (const [member, v] of Object.entries(item)) {
+                        const field = inner.fields.find(f => f.name === member);
+                        if (!field) {
+                            throw new Error(`${mapped.cppName} has no member '${member}'`);
+                        }
+                        assign(`${target}.${member}`, v, field.type);
+                    }
+                    return;
+                }
+                if (inner.kind === 'array' && Array.isArray(item)) {
+                    item.forEach((v, i) => assign(`${target}[${i}]`, v, inner.element));
+                    return;
+                }
+                throw new Error(`${JSON.stringify(item)} is not a value of ${mapped.cppName}`);
+            }
+            const literal = this.literal(item, mapped ?? 'integer');
+            assignments.push(`${target} = ${itemType.kind === 'integer' || (itemType.kind === 'real' && itemType.bits === 32) ? `static_cast<${cppSpelling(itemType)}>(${literal})` : literal};`);
+        };
+        assign('v', value, resolved);
+        const declared = resolved.kind === 'array' ? this.spelling(resolved, type.index) : type.cppName;
+        return `[] { ${declared} v{}; ${assignments.join(' ')} return v; }()`;
+    }
+
     private literal(value: ScenarioValue, type: HsmType): string {
+        if (isCppType(type)) {
+            return this.cppLiteral(value, type);
+        }
         switch (type) {
             case 'real':
                 if (typeof value !== 'number') {
@@ -599,12 +770,20 @@ const RUNTIME: string[] = [
     '#include <cstdlib>',
     '#include <limits>',
     '#include <string>',
+    '#include <type_traits>',
     '#include <vector>',
     '',
     'namespace hsm_scenario {',
     '',
     'inline std::string format(sc::integer value) {',
     '    return std::to_string(value);',
+    '}',
+    '',
+    '// Integers of other C++ types (std::uint8_t, int, ...).',
+    'template <typename T>',
+    'inline typename std::enable_if<std::is_integral<T>::value && !std::is_same<T, bool>::value && !std::is_same<T, sc::integer>::value, std::string>::type',
+    'format(T value) {',
+    '    return std::is_signed<T>::value ? std::to_string(static_cast<long long>(value)) : std::to_string(static_cast<unsigned long long>(value));',
     '}',
     '',
     'inline std::string format(bool value) {',

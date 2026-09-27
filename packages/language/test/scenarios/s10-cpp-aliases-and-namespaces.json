@@ -1,0 +1,43 @@
+{
+    "name": "s10-cpp-aliases-and-namespaces",
+    "description": "typedef / using aliases, HSM aliases of C++ types, nested namespaces, using-declarations, names of the global namespace (::Color) and <cstdint> typedefs, which are known without an include.",
+    "text": [
+        "statemachine M {",
+        "    import \"types.h\"",
+        "    interface:",
+        "        alias Speed : outer::inner::Rpm",
+        "        in event set : Speed",
+        "        var speed : Speed",
+        "        var color : ::Color = ::Color::Green",
+        "        var count : std::uint16_t",
+        "        var level : outer::Level",
+        "        var ticks : uint64_t",
+        "    [*] -> A",
+        "    state A",
+        "    A -> A : set / speed = valueof(set); color = ::Color::Blue; count = count + 1; level = outer::inner::kDefaultLevel; ticks = ::kTicksPerSecond",
+        "}"
+    ],
+    "files": {
+        "types.h": [
+            "#pragma once",
+            "#include <cstdint>",
+            "enum class Color { Red, Green, Blue };",
+            "constexpr std::uint64_t kTicksPerSecond = 1000000;",
+            "namespace outer {",
+            "enum class Level { Low, Mid, High };",
+            "namespace inner {",
+            "typedef std::int32_t Rpm;",
+            "using outer::Level;",
+            "constexpr Level kDefaultLevel = Level::Mid;",
+            "}",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"speed": 0, "color": "Color::Green", "count": 0, "level": "outer::Level::Low"}}},
+        {"raise": "set", "value": 1200},
+        {"runCycle": true},
+        {"expect": {"variables": {"speed": 1200, "color": "Color::Blue", "count": 1, "level": "outer::Level::Mid", "ticks": 1000000}}}
+    ]
+}
