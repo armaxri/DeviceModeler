@@ -288,7 +288,7 @@ export class HsmApp implements DiagramHost {
         if (layout !== undefined) {
             storeLayout(fileName, manual);
         }
-        this.diagram.loadLayout(manual);
+        this.diagram.loadLayout(manual, false);
         byId('file-name').textContent = fileName;
         try {
             localStorage.setItem(STORAGE_FILE, fileName);

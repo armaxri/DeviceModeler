@@ -1193,13 +1193,16 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
 
     /**
      * Sets the layout of the model loaded by the host (opening a model, an external change of the layout
-     * file). Clears the layout history; {@link DiagramHost.layoutChanged} is not called.
+     * file). Clears the layout history; {@link DiagramHost.layoutChanged} is not called. `show`: update
+     * the diagram now (false if the host loads a new text and updates the diagram anyway).
      */
-    loadLayout(layout: ManualLayout | undefined): void {
+    loadLayout(layout: ManualLayout | undefined, show = true): void {
         this.layoutHistory.clear();
         this.layoutData = layout;
         this.updateLayoutControls();
-        this.applyLayoutChange();
+        if (show) {
+            this.applyLayoutChange();
+        }
     }
 
     /** Replaces the manual layout as an undoable change (e.g. a layout file opened for the current model). */
