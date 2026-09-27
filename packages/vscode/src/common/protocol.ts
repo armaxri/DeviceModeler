@@ -39,8 +39,6 @@ export type ToWebview =
     | { type: 'cursor', offset: number }
     /** Answer to an `edit` message: `ok` false if the document changed in between or the edit failed. */
     | { type: 'editResult', requestId: number, ok: boolean, text: string, version: number, message?: string }
-    /** Requests the rendered diagram as SVG (answered with `svg`). */
-    | { type: 'requestSvg', requestId: number }
     | { type: 'fit' };
 
 /** Messages from the webview to the extension. */
@@ -57,7 +55,6 @@ export type FromWebview =
     | { type: 'undo' }
     | { type: 'redo' }
     | { type: 'status', message: string, severity: StatusSeverity }
-    | { type: 'svg', requestId: number, svg?: string, error?: string }
     /** A setting was changed in the toolbar of the webview. */
     | { type: 'updateSetting', key: 'direction' | 'routing' | 'priorities' | 'showProperties', value: string | boolean }
     /** Runs a command of the extension (toolbar buttons). */

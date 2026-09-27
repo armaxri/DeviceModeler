@@ -141,18 +141,6 @@ export class WebviewHost implements DiagramHost {
                 }
                 break;
             }
-            case 'requestSvg': {
-                let svg: string | undefined;
-                let error: string | undefined;
-                try {
-                    svg = this.controller.exportSvg();
-                    error = svg ? undefined : 'The diagram has not been rendered yet.';
-                } catch (e) {
-                    error = e instanceof Error ? e.message : String(e);
-                }
-                this.post({ type: 'svg', requestId: message.requestId, svg, error });
-                break;
-            }
             case 'fit':
                 this.controller.fit();
                 break;

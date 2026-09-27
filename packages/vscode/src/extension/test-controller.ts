@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
-import type { WorkspaceFile } from 'hsm-language';
-import { discoverTests, failureMessage, runHsmTests, type TextRange } from './logic/tests.js';
+import { CoverageCollector, type MachineCoverage, type WorkspaceFile } from 'hsm-language';
+import { discoverTests, failureMessage, lineCoverage, runHsmTests, type TextRange } from './logic/tests.js';
 
 const EXCLUDE = '**/{node_modules,out,dist,build}/**';
 
@@ -33,7 +33,11 @@ export class HsmTestController implements vscode.Disposable {
             }
         };
         this.controller.refreshHandler = () => this.discoverWorkspace();
-        this.runProfile = this.controller.createRunProfile('Run', vscode.TestRunProfileKind.Run, (request, token) => this.run(request, token), true);
+        this.runProfile = this.controller.createRunProfile('Run', vscode.TestRunProfileKind.Run, (request, token) => this.run(request, token, false), true);
+        // model coverage: states, transitions and reactions as statements, guard decisions as branches
+        const coverageProfile = this.controller.createRunProfile('Run with Model Coverage', vscode.TestRunProfileKind.Coverage,
+            (request, token) => this.run(request, token, true), true);
+        coverageProfile.loadDetailedCoverage = async (_run, file) => (file as ModelFileCoverage).details;
         const watcher = vscode.workspace.createFileSystemWatcher('**/*.hsmtest');
         this.disposables.push(
             this.controller,
@@ -117,15 +121,16 @@ export class HsmTestController implements vscode.Disposable {
         }
         const source = new vscode.CancellationTokenSource();
         try {
-            await this.run(new vscode.TestRunRequest(include, undefined, this.runProfile), source.token);
+            await this.run(new vscode.TestRunRequest(include, undefined, this.runProfile), source.token, false);
         } finally {
             source.dispose();
         }
         vscode.commands.executeCommand('workbench.view.testing.focus').then(undefined, () => undefined);
     }
 
-    private async run(request: vscode.TestRunRequest, token: vscode.CancellationToken): Promise<void> {
+    private async run(request: vscode.TestRunRequest, token: vscode.CancellationToken, withCoverage: boolean): Promise<void> {
         const run = this.controller.createTestRun(request);
+        const coverage = withCoverage ? new CoverageCollector() : undefined;
         try {
             // the tests to run, grouped by test file
             const roots = request.include ?? [...collection(this.controller.items)];
@@ -158,6 +163,7 @@ export class HsmTestController implements vscode.Disposable {
                 run.started(item);
             }
             const { results, problems } = await runHsmTests(models, testFiles, {
+                coverage,
                 filter: (uri, testClass, test) => !token.isCancellationRequested && itemOf(uri, testClass, test) !== undefined,
                 onResult: result => {
                     const item = itemOf(result.uri, result.testClass, result.name);
@@ -205,6 +211,17 @@ export class HsmTestController implements vscode.Disposable {
                     run.errored(item, new vscode.TestMessage('The test was not executed (unknown test or state machine).'));
                 }
             }
+            if (coverage) {
+                const byFile = new Map<string, MachineCoverage[]>();
+                for (const machine of coverage.report().machines) {
+                    if (machine.uri) {
+                        byFile.set(machine.uri, [...byFile.get(machine.uri) ?? [], machine]);
+                    }
+                }
+                for (const [uri, machines] of byFile) {
+                    run.addCoverage(new ModelFileCoverage(vscode.Uri.parse(uri), machines));
+                }
+            }
             this.output.info(`Tests: ${results.filter(r => r.status === 'passed').length} passed, `
                 + `${results.filter(r => r.status === 'failed').length} failed, ${results.filter(r => r.status === 'error').length} errors`);
         } catch (error) {
@@ -231,4 +248,21 @@ async function readFile(uri: vscode.Uri): Promise<WorkspaceFile> {
     const open = vscode.workspace.textDocuments.find(document => document.uri.toString() === uri.toString());
     const text = open ? open.getText() : new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
     return { uri: uri.toString(), text };
+}
+
+/** Model coverage of the state machines of a file as file coverage of its `.hsm` file. */
+class ModelFileCoverage extends vscode.FileCoverage {
+
+    readonly details: vscode.StatementCoverage[];
+
+    constructor(uri: vscode.Uri, machines: readonly MachineCoverage[]) {
+        const details = machines.flatMap(lineCoverage).map(line => new vscode.StatementCoverage(
+            line.hits,
+            new vscode.Position(line.line, 0),
+            line.branches.map(branch => new vscode.BranchCoverage(branch.hits, undefined, branch.label))));
+        const statements = new vscode.TestCoverageCount(details.filter(d => Number(d.executed) > 0).length, details.length);
+        const branches = details.flatMap(d => d.branches);
+        super(uri, statements, branches.length > 0 ? new vscode.TestCoverageCount(branches.filter(b => Number(b.executed) > 0).length, branches.length) : undefined);
+        this.details = details;
+    }
 }

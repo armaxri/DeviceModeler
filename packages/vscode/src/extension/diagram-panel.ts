@@ -168,8 +168,6 @@ export class DiagramPanel {
     private cursorTimer?: ReturnType<typeof setTimeout>;
     private applyingEdit = false;
     private ready = false;
-    private svgRequests = new Map<number, (result: { svg?: string, error?: string }) => void>();
-    private svgRequestId = 0;
     private readonly readyWaiters: Array<() => void> = [];
 
     constructor(private readonly manager: DiagramManager, readonly panel: vscode.WebviewPanel, private document: vscode.TextDocument) {
@@ -221,25 +219,6 @@ export class DiagramPanel {
     /** Resolves once the webview has been loaded. */
     whenReady(): Promise<void> {
         return this.ready ? Promise.resolve() : new Promise(resolve => this.readyWaiters.push(resolve));
-    }
-
-    /** The rendered diagram as SVG document. */
-    async requestSvg(): Promise<string> {
-        await this.whenReady();
-        const requestId = ++this.svgRequestId;
-        const result = await new Promise<{ svg?: string, error?: string }>((resolve, reject) => {
-            this.svgRequests.set(requestId, resolve);
-            setTimeout(() => {
-                if (this.svgRequests.delete(requestId)) {
-                    reject(new Error('The diagram did not answer.'));
-                }
-            }, 10000);
-            this.post({ type: 'requestSvg', requestId });
-        });
-        if (!result.svg) {
-            throw new Error(result.error ?? 'The diagram has not been rendered yet.');
-        }
-        return result.svg;
     }
 
     documentChanged(document: vscode.TextDocument): void {
@@ -305,12 +284,6 @@ export class DiagramPanel {
             case 'status':
                 vscode.window.setStatusBarMessage(`$(warning) HSM: ${message.message}`, 6000);
                 break;
-            case 'svg': {
-                const resolve = this.svgRequests.get(message.requestId);
-                this.svgRequests.delete(message.requestId);
-                resolve?.({ svg: message.svg, error: message.error });
-                break;
-            }
             case 'updateSetting': {
                 const key = message.key === 'routing' ? 'edgeRouting' : message.key;
                 await vscode.workspace.getConfiguration('hsm.diagram').update(key, message.value, vscode.ConfigurationTarget.Global);

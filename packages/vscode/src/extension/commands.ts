@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
-import { generateCpp, generatePlantUml, HsmModelLoader, importSct, type ParsedModel } from 'hsm-language';
+import { generatePlantUml, HsmModelLoader, importSct, layoutStateMachine, renderSvg, type ParsedModel } from 'hsm-language';
+import { runGeneration } from '../../../language/src/generator/generate-command.js';
 import type { DiagramManager } from './diagram-panel.js';
 import type { HsmTestController } from './test-controller.js';
-import { resolveCppConfig, type CppSettings } from './logic/generator-config.js';
+import { effectiveTheme } from './logic/webview.js';
+import { resolveGeneration, type CppSettings } from './logic/generator-config.js';
 
 export interface CommandContext {
     diagrams: DiagramManager;
@@ -77,8 +79,8 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
             vscode.window.showWarningMessage('HSM: Open an .hsm file to export its diagram.');
             return;
         }
-        const panel = await commands.diagrams.open(uri, true);
-        const svg = await panel.requestSvg();
+        const document = await vscode.workspace.openTextDocument(uri);
+        const svg = await renderModelSvg(document);
         const target = await vscode.window.showSaveDialog({
             defaultUri: uri.with({ path: uri.path.replace(/\.hsm$/i, '') + '.svg' }),
             filters: { SVG: ['svg'] },
@@ -125,6 +127,25 @@ function modelUri(arg: unknown, diagrams: DiagramManager): vscode.Uri | undefine
     return diagrams.active?.uri;
 }
 
+/**
+ * The diagram of a model as SVG document (`renderSvg` of the language package: the same look as the
+ * diagram view, styles embedded). Layout options follow the `hsm.diagram.*` settings; with the theme
+ * `auto` the light theme is used (exported files are usually embedded in light documents).
+ */
+export async function renderModelSvg(document: vscode.TextDocument): Promise<string> {
+    const parsed = await parseModel(document);
+    if (parsed.hasSyntaxErrors || !parsed.model?.name) {
+        throw new Error(`${path.basename(document.uri.path)} contains syntax errors.`);
+    }
+    const config = vscode.workspace.getConfiguration('hsm.diagram', document.uri);
+    const { graph } = await layoutStateMachine(parsed.model, {
+        direction: config.get<string>('direction') === 'RIGHT' ? 'RIGHT' : 'DOWN',
+        routing: (['SPLINES', 'ORTHOGONAL', 'POLYLINE'] as const).find(r => r === config.get<string>('edgeRouting')) ?? 'SPLINES',
+        priorities: config.get<boolean>('priorities', true)
+    });
+    return renderSvg(graph, { theme: effectiveTheme(config.get<string>('theme', 'auto'), config.get<string>('lightTheme', 'classic'), false) });
+}
+
 function cppSettings(uri: vscode.Uri): CppSettings {
     const config = vscode.workspace.getConfiguration('hsm.cpp', uri);
     return {
@@ -134,48 +155,43 @@ function cppSettings(uri: vscode.Uri): CppSettings {
     };
 }
 
-/** `HSM: Generate C++`: generates `sc_statemachine.h`, `<Class>.h` and `<Class>.cpp`. */
+/**
+ * `HSM: Generate C++`: generates `sc_statemachine.h`, `<Class>.h` and `<Class>.cpp` with the
+ * generator of the language package (`runGeneration`, as `hsm generate`), configured by a
+ * generator configuration file or the settings. Unsaved changes of the model are saved first.
+ */
 export async function generateCppFor(uri: vscode.Uri, output: vscode.LogOutputChannel): Promise<vscode.Uri[]> {
+    if (uri.scheme !== 'file') {
+        throw new Error('Only models stored in files can be generated.');
+    }
     const document = await vscode.workspace.openTextDocument(uri);
-    const parsed = await parseModel(document);
+    if (document.isDirty) {
+        await document.save();
+    }
     const name = path.basename(uri.fsPath);
-    const errors = parsed.diagnostics.filter(d => d.severity === 1);
-    if (parsed.hasSyntaxErrors || errors.length > 0) {
-        for (const d of errors) {
-            output.error(`${name}:${d.range.start.line + 1}:${d.range.start.character + 1}: ${d.message}`);
-        }
-        throw new Error(`${name} contains ${errors.length || 'syntax'} error${errors.length === 1 ? '' : 's'} – fix ${errors.length === 1 ? 'it' : 'them'} before generating code.`);
-    }
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
-    const config = await resolveCppConfig(uri.fsPath, cppSettings(uri), workspaceFolder, {
-        readDirectory: async directory => (await vscode.workspace.fs.readDirectory(vscode.Uri.file(directory))).map(([entry]) => entry),
-        readFile: async file => new TextDecoder().decode(await vscode.workspace.fs.readFile(vscode.Uri.file(file)))
-    });
-    config.warnings.forEach(warning => output.warn(warning));
-    if (config.configFile) {
-        output.info(`${name}: using the generator configuration ${config.configFile}`);
+    const generation = await resolveGeneration(uri.fsPath, cppSettings(uri), workspaceFolder);
+    if (generation.configFile) {
+        output.info(`${name}: using the generator configuration ${generation.configFile}`);
     }
-    const result = generateCpp(parsed.model, { namespace: config.namespace, className: config.className, standard: config.standard });
-    for (const d of result.diagnostics) {
-        const line = d.node?.$cstNode ? `${d.node.$cstNode.range.start.line + 1}:` : '';
-        const log = d.severity === 'error' ? output.error.bind(output) : output.warn.bind(output);
-        log(`${name}:${line} ${d.message}`);
+    const result = await runGeneration({ config: generation.config, baseDir: generation.baseDir, targets: ['cpp'], mode: 'write' });
+    const diagnostics = [...generation.diagnostics, ...result.diagnostics];
+    for (const d of diagnostics) {
+        const location = d.file ? `${d.file}${d.line !== undefined ? `:${d.line}${d.column !== undefined ? `:${d.column}` : ''}` : ''}: ` : '';
+        (d.severity === 'error' ? output.error : output.warn).call(output, `${location}${d.message}`);
     }
-    if (result.files.length === 0) {
+    const errors = result.diagnostics.filter(d => d.severity === 'error');
+    if (errors.length > 0) {
         output.show(true);
-        throw new Error(`The C++ code of ${name} could not be generated (see the output 'HSM').`);
+        throw new Error(`The C++ code of ${name} could not be generated: ${errors[0].message}${errors.length > 1 ? ` (and ${errors.length - 1} more, see the output 'HSM')` : ''}`);
     }
-    const outDir = vscode.Uri.file(config.outDir);
-    await vscode.workspace.fs.createDirectory(outDir);
-    const written: vscode.Uri[] = [];
-    for (const file of result.files) {
-        const target = vscode.Uri.joinPath(outDir, file.path);
-        await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(file.content));
-        output.info(`Generated ${target.fsPath}`);
-        written.push(target);
+    const written = result.outputs.map(o => vscode.Uri.file(o.file));
+    for (const o of result.outputs) {
+        output.info(`${o.status === 'written' ? 'Generated' : 'Unchanged'} ${o.file}`);
     }
-    const relative = vscode.workspace.asRelativePath(outDir, false);
-    showWritten(`Generated ${written.map(w => path.basename(w.path)).join(', ')} in ${relative}.`, written);
+    const outDir = written[0] ? vscode.Uri.joinPath(written[0], '..') : uri;
+    const unchanged = result.outputs.every(o => o.status === 'unchanged');
+    showWritten(`${unchanged ? 'Up to date' : 'Generated'}: ${written.map(w => path.basename(w.path)).join(', ')} in ${vscode.workspace.asRelativePath(outDir, false)}.`, written);
     return written;
 }
 

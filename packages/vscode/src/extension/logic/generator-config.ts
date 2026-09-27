@@ -1,15 +1,18 @@
+import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { globToRegExp, isGlob, type CppTargetConfig, type GeneratorConfig, type ModelEntry } from 'hsm-language';
+// Node-only part of the language package (not exported from its index because the web app bundles the index)
+import { loadGeneratorConfig, type GenerateDiagnostic } from '../../../../language/src/generator/generate-command.js';
 
 /**
- * Resolution of the options of `HSM: Generate C++` for a model.
+ * Resolution of the generator configuration of `HSM: Generate C++` for a model.
  *
- * A generator configuration file next to the model (or in a parent directory up to the workspace
- * folder) takes precedence over the VS Code settings `hsm.cpp.*`. Recognized file names:
- * `hsm.gen.json`, `<name>.hsm.gen.json` and `<name>.hsmgen.json`. The format follows the generator
- * configuration of the language package (`{ "models": [...], "cpp": { "outDir", "namespace", "className", "std" } }`,
- * paths relative to the configuration file, per-model options in model entries). This module is the
- * single integration point: once the language package exports its configuration loader, only
- * {@link resolveCppConfig} has to delegate to it.
+ * A generator configuration file (`hsm.gen.json` or `<name>.hsm.gen.json`, the format of
+ * `hsm generate`, see `packages/language/src/generator/config.ts`) in the directory of the model or
+ * in a parent directory up to the workspace folder takes precedence if it lists the model (directly
+ * or via a glob) and configures the `cpp` target. Otherwise the VS Code settings `hsm.cpp.*` are
+ * used. The result is a configuration for `runGeneration` of the language package that contains only
+ * this model, so the files are generated exactly as `hsm generate` would generate them.
  */
 
 /** The `hsm.cpp.*` settings. */
@@ -21,58 +24,77 @@ export interface CppSettings {
     standard: '11' | '17';
 }
 
-export interface ResolvedCppConfig {
-    /** Absolute output directory. */
-    outDir: string;
-    namespace?: string;
-    className?: string;
-    standard: 11 | 17;
-    /** The configuration file used, if any (otherwise the settings). */
+export interface ResolvedGeneration {
+    /** Configuration for `runGeneration` (only the model, only the `cpp` target). */
+    config: GeneratorConfig;
+    /** Directory the relative paths of `config` are resolved against. */
+    baseDir: string;
+    /** The configuration file used (undefined: the settings). */
     configFile?: string;
-    /** Problems of the configuration file (e.g. options not supported here). */
-    warnings: string[];
+    /** Problems of configuration files (warnings, or errors of files that were skipped). */
+    diagnostics: GenerateDiagnostic[];
 }
 
-/** File system access needed to find configuration files (injected for tests). */
-export interface ConfigFileSystem {
-    readDirectory(directory: string): Promise<string[]>;
-    readFile(file: string): Promise<string>;
-}
-
-const CONFIG_FILE_PATTERN = /^(hsm\.gen\.json|.+\.hsm\.gen\.json|.+\.hsmgen\.json)$/;
-
-/** Options of the `cpp` target handled by the extension; others are reported as warnings. */
-const SUPPORTED_CPP_OPTIONS = new Set(['outDir', 'namespace', 'className', 'std', 'standard']);
-
-interface CppOptions {
-    outDir?: unknown;
-    namespace?: unknown;
-    className?: unknown;
-    std?: unknown;
-    standard?: unknown;
-    [key: string]: unknown;
-}
+const CONFIG_FILE_PATTERN = /^(hsm\.gen\.json|.+\.hsm\.gen\.json)$/;
 
 export function isGeneratorConfigFile(fileName: string): boolean {
     return CONFIG_FILE_PATTERN.test(fileName);
 }
 
-export async function resolveCppConfig(modelPath: string, settings: CppSettings, workspaceFolder: string | undefined, fs: ConfigFileSystem): Promise<ResolvedCppConfig> {
-    const found = await findConfigFor(modelPath, workspaceFolder, fs);
-    if (found) {
-        return found;
+/**
+ * The entries of a configuration that match the model (in configuration order). Paths and globs are
+ * relative to the directory of the configuration file.
+ */
+export function matchingEntries(config: GeneratorConfig, configDir: string, modelPath: string): ModelEntry[] {
+    const model = path.resolve(modelPath);
+    const relative = path.relative(configDir, model).split(path.sep).join('/');
+    return config.models.filter(entry => {
+        const pattern = entry.path.replace(/\\/g, '/');
+        if (!isGlob(pattern)) {
+            return path.resolve(configDir, pattern) === model;
+        }
+        return !relative.startsWith('../') && globToRegExp(pattern.replace(/^\.\//, '')).test(relative);
+    });
+}
+
+/** The generation of the model with the options of a configuration, or undefined if it does not configure C++ for the model. */
+export function generationFromConfig(config: GeneratorConfig, configFile: string, modelPath: string): ResolvedGeneration | undefined {
+    const baseDir = path.dirname(configFile);
+    const entries = matchingEntries(config, baseDir, modelPath);
+    if (entries.length === 0 || (config.cpp === undefined && !entries.some(entry => entry.cpp !== undefined))) {
+        return undefined;
     }
     return {
+        config: {
+            models: entries.map(entry => ({ path: path.resolve(modelPath), cpp: entry.cpp })),
+            cpp: config.cpp ?? {},
+            writeOnlyIfChanged: config.writeOnlyIfChanged
+        },
+        baseDir,
+        configFile,
+        diagnostics: []
+    };
+}
+
+/** The generation of the model with the `hsm.cpp.*` settings. */
+export function generationFromSettings(modelPath: string, settings: CppSettings, workspaceFolder: string | undefined): ResolvedGeneration {
+    const cpp: CppTargetConfig = {
         outDir: resolveOutputDirectory(modelPath, settings.outputDirectory, workspaceFolder),
-        namespace: settings.namespace ?? undefined,
-        standard: settings.standard === '11' ? 11 : 17,
-        warnings: []
+        std: settings.standard === '11' ? 11 : 17
+    };
+    if (settings.namespace !== null && settings.namespace !== undefined) {
+        cpp.namespace = settings.namespace;
+    }
+    return {
+        config: { models: [{ path: path.resolve(modelPath) }], cpp, writeOnlyIfChanged: true },
+        baseDir: path.dirname(path.resolve(modelPath)),
+        diagnostics: []
     };
 }
 
 /** The output directory of the settings: relative to the model, absolute, or with `${workspaceFolder}`. */
 export function resolveOutputDirectory(modelPath: string, setting: string, workspaceFolder: string | undefined): string {
-    const modelDir = path.dirname(modelPath);
+    const modelDir = path.dirname(path.resolve(modelPath));
     let value = setting.trim();
     if (value === '') {
         return modelDir;
@@ -83,114 +105,41 @@ export function resolveOutputDirectory(modelPath: string, setting: string, works
     return path.resolve(modelDir, value);
 }
 
-/** Searches configuration files from the directory of the model up to the workspace folder. */
-async function findConfigFor(modelPath: string, workspaceFolder: string | undefined, fs: ConfigFileSystem): Promise<ResolvedCppConfig | undefined> {
-    let directory = path.dirname(modelPath);
+/**
+ * Finds the configuration for the model: searches `hsm.gen.json` / `*.hsm.gen.json` from the
+ * directory of the model up to the workspace folder (only the model directory without workspace
+ * folder); the first file that configures C++ for the model wins. Falls back to the settings.
+ * Configuration files with errors are skipped and reported in `diagnostics`.
+ */
+export async function resolveGeneration(modelPath: string, settings: CppSettings, workspaceFolder: string | undefined): Promise<ResolvedGeneration> {
+    const diagnostics: GenerateDiagnostic[] = [];
+    let directory = path.dirname(path.resolve(modelPath));
     const root = workspaceFolder ? path.resolve(workspaceFolder) : directory;
-    for (;;) {
+    while (isWithin(directory, root)) {
         let entries: string[] = [];
         try {
-            entries = (await fs.readDirectory(directory)).filter(isGeneratorConfigFile).sort();
+            entries = (await fs.readdir(directory)).filter(isGeneratorConfigFile).sort();
         } catch {
             // not readable: continue with the parent
         }
         for (const entry of entries) {
-            const file = path.join(directory, entry);
-            const resolved = configForModel(file, await fs.readFile(file), modelPath);
+            const loaded = await loadGeneratorConfig(path.join(directory, entry));
+            diagnostics.push(...loaded.diagnostics);
+            const resolved = loaded.config && generationFromConfig(loaded.config, loaded.file, modelPath);
             if (resolved) {
-                return resolved;
+                return { ...resolved, diagnostics };
             }
         }
         const parent = path.dirname(directory);
-        if (parent === directory || !isWithin(directory, root) || path.resolve(directory) === root) {
-            return undefined;
+        if (parent === directory) {
+            break;
         }
         directory = parent;
     }
+    return { ...generationFromSettings(modelPath, settings, workspaceFolder), diagnostics };
 }
 
 function isWithin(directory: string, root: string): boolean {
     const relative = path.relative(root, directory);
     return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
-}
-
-/**
- * The C++ options of the configuration file for the model, or undefined if the file does not
- * configure the model (not listed in `models`) or has no `cpp` target.
- */
-export function configForModel(configFile: string, text: string, modelPath: string): ResolvedCppConfig | undefined {
-    let value: unknown;
-    try {
-        value = JSON.parse(text);
-    } catch (error) {
-        throw new Error(`${configFile}: invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    if (!isObject(value)) {
-        throw new Error(`${configFile}: the configuration must be a JSON object`);
-    }
-    const configDir = path.dirname(configFile);
-    const modelEntries: CppOptions[] = [];
-    if (Array.isArray(value.models)) {
-        const relative = path.relative(configDir, modelPath).split(path.sep).join('/');
-        let matched = false;
-        for (const entry of value.models) {
-            const pattern = typeof entry === 'string' ? entry : isObject(entry) && typeof entry.path === 'string' ? entry.path : undefined;
-            if (pattern !== undefined && globToRegExp(pattern.replace(/^\.\//, '')).test(relative)) {
-                matched = true;
-                if (isObject(entry) && isObject(entry.cpp)) {
-                    modelEntries.push(entry.cpp);
-                }
-            }
-        }
-        if (!matched) {
-            return undefined;
-        }
-    }
-    if (!isObject(value.cpp) && modelEntries.length === 0) {
-        return undefined;
-    }
-    const options: CppOptions = Object.assign({}, isObject(value.cpp) ? value.cpp : {}, ...modelEntries);
-    const warnings = Object.keys(options).filter(key => !SUPPORTED_CPP_OPTIONS.has(key))
-        .map(key => `${path.basename(configFile)}: the option 'cpp.${key}' is not supported by the VS Code extension yet and is ignored (use 'hsm generate' on the command line).`);
-    const std = options.std ?? options.standard;
-    return {
-        outDir: typeof options.outDir === 'string' ? path.resolve(configDir, options.outDir) : path.dirname(modelPath),
-        namespace: typeof options.namespace === 'string' ? options.namespace : undefined,
-        className: typeof options.className === 'string' ? options.className : undefined,
-        standard: Number(std) === 11 ? 11 : 17,
-        configFile,
-        warnings
-    };
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/** `*` matches within a path segment, `**` any number of segments, `?` one character. */
-export function globToRegExp(glob: string): RegExp {
-    let pattern = '';
-    const text = glob.replace(/\\/g, '/');
-    for (let i = 0; i < text.length; i++) {
-        const c = text[i];
-        if (c === '*') {
-            if (text[i + 1] === '*') {
-                const segmentStart = i === 0 || text[i - 1] === '/';
-                i++;
-                if (segmentStart && text[i + 1] === '/') {
-                    pattern += '(?:[^/]*/)*';
-                    i++;
-                } else {
-                    pattern += '.*';
-                }
-            } else {
-                pattern += '[^/]*';
-            }
-        } else if (c === '?') {
-            pattern += '[^/]';
-        } else {
-            pattern += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-        }
-    }
-    return new RegExp(`^${pattern}$`);
 }
