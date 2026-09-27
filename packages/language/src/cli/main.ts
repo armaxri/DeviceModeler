@@ -12,6 +12,7 @@ import { importSct } from '../importer/sct-importer.js';
 import { StatechartInterpreter } from '../simulation/interpreter.js';
 import { formatTraceEntry, runScenario, validateScenario, type ScenarioStep } from '../simulation/scenario.js';
 import { runTestCommand, type TestCommandOptions } from '../testing/test-command.js';
+import { registerRenderCommands } from './render-commands.js';
 
 const severities = ['', 'error', 'warning', 'info', 'hint'];
 
@@ -180,6 +181,8 @@ export function createProgram(): Command {
             await fs.writeFile(out, text);
             console.log(`Generated ${out}`);
         });
+
+    registerRenderCommands(program);
 
     return program;
 }

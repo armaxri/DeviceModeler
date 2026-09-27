@@ -12,6 +12,9 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 - ✅ Graphical editing as text edits (undo, comments and formatting preserved)
 - ✅ Composite states, orthogonal regions, choice, junction, shallow and deep history, final states
 - ✅ PlantUML export, SVG export, CLI
+- ✅ SVG rendering without a browser (`hsm render`, `renderSvg()`; same look and style sheet as the
+  editor, Helvetica metrics for the layout in Node.js) and model documentation (`hsm doc`: Markdown or HTML
+  with diagram, interface / state / transition tables, `/** */` doc comments, also shown on hover)
 
 ## Phase 1 – Language parity with itemis CREATE ✅
 
@@ -102,6 +105,7 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 - 💭 Multi-file projects and workspaces in the web editor
 - 💭 Manual layout adjustments stored in the model
 - 💭 Coverage of states and transitions from simulation and tests
+  (the SVG renderer can already highlight covered / uncovered elements: `renderSvg(graph, { highlight })`)
 
 ## Decisions
 

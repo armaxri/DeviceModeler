@@ -63,6 +63,10 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
   become `<<fork>>` / `<<join>>`, entry points / exit nodes `<<entryPoint>>` / `<<exitPoint>>`, the
   definition section a legend.
 - **CLI** for validation, PlantUML generation and layout computation.
+- **Rendering and documentation without a browser**: `hsm render` writes the diagrams as SVG files that look
+  like the editor's export, `hsm doc` generates Markdown or HTML documentation of models (diagram,
+  interfaces, states, transitions and `/** … */` doc comments) – see [Rendering diagrams](#rendering-diagrams)
+  and [Model documentation](#model-documentation), examples in [`docs/examples`](docs/examples/index.md).
 - **Unit tests** for state machines in the style of SCTUnit (`.hsmtest` files, see [Unit tests](#unit-tests)),
   executed by the interpreter, with JUnit XML reports for CI.
 - **Code generation** for **C++** (a class per state machine like itemis CREATE, see
@@ -93,6 +97,8 @@ npm run build -w packages/language
 node packages/language/bin/cli.js validate examples/cd-player.hsm
 node packages/language/bin/cli.js plantuml examples/cd-player.hsm -o cd-player.puml
 node packages/language/bin/cli.js layout examples/keyboard.hsm --direction RIGHT
+node packages/language/bin/cli.js render examples -o out --theme modern     # SVG diagrams, see below
+node packages/language/bin/cli.js doc examples -o docs/models --format html  # documentation, see below
 node packages/language/bin/cli.js import model.sct -o model.hsm   # itemis CREATE import, see below
 node packages/language/bin/cli.js simulate examples/cd-player.hsm -e play,eject,eject   # run the interpreter
 node packages/language/bin/cli.js simulate examples/door.hsm --script packages/language/test/scenarios/example-door.json
@@ -100,6 +106,89 @@ node packages/language/bin/cli.js test examples/tests/*.hsmtest --machine exampl
 node packages/language/bin/cli.js generate cpp examples/traffic-light.hsm -o gen   # C++ code, see below
 node packages/language/bin/cli.js generate c examples/traffic-light.hsm -o gen     # C code
 ```
+
+## Rendering diagrams
+
+`hsm render` computes the layout with ELK and renders the diagram as a standalone SVG file – in Node.js, without
+a browser, e.g. for reviews or in CI. The SVG has the shapes, classes and style sheet of the web editor
+(`DIAGRAM_CSS`, shared by both), so it looks like *Export SVG* of the editor.
+
+```bash
+hsm render model.hsm                            # writes model.svg next to the model
+hsm render model.hsm -o diagram.svg --theme dark --direction RIGHT --routing ORTHOGONAL
+hsm render models/ 'src/**/*.hsm' -o build/diagrams   # directories and glob patterns (also when not expanded by the shell)
+```
+
+Options: `--theme classic|modern|dark` (default `classic`), `--direction DOWN|RIGHT`, `--routing
+SPLINES|ORTHOGONAL|POLYLINE`, `--no-priorities`. Only SVG is supported (no PNG: there is no pure JavaScript
+rasterizer; convert with e.g. `rsvg-convert` or a browser if needed). Models with syntax errors are skipped
+(exit code 1), validation errors are printed but the model is rendered.
+
+Text is measured with a built-in table of the Helvetica character widths (Helvetica, Arial and Liberation Sans
+are metric compatible) and a monospace width for the definition section, so the layout computed in Node.js is
+close to the one of the editor, which measures with the browser's fonts: for the examples, text widths differ
+by 1.5 % on average (at most 2 px) from Chromium with Liberation Sans, the widths of the state boxes by 0.1 %
+(at most 1 px). Fonts with other metrics (e.g. *Helvetica Neue* on macOS) make the text slightly wider or
+narrower than the boxes.
+
+From code (works in the browser as well):
+
+```ts
+import { HsmModelLoader, layoutStateMachine, renderSvg } from 'hsm-language';
+
+const { model } = await new HsmModelLoader().load(text);
+const layout = await layoutStateMachine(model, { direction: 'DOWN' });
+const svg = renderSvg(layout.graph, {
+    theme: 'classic',                        // 'classic' | 'modern' | 'dark'
+    title: 'CdPlayer – test coverage',       // optional heading above the diagram
+    highlight: new Map([                     // diagram element id -> highlight
+        [layout.ids.get(playingState)!, 'covered'],       // CSS class hsm-covered (green)
+        [layout.ids.get(ejectTransition)!, 'uncovered'],  // CSS class hsm-uncovered (red, dashed)
+        [layout.ids.get(pausedState)!, 'active']          // CSS class active (like the simulation)
+    ]),                                      // any other value is used as CSS class name(s)
+    legend: true,                            // legend of the used highlights (or [{ kind, label }])
+    embedStyles: true,                       // false: the page embedding the SVG provides DIAGRAM_CSS
+    xmlDeclaration: true                     // false for inlining into HTML
+});
+```
+
+`highlight` applies to states, pseudo states (`<g class="hsm-node …">`) and transitions (`<g class="transition …">`);
+the ids are those of `LayoutResult.ids` (AST node → id) and `LayoutResult.elements` (id → AST node). The
+classes `hsm-covered` and `hsm-uncovered` are defined in `DIAGRAM_CSS` for all themes.
+
+## Model documentation
+
+`hsm doc` generates a documentation page per state machine and an index page:
+
+```bash
+hsm doc examples -o docs/examples                 # Markdown (GitHub flavored) + one SVG per machine
+hsm doc 'models/**/*.hsm' -o site --format html   # self-contained HTML pages (inline SVG and styles)
+```
+
+Each page contains the description and doc comment of the state machine, the diagram, the execution semantics
+(cycle based with period / event driven, parent first / child first, annotations), per interface (and the
+internal scope) tables of the events (direction, type), variables and constants (type, initial value, `readonly`)
+and operations (signature, return type), a table of all states and pseudo states (qualified name, kind,
+description, entry / exit actions, other local reactions, sub states per region) and of all transitions
+(source, target, trigger, guard, effect, priority, entry / exit point). Options: `--format md|html`, `--title`
+of the index page and the diagram options of `hsm render`. `npm run docs:examples` regenerates
+[`docs/examples`](docs/examples/index.md).
+
+**Doc comments**: a `/** … */` comment directly before the state machine, an interface, a declaration, a
+state, a pseudo state or a transition documents it (Markdown, JSDoc tags like `@see` are allowed). Plain
+comments (`/* … */`, `// …`) are ignored.
+
+```
+/** Push button of the pedestrian crossing. */
+interface Pedestrian:
+    /** A pedestrian has pressed the button and waits for red. */
+    var waiting : boolean = false
+```
+
+The language server shows the doc comments on hover together with the signature of the element
+(`HsmDocumentationProvider`). From code: `describeStateMachine(model)` returns the collected information,
+`generateModelDoc(model, { format, svg, svgFile })` and `generateDocIndex(entries, format)` render it,
+`docComment(node)` returns the doc comment of an AST node.
 
 ## The language
 
@@ -322,6 +411,8 @@ packages/
     src/diagram/layout.ts     AST -> PlantUML-like diagram model, laid out with ELK
     src/edit/model-edits.ts   structural edits (add, move, rename, delete, add declaration, …) as text edits
     src/generator/plantuml.ts PlantUML generator
+    src/render/               SVG renderer without DOM (renderSvg), diagram style sheet shared with the web app
+    src/doc/                  model documentation (Markdown / HTML), doc comments, hover documentation
     src/generator/common/     shared part of the C / C++ generators (analysis, states, transitions, expressions)
     src/generator/cpp/        C++ code generator and scenario test harness generator
     src/generator/c/          C code generator and scenario test harness generator

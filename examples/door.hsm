@@ -1,4 +1,5 @@
 // Entry points, exit nodes and synchronization (fork / join) in the style of itemis CREATE.
+/** Automatic door with obstacle detection and a service mode. */
 statemachine Door {
     @EventDriven
     @ChildFirstExecution
@@ -9,7 +10,9 @@ statemachine Door {
         in event obstacle
         in event motorStopped
         in event serviceDone
+        /** Raised when the door is blocked by an obstacle. */
         out event alarm
+        /** Number of times the door has been closed. */
         var cycles : integer = 0
 
     [*] -> Closed
@@ -18,6 +21,7 @@ statemachine Door {
         entry / cycles += 1
     }
 
+    /** The motor moves the door up (entry point `Opening`) or down (`Closing`). */
     state Moving {
         entry Opening
         entry Closing
@@ -46,6 +50,7 @@ statemachine Door {
         }
     }
 
+    /** Enters both regions of `Service` at once. */
     sync Fork
     sync Join
 
