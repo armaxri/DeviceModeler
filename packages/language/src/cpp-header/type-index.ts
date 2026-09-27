@@ -122,6 +122,7 @@ export class CppTypeIndex {
     private readonly aliasesInProgress = new Set<CppAlias>();
     private readonly constants = new Map<CppConstant, CppConstantInfo>();
     private readonly constantsInProgress = new Set<CppConstant>();
+    private readonly directivesInProgress = new Set<CppQualifiedName>();
     private readonly resolutionDiagnostics = new Map<string, CppDiagnostic>();
     private resolvedAll = false;
 
@@ -321,9 +322,17 @@ export class CppTypeIndex {
         }
         if (found.length === 0) {
             for (const directive of scope.usingDirectives) {
-                const target = this.lookupIn(directive, scope).map(d => this.memberScope(d)).find(s => s?.kind === 'namespace');
-                if (target) {
-                    found.push(...this.findIn(target, name, visited));
+                if (this.directivesInProgress.has(directive)) {
+                    continue;
+                }
+                this.directivesInProgress.add(directive);
+                try {
+                    const target = this.lookupIn(directive, scope).map(d => this.memberScope(d)).find(s => s?.kind === 'namespace');
+                    if (target) {
+                        found.push(...this.findIn(target, name, visited));
+                    }
+                } finally {
+                    this.directivesInProgress.delete(directive);
                 }
             }
         }
@@ -426,7 +435,9 @@ export class CppTypeIndex {
             throw error;
         }
         const resolved = this.resolveTypeRef(ref, scope);
-        return resolved.kind === 'unsupported' && resolved.reason.startsWith('unknown type') ? undefined : resolved;
+        const unknown = resolved.kind === 'unsupported' && resolved.reason === `unknown type '${resolved.cppName}'`
+            && ref.name.kind === 'named' && this.lookupIn(ref.name.name, this.scopeNamed(scope)).length === 0;
+        return unknown ? undefined : resolved;
     }
 
     /** Resolves a type reference of a declaration (use {@link scopeOf} of the declaration as scope). */
@@ -728,6 +739,7 @@ export class CppTypeIndex {
                 aggregate = false;
             }
         }
+        const locals = new Map<string, EvalValue>();
         for (const field of declaration.fields) {
             if (field.access !== 'public') {
                 aggregate = false;
@@ -739,14 +751,23 @@ export class CppTypeIndex {
                 bitWidth = this.evaluateLength(field.bitWidth.node, scope, field.type);
             }
             let defaultValue: CppValue | undefined;
-            if (field.initializer) {
+            if (field.initializer && fieldType.kind !== 'unsupported') {
                 try {
-                    defaultValue = this.convertValue(field.initializer.node, fieldType, scope, field);
+                    defaultValue = this.convertValue(field.initializer.node, fieldType, scope, field, locals);
                 } catch (error) {
                     if (!(error instanceof EvaluationError)) {
                         throw error;
                     }
                     this.report('warning', `cannot evaluate the default value of '${field.qualifiedName}': ${error.message}`, field.fileName, error.range ?? field.initializer.range);
+                }
+            }
+            if (defaultValue !== undefined && field.name) {
+                try {
+                    locals.set(field.name, this.toEvalValue(defaultValue, fieldType, field.nameRange));
+                } catch (error) {
+                    if (!(error instanceof EvaluationError)) {
+                        throw error;
+                    }
                 }
             }
             fields.push({
@@ -818,6 +839,12 @@ export class CppTypeIndex {
         if (!initializer) {
             return { declaration, type, error: 'the constant has no initializer in the header' };
         }
+        const auto = declaration.type.name.kind === 'other' && declaration.type.name.text === 'auto' && declaration.type.pointer === 0;
+        const charArray = type.kind === 'array' && type.element.kind === 'integer' && type.element.character === true;
+        if (type.kind === 'unsupported' && !auto && !charArray) {
+            // constants of unsupported types (pointers, unknown types, …) are not evaluated
+            return { declaration, type, error: `the type is not supported (${type.reason})` };
+        }
         try {
             // `constexpr char kName[] = "…";` is a string constant
             if (type.kind === 'array' && type.element.kind === 'integer' && type.element.character && type.element.bits === 8
@@ -827,7 +854,7 @@ export class CppTypeIndex {
                     return { declaration, type: { kind: 'string', cppName: 'const char*' }, value: node.value };
                 }
             }
-            if (declaration.type.name.kind === 'other' && declaration.type.name.text === 'auto' && declaration.type.pointer === 0) {
+            if (auto) {
                 const value = this.evaluateNode(initializer.node, scope);
                 type = this.typeOfValue(value);
                 return { declaration, type, value: toCppValue(value) };
@@ -864,7 +891,7 @@ export class CppTypeIndex {
      * Converts an initializer to a value of the given type (aggregate initialization for structs
      * and arrays, implicit conversion for scalars).
      */
-    private convertValue(node: CppExpressionNode, type: CppResolvedType, scope: Scope, owner: CppDeclaration): CppValue {
+    private convertValue(node: CppExpressionNode, type: CppResolvedType, scope: Scope, owner: CppDeclaration, locals?: ReadonlyMap<string, EvalValue>): CppValue {
         if (type.kind === 'struct' || type.kind === 'array') {
             if (node.kind === 'name') {
                 const constant = this.lookupIn(node.name, scope).find(d => d.kind === 'constant') as CppConstant | undefined;
@@ -897,7 +924,7 @@ export class CppTypeIndex {
                 const values: CppValue[] = [];
                 for (let i = 0; i < length; i++) {
                     const element = elements[i];
-                    values.push(element ? this.convertValue(element.value, type.element, scope, owner) : this.requireDefault(type.element, node.range));
+                    values.push(element ? this.convertValue(element.value, type.element, scope, owner, locals) : this.requireDefault(type.element, node.range));
                 }
                 return values;
             }
@@ -916,7 +943,7 @@ export class CppTypeIndex {
                 if (!field) {
                     throw new EvaluationError(`too many initializers for '${type.cppName}'`, element.value.range);
                 }
-                assigned.set(field.name, this.convertValue(element.value, field.type, scope, owner));
+                assigned.set(field.name, this.convertValue(element.value, field.type, scope, owner, locals));
                 position = index + 1;
             }
             const value: Record<string, CppValue> = {};
@@ -927,7 +954,7 @@ export class CppTypeIndex {
         }
         const evaluated = node.kind === 'initializerList' && node.elements.length === 0
             ? zeroValue(type, node.range)
-            : this.evaluateNode(node, scope);
+            : this.evaluateNode(node, scope, locals);
         const converted = convertScalar(evaluated, type, false, node.range);
         if (converted.warning) {
             this.report('warning', `${owner.qualifiedName}: ${converted.warning}`, owner.fileName, node.range);
@@ -1012,10 +1039,17 @@ export class CppTypeIndex {
         }
     }
 
-    private evaluateNode(node: CppExpressionNode, scope: Scope): EvalValue {
+    /**
+     * Evaluates an expression in a scope; `locals` are the values of the preceding data members
+     * (for default member initializers like `int b = a * 2;`).
+     */
+    private evaluateNode(node: CppExpressionNode, scope: Scope, locals?: ReadonlyMap<string, EvalValue>): EvalValue {
         const context: EvaluationContext = {
             dataModel: this.dataModel,
-            resolveValue: (name, range) => this.valueOfName(name, range, scope),
+            resolveValue: (name, range) => {
+                const local = !name.global && name.parts.length === 1 ? locals?.get(name.parts[0].name) : undefined;
+                return local ?? this.valueOfName(name, range, scope);
+            },
             resolveType: ref => this.resolveTypeRefIn(ref, scope),
             resolveTypeName: name => {
                 const type = this.resolveNamedType(name, scope);

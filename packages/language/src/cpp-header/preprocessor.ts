@@ -53,6 +53,25 @@ const HAS_CHECKS = new Set([
     '__has_extension', '__has_c_attribute', '__has_warning', '__has_declspec_attribute', '__is_identifier'
 ]);
 
+/**
+ * Predefined macros: `__cplusplus` and the limits of the fixed size types predefined by GCC and
+ * Clang (used by standard library headers). Compiler identification macros (`__GNUC__`, …) are not
+ * predefined.
+ */
+export const PREDEFINED_MACROS: Readonly<Record<string, string>> = {
+    __cplusplus: '201703L',
+    __CHAR_BIT__: '8',
+    __SCHAR_MAX__: '0x7f',
+    __SHRT_MAX__: '0x7fff',
+    __INT_MAX__: '0x7fffffff',
+    __LONG_LONG_MAX__: '0x7fffffffffffffffLL',
+    __SIZEOF_SHORT__: '2',
+    __SIZEOF_INT__: '4',
+    __SIZEOF_LONG_LONG__: '8',
+    __SIZEOF_FLOAT__: '4',
+    __SIZEOF_DOUBLE__: '8'
+};
+
 /** Appends tokens (without spreading, which fails for very long arrays). */
 function append(target: Token[], tokens: readonly Token[]): void {
     for (const token of tokens) {
@@ -77,7 +96,9 @@ export function preprocess(input: readonly Token[], lines: LineMap, options: Cpp
         const body = tokenize(value, 0, false).tokens.filter(t => t.kind !== 'eof');
         macros.set(name, { name, variadic: false, body });
     };
-    define('__cplusplus', '201703L');
+    for (const [name, value] of Object.entries(PREDEFINED_MACROS)) {
+        define(name, value);
+    }
     for (const [name, value] of Object.entries(options.defines ?? {})) {
         define(name, value);
     }

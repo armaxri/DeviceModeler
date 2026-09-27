@@ -550,6 +550,10 @@ class DeclarationParser extends TokenCursor {
             return false;
         });
         this.declarationDoc = undefined;
+        if (this.atEnd()) {
+            // an unterminated class or enum body (reported already)
+            return;
+        }
         const record = this.recordContext;
         const declared = specifiers.name.kind === 'declared' ? specifiers.name.declaration : undefined;
         if (flags.has('friend')) {
@@ -764,7 +768,7 @@ class DeclarationParser extends TokenCursor {
                 arrayDimensions.push(this.parseArrayDimension());
             }
             return {
-                ...inner, pointer: pointer + inner.pointer, reference: reference ?? inner.reference, functionPointer,
+                ...inner, pointer: functionPointer ? pointer : pointer + inner.pointer, reference: reference ?? inner.reference, functionPointer,
                 arrayDimensions: [...inner.arrayDimensions, ...arrayDimensions], pointerConst: inner.pointerConst
             };
         }
@@ -962,11 +966,18 @@ class DeclarationParser extends TokenCursor {
                 let initializer: CppExpression | undefined;
                 if (this.accept('=')) {
                     this.scope = enumScope;
-                    initializer = this.parseInitializerSpan(false);
+                    try {
+                        initializer = this.parseInitializerSpan(false);
+                    } catch (error) {
+                        if (!(error instanceof SyntaxError)) {
+                            throw error;
+                        }
+                        this.report('warning', `enumerator '${token.text}': ${error.message}`, this.range(error.token, error.token));
+                    }
                     this.scope = outer;
                 }
                 const endIndex = this.index;
-                if (!this.accept(',') && !this.at('}')) {
+                if (!this.accept(',') && !this.at('}') && !this.atEnd()) {
                     this.report('warning', `expected ',' or '}' after enumerator '${token.text}' but found '${this.peek().text || 'end of input'}'`, this.range(this.peek(), this.peek()));
                 }
                 const trailing = this.trailingDocs(nameIndex, endIndex);

@@ -304,7 +304,8 @@ export interface CppHeader {
 export interface CppParseOptions {
     /**
      * Predefined object-like macros for the evaluation of `#if` / `#ifdef` and for expansion
-     * (value `''` for a macro without value). `__cplusplus` is predefined as `201703L`.
+     * (value `''` for a macro without value). `__cplusplus` is predefined as `201703L`, as well as
+     * `__CHAR_BIT__`, `__INT_MAX__` and a few other data model independent GCC / Clang macros.
      */
     readonly defines?: Readonly<Record<string, string>>;
 }

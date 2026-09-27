@@ -274,29 +274,37 @@ export class TokenCursor {
 
     /** Skips a balanced `(…)`, `[…]` or `{…}` group starting at the current token. */
     skipBalanced(): void {
-        const open = this.next().text;
-        const close = open === '(' ? ')' : open === '[' ? ']' : '}';
-        const stack = [close];
-        while (!this.atEnd() && stack.length > 0) {
-            const token = this.next();
-            if (token.kind !== 'punctuator') {
-                continue;
+        const stack: string[] = [];
+        do {
+            const token = this.peek();
+            if (token.kind === 'eof') {
+                return;
             }
-            if (token.text === '(') {
-                stack.push(')');
-            } else if (token.text === '[') {
-                stack.push(']');
-            } else if (token.text === '{') {
-                stack.push('}');
-            } else if (token.text === stack[stack.length - 1]) {
-                stack.pop();
-            } else if (token.text === '}' && stack.includes('}')) {
-                // unbalanced parentheses inside braces: recover at the brace
-                while (stack.pop() !== '}') {
-                    // pop
+            if (token.kind === 'punctuator') {
+                const text = token.text;
+                if (text === '(') {
+                    stack.push(')');
+                } else if (text === '[') {
+                    stack.push(']');
+                } else if (text === '{') {
+                    stack.push('}');
+                } else if (text === stack[stack.length - 1]) {
+                    stack.pop();
+                } else if (text === '}') {
+                    if (!stack.includes('}')) {
+                        // closes an enclosing scope: the group is unbalanced, stop before the brace
+                        return;
+                    }
+                    while (stack.pop() !== '}') {
+                        // unbalanced parentheses inside braces: recover at the brace
+                    }
+                } else if (text === ';' && !stack.includes('}')) {
+                    // end of a declaration inside parentheses: unbalanced, stop before it
+                    return;
                 }
             }
-        }
+            this.next();
+        } while (stack.length > 0);
     }
 
     range(start: Token, end: Token = this.previous()): CppRange {
@@ -860,7 +868,7 @@ export class TokenCursor {
                 }
                 if (FUNDAMENTAL_KEYWORDS.has(start.text)) {
                     // functional cast `int(x)`, `unsigned{x}`
-                    const type = this.parseTypeId();
+                    const type = makeTypeRef(this.parseTypeSpecifiers(), 0, undefined, [], false, this.range(start));
                     if (!this.at('(') && !this.at('{')) {
                         throw new SyntaxError(`expected '(' after '${type.spelling}'`, this.peek());
                     }
