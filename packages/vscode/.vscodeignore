@@ -1,0 +1,12 @@
+# only the bundles and static assets are packaged (everything is bundled, no node_modules)
+**
+!package.json
+!README.md
+!LICENSE
+!language-configuration.json
+!dist/extension.cjs
+!dist/server.cjs
+!dist/webview/**
+!media/**
+!syntaxes/**
+!schemas/**

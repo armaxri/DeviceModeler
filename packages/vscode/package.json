@@ -30,7 +30,10 @@
   "activationEvents": [
     "workspaceContains:**/*.hsm",
     "workspaceContains:**/*.hsmtest",
-    "onWebviewPanel:hsm.diagram"
+    "onLanguage:hsm",
+    "onLanguage:hsmtest",
+    "onWebviewPanel:hsm.diagram",
+    "onCommand:hsm.importSct"
   ],
   "contributes": {
     "languages": [
@@ -126,6 +129,11 @@
           "command": "hsm.generateCpp",
           "when": "editorLangId == hsm",
           "group": "hsm@2"
+        },
+        {
+          "command": "hsm.exportSvg",
+          "when": "editorLangId == hsm",
+          "group": "hsm@3"
         }
       ],
       "explorer/context": [
@@ -153,6 +161,24 @@
           "command": "hsm.importSct",
           "when": "resourceExtname == .sct",
           "group": "hsm@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "hsm.openDiagram",
+          "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram"
+        },
+        {
+          "command": "hsm.generateCpp",
+          "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram"
+        },
+        {
+          "command": "hsm.exportSvg",
+          "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram"
+        },
+        {
+          "command": "hsm.exportPlantUml",
+          "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram"
         }
       ]
     },
@@ -227,7 +253,7 @@
         "hsm.cpp.outputDirectory": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Output directory of **HSM: Generate C++**, relative to the model file (absolute paths and `${workspaceFolder}` are supported). Empty: the directory of the model. A generator configuration file (`*.hsmgen.json`) next to the model takes precedence."
+          "markdownDescription": "Output directory of **HSM: Generate C++**, relative to the model file (absolute paths and `${workspaceFolder}` are supported). Empty: the directory of the model. A generator configuration (`hsm.gen.json` or `*.hsm.gen.json` in the directory of the model or a parent directory) that lists the model takes precedence over all `hsm.cpp.*` settings."
         },
         "hsm.cpp.namespace": {
           "type": [
@@ -257,14 +283,22 @@
           "description": "Traces the communication between VS Code and the HSM language server."
         }
       }
-    }
+    },
+    "jsonValidation": [
+      {
+        "fileMatch": [
+          "hsm.gen.json",
+          "*.hsm.gen.json"
+        ],
+        "url": "./schemas/hsm-gen.schema.json"
+      }
+    ]
   },
   "scripts": {
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.webview.json",
     "test": "vitest run",
-    "test:integration": "node test/integration/run.mjs",
     "package": "node scripts/build.mjs && node scripts/package.mjs"
   },
   "dependencies": {
@@ -277,7 +311,6 @@
   "devDependencies": {
     "@types/node": "^22.20.4",
     "@types/vscode": "~1.95.0",
-    "@vscode/test-electron": "~3.1.0",
     "@vscode/vsce": "~3.9.2",
     "esbuild": "~0.28.2",
     "vite": "~7.3.6",
