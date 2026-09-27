@@ -1,0 +1,62 @@
+{
+    "name": "s9-out-event-seen-once",
+    "description": "An out event of an instance is visible to reactions processed after the instance in the same step and to the others in the next step: every reaction sees it exactly once.",
+    "text": [
+        "statemachine Door {",
+        "    import \"motor.hsm\"",
+        "    interface:",
+        "        var early : integer = 0",
+        "        var late : integer = 0",
+        "    internal:",
+        "        var motor : Motor",
+        "    [*] -> Active",
+        "    state Active {",
+        "        entry / raise motor.start",
+        "        region A {",
+        "            [*] -> A1",
+        "            state A1 {",
+        "                motor.stopped / early += 1",
+        "            }",
+        "        }",
+        "        region B {",
+        "            [*] -> Moving",
+        "            state Moving : motor",
+        "        }",
+        "        region C {",
+        "            [*] -> C1",
+        "            state C1 {",
+        "                motor.stopped / late += 1",
+        "            }",
+        "        }",
+        "    }",
+        "}"
+    ],
+    "files": {
+        "motor.hsm": [
+            "statemachine Motor {",
+            "    ",
+            "    interface:",
+            "        in event start",
+            "        out event stopped",
+            "    [*] -> Off",
+            "    state Off",
+            "    state On {",
+            "        after 1 s / raise stopped",
+            "    }",
+            "    Off -> On : start",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"runCycle": true},
+        {"expect": {"configuration": ["A1", "motor.On", "C1"]}},
+        {"advance": 1000},
+        {"runCycle": true},
+        {"expect": {"configuration": ["A1", "motor.On", "C1"], "variables": {"early": 0, "late": 1}}},
+        {"runCycle": true},
+        {"expect": {"variables": {"early": 1, "late": 1}}},
+        {"runCycle": true},
+        {"expect": {"variables": {"early": 1, "late": 1}}}
+    ]
+}

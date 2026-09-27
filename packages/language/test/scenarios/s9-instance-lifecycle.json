@@ -1,0 +1,52 @@
+{
+    "name": "s9-instance-lifecycle",
+    "description": "A submachine instance is entered after the entry reactions of its state and exited before the exit reactions of its state; its states are reported as motor.<state> (docs/semantics.md §9).",
+    "text": [
+        "statemachine Door {",
+        "    import \"motor.hsm\"",
+        "    interface:",
+        "        in event open",
+        "        in event close",
+        "        operation log(msg : string) : void",
+        "    internal:",
+        "        var motor : Motor",
+        "    [*] -> Closed",
+        "    state Closed",
+        "    state Moving : motor {",
+        "        entry / log(\"Moving entry\")",
+        "        exit / log(\"Moving exit\")",
+        "    }",
+        "    Closed -> Moving : open",
+        "    Moving -> Closed : close",
+        "}"
+    ],
+    "files": {
+        "motor.hsm": [
+            "statemachine Motor {",
+            "    interface:",
+            "        in event start",
+            "        in event stop",
+            "        out event stopped",
+            "        var speed : integer = 0",
+            "        operation log(msg : string) : void",
+            "    entry / log(\"motor entry\")",
+            "    exit / log(\"motor exit\")",
+            "    [*] -> Off",
+            "    state Off",
+            "    state On",
+            "    Off -> On : start / speed = 1",
+            "    On -> Off : stop / speed = 0; raise stopped",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"expect": {"configuration": ["Closed"], "inactive": ["Moving", "motor.Off"], "calls": []}},
+        {"raise": "open"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["motor.Off"], "active": ["Moving", "motor.Off"], "calls": ["log(\"Moving entry\")", "motor.log(\"motor entry\")"]}},
+        {"raise": "close"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Closed"], "inactive": ["Moving", "motor.Off"], "calls": ["motor.log(\"motor exit\")", "log(\"Moving exit\")"]}}
+    ]
+}

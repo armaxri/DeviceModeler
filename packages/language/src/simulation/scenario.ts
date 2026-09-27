@@ -21,6 +21,11 @@ export interface Scenario {
     model?: string;
     /** Inline model text; an array of strings is joined with line breaks. */
     text?: string | string[];
+    /**
+     * Inline texts of further files the model imports, by path relative to the model
+     * (`{ "motor.hsm": ["statemachine Motor {", ...] }`); arrays are joined with line breaks.
+     */
+    files?: Record<string, string | string[]>;
     /** Return values of operations in call order; the last value is repeated. */
     operations?: Record<string, ScenarioValue[]>;
     /** The steps, executed in order. */
@@ -103,6 +108,10 @@ export function validateScenario(json: unknown, name = 'scenario'): Scenario {
     if ((scenario.model === undefined) === (scenario.text === undefined)) {
         problems.push(`exactly one of 'model' and 'text' is required`);
     }
+    if (scenario.files !== undefined && (typeof scenario.files !== 'object' || scenario.files === null
+        || Object.values(scenario.files).some(text => typeof text !== 'string' && !Array.isArray(text)))) {
+        problems.push(`'files' must map file names to texts (strings or arrays of lines)`);
+    }
     scenario.steps.forEach((step, index) => {
         const keys = Object.keys(step);
         const unknown = keys.filter(k => !STEP_KEYS.has(k));
@@ -135,6 +144,15 @@ export function validateScenario(json: unknown, name = 'scenario'): Scenario {
 /** The inline model text of a scenario (`undefined` if it references a model file). */
 export function scenarioText(scenario: Scenario): string | undefined {
     return Array.isArray(scenario.text) ? scenario.text.join('\n') : scenario.text;
+}
+
+/** The inline texts of the files imported by the model of a scenario, by relative path (empty if there are none). */
+export function scenarioFiles(scenario: Scenario): Record<string, string> {
+    const files: Record<string, string> = {};
+    for (const [name, text] of Object.entries(scenario.files ?? {})) {
+        files[name] = Array.isArray(text) ? text.join('\n') : text;
+    }
+    return files;
 }
 
 /** Runs a scenario against the interpreter. Execution stops at the first unexpected error. */
@@ -235,13 +253,8 @@ function checkExpectation(sim: StatechartInterpreter, expect: ScenarioExpectatio
         }
     }
     if (expect.configuration) {
-        const expected = expect.configuration.map(name => {
-            const state = sim.index.findState(name);
-            if (!state) {
-                throw new SimulationError(`Unknown or ambiguous state '${name}'`);
-            }
-            return sim.index.stateName(state);
-        }).sort();
+        // states of submachine instances: `motor.Running` (docs/semantics.md §9)
+        const expected = expect.configuration.map(name => sim.stateDisplayName(name)).sort();
         const actual = [...sim.activeLeafStates].sort();
         if (expected.join() !== actual.join()) {
             fail(`expected configuration [${expected.join(', ')}] but was [${actual.join(', ')}]`);

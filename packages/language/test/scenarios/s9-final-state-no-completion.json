@@ -1,0 +1,41 @@
+{
+    "name": "s9-final-state-no-completion",
+    "description": "An instance in its final state stays there until its state is exited (no completion transitions, as in itemis CREATE); entering the state again enters the instance by default.",
+    "text": [
+        "statemachine Door {",
+        "    import \"motor.hsm\"",
+        "    interface:",
+        "        in event open",
+        "        in event close",
+        "    internal:",
+        "        var motor : Motor",
+        "    [*] -> Closed",
+        "    state Closed",
+        "    state Moving : motor",
+        "    Closed -> Moving : open / raise motor.start",
+        "    Moving -> Closed : close",
+        "}"
+    ],
+    "files": {
+        "motor.hsm": [
+            "statemachine Motor {",
+            "    interface:",
+            "        in event start",
+            "    [*] -> Off",
+            "    state Off",
+            "    Off -> [*] : start",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"raise": "open"},
+        {"runCycle": 3},
+        {"expect": {"configuration": ["Moving"], "inactive": ["motor.Off"]}},
+        {"raise": "close"},
+        {"runCycle": true},
+        {"raise": "open"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["motor.Off"]}}
+    ]
+}

@@ -1,0 +1,46 @@
+{
+    "name": "s9-out-event-child-first-transition",
+    "description": "Child first: if the instance took a transition, the transitions of its state are not checked in this step (as for sub regions, §4); they see the out event raised by that transition in the next step.",
+    "text": [
+        "statemachine Door {",
+        "    import \"motor.hsm\"",
+        "    @CycleBased(100)",
+        "    @ChildFirstExecution",
+        "    interface:",
+        "        in event open",
+        "    internal:",
+        "        var motor : Motor",
+        "    [*] -> Closed",
+        "    state Closed",
+        "    state Moving : motor",
+        "    Closed -> Moving : open / raise motor.start",
+        "    Moving -> Closed : motor.stopped",
+        "}"
+    ],
+    "files": {
+        "motor.hsm": [
+            "statemachine Motor {",
+            "    @CycleBased(100)",
+            "    @ChildFirstExecution",
+            "    interface:",
+            "        in event start",
+            "        out event stopped",
+            "    [*] -> Off",
+            "    state Off",
+            "    state On",
+            "    Off -> On : start",
+            "    On -> Off : after 1 s / raise stopped",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"raise": "open"},
+        {"runCycle": 2},
+        {"advance": 1000},
+        {"runCycle": true},
+        {"expect": {"configuration": ["motor.Off"]}},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Closed"]}}
+    ]
+}

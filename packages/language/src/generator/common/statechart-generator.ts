@@ -1,6 +1,7 @@
 import { AstUtils, type AstNode } from 'langium';
 import * as ast from '../../generated/ast.js';
 import { qualifiedName } from '../../hsm-scope.js';
+import { instanceVariables } from '../../imports.js';
 import { typeOfVariable, type HsmType } from '../../hsm-typesystem.js';
 import { entryPointOf, nodeText, transitionLabel } from '../../model-utils.js';
 import { StatechartInterpreter, type ExecutionMode, type ExecutionOrder } from '../../simulation/interpreter.js';
@@ -27,6 +28,9 @@ export class GeneratorError extends Error {
         super(message);
     }
 }
+
+/** Message of the generator diagnostic for models with submachine instances (docs/semantics.md §9). */
+export const SUBMACHINES_NOT_SUPPORTED = 'Submachine instances are not supported by the C/C++ generator yet';
 
 /** Nanoseconds per time unit. */
 export const NS_PER_UNIT: Record<string, bigint> = { s: 1000000000n, ms: 1000000n, us: 1000n, ns: 1n };
@@ -107,6 +111,10 @@ export abstract class StatechartGenerator implements ExpressionContext {
     private functionOrder = 0;
 
     constructor(protected readonly machine: ast.StateMachine, maxMicrosteps: number | undefined, naming: NamingOptions) {
+        const instance = instanceVariables(machine)[0];
+        if (instance) {
+            throw new GeneratorError(`${SUBMACHINES_NOT_SUPPORTED} ('${instance.name}'); simulate the model or use state machines without instances.`, instance);
+        }
         this.index = new ModelIndex(machine);
         const interpreter = new StatechartInterpreter(machine);
         this.mode = interpreter.executionMode;

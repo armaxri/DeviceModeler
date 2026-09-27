@@ -7,14 +7,17 @@ import { convert, formatValue, int64, declaredType, typeOfValue, type Value } fr
 export interface EvaluationContext {
     /** Current value of a variable or constant. */
     getVariable(variable: ast.VariableDeclaration, node: AstNode): Value;
-    /** Assigns a (not yet converted) value to a variable and returns the stored value. */
-    assignVariable(variable: ast.VariableDeclaration, value: Value, node: AstNode): Value;
+    /**
+     * Assigns a (not yet converted) value to a variable and returns the stored value. `reference` is
+     * the reference to the variable (e.g. `motor.speed` for a variable of a submachine instance).
+     */
+    assignVariable(variable: ast.VariableDeclaration, value: Value, node: AstNode, reference?: AstNode): Value;
     /** Whether an event is present in the current step (an event used as a boolean expression). */
-    isEventPresent(event: ast.EventDeclaration): boolean;
+    isEventPresent(event: ast.EventDeclaration, node: AstNode): boolean;
     /** Value of the last occurrence of an event (`valueof`). */
     eventValue(event: ast.EventDeclaration, node: AstNode): Value | undefined;
     /** Whether a vertex is active (`active(S)`). */
-    isActive(vertex: ast.Vertex): boolean;
+    isActive(vertex: ast.Vertex, node: AstNode): boolean;
     /** Calls an operation with arguments in parameter order (varargs flattened, already converted). */
     callOperation(operation: ast.OperationDeclaration, args: Value[], node: AstNode): Value | undefined;
     /** Raises an event with an optional value (already converted). */
@@ -105,7 +108,7 @@ export class ExpressionEvaluator {
                 if (!state) {
                     throw new SimulationError(`Unresolved state '${node.state.$refText}'`, node);
                 }
-                return this.context.isActive(state);
+                return this.context.isActive(state, node);
             }
             case 'ElementReference':
                 return this.reference(expression as ast.ElementReference);
@@ -145,7 +148,7 @@ export class ExpressionEvaluator {
             return this.call(element, node);
         }
         if (ast.isEventDeclaration(element) && !node.call) {
-            return this.context.isEventPresent(element);
+            return this.context.isEventPresent(element, node);
         }
         throw new SimulationError(`'${element.name}' cannot be used in an expression`, node);
     }
@@ -320,7 +323,7 @@ export class ExpressionEvaluator {
         if (typeof current !== 'bigint' && typeof current !== 'number') {
             throw new SimulationError(`'${node.operator}' requires a numeric variable but '${variable.name}' is ${typeOfValue(current)}`, node);
         }
-        this.context.assignVariable(variable, this.arithmetic(node.operator === '++' ? '+' : '-', current, 1n, node), node);
+        this.context.assignVariable(variable, this.arithmetic(node.operator === '++' ? '+' : '-', current, 1n, node), node, node.operand);
         return current;
     }
 
@@ -340,7 +343,7 @@ export class ExpressionEvaluator {
             const current = this.context.getVariable(variable, target);
             value = this.applyBinary(node.operator.slice(0, -1), current, value, node);
         }
-        return this.context.assignVariable(variable, value, node);
+        return this.context.assignVariable(variable, value, node, target);
     }
 
     private boolean(value: Value, node: AstNode): boolean {

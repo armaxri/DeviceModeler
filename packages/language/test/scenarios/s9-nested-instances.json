@@ -1,0 +1,50 @@
+{
+    "name": "s9-nested-instances",
+    "description": "An instance may have instances of its own: they are processed as sub regions of its states, their states are reported as motor.gear.<state>.",
+    "text": [
+        "statemachine Door {",
+        "    import \"motor.hsm\"",
+        "    interface:",
+        "        in event open",
+        "    internal:",
+        "        var motor : Motor",
+        "    [*] -> Closed",
+        "    state Closed",
+        "    state Moving : motor",
+        "    Closed -> Moving : open / raise motor.start",
+        "}"
+    ],
+    "files": {
+        "motor.hsm": [
+            "statemachine Motor {",
+            "    import \"gear.hsm\"",
+            "    interface:",
+            "        in event start",
+            "    internal:",
+            "        var gear : Gear",
+            "    [*] -> Off",
+            "    state Off",
+            "    state On : gear",
+            "    Off -> On : start / raise gear.spin",
+            "}"
+        ],
+        "gear.hsm": [
+            "statemachine Gear {",
+            "    interface:",
+            "        in event spin",
+            "    [*] -> Idle",
+            "    state Idle",
+            "    state Turning",
+            "    Idle -> Turning : spin",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"raise": "open"},
+        {"runCycle": 2},
+        {"expect": {"configuration": ["motor.gear.Idle"], "active": ["Moving", "motor.On", "motor.gear.Idle"]}},
+        {"runCycle": true},
+        {"expect": {"configuration": ["motor.gear.Turning"]}}
+    ]
+}

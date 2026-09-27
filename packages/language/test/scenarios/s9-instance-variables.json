@@ -1,0 +1,51 @@
+{
+    "name": "s9-instance-variables",
+    "description": "The parent reads and assigns the interface variables of an instance (motor.speed). Instances keep their variables when they are exited and entered again.",
+    "text": [
+        "statemachine Door {",
+        "    import \"motor.hsm\"",
+        "    interface:",
+        "        in event open",
+        "        in event close",
+        "    internal:",
+        "        var motor : Motor",
+        "    [*] -> Closed",
+        "    state Closed",
+        "    state Moving : motor",
+        "    Closed -> Moving : open / motor.speed = motor.speed + 1; raise motor.start",
+        "    Moving -> Closed : close [motor.speed > 10]",
+        "}"
+    ],
+    "files": {
+        "motor.hsm": [
+            "statemachine Motor {",
+            "    interface:",
+            "        in event start",
+            "        var speed : integer = 0",
+            "        var count : integer = 0",
+            "    [*] -> Off",
+            "    state Off",
+            "    state On",
+            "    Off -> On : start / speed += 10; count++",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"raise": "open"},
+        {"runCycle": true},
+        {"expect": {"variables": {"motor.speed": 1, "motor.count": 0}}},
+        {"raise": "close"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["motor.On"], "variables": {"motor.speed": 11}}},
+        {"runCycle": true},
+        {"raise": "close"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Closed"], "variables": {"motor.speed": 11, "motor.count": 1}}},
+        {"raise": "open"},
+        {"runCycle": 2},
+        {"expect": {"configuration": ["motor.On"], "variables": {"motor.speed": 22, "motor.count": 2}}},
+        {"set": {"motor.speed": 5}},
+        {"expect": {"variables": {"motor.speed": 5}}}
+    ]
+}

@@ -1,0 +1,49 @@
+{
+    "name": "s9-entry-point",
+    "description": "A transition with '# >E' to a submachine state enters the instance through the entry point E of its state machine, otherwise by its initial transition.",
+    "text": [
+        "statemachine Door {",
+        "    import \"motor.hsm\"",
+        "    interface:",
+        "        in event open",
+        "        in event openFast",
+        "        in event close",
+        "    internal:",
+        "        var motor : Motor",
+        "    [*] -> Closed",
+        "    state Closed",
+        "    state Moving : motor",
+        "    Closed -> Moving : open",
+        "    Closed -> Moving : openFast # >Run",
+        "    Moving -> Closed : close",
+        "}"
+    ],
+    "files": {
+        "motor.hsm": [
+            "statemachine Motor {",
+            "    interface:",
+            "        in event start",
+            "        operation log(msg : string) : void",
+            "    entry Run",
+            "    [*] -> Off",
+            "    state Off",
+            "    state On {",
+            "        entry / log(\"On\")",
+            "    }",
+            "    Run -> On",
+            "    Off -> On : start",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"raise": "openFast"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["motor.On"], "calls": ["motor.log(\"On\")"]}},
+        {"raise": "close"},
+        {"runCycle": true},
+        {"raise": "open"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["motor.Off"], "calls": []}}
+    ]
+}

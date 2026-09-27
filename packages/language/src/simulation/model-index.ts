@@ -1,6 +1,7 @@
 import { AstUtils, type AstNode } from 'langium';
 import * as ast from '../generated/ast.js';
 import { qualifiedName } from '../hsm-scope.js';
+import { isInstance, referencedInstance, type MemberReferenceNode } from '../imports.js';
 import type { EventDirection } from '../hsm-typesystem.js';
 import { commonContainer, scopeOf, type ScopeContainer } from '../model-utils.js';
 import { SimulationError } from './errors.js';
@@ -47,6 +48,8 @@ export class ModelIndex {
     private readonly declarationNames = new Map<ast.Declaration, string>();
     /** All states in document order. */
     readonly states: ast.State[] = [];
+    private readonly instanceSet = new Set<ast.VariableDeclaration>();
+    private readonly instanceCache = new Map<AstNode, ast.VariableDeclaration | undefined>();
 
     constructor(machine: ast.StateMachine) {
         this.machine = machine;
@@ -57,6 +60,9 @@ export class ModelIndex {
                     this.declarations.set(name, declaration);
                 }
                 this.declarationNames.set(declaration, name);
+                if (ast.isVariableDeclaration(declaration) && isInstance(declaration)) {
+                    this.instanceSet.add(declaration);
+                }
             }
         }
         const transitions: ast.Transition[] = [];
@@ -281,9 +287,37 @@ export class ModelIndex {
         return event.direction === 'out' ? 'out' : 'in';
     }
 
-    /** All variables and constants in declaration order. */
+    /** All variables and constants in declaration order (without submachine instances). */
     variables(): ast.VariableDeclaration[] {
-        return this.machine.scopes.flatMap(s => s.declarations).filter(ast.isVariableDeclaration);
+        return this.machine.scopes.flatMap(s => s.declarations).filter(ast.isVariableDeclaration).filter(v => !this.instanceSet.has(v));
+    }
+
+    /** All declarations in declaration order. */
+    declarationsInOrder(): ast.Declaration[] {
+        return this.machine.scopes.flatMap(s => s.declarations);
+    }
+
+    /** The submachine instances (variables whose type is an imported state machine) in declaration order. */
+    instances(): ast.VariableDeclaration[] {
+        return [...this.instanceSet];
+    }
+
+    /** Whether the variable is a submachine instance. */
+    isInstance(variable: ast.VariableDeclaration): boolean {
+        return this.instanceSet.has(variable);
+    }
+
+    /**
+     * The submachine instance through which a reference (`motor.speed`, `raise motor.start`,
+     * `active(motor.On)`) accesses a member of the instance, `undefined` for own members.
+     */
+    instanceOf(node: AstNode): ast.VariableDeclaration | undefined {
+        if (!this.instanceCache.has(node)) {
+            const referencing = ast.isElementReference(node) || ast.isEventTrigger(node) || ast.isRaiseStatement(node)
+                || ast.isValueOfExpression(node) || ast.isActiveExpression(node);
+            this.instanceCache.set(node, referencing ? referencedInstance(node as MemberReferenceNode, this.machine) : undefined);
+        }
+        return this.instanceCache.get(node);
     }
 
     /** All events in declaration order. */
