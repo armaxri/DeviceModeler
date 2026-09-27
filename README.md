@@ -7,6 +7,9 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
 
 ![HSM Modeler](docs/screenshot.png)
 
+Documentation: [execution semantics](docs/semantics.md) · [C++ integration](docs/cpp-integration.md) ·
+[possible improvements](docs/improvements.md) · [roadmap](ROADMAP.md)
+
 ## Features
 
 - **Textual DSL** (Langium): the structure of the state machine (states, regions, transitions) uses a
@@ -676,7 +679,7 @@ packages/
                 Langium language server (src/server), diagram webview reusing packages/web (src/webview)
 examples/       sample state machines, examples/tests: their unit tests, examples/cmake: CMake example
 cmake/          CMake integration (HsmGenerate.cmake: hsm_generate, hsm_add_tests)
-docs/           execution semantics
+docs/           execution semantics, C++ integration, possible improvements, generated example docs
 ```
 
 The text is the single source of truth. On every change it is parsed and validated by the Langium

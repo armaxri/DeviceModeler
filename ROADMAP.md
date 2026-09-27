@@ -4,7 +4,9 @@ Goal: HSM Modeler becomes a replacement for **itemis CREATE** (formerly YAKINDU 
 Tools): the same statechart language and semantics, plus a web-based graphical editor with a
 PlantUML-like look.
 
-Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be decided
+Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be decided · ⛔ not planned
+
+Possible next steps are described in more detail in [docs/improvements.md](docs/improvements.md).
 
 ## Phase 0 – Foundation ✅
 
@@ -83,8 +85,9 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 - ✅ Submachine states of statecharts imported together (`hsm import A.sct B.sct`, several files in
   "Open…") become submachine instances (the reference format is assumed to be `referencedStatechart`
   with an `href`; itemis `import:` statements of the definition section are commented out)
-- 📋 Remaining differences found in the upstream models: raising `in` events inside the machine,
-  operations called without parentheses, `out` events as triggers, `%` on reals
+- ⛔ Remaining differences found in the upstream models (raising `in` events inside the machine,
+  operations called without parentheses, `out` events as triggers, `%` on reals) – not planned, see
+  [docs/improvements.md](docs/improvements.md#differences-to-itemis-create)
 - 📋 Import test suite based on real-world models from users
 - 💭 Keep manual layout from `.sct` notation models (saved positions)
 
@@ -170,8 +173,12 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 - **Hand-arranged layouts are evaluated on the separate branch `claude/manual-layout`** (sidecar
   layout files, dragging / resizing, positions imported from `.sct` notation models). The main branch
   keeps the automatic layout; the experiment is merged only if it proves worthwhile.
+- **No exchange with itemis is planned.** HSM replaces itemis CREATE for our own models; remaining
+  differences to the itemis language are only closed if our models need them.
+- **Code generation improvements come later.** Submachines and C++ header types are supported by the
+  language, simulation and tests first; the C++ generator catches up when needed.
 
 ## Open questions
 
 - Is simulation or SCTUnit-style testing used in current projects?
-- Is deep C/C++ header integration (using C/C++ types in the statechart) required?
+- Does hand-arranged layout (branch `claude/manual-layout`) prove worthwhile in daily use?
