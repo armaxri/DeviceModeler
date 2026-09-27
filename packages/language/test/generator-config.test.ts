@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
-    CONFIG_PROPERTIES, globToRegExp, licenseComment, parseGeneratorConfig, postProcessFiles, TARGET_PROPERTIES, targetConfigForModel
+    CONFIG_PROPERTIES, HEADER_PROPERTIES, parseHeaderConfig, globToRegExp, licenseComment, parseGeneratorConfig, postProcessFiles, TARGET_PROPERTIES, targetConfigForModel
 } from '../src/generator/config.js';
 import { expandModelPath, loadGeneratorConfig, runGenerateCommand, runGeneration } from '../src/generator/generate-command.js';
 import { example } from './helpers.js';
@@ -36,7 +36,7 @@ describe('parseGeneratorConfig', () => {
         expect(messages({ cpp: {} })).toEqual([`/models 'models' must be a non-empty array of paths / globs of .hsm files`]);
         expect(messages({ models: ['a.hsm'] })).toEqual([' no target configured: add "cpp": {} and / or "c": {}']);
         expect(messages({ models: ['a.hsm'], cpp: { std: 14, headerExtension: 'hpp', nameSpace: 'x' }, extra: 1 })).toEqual([
-            `/extra unknown property 'extra' (expected one of models, cpp, c, writeOnlyIfChanged)`,
+            `/extra unknown property 'extra' (expected one of models, cpp, c, headers, writeOnlyIfChanged)`,
             `/cpp/std 'std' must be 17 or 11`,
             `/cpp/headerExtension 'headerExtension' must be a file extension starting with a dot, e.g. '.hpp'`,
             `/cpp/nameSpace unknown option 'nameSpace' of target 'cpp' (expected one of outDir, headerExtension, sourceExtension, licenseHeader, licenseHeaderFile, maxMicrosteps, namespace, className, std)`
@@ -57,6 +57,24 @@ describe('parseGeneratorConfig', () => {
             expect(Object.keys(schema.definitions[target].properties).sort()).toEqual(Object.keys(TARGET_PROPERTIES[target]).sort());
         }
         expect(Object.keys(schema.properties.models.items.anyOf[1].properties).sort()).toEqual(['c', 'cpp', 'path']);
+        expect(Object.keys(schema.definitions.headers.properties).sort()).toEqual([...HEADER_PROPERTIES].sort());
+    });
+
+    test('the headers block (C/C++ header imports)', () => {
+        const parsed = parseGeneratorConfig({
+            models: ['a.hsm'], cpp: {},
+            headers: { includePaths: ['include'], defines: { USE_CAN: '1', LEVEL: 2 }, dataModel: { longBits: 32, pointerBits: 32, charSigned: false } }
+        });
+        expect(parsed.diagnostics).toEqual([]);
+        expect(parsed.config?.headers).toEqual({ includePaths: ['include'], defines: { USE_CAN: '1', LEVEL: '2' }, dataModel: { longBits: 32, pointerBits: 32, charSigned: false } });
+        const invalid = parseGeneratorConfig({ models: ['a.hsm'], cpp: {}, headers: { includePaths: 'include', dataModel: { longBits: 16 }, x: 1 } });
+        expect(invalid.diagnostics.map(d => `${d.pointer}: ${d.message}`)).toEqual([
+            "/headers/includePaths: 'includePaths' must be an array of directories",
+            "/headers/dataModel/longBits: 'longBits' must be 32 or 64",
+            "/headers/x: unknown property 'x' of 'headers' (expected includePaths, defines, dataModel)"
+        ]);
+        expect(parseHeaderConfig('{ "headers": { "includePaths": ["inc"] } }')).toEqual({ includePaths: ['inc'] });
+        expect(parseHeaderConfig('{ "models": [] }')).toBeUndefined();
     });
 });
 

@@ -1,6 +1,6 @@
 import type { StateMachine } from '../generated/ast.js';
 import { generateC } from './c/index.js';
-import { generateCpp } from './cpp/index.js';
+import { generateCpp, type CppGeneratorOptions } from './cpp/index.js';
 
 /**
  * Generator configuration files (`hsm.gen.json`, like the `.sgen` files of itemis CREATE): which
@@ -14,9 +14,14 @@ import { generateCpp } from './cpp/index.js';
  *     "$schema": "../node_modules/hsm-language/schemas/hsm-gen.schema.json",
  *     "models": ["models/*.hsm", { "path": "legacy/door.hsm", "cpp": { "namespace": "legacy" } }],
  *     "cpp": { "outDir": "src-gen", "namespace": "app::sm", "std": 17, "headerExtension": ".hpp" },
+ *     "headers": { "includePaths": ["include"], "defines": { "USE_CAN": "1" }, "dataModel": { "longBits": 32, "pointerBits": 32 } },
  *     "writeOnlyIfChanged": true
  * }
  * ```
+ *
+ * The `headers` block configures the analysis of imported C/C++ headers (`import "motor_types.h"`,
+ * docs/cpp-integration.md) for all hosts: `hsm` (CLI), the language server of the VS Code extension
+ * (the nearest `hsm.gen.json` / `*.hsm.gen.json` above a model) and the generator.
  */
 
 /** Default file name of a generator configuration (`<name>.hsm.gen.json` is also recognized by the schema). */
@@ -72,11 +77,26 @@ export interface ModelEntry {
     c?: CTargetConfig;
 }
 
+/**
+ * Settings of the analysis of imported C/C++ headers (the `headers` block). Relative include paths
+ * are relative to the configuration file.
+ */
+export interface HeaderConfig {
+    /** Include directories searched for `import "x.h"` (after the directory of the model) and for the `#include`s of headers. */
+    includePaths?: string[];
+    /** Predefined macros like `-D` (`"NAME": "value"`, `""` for a macro without value). */
+    defines?: Record<string, string>;
+    /** Data model of the target: `longBits` (32 or 64, default 64), `pointerBits` (32 or 64, default 64), `charSigned` (default true). */
+    dataModel?: { longBits?: 32 | 64, pointerBits?: 32 | 64, charSigned?: boolean };
+}
+
 /** A validated generator configuration. A target is generated if its key is present. */
 export interface GeneratorConfig {
     models: ModelEntry[];
     cpp?: CppTargetConfig;
     c?: CTargetConfig;
+    /** Analysis of imported C/C++ headers. */
+    headers?: HeaderConfig;
     /** Only write files whose content changed, keeping the modification times of the others (default true). */
     writeOnlyIfChanged: boolean;
 }
@@ -112,7 +132,10 @@ export const TARGET_PROPERTIES: { cpp: Record<keyof CppTargetConfig, PropertyKin
 };
 
 /** The top-level properties (kept in sync with the JSON schema by a test). */
-export const CONFIG_PROPERTIES = ['$schema', 'models', 'cpp', 'c', 'writeOnlyIfChanged'] as const;
+export const CONFIG_PROPERTIES = ['$schema', 'models', 'cpp', 'c', 'headers', 'writeOnlyIfChanged'] as const;
+
+/** The properties of the `headers` block (kept in sync with the JSON schema by a test). */
+export const HEADER_PROPERTIES = ['includePaths', 'defines', 'dataModel'] as const;
 
 const DEFAULT_SOURCE_EXTENSIONS: Record<GeneratorTarget, string> = { cpp: '.cpp', c: '.c' };
 
@@ -190,6 +213,12 @@ export function parseGeneratorConfig(input: string | unknown): ParsedGeneratorCo
     if (value.cpp === undefined && value.c === undefined) {
         error('', `no target configured: add "cpp": {} and / or "c": {}`);
     }
+    if (value.headers !== undefined) {
+        const headers = validateHeaders(value.headers, '/headers', error);
+        if (headers) {
+            config.headers = headers;
+        }
+    }
     if (value.writeOnlyIfChanged !== undefined) {
         if (typeof value.writeOnlyIfChanged === 'boolean') {
             config.writeOnlyIfChanged = value.writeOnlyIfChanged;
@@ -198,6 +227,78 @@ export function parseGeneratorConfig(input: string | unknown): ParsedGeneratorCo
         }
     }
     return diagnostics.some(d => d.severity === 'error') ? { diagnostics } : { config, diagnostics };
+}
+
+/** Validates the `headers` block. */
+function validateHeaders(value: unknown, pointer: string, error: (pointer: string, message: string) => void): HeaderConfig | undefined {
+    if (!isObject(value)) {
+        error(pointer, `'headers' must be an object { "includePaths": [...], "defines": {...}, "dataModel": {...} }`);
+        return undefined;
+    }
+    const result: HeaderConfig = {};
+    for (const [key, option] of Object.entries(value)) {
+        const at = `${pointer}/${key}`;
+        switch (key) {
+            case 'includePaths':
+                if (Array.isArray(option) && option.every(p => typeof p === 'string' && p.trim() !== '')) {
+                    result.includePaths = option as string[];
+                } else {
+                    error(at, `'includePaths' must be an array of directories`);
+                }
+                break;
+            case 'defines':
+                if (isObject(option) && Object.entries(option).every(([name, v]) => /^[A-Za-z_]\w*$/.test(name) && (typeof v === 'string' || typeof v === 'number'))) {
+                    result.defines = Object.fromEntries(Object.entries(option).map(([name, v]) => [name, String(v)]));
+                } else {
+                    error(at, `'defines' must map macro names to values (strings or numbers, "" for a macro without value)`);
+                }
+                break;
+            case 'dataModel': {
+                if (!isObject(option)) {
+                    error(at, `'dataModel' must be an object { "longBits": 32 | 64, "pointerBits": 32 | 64, "charSigned": boolean }`);
+                    break;
+                }
+                const dataModel: NonNullable<HeaderConfig['dataModel']> = {};
+                for (const [name, v] of Object.entries(option)) {
+                    if ((name === 'longBits' || name === 'pointerBits') && (v === 32 || v === 64)) {
+                        dataModel[name] = v;
+                    } else if (name === 'charSigned' && typeof v === 'boolean') {
+                        dataModel.charSigned = v;
+                    } else {
+                        error(`${at}/${name}`, name === 'longBits' || name === 'pointerBits' || name === 'charSigned'
+                            ? `'${name}' must be ${name === 'charSigned' ? 'true or false' : '32 or 64'}` : `unknown property '${name}' (expected longBits, pointerBits, charSigned)`);
+                    }
+                }
+                result.dataModel = dataModel;
+                break;
+            }
+            default:
+                error(at, `unknown property '${key}' of 'headers' (expected ${HEADER_PROPERTIES.join(', ')})`);
+        }
+    }
+    return result;
+}
+
+/**
+ * The `headers` block of a configuration file (JSON text or parsed value) without validating the rest
+ * of the configuration (used by the language hosts, which need only the header settings); `undefined`
+ * if there is none or it is invalid.
+ */
+export function parseHeaderConfig(input: string | unknown): HeaderConfig | undefined {
+    let value: unknown = input;
+    if (typeof input === 'string') {
+        try {
+            value = JSON.parse(input);
+        } catch {
+            return undefined;
+        }
+    }
+    if (!isObject(value) || value.headers === undefined) {
+        return undefined;
+    }
+    let valid = true;
+    const headers = validateHeaders(value.headers, '/headers', () => valid = false);
+    return valid ? headers : undefined;
 }
 
 function validateTarget(target: GeneratorTarget, value: unknown, pointer: string,
@@ -285,9 +386,10 @@ export interface TargetGenerationResult {
  * generated files) and prepends the license header. `licenseHeaderFile` must have been resolved
  * into `licenseHeader` by the caller. `outDir` is ignored (the paths are file names).
  */
-export function generateTarget(machine: StateMachine, target: GeneratorTarget, options: TargetConfig): TargetGenerationResult {
+export function generateTarget(machine: StateMachine, target: GeneratorTarget, options: TargetConfig,
+    extra: { headerInclude?: CppGeneratorOptions['headerInclude'] } = {}): TargetGenerationResult {
     const result = target === 'cpp'
-        ? generateCpp(machine, cppGeneratorOptions(options as CppTargetConfig))
+        ? generateCpp(machine, { ...cppGeneratorOptions(options as CppTargetConfig), headerInclude: extra.headerInclude })
         : generateC(machine, cGeneratorOptions(options as CTargetConfig));
     const diagnostics = result.diagnostics.map(d => ({
         severity: d.severity,

@@ -47,6 +47,8 @@ export interface CppImportInfo {
     readonly index: CppTypeIndex;
     /** The imported headers and the headers they include (transitively), without duplicates. */
     readonly headers: readonly LoadedHeader[];
+    /** {@link CppHeaderStore.settingsVersion} of the settings the index was built with. */
+    readonly settingsVersion?: number;
 }
 
 interface StoredText {
@@ -140,7 +142,12 @@ export class CppHeaderStore {
         return (this.texts.get(key) ?? this.readTexts.get(key))?.version;
     }
 
-    /** The effective settings for a document. */
+    /**
+     * The effective settings for a document: the settings of its configuration ({@link settingsProvider},
+     * e.g. the `headers` block of the nearest `hsm.gen.json`) combined with the global {@link settings}
+     * (CLI `-I` / `-D`, VS Code settings): the include paths of the configuration come first, defines
+     * and the data model of the global settings override those of the configuration.
+     */
     settingsFor(documentUri: URI | undefined): CppHeaderSettings {
         const own = documentUri ? this.settingsProvider?.(documentUri) : undefined;
         if (!own) {
@@ -148,10 +155,19 @@ export class CppHeaderStore {
         }
         return {
             includePaths: [...own.includePaths ?? [], ...this.settings.includePaths ?? []],
-            defines: { ...this.settings.defines, ...own.defines },
-            dataModel: { ...this.settings.dataModel, ...own.dataModel }
+            defines: { ...own.defines, ...this.settings.defines },
+            dataModel: { ...own.dataModel, ...this.settings.dataModel }
         };
     }
+
+    /** Changes the global settings; documents are relinked by the next build ({@link HsmImportResolver.headersChanged}). */
+    updateSettings(settings: CppHeaderSettings): void {
+        this.settings = settings;
+        this.settingsVersion++;
+    }
+
+    /** Incremented when the settings change (also call it when the configuration files of the {@link settingsProvider} change). */
+    settingsVersion = 0;
 
     /** Loads (and parses) the header at `uri`; `undefined` if there is no text for it. */
     load(uri: URI, settings: CppHeaderSettings): LoadedHeader | undefined {

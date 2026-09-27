@@ -15,11 +15,34 @@ import { formatTraceEntry, runScenario, validateScenario, type ScenarioStep } fr
 import { runTestCommand, type TestCommandOptions } from '../testing/test-command.js';
 import { registerRenderCommands } from './render-commands.js';
 import { CppTypeIndex, cppHeaderReport } from '../cpp-header/index.js';
+import { cliHeaderSettings, dataModelNamed, installNodeHeaderSupport, parseDefines, type NodeHeaderOptions } from '../node/cpp-headers-node.js';
 
 const severities = ['', 'error', 'warning', 'info', 'hint'];
 
-async function load(file: string) {
-    const loader = new HsmModelLoader(createHsmServices(NodeFileSystem));
+/** Options of commands that load models: settings of imported C/C++ headers. */
+export interface HeaderCommandOptions {
+    include?: string[];
+    define?: string[];
+    dataModel?: string;
+}
+
+/** Adds `-I`, `-D` and `--data-model` (settings of imported C/C++ headers, see docs/cpp-integration.md). */
+export function headerOptions(command: Command): Command {
+    return command
+        .option('-I, --include <dirs...>', 'include directories for imported C/C++ headers (after the headers block of hsm.gen.json)')
+        .option('-D, --define <macros...>', 'predefined macros for imported C/C++ headers: NAME or NAME=VALUE')
+        .option('--data-model <model>', 'data model of the target for C/C++ headers: lp64 (default), llp64 or ilp32 (32-bit long and pointers)');
+}
+
+/** The Node header support for the options of a command. */
+export function nodeHeaderOptions(options: HeaderCommandOptions): NodeHeaderOptions {
+    return { settings: cliHeaderSettings(options) };
+}
+
+async function load(file: string, options: HeaderCommandOptions = {}) {
+    const services = createHsmServices(NodeFileSystem);
+    installNodeHeaderSupport(services.shared, nodeHeaderOptions(options));
+    const loader = new HsmModelLoader(services);
     const text = await fs.readFile(file, 'utf-8');
     const parsed = await loader.load(text, `file://${path.resolve(file)}`);
     let errors = 0;
@@ -44,11 +67,11 @@ async function load(file: string) {
 export function createProgram(): Command {
     const program = new Command('hsm').description('Tools for hierarchical state machine models (.hsm)');
 
-    program.command('validate')
+    headerOptions(program.command('validate'))
         .argument('<file>', '.hsm file to validate')
         .description('parses and validates a model')
-        .action(async (file: string) => {
-            const { errors } = await load(file);
+        .action(async (file: string, options: HeaderCommandOptions) => {
+            const { errors } = await load(file, options);
             if (errors > 0) {
                 process.exitCode = 1;
             } else {
@@ -56,12 +79,12 @@ export function createProgram(): Command {
             }
         });
 
-    program.command('plantuml')
+    headerOptions(program.command('plantuml'))
         .argument('<file>', '.hsm file')
         .option('-o, --out <file>', 'output file (default: <file>.puml)')
         .description('generates a PlantUML state diagram')
-        .action(async (file: string, options: { out?: string }) => {
-            const { parsed, errors } = await load(file);
+        .action(async (file: string, options: { out?: string } & HeaderCommandOptions) => {
+            const { parsed, errors } = await load(file, options);
             if (errors > 0 || parsed.hasSyntaxErrors) {
                 process.exitCode = 1;
                 return;
@@ -71,7 +94,7 @@ export function createProgram(): Command {
             console.log(`Generated ${out}`);
         });
 
-    program.command('generate')
+    headerOptions(program.command('generate'))
         .argument('[target]', 'target language: cpp or c (default: all targets of the configuration)')
         .argument('[files...]', '.hsm files (default: the models of the generator configuration)')
         .option('-c, --config <file>', `generator configuration (default: ${GENERATOR_CONFIG_FILE} in the current directory if no files are given)`)
@@ -89,24 +112,24 @@ export function createProgram(): Command {
             process.exitCode = await runGenerateCommand(target, files, options);
         });
 
-    program.command('layout')
+    headerOptions(program.command('layout'))
         .argument('<file>', '.hsm file')
         .option('-d, --direction <direction>', 'DOWN or RIGHT', 'DOWN')
         .description('prints the computed diagram layout as JSON')
-        .action(async (file: string, options: { direction: 'DOWN' | 'RIGHT' }) => {
-            const { parsed } = await load(file);
+        .action(async (file: string, options: { direction: 'DOWN' | 'RIGHT' } & HeaderCommandOptions) => {
+            const { parsed } = await load(file, options);
             const { graph } = await layoutStateMachine(parsed.model, { direction: options.direction });
             console.log(JSON.stringify(graph, undefined, 2));
         });
 
-    program.command('simulate')
+    headerOptions(program.command('simulate'))
         .argument('<file>', '.hsm file')
         .option('-s, --script <scenario>', 'scenario file (JSON, see packages/language/test/scenarios/README.md) to run against the model')
         .option('-e, --events <events>', 'without script: comma separated in events raised one after another (cycle based: each followed by a run cycle)')
         .option('-q, --quiet', 'print only the active states after each step, not the trace')
         .description('runs the state machine in the interpreter and prints the trace and the active states')
-        .action(async (file: string, options: { script?: string, events?: string, quiet?: boolean }) => {
-            const { parsed, errors } = await load(file);
+        .action(async (file: string, options: { script?: string, events?: string, quiet?: boolean } & HeaderCommandOptions) => {
+            const { parsed, errors } = await load(file, options);
             if (errors > 0 || parsed.hasSyntaxErrors) {
                 process.exitCode = 1;
                 return;
@@ -142,7 +165,7 @@ export function createProgram(): Command {
             }
         });
 
-    program.command('test')
+    headerOptions(program.command('test'))
         .argument('<files...>', 'unit test files (.hsmtest)')
         .option('-m, --machine <files...>', 'state machine files (.hsm) or directories; the .hsm files next to the test files are loaded automatically')
         .option('--junit <file>', 'writes a JUnit XML report')
@@ -182,10 +205,13 @@ export function createProgram(): Command {
 
     program.command('cpp-header')
         .argument('<files...>', 'C++ headers (analyzed together, in the given order)')
+        .option('-D, --define <macros...>', 'predefined macros: NAME or NAME=VALUE')
+        .option('--data-model <model>', 'data model of the target: lp64 (default), llp64 or ilp32')
         .description('prints the types and constants extracted from C++ headers as JSON (for debugging the C++ integration)')
-        .action(async (files: string[]) => {
+        .action(async (files: string[], options: HeaderCommandOptions) => {
             const sources = await Promise.all(files.map(async fileName => ({ fileName, text: await fs.readFile(fileName, 'utf-8') })));
-            console.log(JSON.stringify(cppHeaderReport(CppTypeIndex.fromSources(sources)), undefined, 2));
+            const index = CppTypeIndex.fromSources(sources, { defines: parseDefines(options.define), dataModel: dataModelNamed(options.dataModel) });
+            console.log(JSON.stringify(cppHeaderReport(index), undefined, 2));
         });
 
     registerRenderCommands(program);

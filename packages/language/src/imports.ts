@@ -233,6 +233,11 @@ export function instanceOfReference(reference: Reference<AstNode>, machine: ast.
     return result;
 }
 
+/** Whether a C/C++ header import of the machine could not be resolved (errors of C++ names are then not reported). */
+export function hasUnresolvedHeaders(machine: ast.StateMachine | undefined): boolean {
+    return !!machine && resolvedImports(machine).some(i => i.kind === 'header' && !i.header?.found);
+}
+
 /** Whether an `.hsm` import of the machine could not be resolved (the file is missing). */
 export function hasUnresolvedImports(machine: ast.StateMachine): boolean {
     return resolvedImports(machine).some(i => i.kind === 'hsm' && !i.machine);
@@ -291,7 +296,7 @@ export class HsmImportResolver {
             return undefined;
         }
         const settings = this.headerStore.settingsFor(machine.$document?.uri);
-        return { index: this.headerStore.index(headers, settings), headers };
+        return { index: this.headerStore.index(headers, settings), headers, settingsVersion: this.headerStore.settingsVersion };
     }
 
     /**
@@ -299,6 +304,10 @@ export class HsmImportResolver {
      * a header that was not found might exist now).
      */
     headersChanged(machine: ast.StateMachine): boolean {
+        const info = cppRegistry.get(machine);
+        if (info && info.settingsVersion !== this.headerStore.settingsVersion) {
+            return true;
+        }
         return resolvedImports(machine).some(i => i.kind === 'header' && i.header !== undefined
             && (!i.header.found || i.header.headers.some(h => this.headerStore.version(h.uri) !== h.version)));
     }

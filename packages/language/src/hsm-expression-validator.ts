@@ -9,7 +9,7 @@ import {
     isCastable, isComparable, isCyclicAlias, isError, isNumeric, resolveTypeAlias, resolveTypeName, returnTypeOf,
     typeName, typeOfAlias, typeOfEvent, typeOfParameter, typeOfTypeReference, typeOfVariable, type HsmType
 } from './hsm-typesystem.js';
-import { cppImports, hasUnresolvedImports, importedMachines, isInstance, isUnresolvedInstance, machineType, referableName, referencedInstance } from './imports.js';
+import { cppImports, hasUnresolvedHeaders, hasUnresolvedImports, importedMachines, isInstance, isUnresolvedInstance, machineType, referableName, referencedInstance } from './imports.js';
 import {
     contextMachine, cppTypeOfReference, elementOf, isCppType, isReadonlyString, isUnscopedEnum, memberOf, referenceMembers, resolveCppValue
 } from './cpp-types.js';
@@ -128,6 +128,9 @@ export class HsmExpressionValidator {
             return;
         }
         if (!builtin && !alias) {
+            if (hasUnresolvedHeaders(contextMachine(reference)) && /::|_t$/.test(reference.name)) {
+                return; // the unresolved header import is reported
+            }
             const container = AstUtils.getContainerOfType(reference, ast.isStateMachine);
             if (container && hasUnresolvedImports(container) && /^[A-Z]/.test(reference.name)) {
                 accept('error', `Unknown type '${reference.name}' (an import could not be resolved; does it define '${reference.name}'?).`, { node: reference, property: 'name' });
@@ -442,7 +445,7 @@ export class HsmExpressionValidator {
 
     checkCppReference(reference: ast.CppReference, accept: ValidationAcceptor): void {
         const resolved = resolveCppValue(reference);
-        if (resolved.error) {
+        if (resolved.error && !(resolved.declaration === undefined && hasUnresolvedHeaders(contextMachine(reference)))) {
             accept('error', resolved.error, { node: reference, property: 'name' });
         }
     }
