@@ -24,4 +24,24 @@ describe('formatter', () => {
     A -> A : e [g] / x()
 }`);
     });
+
+    test('formats imports and submachine states', async () => {
+        const text = 'statemachine M{import  "motor.hsm"\nimport:"a.hsm"   "b.h" internal: var motor:Motor [*]->A state A:motor{entry/raise motor.start}}';
+        const parsed = await parse(text, { 'motor.hsm': 'statemachine Motor {\n    interface:\n        in event start\n}', 'a.hsm': 'statemachine A {}' });
+        const edits = await loader.services.Hsm.lsp.Formatter!.formatDocument(parsed.document, {
+            textDocument: { uri: parsed.document.uri.toString() },
+            options: { tabSize: 4, insertSpaces: true }
+        });
+        const formatted = TextDocument.applyEdits(parsed.document.textDocument, edits);
+        expect(formatted).toBe(`statemachine M {
+    import "motor.hsm"
+    import: "a.hsm" "b.h"
+    internal:
+        var motor : Motor
+    [*] -> A
+    state A : motor {
+        entry / raise motor.start
+    }
+}`);
+    });
 });

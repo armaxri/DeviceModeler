@@ -18,6 +18,14 @@ export class HsmFormatter extends AbstractFormatter {
             if (ast.isState(node) || ast.isStateMachine(node)) {
                 this.getNodeFormatter<ast.State | ast.StateMachine>(node).property('description').prepend(Formatting.oneSpace());
             }
+            if (ast.isState(node)) {
+                // submachine binding: `state Moving : motor`
+                this.getNodeFormatter(node).keyword(':').surround(Formatting.oneSpace());
+            }
+        } else if (ast.isImport(node)) {
+            const formatter = this.getNodeFormatter(node);
+            formatter.keyword(':').prepend(Formatting.noSpace());
+            formatter.properties('paths').prepend(Formatting.oneSpace());
         } else if (ast.isPseudoState(node)) {
             this.getNodeFormatter(node).property('name').prepend(Formatting.oneSpace());
         } else if (ast.isInterfaceScope(node) || ast.isInternalScope(node)) {

@@ -214,9 +214,12 @@ function statePanel(state: import('hsm-language').State, info: SelectionInfo, ho
     const composite = state.vertices.length > 0 || state.regions.length > 0;
     const container = scopeOf(state);
     const isInitial = container.transitions.some(t => t.initial && t.target?.ref === state);
+    // a submachine state (`state Moving : motor`) has no sub states: they are the states of the instance
+    const submachine = state.submachine;
     return [
         h('h2', {}, state.name),
-        h('div', { class: 'kind' }, `${composite ? 'Composite state' : 'State'} in ${containerName(container)}${isInitial ? ' · initial' : ''}`),
+        h('div', { class: 'kind' }, `${composite ? 'Composite state' : submachine ? 'Submachine state' : 'State'} in ${containerName(container)}${isInitial ? ' · initial' : ''}`),
+        submachine ? field('Submachine instance', h('div', { class: 'hint' }, h('code', {}, submachine.$refText), ' – double-click the state to open its state machine')) : undefined,
         ...problems(info.issue),
         nameField(state, host),
         field('Description', h('input', {
@@ -230,8 +233,8 @@ function statePanel(state: import('hsm-language').State, info: SelectionInfo, ho
             ? field('Local reactions', h('div', { class: 'hint' }, ...internal.map(r => h('div', {}, h('code', {}, nodeText(r))))))
             : undefined,
         h('div', { class: 'actions' },
-            h('button', { onClick: () => host.applyEdit(editor => editor.addVertex(state, 'state')) }, 'Add sub state'),
-            h('button', { onClick: () => host.applyEdit(editor => editor.addRegion(state)) }, 'Add region'),
+            submachine ? undefined : h('button', { onClick: () => host.applyEdit(editor => editor.addVertex(state, 'state')) }, 'Add sub state'),
+            submachine ? undefined : h('button', { onClick: () => host.applyEdit(editor => editor.addRegion(state)) }, 'Add region'),
             isInitial ? undefined : h('button', { onClick: () => host.applyEdit(editor => editor.setInitial(state)) }, 'Make initial'),
             h('button', { onClick: () => host.applyEdit(editor => editor.addTransition(state, { finalOf: container })) }, 'Add final'),
             h('button', { class: 'danger', onClick: () => host.deleteSelection() }, 'Delete'))
