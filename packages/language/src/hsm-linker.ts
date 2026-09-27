@@ -22,8 +22,20 @@ export class HsmLinker extends DefaultLinker {
         if (candidates.length < 2) {
             return error;
         }
-        return { ...error, message: ambiguityMessage(name, candidates.map(vertex => referenceName(vertex, refInfo.container))) };
+        const names = candidates.map(vertex => referenceName(vertex, refInfo.container));
+        const point = candidates[0];
+        if (new Set(names).size === 1 && ast.isPseudoState(point) && (point.kind === 'entry' || point.kind === 'exit')) {
+            // entry points / exit nodes with the same name in several regions of a state
+            return { ...error, message: regionPointAmbiguityMessage(point.name, point.kind) };
+        }
+        return { ...error, message: ambiguityMessage(name, names) };
     }
+}
+
+/** Message for a reference to an entry point / exit node whose name is used in several regions of a state. */
+export function regionPointAmbiguityMessage(name: string, kind: 'entry' | 'exit'): string {
+    const what = kind === 'entry' ? 'entry point' : 'exit node';
+    return `'${name}' is ambiguous: several regions have an ${what} with this name. Declare the transition inside the region of the ${what}.`;
 }
 
 function isVertexReference(refInfo: ReferenceInfo): boolean {

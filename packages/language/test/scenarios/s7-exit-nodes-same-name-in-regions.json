@@ -1,0 +1,43 @@
+{
+    "name": "s7-exit-nodes-same-name-in-regions",
+    "description": "Exit nodes with the same name in orthogonal regions: reaching either of them takes the # X> transition.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event a",
+        "        in event b",
+        "        in event back",
+        "        var count : integer = 0",
+        "    [*] -> P",
+        "    state P {",
+        "        region R1 {",
+        "            [*] -> A",
+        "            exit Stop",
+        "            state A",
+        "            A -> Stop : a",
+        "        }",
+        "        region R2 {",
+        "            [*] -> B",
+        "            exit Stop",
+        "            state B",
+        "            B -> Stop : b",
+        "        }",
+        "    }",
+        "    state Stopped",
+        "    P -> Stopped : / count += 1 # Stop>",
+        "    Stopped -> P : back",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "b"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Stopped"], "variables": {"count": 1}}},
+        {"raise": "back"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.A", "P.B"]}},
+        {"raise": "a"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Stopped"], "variables": {"count": 2}}}
+    ]
+}

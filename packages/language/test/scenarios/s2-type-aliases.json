@@ -1,0 +1,34 @@
+{
+    "name": "s2-type-aliases",
+    "description": "Type aliases (alias Name : type) have the semantics of their base type, also through chains of aliases.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        alias inti : integer",
+        "        alias word : string",
+        "        alias count : inti",
+        "        in event go : count",
+        "        out event said : word",
+        "        var myVar : inti = 7",
+        "        var myString : word",
+        "        var half : real = 0.0",
+        "        operation twice(x : inti) : count",
+        "    [*] -> A",
+        "    state A",
+        "    state B",
+        "    A -> B : go / myVar = twice(valueof(go)) / 3; myString = \"TypeSystem\"; half = myVar / 2 as real; raise said : myString",
+        "}"
+    ],
+    "operations": {
+        "twice": [
+            10
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"myVar": 7, "myString": ""}}},
+        {"raise": "go", "value": 5},
+        {"runCycle": true},
+        {"expect": {"configuration": ["B"], "variables": {"myVar": 3, "myString": "TypeSystem", "half": 1.5}, "calls": ["twice(5)"], "outEvents": ["said(\"TypeSystem\")"]}}
+    ]
+}

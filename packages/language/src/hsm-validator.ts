@@ -1,5 +1,6 @@
 import type { AstNode, ValidationAcceptor, ValidationChecks } from 'langium';
 import * as ast from './generated/ast.js';
+import { regionPointAmbiguityMessage } from './hsm-linker.js';
 import type { HsmServices } from './hsm-module.js';
 import {
     allTransitions, allVertices, containerName, enclosingRegion, finalTransitions, initialTransitions,
@@ -274,12 +275,12 @@ export class HsmValidator {
         });
         if (source && isRegionPoint(source) && ast.isRegion(source.$container) && !isInside(transition, source.$container)
             && findPseudos(source.$container.$container, source.kind as 'entry' | 'exit', source.name).length > 1) {
-            accept('error', `'${source.name}' is ambiguous: several regions have ${source.kind === 'entry' ? 'an entry point' : 'an exit node'} with this name. Declare the transition inside the region of the ${source.kind === 'entry' ? 'entry point' : 'exit node'}.`,
+            accept('error', regionPointAmbiguityMessage(source.name, source.kind as 'entry' | 'exit'),
                 { node: transition, property: 'source' });
         }
         if (target && isRegionPoint(target) && ast.isRegion(target.$container) && !isInside(transition, target.$container)
             && findPseudos(target.$container.$container, target.kind as 'entry' | 'exit', target.name).length > 1) {
-            accept('error', `'${target.name}' is ambiguous: several regions have ${target.kind === 'entry' ? 'an entry point' : 'an exit node'} with this name. Declare the transition inside the region of the ${target.kind === 'entry' ? 'entry point' : 'exit node'}.`,
+            accept('error', regionPointAmbiguityMessage(target.name, target.kind as 'entry' | 'exit'),
                 { node: transition, property: 'target' });
         }
     }
