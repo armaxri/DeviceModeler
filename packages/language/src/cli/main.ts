@@ -13,6 +13,7 @@ import { StatechartInterpreter } from '../simulation/interpreter.js';
 import { formatTraceEntry, runScenario, validateScenario, type ScenarioStep } from '../simulation/scenario.js';
 import { runTestCommand, type TestCommandOptions } from '../testing/test-command.js';
 import { registerRenderCommands } from './render-commands.js';
+import { CppTypeIndex, cppHeaderReport } from '../cpp-header/index.js';
 
 const severities = ['', 'error', 'warning', 'info', 'hint'];
 
@@ -158,6 +159,14 @@ export function createProgram(): Command {
             const out = options.out ?? file.replace(/\.sct$/, '') + '.hsm';
             await fs.writeFile(out, text);
             console.log(`Generated ${out}`);
+        });
+
+    program.command('cpp-header')
+        .argument('<files...>', 'C++ headers (analyzed together, in the given order)')
+        .description('prints the types and constants extracted from C++ headers as JSON (for debugging the C++ integration)')
+        .action(async (files: string[]) => {
+            const sources = await Promise.all(files.map(async fileName => ({ fileName, text: await fs.readFile(fileName, 'utf-8') })));
+            console.log(JSON.stringify(cppHeaderReport(CppTypeIndex.fromSources(sources)), undefined, 2));
         });
 
     registerRenderCommands(program);
