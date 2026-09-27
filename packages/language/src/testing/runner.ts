@@ -1,6 +1,5 @@
 import type { AstNode, LangiumDocument, Reference } from 'langium';
 import * as ast from '../generated/ast.js';
-import { typeOfVariable } from '../hsm-typesystem.js';
 import { qualifiedName } from '../hsm-scope.js';
 import { instanceOfReference, referableName } from '../imports.js';
 import { SimulationError } from '../simulation/errors.js';
@@ -8,7 +7,7 @@ import { ExpressionEvaluator, type EvaluationContext } from '../simulation/expre
 import { StatechartInterpreter, type TraceEntry } from '../simulation/interpreter.js';
 import { formatTraceEntry } from '../simulation/scenario.js';
 import {
-    convert, declaredType, defaultValueOf, formatValue, fromHost, toHost, typeOfValue, type HostValue, type TypeName, type Value
+    convert, declaredType, defaultValueOf, formatValue, fromHost, runtimeTypeOfValue, toHost, type HostValue, type Value
 } from '../simulation/values.js';
 import type { CoverageCollector } from './coverage.js';
 import { builtinVariable, isLocalVariable } from './hsm-test-scope.js';
@@ -231,7 +230,7 @@ class TestExecution {
                 const declaration = statement.declaration;
                 const type = declaredType(declaration.type);
                 const initial = declaration.initialValue ? this.evaluator.evaluate(declaration.initialValue) : defaultValueOf(type ?? 'integer');
-                this.frame().set(declaration, convert(initial, type ?? typeOfValue(initial), `Initial value of '${declaration.name}'`, declaration)!);
+                this.frame().set(declaration, convert(initial, type ?? runtimeTypeOfValue(initial), `Initial value of '${declaration.name}'`, declaration)!);
                 break;
             }
             case 'IfStatement':
@@ -411,8 +410,11 @@ class TestExecution {
                     }
                     return value;
                 }
-                const value = this.sim.getVariable(this.hostName(variable, referenceOf(node)));
-                return fromHost(value, machineVariableType(variable, value), `Value of '${variable.name}'`, node)!;
+                const value = this.sim.getValue(this.hostName(variable, referenceOf(node)));
+                if (value === undefined) {
+                    throw new SimulationError(`Variable '${variable.name}' has no value`, node);
+                }
+                return value;
             },
             assignVariable: (variable, value, node, reference) => {
                 if (builtinVariable(variable) || variable.const) {
@@ -420,14 +422,13 @@ class TestExecution {
                 }
                 if (isLocalVariable(variable)) {
                     const current = this.frame().get(variable);
-                    const converted = convert(value, declaredType(variable.type) ?? typeOfValue(current), `Assignment to '${variable.name}'`, node)!;
+                    const converted = convert(value, declaredType(variable.type) ?? runtimeTypeOfValue(current), `Assignment to '${variable.name}'`, node)!;
                     this.frame().set(variable, converted);
                     return converted;
                 }
                 const name = this.hostName(variable, referenceOf(reference));
                 this.sim.setVariable(name, value);
-                const stored = this.sim.getVariable(name);
-                return fromHost(stored, machineVariableType(variable, stored), `Value of '${variable.name}'`, node)!;
+                return this.sim.getValue(name)!;
             },
             isEventPresent: (event, node) => {
                 const name = this.hostName(event, referenceOf(node));
@@ -474,14 +475,6 @@ class TestExecution {
 
 const MS_PER_UNIT: Record<string, number> = { s: 1000, ms: 1, us: 1e-3, ns: 1e-6 };
 
-function machineVariableType(variable: ast.VariableDeclaration, value: HostValue | undefined): TypeName {
-    const type = typeOfVariable(variable);
-    if (type !== 'error' && type !== 'null' && type !== 'instance') {
-        return type;
-    }
-    return typeof value === 'number' ? (Number.isInteger(value) ? 'integer' : 'real') : typeof value === 'boolean' ? 'boolean' : 'string';
-}
-
 /** The reference of a node referencing a declaration (`motor.speed`, `valueof(motor.failed)`). */
 function referenceOf(node: AstNode | undefined): Reference | undefined {
     if (ast.isElementReference(node)) {
@@ -498,7 +491,7 @@ function isLiteral(expression: ast.Expression): boolean {
 }
 
 function sameValues(actual: readonly HostValue[], expected: readonly HostValue[]): boolean {
-    return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
+    return actual.length === expected.length && actual.every((value, index) => JSON.stringify(value) === JSON.stringify(expected[index]));
 }
 
 function sourceText(node: AstNode): string {

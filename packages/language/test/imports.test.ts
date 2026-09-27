@@ -103,11 +103,10 @@ statemachine Door {
     [*] -> Moving
     state Moving : motor
 }
-`, { 'motor.hsm': MOTOR });
+`, { 'motor.hsm': MOTOR, 'types.h': 'namespace door { enum class Kind { A, B }; }' });
         expect(errors(parsed)).toEqual([]);
         expect(resolvedImports(parsed.model).map(i => i.kind)).toEqual(['hsm', 'header']);
-        expect(parsed.diagnostics.filter(d => d.severity === 3).map(d => d.message))
-            .toContain(`C/C++ header imports are not supported yet; 'types.h' is ignored.`);
+        expect(resolvedImports(parsed.model)[1].header?.found).toBe(true);
     });
 
     test('missing files, unsupported files, cycles and duplicate names', async () => {
@@ -240,7 +239,7 @@ describe('submachine instances: validation', () => {
             `The in event 'motor.start' of a submachine instance cannot be used as a condition: only its out events can be observed.`,
             `Cannot raise 'motor.stopped': only the in events of a submachine instance can be raised.`,
             `The operation 'motor.setPwm' of a submachine instance cannot be called: operations are implemented by the host of the instance.`,
-            `Could not resolve reference to Declaration named 'motor.secret'.`
+            `The state machine 'Motor' of the instance 'motor' has no interface member 'secret'.`
         ].sort());
     });
 

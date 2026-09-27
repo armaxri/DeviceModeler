@@ -9,7 +9,7 @@ import {
     isFinalState, ModelIndex, type ActiveVertex, type FinalState, type RegionNode, type TargetVertex
 } from './model-index.js';
 import {
-    convert, defaultValueOf, formatCall, formatValue, fromHost, toHost, declaredType, typeOfValue, type HostValue, type TypeName, type Value
+    convert, defaultValueOf, formatCall, formatValue, fromHost, toHost, declaredType, runtimeTypeOfValue, type HostValue, type RuntimeType, type Value
 } from './values.js';
 
 /** Implementation of an operation provided by the host. Arguments are given in parameter order (varargs flattened). */
@@ -169,7 +169,7 @@ export class StatechartInterpreter {
     private readonly active = new Map<RegionNode, ActiveVertex>();
     private readonly history = new Map<RegionNode, ActiveVertex>();
     private readonly values = new Map<ast.VariableDeclaration, Value>();
-    private readonly variableTypes = new Map<ast.VariableDeclaration, TypeName | undefined>();
+    private readonly variableTypes = new Map<ast.VariableDeclaration, RuntimeType | undefined>();
     private readonly eventValues = new Map<ast.EventDeclaration, Value | undefined>();
     private readonly timers = new Map<ast.TimeTrigger, Timer>();
 
@@ -491,6 +491,27 @@ export class StatechartInterpreter {
             throw new SimulationError(`'${name}' is ${variable.const ? 'a constant' : 'read-only'} and cannot be set by the host`, variable);
         }
         this.values.set(variable, fromHost(value, this.variableTypes.get(variable), `Value of '${name}'`, variable)!);
+    }
+
+    /**
+     * The runtime value of a variable or constant (`x`, `Iface.x`, `motor.speed`), e.g. to show enum
+     * values by name or the members of a struct value ({@link formatValue}).
+     */
+    getValue(name: string): Value | undefined {
+        const instance = this.index.findVariable(name) ? undefined : this.instanceOfName(name);
+        if (instance) {
+            return instance.interpreter.getValue(instance.rest);
+        }
+        return this.values.get(this.resolveVariable(name));
+    }
+
+    /** The runtime type of a variable or constant (`undefined` if it is not known). */
+    getVariableType(name: string): RuntimeType | undefined {
+        const instance = this.index.findVariable(name) ? undefined : this.instanceOfName(name);
+        if (instance) {
+            return instance.interpreter.getVariableType(instance.rest);
+        }
+        return this.variableTypes.get(this.resolveVariable(name));
     }
 
     /** Snapshot of all variables and constants by declared name (`x`, `Iface.x`). */
@@ -1414,7 +1435,7 @@ export class StatechartInterpreter {
                 continue;
             }
             const value = this.evaluator.evaluate(declaration.initialValue);
-            const type = declaredType(declaration.type) ?? typeOfValue(value);
+            const type = declaredType(declaration.type) ?? runtimeTypeOfValue(value);
             this.variableTypes.set(declaration, type);
             this.values.set(declaration, convert(value, type, `Initial value of '${declaration.name}'`, declaration)!);
         }

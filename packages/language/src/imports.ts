@@ -1,5 +1,7 @@
 import { AstUtils, URI, UriUtils, type AstNode, type LangiumCoreServices, type LangiumDocuments, type Reference } from 'langium';
 import * as ast from './generated/ast.js';
+import { cppHeaderStore, loadHeaderClosure, resolveHeaderPath, type CppHeaderStore, type CppImportInfo, type LoadedHeader } from './cpp-headers.js';
+import { CppTypeIndex } from './cpp-header/type-index.js';
 
 /**
  * Imports of other files (`import "motor.hsm"`) and submachine instances.
@@ -14,8 +16,8 @@ import * as ast from './generated/ast.js';
  * {@link importedMachines}, {@link machineType}, {@link instanceMachine} ...).
  *
  * Kinds of imports ({@link importKind}): `.hsm` files (state machines, their names are types),
- * C/C++ headers (`.h`, `.hpp`, ...; accepted but not resolved yet – see {@link HsmImportResolver.resolveHeader},
- * the extension point for the C++ header integration) and everything else (unsupported, an error).
+ * C/C++ headers (`.h`, `.hpp`, ...: their types and constants, see cpp-headers.ts and cpp-types.ts;
+ * resolved relative to the importing file and the include paths) and everything else (unsupported, an error).
  */
 
 /** `hsm`: a state machine file; `header`: a C/C++ header; `unsupported`: any other file. */
@@ -34,11 +36,18 @@ export interface ResolvedImport {
     readonly uri?: URI;
     /** `hsm`: the imported state machine, `undefined` if the file is not loaded. */
     readonly machine?: ast.StateMachine;
-    /**
-     * `header`: the result of the header integration (not implemented yet; a future header resolver
-     * stores the parsed declarations here).
-     */
-    readonly header?: unknown;
+    /** `header`: the result of the header resolution. */
+    readonly header?: ResolvedHeader;
+}
+
+/** A resolved header import. */
+export interface ResolvedHeader {
+    /** Whether the header was found (`uri` of the import is its location). */
+    readonly found: boolean;
+    /** The locations that were searched (the directory of the importing file, then the include paths). */
+    readonly searched: readonly URI[];
+    /** The header and the headers it includes (transitively), empty if it was not found. */
+    readonly headers: readonly LoadedHeader[];
 }
 
 /** The kind of an import path, by its file extension. */
@@ -69,10 +78,27 @@ export function importPaths(machine: ast.StateMachine): ast.ImportPath[] {
 
 const registry = new WeakMap<ast.StateMachine, readonly ResolvedImport[]>();
 const machinesCache = new WeakMap<readonly ResolvedImport[], Map<string, ast.StateMachine>>();
+const cppRegistry = new WeakMap<ast.StateMachine, CppImportInfo>();
+let emptyIndex: CppTypeIndex | undefined;
 
 /** Stores the resolved imports of a state machine (called by the {@link HsmImportResolver}). */
-export function registerImports(machine: ast.StateMachine, imports: readonly ResolvedImport[]): void {
+export function registerImports(machine: ast.StateMachine, imports: readonly ResolvedImport[], cpp?: CppImportInfo): void {
     registry.set(machine, imports);
+    if (cpp) {
+        cppRegistry.set(machine, cpp);
+    } else {
+        cppRegistry.delete(machine);
+    }
+}
+
+/**
+ * The C++ types and constants visible in a state machine: the index over its imported headers (and
+ * the headers they include). Without header imports (or before the machine is linked) an empty
+ * index, which knows the fundamental types and the `<cstdint>` typedefs.
+ */
+export function cppImports(machine: ast.StateMachine | undefined): CppImportInfo {
+    const info = machine ? cppRegistry.get(machine) : undefined;
+    return info ?? { index: emptyIndex ??= new CppTypeIndex([]), headers: [] };
 }
 
 /** The resolved imports of a state machine (empty if it has none or they were not resolved yet). */
@@ -235,16 +261,46 @@ export function isUnresolvedInstance(variable: ast.VariableDeclaration | undefin
 export class HsmImportResolver {
 
     protected readonly documents: LangiumDocuments;
+    readonly headerStore: CppHeaderStore;
 
     constructor(services: LangiumCoreServices) {
         this.documents = services.shared.workspace.LangiumDocuments;
+        this.headerStore = cppHeaderStore(services.shared);
     }
 
     /** Resolves the imports of the state machine of a document and stores them in the registry. */
     update(machine: ast.StateMachine): readonly ResolvedImport[] {
         const imports = this.resolve(machine);
-        registerImports(machine, imports);
+        registerImports(machine, imports, this.cppImports(machine, imports));
         return imports;
+    }
+
+    /** The index over the headers of the resolved imports (`undefined` if there are no header imports). */
+    protected cppImports(machine: ast.StateMachine, imports: readonly ResolvedImport[]): CppImportInfo | undefined {
+        const headers: LoadedHeader[] = [];
+        const seen = new Set<string>();
+        for (const resolved of imports) {
+            for (const header of resolved.header?.headers ?? []) {
+                if (!seen.has(header.uri.toString())) {
+                    seen.add(header.uri.toString());
+                    headers.push(header);
+                }
+            }
+        }
+        if (!imports.some(i => i.kind === 'header')) {
+            return undefined;
+        }
+        const settings = this.headerStore.settingsFor(machine.$document?.uri);
+        return { index: this.headerStore.index(headers, settings), headers };
+    }
+
+    /**
+     * Whether the headers used by the machine changed since it was linked (a header text changed, or
+     * a header that was not found might exist now).
+     */
+    headersChanged(machine: ast.StateMachine): boolean {
+        return resolvedImports(machine).some(i => i.kind === 'header' && i.header !== undefined
+            && (!i.header.found || i.header.headers.some(h => this.headerStore.version(h.uri) !== h.version)));
     }
 
     /** Resolves all import paths of a state machine (without storing the result). */
@@ -267,9 +323,19 @@ export class HsmImportResolver {
         return { node, path, kind, uri, machine: ast.isStateMachine(root) ? root : undefined };
     }
 
-    /** C/C++ headers are not resolved yet (the validator reports an info). */
+    /**
+     * Finds a header in the {@link CppHeaderStore} (relative to the importing file, then in the include
+     * paths) and loads it with the headers it includes.
+     */
     protected resolveHeader(node: ast.ImportPath, path: string, uri: URI | undefined): ResolvedImport {
-        return { node, path, kind: 'header', uri };
+        const base = AstUtils.findRootNode(node).$document?.uri;
+        const settings = this.headerStore.settingsFor(base);
+        const found = resolveHeaderPath(this.headerStore, path, base ? UriUtils.dirname(base) : undefined, settings);
+        if (!found.uri) {
+            return { node, path, kind: 'header', uri: uri ?? found.searched[0], header: { found: false, searched: found.searched, headers: [] } };
+        }
+        const headers = loadHeaderClosure(this.headerStore, found.uri, settings);
+        return { node, path, kind: 'header', uri: found.uri, header: { found: true, searched: found.searched, headers } };
     }
 
     /**

@@ -1,12 +1,13 @@
 import {
     AstUtils, Cancellation, DefaultDocumentBuilder, DefaultLinker,
-    type AstNodeDescription, type LangiumDocument, type LinkingError, type ReferenceInfo
+    type AstNodeDescription, type LangiumCoreServices, type LangiumDocument, type LinkingError, type ReferenceInfo, type ScopeProvider
 } from 'langium';
 import type { LangiumSharedServices } from 'langium/lsp';
 import * as ast from './generated/ast.js';
 import type { HsmServices } from './hsm-module.js';
 import { referenceName, vertexCandidates } from './hsm-scope.js';
 import { resolvedImports } from './imports.js';
+import { setReferenceMembers } from './cpp-types.js';
 
 /**
  * Linker of the HSM language. Improves the error message of vertex references that cannot be
@@ -27,8 +28,16 @@ export class HsmLinker extends DefaultLinker {
         await super.link(document, cancelToken);
     }
 
+    override getCandidate(refInfo: ReferenceInfo): AstNodeDescription | LinkingError {
+        return memberAwareCandidate(refInfo, this.scopeProvider, () => super.getCandidate(refInfo));
+    }
+
     protected override createLinkingError(refInfo: ReferenceInfo, targetDescription?: AstNodeDescription): LinkingError {
         const error = super.createLinkingError(refInfo, targetDescription);
+        if (!targetDescription && ast.isElementReference(refInfo.container) && refInfo.property === 'element') {
+            const hint = cppNameHint(refInfo.reference.$refText);
+            return hint ? { ...error, message: `${error.message} ${hint}` } : error;
+        }
         if (targetDescription || !isVertexReference(refInfo)) {
             return error;
         }
@@ -48,6 +57,61 @@ export class HsmLinker extends DefaultLinker {
             return { ...error, message: regionPointAmbiguityMessage(point.name, point.kind) };
         }
         return { ...error, message: ambiguityMessage(name, names) };
+    }
+}
+
+/**
+ * Linking of element references whose name continues with members of a C++ struct value (`pos.x`,
+ * `cfg.home.y`): if the whole name does not denote a declaration, the longest prefix that names a
+ * variable (or constant) is the referenced declaration and the rest are the members (recorded with
+ * `setReferenceMembers`, read with `referenceMembers`). Whether the members exist is checked by the
+ * type system / validator.
+ */
+export function memberAwareCandidate(refInfo: ReferenceInfo, scopeProvider: ScopeProvider, standard: () => AstNodeDescription | LinkingError): AstNodeDescription | LinkingError {
+    const candidate = standard();
+    const container = refInfo.container;
+    if (!ast.isElementReference(container) || refInfo.property !== 'element') {
+        return candidate;
+    }
+    if (!isLinkingError(candidate)) {
+        setReferenceMembers(container, undefined);
+        return candidate;
+    }
+    const segments = refInfo.reference.$refText.replace(/\s+/g, '').split('.');
+    if (segments.length > 1 && !container.call) {
+        const scope = scopeProvider.getScope(refInfo);
+        for (let length = segments.length - 1; length >= 1; length--) {
+            const description = scope.getElement(segments.slice(0, length).join('.'));
+            if (description && description.type === 'VariableDeclaration') {
+                setReferenceMembers(container, segments.slice(length));
+                return description;
+            }
+        }
+    }
+    setReferenceMembers(container, undefined);
+    return candidate;
+}
+
+function isLinkingError(value: AstNodeDescription | LinkingError): value is LinkingError {
+    return 'info' in value && 'message' in value && !('path' in value);
+}
+
+/** A hint for an unresolved name that is written like a C++ name of the global namespace (`HAL_OK` -> `::HAL_OK`). */
+function cppNameHint(name: string): string | undefined {
+    return /^[A-Za-z_]\w*$/.test(name) && /^(k[A-Z]|[A-Z][A-Z0-9_]+$)/.test(name)
+        ? `(A constant of the global namespace of an imported C++ header is written '::${name}'.)`
+        : undefined;
+}
+
+/** Linker of the test language: members of C++ struct values in element references (`pos.x`). */
+export class HsmTestLinker extends DefaultLinker {
+
+    constructor(services: LangiumCoreServices) {
+        super(services);
+    }
+
+    override getCandidate(refInfo: ReferenceInfo): AstNodeDescription | LinkingError {
+        return memberAwareCandidate(refInfo, this.scopeProvider, () => super.getCandidate(refInfo));
     }
 }
 
@@ -84,7 +148,16 @@ export class HsmDocumentBuilder extends DefaultDocumentBuilder {
             return true;
         }
         const root = document.parseResult.value;
-        return ast.isStateMachine(root) && resolvedImports(root).some(i => i.kind === 'hsm'
-            && (!i.machine || (i.uri !== undefined && changedUris.has(i.uri.toString()))));
+        if (!ast.isStateMachine(root)) {
+            return false;
+        }
+        return resolvedImports(root).some(i => i.kind === 'hsm' && (!i.machine || (i.uri !== undefined && changedUris.has(i.uri.toString()))))
+            || this.headersChanged(root);
+    }
+
+    /** Whether a header imported by the machine changed (or a missing one may exist now). */
+    protected headersChanged(machine: ast.StateMachine): boolean {
+        const services = this.serviceRegistry.getServices(machine.$document!.uri) as Partial<HsmServices>;
+        return services.references?.ImportResolver?.headersChanged(machine) ?? false;
     }
 }

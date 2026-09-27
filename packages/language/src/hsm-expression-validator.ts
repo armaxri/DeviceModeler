@@ -9,7 +9,12 @@ import {
     isCastable, isComparable, isCyclicAlias, isError, isNumeric, resolveTypeAlias, resolveTypeName, returnTypeOf,
     typeName, typeOfAlias, typeOfEvent, typeOfParameter, typeOfTypeReference, typeOfVariable, type HsmType
 } from './hsm-typesystem.js';
-import { hasUnresolvedImports, importedMachines, isInstance, isUnresolvedInstance, machineType, referableName, referencedInstance } from './imports.js';
+import { cppImports, hasUnresolvedImports, importedMachines, isInstance, isUnresolvedInstance, machineType, referableName, referencedInstance } from './imports.js';
+import {
+    contextMachine, cppTypeOfReference, elementOf, isCppType, isReadonlyString, isUnscopedEnum, memberOf, referenceMembers, resolveCppValue
+} from './cpp-types.js';
+import { constantInteger, lvalueOf, rangeWarning, storageOfTarget, storageOfTypeReference } from './cpp-storage.js';
+import { isAssignableArray, memberPathType, typeOfDeclaration } from './hsm-typesystem.js';
 
 /** Annotations that select the execution semantics (see docs/semantics.md §3 and §4). */
 export const SUPPORTED_ANNOTATIONS = ['CycleBased', 'EventDriven', 'ParentFirstExecution', 'ChildFirstExecution'];
@@ -105,6 +110,16 @@ export class HsmExpressionValidator {
         const builtin = resolveTypeName(reference.name);
         const alias = builtin ? undefined : resolveTypeAlias(reference);
         const machine = builtin || alias ? undefined : machineType(reference);
+        const cpp = builtin || alias || machine ? undefined : cppTypeOfReference(reference);
+        if (cpp) {
+            if (cpp.mapping.error) {
+                accept('error', `The C++ type '${reference.name}' cannot be used: ${cpp.mapping.error}.`, { node: reference, property: 'name' });
+            } else if (isReadonlyString(cpp.resolved) && !ast.isCastExpression(reference.$container)) {
+                accept('error', `The C++ type '${reference.name}' (${cpp.resolved.cppName}) cannot store strings; use 'string' (std::string).`,
+                    { node: reference, property: 'name' });
+            }
+            return;
+        }
         if (machine) {
             if (!ast.isVariableDeclaration(reference.$container) || reference.$containerProperty !== 'type') {
                 accept('error', `The state machine type '${reference.name}' can only be used as the type of a variable (a submachine instance).`,
@@ -120,7 +135,8 @@ export class HsmExpressionValidator {
             }
             const imported = container ? [...importedMachines(container).keys()] : [];
             const machines = imported.length > 0 ? `, imported state machines (${imported.join(', ')})` : '';
-            accept('error', `Unknown type '${reference.name}'. Known types are ${BUILTIN_TYPES.join(', ')}${machines} and type aliases ('alias Name : type').`,
+            const headers = cppImports(contextMachine(reference)).headers.length > 0 ? ', the types of the imported C++ headers' : '';
+            accept('error', `Unknown type '${reference.name}'. Known types are ${BUILTIN_TYPES.join(', ')}${machines}${headers} and type aliases ('alias Name : type').`,
                 { node: reference, property: 'name' });
             return;
         }
@@ -174,6 +190,18 @@ export class HsmExpressionValidator {
         if (declared !== 'void' && value !== 'void' && !isAssignable(declared, value)) {
             accept('error', `Type mismatch: the initial value of type ${typeName(value)} cannot be assigned to '${variable.name}' of type ${typeName(declared)}.`,
                 { node: variable, property: 'initialValue' });
+            return;
+        }
+        this.checkRange(variable.initialValue, storageOfTypeReference(variable.type), `'${variable.name}'`, { node: variable, property: 'initialValue' }, accept);
+    }
+
+    /** Warns if a constant integer value is out of the range of the C++ integer storage type it is assigned to. */
+    protected checkRange(value: ast.Expression | undefined, storage: ReturnType<typeof storageOfTypeReference>, target: string,
+        location: { node: AstNode, property?: string, index?: number }, accept: ValidationAcceptor): void {
+        const constant = storage?.kind === 'integer' ? constantInteger(value) : undefined;
+        const warning = constant === undefined ? undefined : rangeWarning(constant, storage, target);
+        if (warning) {
+            accept('warning', warning, location as never);
         }
     }
 
@@ -294,7 +322,9 @@ export class HsmExpressionValidator {
         if (valueType !== 'void' && eventType !== 'void' && !isAssignable(eventType, valueType)) {
             accept('error', `Type mismatch: a value of type ${typeName(valueType)} cannot be assigned to event '${name}' of type ${typeName(eventType)}.`,
                 { node: statement, property: 'value' });
+            return;
         }
+        this.checkRange(statement.value, storageOfTypeReference(event.type), `the event '${name}'`, { node: statement, property: 'value' }, accept);
     }
 
     // -----------------------------------------------------------------------------------------
@@ -311,6 +341,15 @@ export class HsmExpressionValidator {
 
     checkPostfix(expression: ast.PostfixExpression, accept: ValidationAcceptor): void {
         const operand = expression.operand;
+        const target = lvalueOf(operand);
+        if (target?.partial) {
+            this.checkModifiable(target.variable, target.reference, accept);
+            const type = inferType(operand);
+            if (isValueType(type) && !isNumeric(type)) {
+                accept('error', `'${expression.operator}' requires a numeric operand, but the operand is of type ${typeName(type)}.`, { node: expression, property: 'operator' });
+            }
+            return;
+        }
         const element = ast.isElementReference(operand) && !operand.call ? operand.element.ref : undefined;
         if (!ast.isElementReference(operand) || operand.call || (operand.element.ref && !ast.isVariableDeclaration(element))) {
             accept('error', `'${expression.operator}' can only be applied to a variable.`, { node: expression, property: 'operator' });
@@ -333,29 +372,32 @@ export class HsmExpressionValidator {
 
     checkAssignment(assignment: ast.AssignmentExpression, accept: ValidationAcceptor): void {
         const left = assignment.left;
-        if (!ast.isElementReference(left)) {
+        const target = lvalueOf(left);
+        let root = left;
+        while (ast.isMemberAccessExpression(root) || ast.isIndexExpression(root)) {
+            root = root.receiver;
+        }
+        if (!ast.isElementReference(root)) {
             accept('error', 'The left-hand side of an assignment must be a variable.', { node: left });
             return;
         }
-        const element = left.element.ref;
+        const element = root.element.ref;
         if (!element) {
             return; // linking error
         }
-        if (!ast.isVariableDeclaration(element) || left.call) {
+        if (!target) {
             accept('error', 'The left-hand side of an assignment must be a variable.', { node: left });
             return;
         }
-        const name = left.element.$refText;
-        if (isInstance(element)) {
-            accept('error', `Cannot assign to the submachine instance '${name}': instances cannot be assigned.`, { node: left, property: 'element' });
+        const name = target.partial ? nodeTextOf(left) : left.$type === 'ElementReference' ? (left as ast.ElementReference).element.$refText : nodeTextOf(left);
+        if (!this.checkModifiable(target.variable, target.reference, accept)) {
             return;
         }
-        if (element.const) {
-            accept('error', `Cannot assign a value to the constant '${name}'.`, { node: left, property: 'element' });
-        } else if (element.readonly) {
-            accept('error', `Cannot assign a value to the readonly variable '${name}'.`, { node: left, property: 'element' });
+        const variableType = target.partial ? inferType(left) : typeOfVariable(target.variable);
+        if (isCppType(variableType) && variableType.kind === 'array' && !isAssignableArray(variableType)) {
+            accept('error', `The C array '${name}' (${variableType.cppName}) cannot be assigned as a whole; assign its elements.`, { node: left });
+            return;
         }
-        const variableType = typeOfVariable(element);
         const valueType = inferType(assignment.value);
         if (valueType === 'void') {
             return; // reported at the operation call
@@ -365,7 +407,9 @@ export class HsmExpressionValidator {
             if (!isAssignable(variableType, valueType)) {
                 accept('error', `Type mismatch: a value of type ${typeName(valueType)} cannot be assigned to '${name}' of type ${typeName(variableType)}.`,
                     { node: assignment, property: 'value' });
+                return;
             }
+            this.checkRange(assignment.value, storageOfTarget(left), `'${name}'`, { node: assignment, property: 'value' }, accept);
             return;
         }
         const result = binaryResultType(operator, variableType, valueType);
@@ -376,6 +420,91 @@ export class HsmExpressionValidator {
             accept('error', `Type mismatch: the result of '${assignment.operator}' is of type ${typeName(result)} and cannot be assigned to '${name}' of type ${typeName(variableType)}.`,
                 { node: assignment, property: 'value' });
         }
+    }
+
+    /** Whether the variable can be modified (reports constants, readonly variables and instances). */
+    protected checkModifiable(variable: ast.VariableDeclaration, reference: ast.ElementReference, accept: ValidationAcceptor): boolean {
+        const name = reference.element.$refText;
+        if (isInstance(variable)) {
+            accept('error', `Cannot assign to the submachine instance '${name}': instances cannot be assigned.`, { node: reference, property: 'element' });
+            return false;
+        }
+        if (variable.const) {
+            accept('error', `Cannot assign a value to the constant '${name}'.`, { node: reference, property: 'element' });
+        } else if (variable.readonly) {
+            accept('error', `Cannot assign a value to the readonly variable '${name}'.`, { node: reference, property: 'element' });
+        }
+        return true;
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // C++ names, members and elements
+
+    checkCppReference(reference: ast.CppReference, accept: ValidationAcceptor): void {
+        const resolved = resolveCppValue(reference);
+        if (resolved.error) {
+            accept('error', resolved.error, { node: reference, property: 'name' });
+        }
+    }
+
+    checkMemberAccess(expression: ast.MemberAccessExpression, accept: ValidationAcceptor): void {
+        const receiver = inferType(expression.receiver);
+        if (!isValueType(receiver)) {
+            return;
+        }
+        const member = memberOf(receiver, expression.member);
+        if (member.error) {
+            accept('error', `${capitalize(member.error)}.`, { node: expression, property: 'member' });
+        }
+    }
+
+    checkIndex(expression: ast.IndexExpression, accept: ValidationAcceptor): void {
+        const receiver = inferType(expression.receiver);
+        if (isValueType(receiver)) {
+            const element = elementOf(receiver);
+            if (!element) {
+                accept('error', `Only values of C++ array types have elements, but the value is of type ${typeName(receiver)}.`, { node: expression, property: 'receiver' });
+            } else {
+                const index = constantInteger(expression.index);
+                if (index !== undefined && (index < 0n || index >= BigInt(element.length))) {
+                    accept('error', `The index ${index} is out of the bounds of '${typeName(receiver)}' (0..${element.length - 1}).`, { node: expression, property: 'index' });
+                }
+            }
+        }
+        const index = promotedType(inferType(expression.index));
+        if (isValueType(index) && index !== 'integer') {
+            accept('error', `The index must be of type integer, but is of type ${typeName(index)}.`, { node: expression, property: 'index' });
+        }
+    }
+
+    /** Members in the name of an element reference (`pos.x`). */
+    protected checkReferenceMembers(reference: ast.ElementReference, members: readonly string[], accept: ValidationAcceptor): void {
+        const element = reference.element.ref;
+        const base = reference.element.$refText.replace(/\s+/g, '').split('.').slice(0, -members.length).join('.');
+        if (!ast.isVariableDeclaration(element) || reference.call) {
+            accept('error', `'${base}' is not a variable: '${members.join('.')}' cannot be accessed.`, { node: reference, property: 'element' });
+            return;
+        }
+        let type = typeOfDeclaration(element);
+        if (type === 'instance') {
+            const machine = machineType(element.type);
+            accept('error', `The state machine '${machine?.name ?? element.type?.name}' of the instance '${base}' has no interface member '${members.join('.')}'.`,
+                { node: reference, property: 'element' });
+            return;
+        }
+        for (const [i, name] of members.entries()) {
+            if (!isValueType(type)) {
+                return;
+            }
+            const member = memberOf(type, name);
+            if (member.error) {
+                const path = [base, ...members.slice(0, i)].join('.');
+                accept('error', `Cannot access '${name}' of '${path}': ${member.error}.`, { node: reference, property: 'element' });
+                return;
+            }
+            type = member.type!;
+        }
+        void memberPathType;
     }
 
     checkBinary(expression: ast.BinaryExpression, accept: ValidationAcceptor): void {
@@ -470,6 +599,11 @@ export class HsmExpressionValidator {
     checkElementReference(reference: ast.ElementReference, accept: ValidationAcceptor): void {
         const element = reference.element.ref;
         const name = reference.element.$refText;
+        const members = referenceMembers(reference);
+        if (members.length > 0) {
+            this.checkReferenceMembers(reference, members, accept);
+            return;
+        }
         if (ast.isVariableDeclaration(element)) {
             if (reference.call) {
                 accept('error', `'${name}' is a ${element.const ? 'constant' : 'variable'} and cannot be called.`, { node: reference, property: 'call' });
@@ -541,6 +675,8 @@ export class HsmExpressionValidator {
             if (isValueType(argumentType) && parameterType !== 'void' && !isAssignable(parameterType, argumentType)) {
                 accept('error', `Type mismatch: an argument of type ${typeName(argumentType)} cannot be assigned to the parameter '${parameter.name}' of type ${typeName(parameterType)}.`,
                     { node: argument, property: 'value' });
+            } else {
+                this.checkRange(argument.value, storageOfTypeReference(parameter.type), `the parameter '${parameter.name}'`, { node: argument, property: 'value' }, accept);
             }
         }
         const missing = parameters.filter(p => p !== varArgs && !bound.has(p));
@@ -590,9 +726,24 @@ export class HsmDocumentValidator extends DefaultDocumentValidator {
     }
 }
 
-/** Whether a type reference denotes a built-in type, a type alias or an imported state machine. */
+/** Whether a type reference denotes a built-in type, a type alias, an imported state machine or a C++ type. */
 export function isKnownType(reference: ast.TypeReference): boolean {
-    return resolveTypeName(reference.name) !== undefined || resolveTypeAlias(reference) !== undefined || machineType(reference) !== undefined;
+    return resolveTypeName(reference.name) !== undefined || resolveTypeAlias(reference) !== undefined || machineType(reference) !== undefined
+        || cppTypeOfReference(reference) !== undefined;
+}
+
+function capitalize(text: string): string {
+    return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** The text of a node without line breaks (for messages). */
+function nodeTextOf(node: AstNode): string {
+    return (node.$cstNode?.text ?? '').replace(/\s+/g, ' ').trim();
+}
+
+/** Unscoped enums are integers as index / operand. */
+function promotedType(type: HsmType): HsmType {
+    return isUnscopedEnum(type) ? 'integer' : type;
 }
 
 function isFreeAnnotationArgument(node: AstNode): boolean {

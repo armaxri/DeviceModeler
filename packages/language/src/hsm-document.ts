@@ -4,6 +4,8 @@ import { isStateMachine, type StateMachine } from './generated/ast.js';
 import { createHsmServices, type HsmServices } from './hsm-module.js';
 import type { LangiumSharedServices } from 'langium/lsp';
 import { importKind, importPaths, resolveImportUri } from './imports.js';
+import { cppHeaderStore, headerCandidates, includeCandidates, type CppHeaderSettings } from './cpp-headers.js';
+import { UriUtils } from 'langium';
 
 export interface ParsedModel {
     text: string;
@@ -36,6 +38,8 @@ export interface HsmModelLoaderOptions {
      * system of the browser cannot read files).
      */
     readFile?: FileReader;
+    /** Settings of the analysis of imported C/C++ headers (include paths, defines, data model), see cpp-headers.ts. */
+    cppHeaders?: CppHeaderSettings;
 }
 
 export interface LoadOptions {
@@ -63,6 +67,9 @@ export class HsmModelLoader {
 
     constructor(services?: { shared: LangiumSharedServices, Hsm: HsmServices }, options: HsmModelLoaderOptions = {}) {
         this.services = services ?? createHsmServices();
+        if (options.cppHeaders) {
+            cppHeaderStore(this.services.shared).settings = options.cppHeaders;
+        }
         const fileSystem = this.services.shared.workspace.FileSystemProvider;
         this.readFile = options.readFile ?? (async uri => {
             try {
@@ -115,6 +122,10 @@ export function replaceDocument(shared: LangiumSharedServices, uri: URI, text: s
  * from `files` (by URI or by path relative to the first document), else with `readFile`, else the
  * text of an already loaded document. The documents are created anew (and replace loaded ones), so that they
  * can be built together with the importing documents. Returns the new documents (not built yet).
+ *
+ * Imported C/C++ headers (and the headers they include) are put into the {@link cppHeaderStore}: all
+ * header files of `files`, the others from `readFile` (searched relative to the importing file and in
+ * the include paths of the store's settings).
  */
 export async function loadImports(shared: LangiumSharedServices, roots: LangiumDocument[], files: Record<string, string>, readFile: FileReader): Promise<LangiumDocument[]> {
     const documents = shared.workspace.LangiumDocuments;
@@ -124,6 +135,37 @@ export async function loadImports(shared: LangiumSharedServices, roots: LangiumD
         const uri = /^[a-zA-Z][\w+.-]*:/.test(key) && !/^[a-zA-Z]:[\\/]/.test(key) ? URI.parse(key) : base ? resolveImportUri(base, key) : URI.file(key);
         given.set(uri.toString(), text);
     }
+    const store = cppHeaderStore(shared);
+    for (const [key, text] of given) {
+        if (importKind(key) === 'header') {
+            store.setText(key, text);
+        }
+    }
+    const headersSeen = new Set<string>();
+    const loadHeader = async (candidates: URI[], settings: CppHeaderSettings): Promise<void> => {
+        for (const uri of candidates) {
+            const key = uri.toString();
+            if (headersSeen.has(key)) {
+                return;
+            }
+            let text = given.get(key);
+            if (text === undefined && !store.reader) {
+                text = await readFile(uri);
+                if (text !== undefined) {
+                    store.setText(uri, text);
+                }
+            }
+            if (store.get(uri) === undefined) {
+                continue;
+            }
+            headersSeen.add(key);
+            const header = store.load(uri, settings);
+            for (const include of header ? includeCandidates(header.header, uri, settings) : []) {
+                await loadHeader(include, settings);
+            }
+            return;
+        }
+    };
     const seen = new Set(roots.map(d => d.uri.toString()));
     const result: LangiumDocument[] = [];
     const queue = [...roots];
@@ -134,6 +176,11 @@ export async function loadImports(shared: LangiumSharedServices, roots: LangiumD
             continue;
         }
         for (const path of importPaths(root)) {
+            if (path.path && importKind(path.path) === 'header') {
+                const settings = store.settingsFor(document.uri);
+                await loadHeader(headerCandidates(path.path, UriUtils.dirname(document.uri), settings), settings);
+                continue;
+            }
             if (!path.path || importKind(path.path) !== 'hsm') {
                 continue;
             }

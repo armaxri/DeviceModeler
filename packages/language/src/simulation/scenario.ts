@@ -9,8 +9,12 @@ import type { HostValue } from './values.js';
  * `packages/language/test/scenarios/README.md`.
  */
 
-/** A value in a scenario: integers, reals, booleans and strings. */
-export type ScenarioValue = number | boolean | string;
+/**
+ * A value in a scenario: integers, reals, booleans and strings; values of C++ enum types as the
+ * qualified name of the enumerator (`"motor::Mode::Fast"`), structs as objects (`{"x": 1, "y": 2}`,
+ * in expectations only the listed members are compared), arrays as arrays.
+ */
+export type ScenarioValue = number | boolean | string | ScenarioValue[] | { [member: string]: ScenarioValue };
 
 export interface Scenario {
     /** Name of the scenario (defaults to the file name). */
@@ -287,6 +291,18 @@ function normalize(text: string): string {
 function sameValue(actual: HostValue | undefined, expected: ScenarioValue): boolean {
     if (typeof actual === 'number' && typeof expected === 'number') {
         return actual === expected || Math.abs(actual - expected) <= 1e-9 * Math.max(1, Math.abs(expected));
+    }
+    if (Array.isArray(expected)) {
+        return Array.isArray(actual) && actual.length === expected.length && expected.every((e, i) => sameValue(actual[i], e));
+    }
+    if (typeof expected === 'object' && expected !== null) {
+        // structs: the listed members are compared
+        return typeof actual === 'object' && actual !== null && !Array.isArray(actual)
+            && Object.entries(expected).every(([member, e]) => sameValue(actual[member], e));
+    }
+    if (typeof expected === 'string' && typeof actual === 'string') {
+        // enumerators: `motor::Mode::Fast` (also with a leading `::`)
+        return actual === expected || actual === expected.replace(/^::/, '');
     }
     return actual === expected;
 }

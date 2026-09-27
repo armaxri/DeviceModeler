@@ -44,7 +44,10 @@ export function registerValidationChecks(services: HsmServices): void {
         UnaryExpression: expressions.checkUnary,
         ConditionalExpression: expressions.checkConditional,
         CastExpression: expressions.checkCast,
-        ElementReference: expressions.checkElementReference
+        ElementReference: expressions.checkElementReference,
+        CppReference: expressions.checkCppReference,
+        MemberAccessExpression: expressions.checkMemberAccess,
+        IndexExpression: expressions.checkIndex
     };
     registry.register(expressionChecks, expressions);
 }

@@ -48,6 +48,7 @@ export namespace Hsm {
         | "/"
         | "/="
         | ":"
+        | "::"
         | ";"
         | "<"
         | "<<"
@@ -120,6 +121,7 @@ export namespace Hsm {
         BuiltinTrigger: BuiltinTrigger
         CastExpression: CastExpression
         ConditionalExpression: ConditionalExpression
+        CppReference: CppReference
         Declaration: Declaration
         Effect: Effect
         ElementReference: ElementReference
@@ -130,11 +132,13 @@ export namespace Hsm {
         HexLiteral: HexLiteral
         Import: Import
         ImportPath: ImportPath
+        IndexExpression: IndexExpression
         IntLiteral: IntLiteral
         InterfaceScope: InterfaceScope
         InternalScope: InternalScope
         Literal: Literal
         LocalReaction: LocalReaction
+        MemberAccessExpression: MemberAccessExpression
         NullLiteral: NullLiteral
         OperationDeclaration: OperationDeclaration
         Parameter: Parameter
@@ -202,6 +206,7 @@ export namespace HsmTest {
         | "/"
         | "/="
         | ":"
+        | "::"
         | ";"
         | "<"
         | "<<"
@@ -215,6 +220,8 @@ export namespace HsmTest {
         | ">>="
         | "?"
         | "@"
+        | "["
+        | "]"
         | "^"
         | "^="
         | "active"
@@ -267,6 +274,7 @@ export namespace HsmTest {
         BuiltinTrigger: BuiltinTrigger
         CastExpression: CastExpression
         ConditionalExpression: ConditionalExpression
+        CppReference: CppReference
         Declaration: Declaration
         Effect: Effect
         ElementReference: ElementReference
@@ -280,12 +288,14 @@ export namespace HsmTest {
         IfStatement: IfStatement
         Import: Import
         ImportPath: ImportPath
+        IndexExpression: IndexExpression
         IntLiteral: IntLiteral
         InterfaceScope: InterfaceScope
         InternalScope: InternalScope
         Literal: Literal
         LocalReaction: LocalReaction
         LocalVariableStatement: LocalVariableStatement
+        MemberAccessExpression: MemberAccessExpression
         MockStatement: MockStatement
         NullLiteral: NullLiteral
         OperationCallStatement: OperationCallStatement
@@ -342,7 +352,7 @@ export type HsmAstType = Hsm.AstType & HsmTest.AstType
 // all type definitions of the the whole 'Hsm' project
 
 export interface ActiveExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'ActiveExpression';
     state: langium.Reference<Vertex>;
 }
@@ -431,9 +441,9 @@ export function isAssertStatement(item: unknown): item is AssertStatement {
 }
 
 export interface AssignmentExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'AssignmentExpression';
-    left: ElementReference | Expression;
+    left: Expression;
     operator: AssignmentOperator;
     value: Expression;
 }
@@ -471,7 +481,7 @@ export function isAssignmentStatement(item: unknown): item is AssignmentStatemen
 }
 
 export interface BinaryExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'BinaryExpression';
     left: Expression;
     operator: '!=' | '%' | '&&' | '&' | '*' | '+' | '-' | '/' | '<' | '<<' | '<=' | '==' | '>' | '>=' | '>>' | '^' | '|' | '||';
@@ -505,7 +515,7 @@ export function isBlock(item: unknown): item is Block {
 }
 
 export interface BoolLiteral extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'BoolLiteral';
     value: 'false' | 'true';
 }
@@ -535,7 +545,7 @@ export function isBuiltinTrigger(item: unknown): item is BuiltinTrigger {
 }
 
 export interface CastExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'CastExpression';
     operand: Expression;
     type: TypeReference;
@@ -552,7 +562,7 @@ export function isCastExpression(item: unknown): item is CastExpression {
 }
 
 export interface ConditionalExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'ConditionalExpression';
     condition: Expression;
     falseCase: Expression;
@@ -568,6 +578,27 @@ export const ConditionalExpression = {
 
 export function isConditionalExpression(item: unknown): item is ConditionalExpression {
     return reflection.isInstance(item, ConditionalExpression.$type);
+}
+
+export type CppName = string;
+
+export function isCppName(item: unknown): item is CppName {
+    return typeof item === 'string';
+}
+
+export interface CppReference extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $type: 'CppReference';
+    name: CppName;
+}
+
+export const CppReference = {
+    $type: 'CppReference',
+    name: 'name'
+} as const;
+
+export function isCppReference(item: unknown): item is CppReference {
+    return reflection.isInstance(item, CppReference.$type);
 }
 
 export type Declaration = EventDeclaration | OperationDeclaration | TypeAliasDeclaration | VariableDeclaration;
@@ -596,7 +627,7 @@ export function isEffect(item: unknown): item is Effect {
 }
 
 export interface ElementReference extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'ElementReference';
     arguments: Array<Argument>;
     call: boolean;
@@ -674,7 +705,7 @@ export function isExitStatement(item: unknown): item is ExitStatement {
     return reflection.isInstance(item, ExitStatement.$type);
 }
 
-export type Expression = ActiveExpression | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | ElementReference | Literal | ParenthesizedExpression | PostfixExpression | UnaryExpression | ValueOfExpression;
+export type Expression = ActiveExpression | AssignmentExpression | BinaryExpression | CastExpression | ConditionalExpression | CppReference | ElementReference | IndexExpression | Literal | MemberAccessExpression | ParenthesizedExpression | PostfixExpression | UnaryExpression | ValueOfExpression;
 
 export const Expression = {
     $type: 'Expression'
@@ -700,7 +731,7 @@ export function isExpressionStatement(item: unknown): item is ExpressionStatemen
 }
 
 export interface HexLiteral extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'HexLiteral';
     value: string;
 }
@@ -767,6 +798,23 @@ export function isImportPath(item: unknown): item is ImportPath {
     return reflection.isInstance(item, ImportPath.$type);
 }
 
+export interface IndexExpression extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $type: 'IndexExpression';
+    index: Expression;
+    receiver: ElementReference | Expression;
+}
+
+export const IndexExpression = {
+    $type: 'IndexExpression',
+    index: 'index',
+    receiver: 'receiver'
+} as const;
+
+export function isIndexExpression(item: unknown): item is IndexExpression {
+    return reflection.isInstance(item, IndexExpression.$type);
+}
+
 export interface InterfaceScope extends langium.AstNode {
     readonly $container: StateMachine;
     readonly $type: 'InterfaceScope';
@@ -800,7 +848,7 @@ export function isInternalScope(item: unknown): item is InternalScope {
 }
 
 export interface IntLiteral extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'IntLiteral';
     value: number;
 }
@@ -858,6 +906,23 @@ export function isLocalVariableStatement(item: unknown): item is LocalVariableSt
     return reflection.isInstance(item, LocalVariableStatement.$type);
 }
 
+export interface MemberAccessExpression extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $type: 'MemberAccessExpression';
+    member: string;
+    receiver: ElementReference | Expression;
+}
+
+export const MemberAccessExpression = {
+    $type: 'MemberAccessExpression',
+    member: 'member',
+    receiver: 'receiver'
+} as const;
+
+export function isMemberAccessExpression(item: unknown): item is MemberAccessExpression {
+    return reflection.isInstance(item, MemberAccessExpression.$type);
+}
+
 export interface MockStatement extends langium.AstNode {
     readonly $container: Block;
     readonly $type: 'MockStatement';
@@ -880,7 +945,7 @@ export function isMockStatement(item: unknown): item is MockStatement {
 }
 
 export interface NullLiteral extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'NullLiteral';
 }
 
@@ -948,7 +1013,7 @@ export function isParameter(item: unknown): item is Parameter {
 }
 
 export interface ParenthesizedExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'ParenthesizedExpression';
     expression: Expression;
 }
@@ -963,9 +1028,9 @@ export function isParenthesizedExpression(item: unknown): item is ParenthesizedE
 }
 
 export interface PostfixExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'PostfixExpression';
-    operand: ElementReference | Expression;
+    operand: Expression;
     operator: '++' | '--';
 }
 
@@ -1062,7 +1127,7 @@ export function isReactionSpec(item: unknown): item is ReactionSpec {
 }
 
 export interface RealLiteral extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'RealLiteral';
     value: string;
 }
@@ -1173,7 +1238,7 @@ export function isStatement(item: unknown): item is Statement {
 }
 
 export interface StringLiteral extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'StringLiteral';
     value: string;
 }
@@ -1327,7 +1392,7 @@ export function isTypeAliasDeclaration(item: unknown): item is TypeAliasDeclarat
 export interface TypeReference extends langium.AstNode {
     readonly $container: CastExpression | EventDeclaration | OperationDeclaration | Parameter | TypeAliasDeclaration | VariableDeclaration;
     readonly $type: 'TypeReference';
-    name: QualifiedName;
+    name: TypeReferenceName;
 }
 
 export const TypeReference = {
@@ -1339,8 +1404,14 @@ export function isTypeReference(item: unknown): item is TypeReference {
     return reflection.isInstance(item, TypeReference.$type);
 }
 
+export type TypeReferenceName = string;
+
+export function isTypeReferenceName(item: unknown): item is TypeReferenceName {
+    return typeof item === 'string';
+}
+
 export interface UnaryExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'UnaryExpression';
     operand: Expression;
     operator: '!' | '+' | '-' | '~';
@@ -1357,7 +1428,7 @@ export function isUnaryExpression(item: unknown): item is UnaryExpression {
 }
 
 export interface ValueOfExpression extends langium.AstNode {
-    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'ValueOfExpression';
     event: langium.Reference<EventDeclaration>;
 }
@@ -1596,6 +1667,15 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: [Expression.$type]
         },
+        CppReference: {
+            name: CppReference.$type,
+            properties: {
+                name: {
+                    name: CppReference.name
+                }
+            },
+            superTypes: [Expression.$type]
+        },
         Declaration: {
             name: Declaration.$type,
             properties: {
@@ -1739,6 +1819,18 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: []
         },
+        IndexExpression: {
+            name: IndexExpression.$type,
+            properties: {
+                index: {
+                    name: IndexExpression.index
+                },
+                receiver: {
+                    name: IndexExpression.receiver
+                }
+            },
+            superTypes: [Expression.$type]
+        },
         IntLiteral: {
             name: IntLiteral.$type,
             properties: {
@@ -1806,6 +1898,18 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
                 }
             },
             superTypes: [TestStatement.$type]
+        },
+        MemberAccessExpression: {
+            name: MemberAccessExpression.$type,
+            properties: {
+                member: {
+                    name: MemberAccessExpression.member
+                },
+                receiver: {
+                    name: MemberAccessExpression.receiver
+                }
+            },
+            superTypes: [Expression.$type]
         },
         MockStatement: {
             name: MockStatement.$type,

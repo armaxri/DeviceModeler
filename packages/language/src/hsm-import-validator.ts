@@ -1,9 +1,11 @@
-import type { ValidationAcceptor, ValidationChecks } from 'langium';
+import { UriUtils, type ValidationAcceptor, type ValidationChecks } from 'langium';
+import { displayPath, headerDiagnosticMessage } from './cpp-headers.js';
 import * as ast from './generated/ast.js';
 import type { HsmServices } from './hsm-module.js';
 import { resolveTypeName } from './hsm-typesystem.js';
 import {
-    instanceMachine, instanceVariables, isInstance, isUnresolvedInstance, referableName, resolvedImports, type HsmImportResolver
+    cppImports, instanceMachine, instanceVariables, isInstance, isUnresolvedInstance, referableName, resolvedImports, type HsmImportResolver,
+    type ResolvedImport
 } from './imports.js';
 import { isKnownType } from './hsm-expression-validator.js';
 import { isComposite } from './model-utils.js';
@@ -49,7 +51,13 @@ export class HsmImportValidator {
                 continue;
             }
             if (resolved.kind === 'header') {
-                accept('info', `C/C++ header imports are not supported yet; '${resolved.path}' is ignored.`, target);
+                const key = resolved.uri?.toString() ?? resolved.path;
+                if (byUri.has(key)) {
+                    accept('warning', `'${resolved.path}' is imported more than once.`, target);
+                    continue;
+                }
+                byUri.add(key);
+                this.checkHeader(machine, resolved, accept);
                 continue;
             }
             if (resolved.kind === 'unsupported') {
@@ -88,6 +96,34 @@ export class HsmImportValidator {
             if (resolveTypeName(imported.name)) {
                 accept('error', `The imported state machine '${imported.name}' has the name of a built-in type.`, target);
             }
+        }
+    }
+
+    /** A header import: the header must exist; errors in the header (and the headers it includes) are reported at the import. */
+    protected checkHeader(machine: ast.StateMachine, resolved: ResolvedImport, accept: ValidationAcceptor): void {
+        const target = { node: resolved.node, property: 'path' } as const;
+        const base = machine.$document ? UriUtils.dirname(machine.$document.uri) : undefined;
+        const header = resolved.header;
+        if (!header?.found) {
+            const searched = (header?.searched ?? []).map(uri => displayPath(uri.toString(), base));
+            accept('error', `Cannot resolve the import '${resolved.path}': the header was not found${searched.length > 0 ? ` (searched: ${searched.join(', ')})` : ''}. `
+                + 'Include directories are configured in the "headers" block of hsm.gen.json, with -I (CLI) or the setting hsm.headers.includePaths (VS Code).', target);
+            return;
+        }
+        const files = new Set(header.headers.map(h => h.uri.toString()));
+        const diagnostics = cppImports(machine).index.diagnostics.filter(d => files.has(d.fileName));
+        const errors = diagnostics.filter(d => d.severity === 'error');
+        const shown = errors.slice(0, 5);
+        for (const error of shown) {
+            accept('error', `Error in the imported header: ${headerDiagnosticMessage(error, base)}`, target);
+        }
+        if (errors.length > shown.length) {
+            accept('error', `The imported header has ${errors.length - shown.length} further errors (hsm cpp-header ${resolved.path} lists all).`, target);
+        }
+        const warnings = diagnostics.filter(d => d.severity === 'warning');
+        if (warnings.length > 0) {
+            accept('info', `The analysis of '${resolved.path}' reported ${warnings.length === 1 ? 'a warning' : `${warnings.length} warnings`}: `
+                + `${headerDiagnosticMessage(warnings[0], base)}${warnings.length > 1 ? ' (hsm cpp-header lists all)' : ''}`, target);
         }
     }
 

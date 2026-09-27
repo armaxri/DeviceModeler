@@ -1,6 +1,10 @@
 import { AstUtils, type AstNode } from 'langium';
 import * as ast from './generated/ast.js';
 import { machineType } from './imports.js';
+import {
+    cppTypeOfReference, elementOf, isCppType, isEnumType, isStructType, isUnscopedEnum, memberOf, referenceMembers, resolveCppValue,
+    type CppHsmType
+} from './cpp-types.js';
 
 /**
  * Type system of the HSM language (the statechart language of itemis CREATE).
@@ -14,11 +18,17 @@ import { machineType } from './imports.js';
  * `instance` is the type of a submachine instance (a variable whose type is an imported state machine,
  * see imports.ts): instances cannot be assigned, compared or used in operations; only their members
  * (`motor.speed`, `motor.start`) are used.
+ * Imported C++ enums, structs and arrays are types of their own ({@link CppHsmType}, identified by the
+ * qualified C++ name, see cpp-types.ts); C++ integer, floating point, `bool` and string types map to
+ * `integer`, `real`, `boolean` and `string`. Compare types with {@link sameType}.
  */
-export type HsmType = 'integer' | 'real' | 'boolean' | 'string' | 'void' | 'null' | 'instance' | 'error';
+export type HsmType = BuiltinTypeName | 'null' | 'instance' | 'error' | CppHsmType;
+
+/** The names of the built-in types. */
+export type BuiltinTypeName = 'integer' | 'real' | 'boolean' | 'string' | 'void';
 
 /** The types that can be referenced by name in a model. */
-export const BUILTIN_TYPES: readonly HsmType[] = ['integer', 'real', 'boolean', 'string', 'void'];
+export const BUILTIN_TYPES: readonly BuiltinTypeName[] = ['integer', 'real', 'boolean', 'string', 'void'];
 
 export type BinaryOperator = ast.BinaryExpression['operator'];
 export type UnaryOperator = ast.UnaryExpression['operator'];
@@ -26,15 +36,23 @@ export type UnaryOperator = ast.UnaryExpression['operator'];
 /** Effective direction of an event: events of interfaces without direction are `in` events. */
 export type EventDirection = 'in' | 'out' | 'internal';
 
-/** The type with the given name, `undefined` for unknown names. */
-export function resolveTypeName(name: string | undefined): HsmType | undefined {
-    return name !== undefined && (BUILTIN_TYPES as readonly string[]).includes(name) ? name as HsmType : undefined;
+/** The built-in type with the given name, `undefined` for other names. */
+export function resolveTypeName(name: string | undefined): BuiltinTypeName | undefined {
+    return name !== undefined && (BUILTIN_TYPES as readonly string[]).includes(name) ? name as BuiltinTypeName : undefined;
+}
+
+/** Whether two types are the same type (C++ types are compared by their qualified name). */
+export function sameType(a: HsmType, b: HsmType): boolean {
+    if (isCppType(a) || isCppType(b)) {
+        return isCppType(a) && isCppType(b) && a.kind === b.kind && a.cppName === b.cppName;
+    }
+    return a === b;
 }
 
 /**
- * The type denoted by a type reference: a built-in type, a type alias (resolved to its base type) or
- * an imported state machine (`instance`). Unknown type names, missing references and cyclic aliases
- * yield `error`.
+ * The type denoted by a type reference: a built-in type, a type alias (resolved to its base type),
+ * an imported state machine (`instance`) or a C++ type of an imported header (see cpp-types.ts).
+ * Unknown type names, unsupported C++ types, missing references and cyclic aliases yield `error`.
  */
 export function typeOfTypeReference(reference: ast.TypeReference | undefined): HsmType {
     if (!reference) {
@@ -48,7 +66,15 @@ export function typeOfTypeReference(reference: ast.TypeReference | undefined): H
     if (alias) {
         return typeOfAlias(alias);
     }
-    return machineType(reference) ? 'instance' : 'error';
+    return nonAliasType(reference);
+}
+
+/** The type of a reference that is neither a built-in type nor an alias: an imported state machine or a C++ type. */
+function nonAliasType(reference: ast.TypeReference): HsmType {
+    if (machineType(reference)) {
+        return 'instance';
+    }
+    return cppTypeOfReference(reference)?.mapping.type ?? 'error';
 }
 
 /** The base type of a type alias (`error` for cyclic or unresolvable aliases). */
@@ -64,9 +90,31 @@ export function typeOfAlias(alias: ast.TypeAliasDeclaration): HsmType {
         if (builtin) {
             return builtin;
         }
-        current = current.type ? resolveTypeAlias(current.type) : undefined;
+        const next: ast.TypeAliasDeclaration | undefined = current.type ? resolveTypeAlias(current.type) : undefined;
+        if (!next) {
+            return current.type ? nonAliasType(current.type) : 'error';
+        }
+        current = next;
     }
     return 'error';
+}
+
+/**
+ * The type reference that finally determines a type reference through aliases (`alias Speed : motor::Rpm`,
+ * `var s : Speed` -> `motor::Rpm`); the reference itself if it is not an alias. Used for the C++ storage type.
+ */
+export function baseTypeReference(reference: ast.TypeReference | undefined): ast.TypeReference | undefined {
+    const visited = new Set<ast.TypeAliasDeclaration>();
+    let current = reference;
+    while (current && !resolveTypeName(current.name)) {
+        const alias = resolveTypeAlias(current);
+        if (!alias || visited.has(alias)) {
+            return current;
+        }
+        visited.add(alias);
+        current = alias.type;
+    }
+    return current;
 }
 
 /** Whether the alias refers (directly or through other aliases) to itself. */
@@ -148,7 +196,24 @@ export function isAssignable(target: HsmType, source: HsmType): boolean {
     if (target === 'instance' || source === 'instance') {
         return false;
     }
+    if (isCppType(target) || isCppType(source)) {
+        // unscoped enums convert implicitly to integer (and real), like in C++; C arrays cannot be assigned
+        if (sameType(target, source)) {
+            return !isCppType(target) || target.kind !== 'array' || isAssignableArray(target);
+        }
+        return isUnscopedEnum(source) && (target === 'integer' || target === 'real');
+    }
     return target === source || (target === 'real' && source === 'integer') || (target === 'string' && source === 'null');
+}
+
+/** Whether values of an array type can be assigned as a whole (`std::array`, not C arrays). */
+export function isAssignableArray(type: CppHsmType): boolean {
+    return type.resolved.cppName.startsWith('std::array');
+}
+
+/** The type as operand of arithmetic, bitwise and relational operators: unscoped enums are integers (C++ promotion). */
+export function promoted(type: HsmType): HsmType {
+    return isUnscopedEnum(type) ? 'integer' : type;
 }
 
 /** The common type of two types (used for the branches of `?:`), `undefined` if they are incompatible. */
@@ -159,8 +224,13 @@ export function commonType(a: HsmType, b: HsmType): HsmType | undefined {
     if (a === 'instance' || b === 'instance') {
         return undefined;
     }
-    if (a === b) {
+    if (sameType(a, b)) {
         return a;
+    }
+    if (isCppType(a) || isCppType(b)) {
+        const pa = promoted(a);
+        const pb = promoted(b);
+        return !isCppType(pa) && !isCppType(pb) ? commonType(pa, pb) : undefined;
     }
     if (isNumeric(a) && isNumeric(b)) {
         return 'real';
@@ -173,6 +243,10 @@ export function commonType(a: HsmType, b: HsmType): HsmType | undefined {
 
 /** Whether values of the two types can be compared with `==` / `!=`. */
 export function isComparable(a: HsmType, b: HsmType): boolean {
+    // structs and arrays have no `==` (C++ aggregates have no default comparison before C++20)
+    if ((isCppType(a) && a.kind !== 'enum') || (isCppType(b) && b.kind !== 'enum')) {
+        return isError(a) || isError(b);
+    }
     return commonType(a, b) !== undefined && a !== 'void' && b !== 'void';
 }
 
@@ -180,6 +254,14 @@ export function isComparable(a: HsmType, b: HsmType): boolean {
 export function isCastable(source: HsmType, target: HsmType): boolean {
     if (source === 'instance' || target === 'instance') {
         return isError(source) || isError(target);
+    }
+    if (isCppType(source) || isCppType(target)) {
+        if (isError(source) || isError(target) || sameType(source, target)) {
+            return true;
+        }
+        // integer <-> enum (also between enums through their values), like static_cast in C++
+        const integral = (type: HsmType) => type === 'integer' || isEnumType(type);
+        return integral(source) && integral(target);
     }
     return isError(source) || isError(target) || source === target || (isNumeric(source) && isNumeric(target))
         || (source === 'null' && target === 'string');
@@ -192,6 +274,10 @@ export function isCastable(source: HsmType, target: HsmType): boolean {
  */
 export function binaryResultType(operator: BinaryOperator, left: HsmType, right: HsmType): HsmType | undefined {
     const unknown = isError(left) || isError(right);
+    if (operator !== '==' && operator !== '!=') {
+        left = promoted(left);
+        right = promoted(right);
+    }
     switch (operator) {
         case '&&':
         case '||':
@@ -232,6 +318,7 @@ function arithmeticResultType(left: HsmType, right: HsmType): HsmType | undefine
 
 /** The result type of a unary operation, `undefined` if the operator cannot be applied to the operand. */
 export function unaryResultType(operator: UnaryOperator, operand: HsmType): HsmType | undefined {
+    operand = promoted(operand);
     switch (operator) {
         case '!':
             return isError(operand) || operand === 'boolean' ? 'boolean' : undefined;
@@ -330,6 +417,13 @@ function infer(expression: ast.Expression | undefined, visiting: Set<AstNode>): 
         }
         case 'ElementReference': {
             const element = expression.element.ref;
+            const members = referenceMembers(expression);
+            if (members.length > 0) {
+                if (!ast.isVariableDeclaration(element) || expression.call) {
+                    return 'error';
+                }
+                return memberPathType(declarationType(element, visiting), members);
+            }
             if (ast.isVariableDeclaration(element)) {
                 return expression.call ? 'error' : declarationType(element, visiting);
             }
@@ -342,6 +436,12 @@ function infer(expression: ast.Expression | undefined, visiting: Set<AstNode>): 
             }
             return 'error';
         }
+        case 'CppReference':
+            return resolveCppValue(expression).type ?? 'error';
+        case 'MemberAccessExpression':
+            return memberPathType(infer(expression.receiver, visiting), [expression.member]);
+        case 'IndexExpression':
+            return elementOf(infer(expression.receiver, visiting))?.type ?? 'error';
         case 'PostfixExpression': {
             const operand = infer(expression.operand, visiting);
             return isNumeric(operand) ? operand : 'error';
@@ -368,6 +468,22 @@ function infer(expression: ast.Expression | undefined, visiting: Set<AstNode>): 
     }
 }
 
+/** The type of the member path `members` of a value of type `type` (`error` if a member does not exist). */
+export function memberPathType(type: HsmType, members: readonly string[]): HsmType {
+    let current = type;
+    for (const member of members) {
+        if (isError(current)) {
+            return 'error';
+        }
+        const resolved = memberOf(current, member);
+        if (resolved.error) {
+            return 'error';
+        }
+        current = resolved.type!;
+    }
+    return current;
+}
+
 function declarationType(variable: ast.VariableDeclaration, visiting: Set<AstNode>): HsmType {
     if (variable.type) {
         const type = typeOfTypeReference(variable.type);
@@ -386,7 +502,7 @@ function declarationType(variable: ast.VariableDeclaration, visiting: Set<AstNod
     }
 }
 
-/** Default value of a type: `0`, `0.0`, `false`, `""`; `undefined` for `void` and `error`. */
+/** Default value of a built-in type: `0`, `0.0`, `false`, `""`; `undefined` for `void`, `error` and C++ enum / struct / array types. */
 export function defaultValue(type: HsmType): number | boolean | string | undefined {
     switch (type) {
         case 'integer':
@@ -403,5 +519,10 @@ export function defaultValue(type: HsmType): number | boolean | string | undefin
 
 /** Human readable name of a type for diagnostics. */
 export function typeName(type: HsmType): string {
+    if (isCppType(type)) {
+        return type.cppName;
+    }
     return type === 'error' ? 'unknown' : type === 'instance' ? 'state machine instance' : type;
 }
+
+export { isCppType, isEnumType, isStructType };

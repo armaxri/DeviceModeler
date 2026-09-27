@@ -1,7 +1,16 @@
 import type { AstNode } from 'langium';
 import * as ast from '../generated/ast.js';
 import { SimulationError } from './errors.js';
-import { convert, formatValue, int64, declaredType, typeOfValue, type Value } from './values.js';
+import {
+    ArrayValue, convert, declaredType, EnumValue, formatValue, fromCppValue, int64, integerOf, isIntegerType, runtimeTypeOfCpp, StructValue,
+    typeOfValue, valuesEqual, type RuntimeType, type Value
+} from './values.js';
+import { isCppType, referenceMembers, resolveCppValue } from '../cpp-types.js';
+import { wrapInteger } from '../cpp-storage.js';
+import type { CppConstantInfo, CppTypeIndex } from '../cpp-header/type-index.js';
+
+/** A step from a value to a part of it: a struct member or an array element. */
+type PathStep = { readonly member: string } | { readonly index: number };
 
 /** Access of the expression evaluator to the state of the running state machine. */
 export interface EvaluationContext {
@@ -33,6 +42,11 @@ export interface EvaluationContext {
  * arithmetic, comparisons and assignments to `real` variables. The operand types follow
  * `hsm-typesystem.ts` (`%`, bitwise and shift operators: integers; `+` on strings: concatenation;
  * relational operators: numbers); invalid operands are runtime errors.
+ *
+ * Values of imported C++ types (docs/cpp-integration.md): enum values compare by value, unscoped enum
+ * values are integers in arithmetic; members (`pos.x`) and elements (`a[i]`) are read and assigned
+ * (an assignment to a member replaces the whole struct value of the variable); values assigned to
+ * places of C++ integer types wrap around to the width of the type.
  */
 export class ExpressionEvaluator {
 
@@ -112,6 +126,24 @@ export class ExpressionEvaluator {
             }
             case 'ElementReference':
                 return this.reference(expression as ast.ElementReference);
+            case 'CppReference': {
+                const node = expression as ast.CppReference;
+                const resolved = resolveCppValue(node);
+                if (resolved.error) {
+                    throw new SimulationError(resolved.error, node);
+                }
+                const { info, index } = resolved as { info: CppConstantInfo, index: CppTypeIndex };
+                return fromCppValue(info.value!, runtimeTypeOfCpp(info.type, index));
+            }
+            case 'MemberAccessExpression': {
+                const node = expression as ast.MemberAccessExpression;
+                return readPath(this.evaluate(node.receiver), [{ member: node.member }], node);
+            }
+            case 'IndexExpression': {
+                const node = expression as ast.IndexExpression;
+                const receiver = this.evaluate(node.receiver);
+                return readPath(receiver, [{ index: this.index(node, receiver) }], node);
+            }
             case 'UnaryExpression':
                 return this.unary(expression as ast.UnaryExpression);
             case 'BinaryExpression':
@@ -142,7 +174,9 @@ export class ExpressionEvaluator {
             if (node.call) {
                 throw new SimulationError(`'${element.name}' is a variable, not an operation`, node);
             }
-            return this.context.getVariable(element, node);
+            const members = referenceMembers(node);
+            const value = this.context.getVariable(element, node);
+            return members.length === 0 ? value : readPath(value, members.map(member => ({ member })), node);
         }
         if (ast.isOperationDeclaration(element)) {
             return this.call(element, node);
@@ -200,10 +234,14 @@ export class ExpressionEvaluator {
                 return !this.boolean(operand, node.operand);
             case '~':
                 return int64(~this.integer(operand, node));
-            case '-':
-                return typeof operand === 'bigint' ? int64(-operand) : -this.number(operand, node);
-            case '+':
-                return typeof operand === 'bigint' ? operand : this.number(operand, node);
+            case '-': {
+                const integer = integerOf(operand);
+                return integer !== undefined ? int64(-integer) : -this.number(operand, node);
+            }
+            case '+': {
+                const integer = integerOf(operand);
+                return integer !== undefined ? integer : this.number(operand, node);
+            }
         }
     }
 
@@ -223,9 +261,9 @@ export class ExpressionEvaluator {
     private applyBinary(operator: string, left: Value, right: Value, node: AstNode): Value {
         switch (operator) {
             case '==':
-                return equals(left, right);
+                return valuesEqual(left, right);
             case '!=':
-                return !equals(left, right);
+                return !valuesEqual(left, right);
             case '<': case '<=': case '>': case '>=': {
                 const [a, b] = this.numericPair(left, right, operator, node);
                 switch (operator) {
@@ -264,7 +302,10 @@ export class ExpressionEvaluator {
         }
     }
 
-    private arithmetic(operator: string, left: Value, right: Value, node: AstNode): Value {
+    private arithmetic(operator: string, leftValue: Value, rightValue: Value, node: AstNode): Value {
+        // unscoped enum values are integers in arithmetic (C++ integral promotion)
+        const left = integerOf(leftValue) ?? leftValue;
+        const right = integerOf(rightValue) ?? rightValue;
         if (typeof left === 'bigint' && typeof right === 'bigint') {
             switch (operator) {
                 case '+': return int64(left + right);
@@ -289,7 +330,9 @@ export class ExpressionEvaluator {
         }
     }
 
-    private numericPair(left: Value, right: Value, operator: string, node: AstNode): [number, number] {
+    private numericPair(leftValue: Value, rightValue: Value, operator: string, node: AstNode): [number, number] {
+        const left = integerOf(leftValue) ?? leftValue;
+        const right = integerOf(rightValue) ?? rightValue;
         if ((typeof left !== 'bigint' && typeof left !== 'number') || (typeof right !== 'bigint' && typeof right !== 'number')) {
             throw new SimulationError(`Operator '${operator}' cannot be applied to ${typeOfValue(left)} and ${typeOfValue(right)}`, node);
         }
@@ -299,9 +342,18 @@ export class ExpressionEvaluator {
     private cast(node: ast.CastExpression): Value {
         const value = this.evaluate(node.operand);
         const target = declaredType(node.type);
+        if (isCppType(target) || typeof target === 'object') {
+            return this.cppCast(value, target, node);
+        }
         const actual = typeOfValue(value);
         if (target === actual) {
             return value;
+        }
+        if (target === 'integer' && value instanceof EnumValue) {
+            return value.value;
+        }
+        if (target === 'real' && value instanceof EnumValue) {
+            return Number(value.value);
         }
         if (target === 'real' && actual === 'integer') {
             return Number(value);
@@ -316,34 +368,102 @@ export class ExpressionEvaluator {
         throw new SimulationError(`Cannot cast ${actual} to ${node.type.name}`, node);
     }
 
-    /** `x++` / `x--`: updates the variable, the value is the value before the update. */
-    private postfix(node: ast.PostfixExpression): Value {
-        const variable = this.variableOf(node.operand, `The operand of '${node.operator}' must be a variable`);
-        const current = this.context.getVariable(variable, node.operand);
-        if (typeof current !== 'bigint' && typeof current !== 'number') {
-            throw new SimulationError(`'${node.operator}' requires a numeric variable but '${variable.name}' is ${typeOfValue(current)}`, node);
+    /** `x as T` for C++ types: integer / enum values to an enum type, integers to a C++ integer type (wrap-around). */
+    private cppCast(value: Value, target: RuntimeType, node: ast.CastExpression): Value {
+        if (isCppType(target)) {
+            if (target.resolved.kind === 'enum') {
+                const integer = typeof value === 'bigint' ? value : value instanceof EnumValue ? value.value : undefined;
+                if (integer !== undefined) {
+                    return new EnumValue(target, wrapInteger(integer, target.resolved.underlying));
+                }
+            } else if ((value instanceof StructValue || value instanceof ArrayValue) && value.type.cppName === target.cppName) {
+                return value;
+            }
+            throw new SimulationError(`Cannot cast ${typeOfValue(value)} to ${target.cppName}`, node);
         }
-        this.context.assignVariable(variable, this.arithmetic(node.operator === '++' ? '+' : '-', current, 1n, node), node, node.operand);
+        return convert(isIntegerType(target) && typeof value === 'number' ? this.truncate(value, node) : value instanceof EnumValue ? value.value : value,
+            target, `Cast to ${node.type.name}`, node)!;
+    }
+
+    private truncate(number: number, node: AstNode): bigint {
+        if (!Number.isFinite(number)) {
+            throw new SimulationError(`Cannot convert ${formatValue(number)} to integer`, node);
+        }
+        return int64(BigInt(Math.trunc(number)));
+    }
+
+    /** `x++` / `x--`: updates the variable (or member / element), the value is the value before the update. */
+    private postfix(node: ast.PostfixExpression): Value {
+        const target = this.lvalue(node.operand, `The operand of '${node.operator}' must be a variable`);
+        const current = target.read();
+        if (typeof current !== 'bigint' && typeof current !== 'number') {
+            throw new SimulationError(`'${node.operator}' requires a numeric variable but '${target.variable.name}' is ${typeOfValue(current)}`, node);
+        }
+        target.write(this.arithmetic(node.operator === '++' ? '+' : '-', current, 1n, node), node);
         return current;
     }
 
-    private variableOf(target: ast.Expression, message: string): ast.VariableDeclaration {
-        const variable = ast.isElementReference(target) && !target.call ? target.element.ref : undefined;
-        if (!variable || !ast.isVariableDeclaration(variable)) {
+    /**
+     * An assignable place: a variable, or a member / element of the value of a variable (`pos.x`,
+     * `a[i]`, `cfg.gains[1]`; index expressions are evaluated once, from left to right).
+     */
+    private lvalue(target: ast.Expression, message: string): { variable: ast.VariableDeclaration, read: () => Value, write: (value: Value, node: AstNode) => Value } {
+        const steps: Array<{ readonly member: string } | ast.IndexExpression> = [];
+        let current = target;
+        while (ast.isMemberAccessExpression(current) || ast.isIndexExpression(current)) {
+            steps.unshift(ast.isMemberAccessExpression(current) ? { member: current.member } : current);
+            current = current.receiver;
+        }
+        const reference = current;
+        const variable = ast.isElementReference(reference) && !reference.call ? reference.element.ref : undefined;
+        if (!ast.isElementReference(reference) || !variable || !ast.isVariableDeclaration(variable)) {
             throw new SimulationError(message, target);
         }
-        return variable;
+        const path: PathStep[] = referenceMembers(reference).map(member => ({ member }));
+        if (path.length === 0 && steps.length === 0) {
+            return {
+                variable,
+                read: () => this.context.getVariable(variable, reference),
+                write: (value, node) => this.context.assignVariable(variable, value, node, reference)
+            };
+        }
+        for (const step of steps) {
+            if ('member' in step) {
+                path.push(step);
+            } else {
+                const receiver = readPath(this.context.getVariable(variable, reference), path, step);
+                path.push({ index: this.index(step, receiver) });
+            }
+        }
+        return {
+            variable,
+            read: () => readPath(this.context.getVariable(variable, reference), path, target),
+            write: (value, node) => {
+                const root = this.context.getVariable(variable, reference);
+                const { value: updated, stored } = writePath(root, path, value, node);
+                this.context.assignVariable(variable, updated, node, reference);
+                return stored;
+            }
+        };
+    }
+
+    /** The index of an element access (checked against the length of the array). */
+    private index(node: ast.IndexExpression, receiver: Value): number {
+        const index = this.integer(this.evaluate(node.index), node.index);
+        const length = receiver instanceof ArrayValue ? receiver.elements.length : 0;
+        if (index < 0n || index >= BigInt(length)) {
+            throw new SimulationError(`Index ${index} is out of bounds 0..${length - 1}`, node);
+        }
+        return Number(index);
     }
 
     private assignment(node: ast.AssignmentExpression): Value {
-        const target = node.left;
-        const variable = this.variableOf(target, 'The left side of an assignment must be a variable');
+        const target = this.lvalue(node.left, 'The left side of an assignment must be a variable');
         let value = this.evaluate(node.value);
         if (node.operator !== '=') {
-            const current = this.context.getVariable(variable, target);
-            value = this.applyBinary(node.operator.slice(0, -1), current, value, node);
+            value = this.applyBinary(node.operator.slice(0, -1), target.read(), value, node);
         }
-        return this.context.assignVariable(variable, value, node, target);
+        return target.write(value, node);
     }
 
     private boolean(value: Value, node: AstNode): boolean {
@@ -354,10 +474,11 @@ export class ExpressionEvaluator {
     }
 
     private integer(value: Value, node: AstNode): bigint {
-        if (typeof value !== 'bigint') {
+        const integer = integerOf(value);
+        if (integer === undefined) {
             throw new SimulationError(`Expected an integer value but got ${formatValue(value)}`, node);
         }
-        return value;
+        return integer;
     }
 
     private number(value: Value, node: AstNode): number {
@@ -368,9 +489,50 @@ export class ExpressionEvaluator {
     }
 }
 
-function equals(left: Value, right: Value): boolean {
-    if ((typeof left === 'bigint' || typeof left === 'number') && (typeof right === 'bigint' || typeof right === 'number')) {
-        return typeof left === typeof right ? left === right : Number(left) === Number(right);
+/** The part of a value at a path of members / elements. */
+export function readPath(value: Value, path: readonly PathStep[], node: AstNode): Value {
+    let current = value;
+    for (const step of path) {
+        if ('member' in step) {
+            if (!(current instanceof StructValue) || !current.fields.has(step.member)) {
+                throw new SimulationError(`${formatValue(current)} has no member '${step.member}'`, node);
+            }
+            current = current.fields.get(step.member)!;
+        } else {
+            if (!(current instanceof ArrayValue) || step.index < 0 || step.index >= current.elements.length) {
+                throw new SimulationError(`${formatValue(current)} has no element ${step.index}`, node);
+            }
+            current = current.elements[step.index];
+        }
     }
-    return left === right;
+    return current;
+}
+
+/**
+ * A copy of `value` with the part at `path` replaced by `leaf` (converted to the type of the member /
+ * element, e.g. wrapped to the width of a C++ integer type); returns the new value and the stored leaf.
+ */
+function writePath(value: Value, path: readonly PathStep[], leaf: Value, node: AstNode): { value: Value, stored: Value } {
+    if (path.length === 0) {
+        return { value: leaf, stored: leaf };
+    }
+    const [step, ...rest] = path;
+    if ('member' in step) {
+        if (!(value instanceof StructValue) || !value.fields.has(step.member)) {
+            throw new SimulationError(`${formatValue(value)} has no member '${step.member}'`, node);
+        }
+        const field = (value.type.resolved.kind === 'struct' ? value.type.resolved.fields : []).find(f => f.name === step.member);
+        const inner = rest.length === 0
+            ? { value: convert(leaf, field ? runtimeTypeOfCpp(field.type, value.type.index) : undefined, `Assignment to member '${step.member}'`, node)!, stored: undefined }
+            : writePath(value.fields.get(step.member)!, rest, leaf, node);
+        return { value: value.with(step.member, inner.value), stored: inner.stored ?? inner.value };
+    }
+    if (!(value instanceof ArrayValue) || step.index < 0 || step.index >= value.elements.length) {
+        throw new SimulationError(`${formatValue(value)} has no element ${step.index}`, node);
+    }
+    const element = value.type.resolved.kind === 'array' ? runtimeTypeOfCpp(value.type.resolved.element, value.type.index) : undefined;
+    const inner = rest.length === 0
+        ? { value: convert(leaf, element, `Assignment to element ${step.index}`, node)!, stored: undefined }
+        : writePath(value.elements[step.index], rest, leaf, node);
+    return { value: value.with(step.index, inner.value), stored: inner.stored ?? inner.value };
 }
