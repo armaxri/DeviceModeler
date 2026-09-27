@@ -1,0 +1,142 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "HSM generator configuration (hsm.gen.json)",
+    "description": "Which state machine models (.hsm) are generated for which targets with which options. Used by `hsm generate` and the CMake function hsm_generate. Relative paths are relative to the configuration file.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["models"],
+    "anyOf": [
+        { "required": ["cpp"] },
+        { "required": ["c"] }
+    ],
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "models": {
+            "description": "Paths or globs (`*`, `?`, `**`) of .hsm files, optionally with options overriding the target options for these models (applied in order).",
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "anyOf": [
+                    { "type": "string", "minLength": 1 },
+                    {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["path"],
+                        "properties": {
+                            "path": { "type": "string", "minLength": 1, "description": "Path or glob of .hsm files." },
+                            "cpp": { "$ref": "#/definitions/cpp" },
+                            "c": { "$ref": "#/definitions/c" }
+                        }
+                    }
+                ]
+            }
+        },
+        "cpp": { "$ref": "#/definitions/cpp" },
+        "c": { "$ref": "#/definitions/c" },
+        "writeOnlyIfChanged": {
+            "description": "Only write files whose content changed, keeping the modification time of the others so that build systems do not recompile them (default: true).",
+            "type": "boolean",
+            "default": true
+        }
+    },
+    "definitions": {
+        "outDir": {
+            "description": "Output directory, relative to the configuration file (default: the directory of each model). hsm generate --out and hsm_generate(OUTPUT_DIR) override it.",
+            "type": "string"
+        },
+        "headerExtension": {
+            "description": "Extension of the generated headers, including the dot (default: .h). The includes of the generated files are adapted.",
+            "type": "string",
+            "pattern": "^\\.[A-Za-z0-9_+]+$",
+            "examples": [".h", ".hpp", ".hh"]
+        },
+        "licenseHeader": {
+            "description": "Text put at the top of every generated file (a string or an array of lines). Wrapped in a /* */ comment unless it starts with // or /*.",
+            "anyOf": [
+                { "type": "string" },
+                { "type": "array", "items": { "type": "string" } }
+            ]
+        },
+        "licenseHeaderFile": {
+            "description": "File (relative to the configuration file) whose text is used as licenseHeader.",
+            "type": "string"
+        },
+        "maxMicrosteps": {
+            "description": "Maximum number of transitions per step and of queued event steps per call (default: 1000).",
+            "type": "integer",
+            "minimum": 1
+        },
+        "identifier": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "cpp": {
+            "description": "Generate C++ (a class per state machine plus the runtime header sc_statemachine.h).",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "outDir": { "$ref": "#/definitions/outDir" },
+                "namespace": {
+                    "description": "Namespace of the generated classes, e.g. app::sm (default: the namespace of the model; \"\": the global namespace).",
+                    "type": "string"
+                },
+                "className": {
+                    "description": "Name of the class and its files (default: the state machine name). Only useful in the options of a single model.",
+                    "$ref": "#/definitions/identifier"
+                },
+                "std": {
+                    "description": "C++ standard the code is written for (default: 17).",
+                    "enum": [17, 11, "17", "11"],
+                    "default": 17
+                },
+                "headerExtension": { "$ref": "#/definitions/headerExtension" },
+                "sourceExtension": {
+                    "description": "Extension of the generated sources, including the dot (default: .cpp).",
+                    "type": "string",
+                    "pattern": "^\\.[A-Za-z0-9_+]+$",
+                    "examples": [".cpp", ".cc", ".cxx"]
+                },
+                "licenseHeader": { "$ref": "#/definitions/licenseHeader" },
+                "licenseHeaderFile": { "$ref": "#/definitions/licenseHeaderFile" },
+                "maxMicrosteps": { "$ref": "#/definitions/maxMicrosteps" }
+            }
+        },
+        "c": {
+            "description": "Generate C99 (a .h / .c pair per state machine plus sc_types.h).",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "outDir": { "$ref": "#/definitions/outDir" },
+                "prefix": {
+                    "description": "Prefix of the functions and file names (default: the state machine name in snake case). Only useful in the options of a single model.",
+                    "$ref": "#/definitions/identifier"
+                },
+                "typeName": {
+                    "description": "Name of the handle type (default: the state machine name).",
+                    "$ref": "#/definitions/identifier"
+                },
+                "stringCapacity": {
+                    "description": "Size of string buffers including the terminating 0 (default: 64).",
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "queueCapacity": {
+                    "description": "Capacity of the event queues of event driven machines (default: 16).",
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "headerExtension": { "$ref": "#/definitions/headerExtension" },
+                "sourceExtension": {
+                    "description": "Extension of the generated sources, including the dot (default: .c).",
+                    "type": "string",
+                    "pattern": "^\\.[A-Za-z0-9_+]+$"
+                },
+                "licenseHeader": { "$ref": "#/definitions/licenseHeader" },
+                "licenseHeaderFile": { "$ref": "#/definitions/licenseHeaderFile" },
+                "maxMicrosteps": { "$ref": "#/definitions/maxMicrosteps" }
+            }
+        }
+    }
+}

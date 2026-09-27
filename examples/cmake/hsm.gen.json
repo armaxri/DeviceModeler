@@ -1,0 +1,16 @@
+{
+    "$schema": "../../packages/language/schemas/hsm-gen.schema.json",
+    "models": ["../cd-player.hsm"],
+    "cpp": {
+        "outDir": "generated",
+        "namespace": "example::player",
+        "std": 17,
+        "headerExtension": ".hpp",
+        "sourceExtension": ".cc",
+        "licenseHeader": [
+            "Copyright (c) 2026 The HSM example authors",
+            "SPDX-License-Identifier: MIT"
+        ]
+    },
+    "writeOnlyIfChanged": true
+}

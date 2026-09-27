@@ -94,7 +94,15 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
   operations of the state machine cannot be called from tests
 - 💭 Further generator targets only on demand (currently none planned); they can build on the shared
   generator core (`src/generator/common`)
-- 💭 Generator configuration model (like itemis `.sgen` files)
+- ✅ Generator configuration (`hsm.gen.json`, like itemis `.sgen` files) with a JSON schema: models (globs),
+  per target and per model options (output directory, namespace, class name, standard, prefix, file
+  extensions, license header), only changed files are written; `hsm generate` (no arguments),
+  `--check` for CI, `--list-outputs` / `--list-inputs` for build systems
+- ✅ CMake integration (`cmake/HsmGenerate.cmake`): `hsm_generate()` regenerates the code at build time when a
+  model changes (only changed files are recompiled), `hsm_add_tests()` runs `.hsmtest` files with CTest
+  (JUnit reports); example project `examples/cmake` built and tested by `npm test` (Ninja / Makefiles)
+  - 📋 still missing: generated GoogleTest targets from `.hsmtest` files, verification on Windows / MSVC,
+    shipping the CMake module with the npm package (currently the `cmake/` directory of the repository)
 
 ## Phase 6 – Tooling 💭
 
