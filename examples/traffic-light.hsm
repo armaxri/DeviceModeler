@@ -1,4 +1,8 @@
 // A pedestrian traffic light - hierarchical states, interfaces, time events and guards.
+/**
+ * Traffic light with a pedestrian request button. The lights are switched
+ * by the host through the internal operation `switchOn`.
+ */
 statemachine TrafficLight {
     @CycleBased(100)
 
@@ -7,17 +11,22 @@ statemachine TrafficLight {
         in event powerOff
         in event failure
         in event reset
+        /** Raised with the bit mask of the lights when the light turns red. */
         out event lightsChanged : integer
 
+    /** Push button of the pedestrian crossing. */
     interface Pedestrian:
         in event request
+        /** A pedestrian has pressed the button and waits for red. */
         var waiting : boolean = false
 
     internal:
         const RED : integer = 1
         const YELLOW : integer = 2
         const GREEN : integer = 4
+        /** Bit mask of the lights that are on (`RED`, `YELLOW`, `GREEN`). */
         var lights : integer = 0
+        /** Switches the lamps of the mask on and all others off. */
         operation switchOn(mask : integer) : void
 
     [*] -> Off
@@ -45,10 +54,12 @@ statemachine TrafficLight {
 
         Red -> RedYellow : after 20 s
         RedYellow -> Green : after 2 s
+        /** Green lasts at least 30 s and only ends when a pedestrian is waiting. */
         Green -> Yellow : after 30 s [Pedestrian.waiting]
         Yellow -> Red : after 3 s / Pedestrian.waiting = false
     }
 
+    /** Failure mode: the yellow light blinks. */
     state Blinking {
         every 500 ms / lights = lights ^ YELLOW; switchOn(lights)
     }

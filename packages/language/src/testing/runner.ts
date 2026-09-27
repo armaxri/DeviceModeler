@@ -8,6 +8,7 @@ import { formatTraceEntry } from '../simulation/scenario.js';
 import {
     convert, declaredType, defaultValueOf, formatValue, fromHost, toHost, typeOfValue, type HostValue, type TypeName, type Value
 } from '../simulation/values.js';
+import type { CoverageCollector } from './coverage.js';
 import { builtinVariable, isLocalVariable } from './hsm-test-scope.js';
 import { CYCLE_UNITS, hasAnnotation } from './hsm-test-validator.js';
 
@@ -42,6 +43,8 @@ export interface TestRunOptions {
     onTrace?: (line: string) => void;
     /** Called after every test. */
     onResult?: (result: TestResult) => void;
+    /** Collects the model coverage of the tests (states, transitions, reactions, guards); see `coverage.ts`. */
+    coverage?: CoverageCollector;
 }
 
 /** A failed assertion. */
@@ -122,8 +125,12 @@ class TestExecution {
         this.trace = [];
         this.budget = this.options.maxIterations ?? 100000;
         this.current = undefined;
+        const coverage = this.options.coverage;
+        coverage?.register(this.machine);
+        coverage?.beginTest(`${this.testClass.name}.${operation.name}`);
         try {
-            this.sim = new StatechartInterpreter(this.machine, { onTrace: entry => this.onTrace(entry) });
+            const simulationOptions = { onTrace: (entry: TraceEntry) => this.onTrace(entry) };
+            this.sim = new StatechartInterpreter(this.machine, coverage ? coverage.attach(simulationOptions) : simulationOptions);
             this.evaluator = new ExpressionEvaluator(this.createContext());
             const setUp = this.testClass.operations.find(op => hasAnnotation(op, 'SetUp'));
             if (setUp) {
@@ -139,6 +146,8 @@ class TestExecution {
                 ...base, status: failure ? 'failed' : 'error', message, line: node ? lineOf(node) : undefined,
                 trace: this.trace, durationMs: Date.now() - start
             };
+        } finally {
+            coverage?.endTest();
         }
     }
 

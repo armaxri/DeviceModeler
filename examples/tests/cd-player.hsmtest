@@ -85,4 +85,26 @@ testclass CdPlayerTest for statemachine CdPlayer {
         proceed 1 cycle
         assert is_final
     }
+
+    @Test
+    operation stopReturnsToStopped() {
+        press(1)
+        raise trackEnd
+        proceed 1 cycle
+        raise stop
+        proceed 1 cycle
+        assert active(Closed.Stopped)
+        assert track == 1 message "entering Stopped resets the track"
+        assert called stopMotor times 1
+    }
+
+    @Test
+    operation powerOffWhileOpen() {
+        raise eject
+        proceed 1 cycle
+        assert active(Open)
+        raise powerOff
+        proceed 1 cycle
+        assert is_final
+    }
 }

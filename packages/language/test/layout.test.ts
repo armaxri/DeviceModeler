@@ -99,7 +99,7 @@ describe('diagram content', () => {
             } else {
                 expect(fork.height).toBeGreaterThan(fork.width);
             }
-            expect(graph.edges.find(e => e.source === 'Closed' && e.target === 'Moving')?.label?.text).toBe('open # >Opening');
+            expect(graph.edges.find(e => e.source === 'Closed' && e.target === 'Moving')?.label?.text).toBe('1: open # >Opening');
         }
     });
 

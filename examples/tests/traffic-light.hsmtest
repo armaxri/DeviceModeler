@@ -61,4 +61,23 @@ testclass TrafficLightTest for statemachine TrafficLight {
         assert active(Off)
         assert called switchOn with (0) times 2 message "Off is entered twice"
     }
+
+    @Test
+    operation resetAfterFailure() {
+        raise failure
+        proceed 1 cycle
+        raise reset
+        proceed 1 cycle
+        assert active(Operating.Red) message "reset restarts the phases with red"
+    }
+
+    @Test
+    operation powerOffWhileBlinking() {
+        raise failure
+        proceed 1 cycle
+        raise powerOff
+        proceed 1 cycle
+        assert active(Off)
+        assert lights == 0
+    }
 }

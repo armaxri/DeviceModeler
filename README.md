@@ -63,11 +63,18 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
   become `<<fork>>` / `<<join>>`, entry points / exit nodes `<<entryPoint>>` / `<<exitPoint>>`, the
   definition section a legend.
 - **CLI** for validation, PlantUML generation and layout computation.
+- **Rendering and documentation without a browser**: `hsm render` writes the diagrams as SVG files that look
+  like the editor's export, `hsm doc` generates Markdown or HTML documentation of models (diagram,
+  interfaces, states, transitions and `/** … */` doc comments) – see [Rendering diagrams](#rendering-diagrams)
+  and [Model documentation](#model-documentation), examples in [`docs/examples`](docs/examples/index.md).
 - **Unit tests** for state machines in the style of SCTUnit (`.hsmtest` files, see [Unit tests](#unit-tests)),
   executed by the interpreter, with JUnit XML reports for CI.
 - **Code generation** for **C++** (a class per state machine like itemis CREATE, see
   [Code generation (C++)](#code-generation-c)) and C99, both verified against the conformance suite of the
   interpreter by compiling and running every scenario.
+- **Build integration**: a generator configuration file (`hsm.gen.json`, like the `.sgen` files of itemis
+  CREATE), `hsm generate --check` for CI and CMake functions (`hsm_generate`, `hsm_add_tests`) that
+  regenerate the code when a model changes (see [Build integration (CMake)](#build-integration-cmake)).
 
 ## Getting started
 
@@ -93,13 +100,100 @@ npm run build -w packages/language
 node packages/language/bin/cli.js validate examples/cd-player.hsm
 node packages/language/bin/cli.js plantuml examples/cd-player.hsm -o cd-player.puml
 node packages/language/bin/cli.js layout examples/keyboard.hsm --direction RIGHT
+node packages/language/bin/cli.js render examples -o out --theme modern     # SVG diagrams, see below
+node packages/language/bin/cli.js doc examples -o docs/models --format html  # documentation, see below
 node packages/language/bin/cli.js import model.sct -o model.hsm   # itemis CREATE import, see below
 node packages/language/bin/cli.js simulate examples/cd-player.hsm -e play,eject,eject   # run the interpreter
 node packages/language/bin/cli.js simulate examples/door.hsm --script packages/language/test/scenarios/example-door.json
 node packages/language/bin/cli.js test examples/tests/*.hsmtest --machine examples --junit report.xml   # unit tests
 node packages/language/bin/cli.js generate cpp examples/traffic-light.hsm -o gen   # C++ code, see below
 node packages/language/bin/cli.js generate c examples/traffic-light.hsm -o gen     # C code
+node packages/language/bin/cli.js generate                  # all models / targets of ./hsm.gen.json, see below
+node packages/language/bin/cli.js generate --check          # exit 1 if generated files are out of date (CI)
 ```
+
+## Rendering diagrams
+
+`hsm render` computes the layout with ELK and renders the diagram as a standalone SVG file – in Node.js, without
+a browser, e.g. for reviews or in CI. The SVG has the shapes, classes and style sheet of the web editor
+(`DIAGRAM_CSS`, shared by both), so it looks like *Export SVG* of the editor.
+
+```bash
+hsm render model.hsm                            # writes model.svg next to the model
+hsm render model.hsm -o diagram.svg --theme dark --direction RIGHT --routing ORTHOGONAL
+hsm render models/ 'src/**/*.hsm' -o build/diagrams   # directories and glob patterns (also when not expanded by the shell)
+```
+
+Options: `--theme classic|modern|dark` (default `classic`), `--direction DOWN|RIGHT`, `--routing
+SPLINES|ORTHOGONAL|POLYLINE`, `--no-priorities`. Only SVG is supported (no PNG: there is no pure JavaScript
+rasterizer; convert with e.g. `rsvg-convert` or a browser if needed). Models with syntax errors are skipped
+(exit code 1), validation errors are printed but the model is rendered.
+
+Text is measured with a built-in table of the Helvetica character widths (Helvetica, Arial and Liberation Sans
+are metric compatible) and a monospace width for the definition section, so the layout computed in Node.js is
+close to the one of the editor, which measures with the browser's fonts: for the examples, text widths differ
+by 1.5 % on average (at most 2 px) from Chromium with Liberation Sans, the widths of the state boxes by 0.1 %
+(at most 1 px). Fonts with other metrics (e.g. *Helvetica Neue* on macOS) make the text slightly wider or
+narrower than the boxes.
+
+From code (works in the browser as well):
+
+```ts
+import { HsmModelLoader, layoutStateMachine, renderSvg } from 'hsm-language';
+
+const { model } = await new HsmModelLoader().load(text);
+const layout = await layoutStateMachine(model, { direction: 'DOWN' });
+const svg = renderSvg(layout.graph, {
+    theme: 'classic',                        // 'classic' | 'modern' | 'dark'
+    title: 'CdPlayer – test coverage',       // optional heading above the diagram
+    highlight: new Map([                     // diagram element id -> highlight
+        [layout.ids.get(playingState)!, 'covered'],       // CSS class hsm-covered (green)
+        [layout.ids.get(ejectTransition)!, 'uncovered'],  // CSS class hsm-uncovered (red, dashed)
+        [layout.ids.get(pausedState)!, 'active']          // CSS class active (like the simulation)
+    ]),                                      // any other value is used as CSS class name(s)
+    legend: true,                            // legend of the used highlights (or [{ kind, label }])
+    embedStyles: true,                       // false: the page embedding the SVG provides DIAGRAM_CSS
+    xmlDeclaration: true                     // false for inlining into HTML
+});
+```
+
+`highlight` applies to states, pseudo states (`<g class="hsm-node …">`) and transitions (`<g class="transition …">`);
+the ids are those of `LayoutResult.ids` (AST node → id) and `LayoutResult.elements` (id → AST node). The
+classes `hsm-covered` and `hsm-uncovered` are defined in `DIAGRAM_CSS` for all themes.
+
+## Model documentation
+
+`hsm doc` generates a documentation page per state machine and an index page:
+
+```bash
+hsm doc examples -o docs/examples                 # Markdown (GitHub flavored) + one SVG per machine
+hsm doc 'models/**/*.hsm' -o site --format html   # self-contained HTML pages (inline SVG and styles)
+```
+
+Each page contains the description and doc comment of the state machine, the diagram, the execution semantics
+(cycle based with period / event driven, parent first / child first, annotations), per interface (and the
+internal scope) tables of the events (direction, type), variables and constants (type, initial value, `readonly`)
+and operations (signature, return type), a table of all states and pseudo states (qualified name, kind,
+description, entry / exit actions, other local reactions, sub states per region) and of all transitions
+(source, target, trigger, guard, effect, priority, entry / exit point). Options: `--format md|html`, `--title`
+of the index page and the diagram options of `hsm render`. `npm run docs:examples` regenerates
+[`docs/examples`](docs/examples/index.md).
+
+**Doc comments**: a `/** … */` comment directly before the state machine, an interface, a declaration, a
+state, a pseudo state or a transition documents it (Markdown, JSDoc tags like `@see` are allowed). Plain
+comments (`/* … */`, `// …`) are ignored.
+
+```
+/** Push button of the pedestrian crossing. */
+interface Pedestrian:
+    /** A pedestrian has pressed the button and waits for red. */
+    var waiting : boolean = false
+```
+
+The language server shows the doc comments on hover together with the signature of the element
+(`HsmDocumentationProvider`). From code: `describeStateMachine(model)` returns the collected information,
+`generateModelDoc(model, { format, svg, svgFile })` and `generateDocIndex(entries, format)` render it,
+`docComment(node)` returns the doc comment of an AST node.
 
 ## The language
 
@@ -264,6 +358,74 @@ Not yet supported (compared to SCTUnit): `@Ignore`, `package` / imports, test su
 order of calls, mocks with sequences of values, calling operations of the state machine in a test,
 `assert` on time (`proceed` is the only way to advance time); the web editor does not run tests yet.
 
+## Coverage
+
+`hsm test --coverage` measures which parts of the state machines the unit tests exercise (like the
+coverage view of SCTUnit in itemis CREATE). Coverage is aggregated over all tests of all test files:
+
+| Metric | Covered when |
+| --- | --- |
+| **States** | the state was entered; final states count per region (`[*]`, `Active.[*]`, `S.r1.[*]`) |
+| **Transitions** | the transition was taken – every transition of the model, including initial transitions, choice / junction branches, history defaults, entry / exit point transitions and each branch of a fork / join |
+| **Reactions** | the local reaction was executed (`entry`, `exit`, `always`, `oncycle`, event and time reactions, also those of the state machine) |
+| **Guard decisions** | each guard of a transition or local reaction counts twice: covered once it was evaluated to `true` and once to `false` (guards are evaluated only when a trigger matched) |
+
+```bash
+hsm test examples/tests/*.hsmtest --coverage                          # text summary + coverage/lcov.info + coverage/html/
+hsm test tests/*.hsmtest --coverage-format text,cobertura --coverage-dir build/coverage
+hsm test tests/*.hsmtest --coverage-threshold states=100,transitions=90   # exit code 1 if not reached
+```
+
+Any `--coverage-*` option implies `--coverage`. Formats (`--coverage-format`, default `text,lcov,html`):
+
+| Format | Output | Use |
+| --- | --- | --- |
+| `text` | table per state machine (states, transitions, reactions, guard decisions) and the uncovered elements with line numbers, on stdout | console, CI logs |
+| `json` | `coverage.json`: totals and every element with id, kind, name, line, diagram id, hits and the covering tests, every guard with its true / false counts (schema version 1, see `toCoverageJson`) | own tooling |
+| `lcov` | `lcov.info`: one record per `.hsm` file; lines (`DA`) are the lines of states, transitions and reactions (a line counts as covered only if all its elements are), functions (`FN`) are the states, branches (`BRDA`) the guard decisions | VS Code (e.g. *Coverage Gutters*), GitHub (Codecov, Coveralls), `genhtml` |
+| `cobertura` | `cobertura-coverage.xml` with the same lines and branches, paths relative to the working directory | GitLab merge request coverage, Jenkins |
+| `html` | `html/index.html` and one self-contained page per state machine with all elements (covered / uncovered, hits, tests) and guards | browsing, CI artifacts |
+
+`--coverage-threshold` takes `states`, `transitions`, `reactions`, `guards` (or `all` / a single number)
+in percent and checks the totals over all state machines. Element ids are stable and equal the ids of the
+diagram elements (`Closed`, `Active.Playing`, `#machine#initial->Closed`, `Closed->Opened`, `Closed->Opened~1`
+for a second transition between the same vertices, `Service#region1#final`, reactions `Opened#reaction2`),
+so reports can be mapped onto the diagram.
+
+CI examples:
+
+```yaml
+# GitLab: test report and coverage in merge requests
+model-tests:
+  script:
+    - npx hsm test tests/*.hsmtest --junit report.xml --coverage-format text,cobertura --coverage-threshold transitions=90
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+```
+
+```yaml
+# GitHub Actions
+- run: npx hsm test tests/*.hsmtest --junit report.xml --coverage-format text,lcov,html --coverage-threshold states=100
+- uses: actions/upload-artifact@v4
+  if: always()
+  with: { name: model-coverage, path: coverage/ }
+- uses: codecov/codecov-action@v5        # optional: coverage/lcov.info
+  with: { files: coverage/lcov.info }
+```
+
+As API, `runTests(test, machine, { coverage: new CoverageCollector() })` collects the coverage of tests;
+a `CoverageCollector` can also be attached to any interpreter –
+`new StatechartInterpreter(machine, collector.attach(options))` – e.g. to show the coverage of a
+simulation session (`collector.highlight(machine)` returns the diagram element ids with the classes
+`hsm-covered` / `hsm-uncovered`). The report functions are `toCoverageText`, `toCoverageJson`, `toLcov`,
+`toCobertura` and `toCoverageHtml` (with an optional `renderDiagram(machine, highlight)` hook that embeds the
+highlighted diagram).
+
 ## Editing in the diagram
 
 | Action | How |
@@ -322,9 +484,14 @@ packages/
     src/diagram/layout.ts     AST -> PlantUML-like diagram model, laid out with ELK
     src/edit/model-edits.ts   structural edits (add, move, rename, delete, add declaration, …) as text edits
     src/generator/plantuml.ts PlantUML generator
+    src/render/               SVG renderer without DOM (renderSvg), diagram style sheet shared with the web app
+    src/doc/                  model documentation (Markdown / HTML), doc comments, hover documentation
     src/generator/common/     shared part of the C / C++ generators (analysis, states, transitions, expressions)
     src/generator/cpp/        C++ code generator and scenario test harness generator
     src/generator/c/          C code generator and scenario test harness generator
+    src/generator/config.ts   generator configuration (hsm.gen.json): format, validation, file names (no fs)
+    src/generator/generate-command.ts  `hsm generate`: loads the configuration, writes / checks the files (Node)
+    schemas/                  JSON schema of hsm.gen.json
     src/importer/             itemis CREATE (.sct) importer with a small XML parser
     src/simulation/           interpreter (docs/semantics.md) with virtual clock, scenario runner
     src/hsm-test.langium      grammar of the unit test language (.hsmtest), imports the expressions of hsm.langium
@@ -337,7 +504,8 @@ packages/
     src/diagram/              Sprotty model, views (PlantUML look), mouse / selection listeners
     src/simulation/           simulation session: interpreter, real-time clock, logs, operation mocks, breakpoints
     src/ui/                   properties and simulation panels, inline editor, SVG / PlantUML export
-examples/       sample state machines, examples/tests: their unit tests
+examples/       sample state machines, examples/tests: their unit tests, examples/cmake: CMake example
+cmake/          CMake integration (HsmGenerate.cmake: hsm_generate, hsm_add_tests)
 docs/           execution semantics
 ```
 
@@ -544,6 +712,141 @@ with the failed part skipped. Strings are stored in buffers of `<PREFIX>_STRING_
 `<PREFIX>_QUEUE_CAPACITY` events (default 16). The C harnesses are generated by
 `generateScenarioHarness(api, scenario)`; `HSM_CFLAGS='-O2 -fsanitize=address,undefined' npm test` runs
 them with sanitizers.
+
+## Build integration (CMake)
+
+### Generator configuration (`hsm.gen.json`)
+
+Like the `.sgen` files of itemis CREATE, a generator configuration says which models are generated for
+which targets with which options. `hsm generate` without arguments reads `hsm.gen.json` in the current
+directory (`--config <file>` for another file; `<name>.hsm.gen.json` is the recommended name for further
+configurations). Relative paths are relative to the configuration file. The JSON schema
+[`packages/language/schemas/hsm-gen.schema.json`](packages/language/schemas/hsm-gen.schema.json) gives
+completion and validation in editors (`"$schema"`); unknown properties are errors.
+
+```json
+{
+    "$schema": "node_modules/hsm-language/schemas/hsm-gen.schema.json",
+    "models": [
+        "models/**/*.hsm",
+        { "path": "models/door.hsm", "cpp": { "namespace": "legacy", "className": "DoorController" } }
+    ],
+    "cpp": {
+        "outDir": "src-gen",
+        "namespace": "app::sm",
+        "std": 17,
+        "headerExtension": ".hpp",
+        "sourceExtension": ".cc",
+        "licenseHeaderFile": "LICENSE-HEADER.txt"
+    },
+    "c": { "outDir": "src-gen/c" },
+    "writeOnlyIfChanged": true
+}
+```
+
+| Property | |
+|---|---|
+| `models` | paths or globs (`*`, `?`, `**`; hidden directories and `node_modules` are skipped) of `.hsm` files; an entry can be an object `{ "path": …, "cpp": {…}, "c": {…} }` whose options override the target options for these models (entries are applied in order). A glob matching nothing is an error |
+| `cpp`, `c` | the targets: a target is generated if its key is present (`"c": {}` for the defaults) |
+| `outDir` | output directory (default: the directory of each model) |
+| `namespace`, `className`, `std` (cpp) | like `--namespace`, `--class-name`, `--std` (17 or 11) |
+| `prefix`, `typeName`, `stringCapacity`, `queueCapacity` (c) | options of the C generator |
+| `headerExtension`, `sourceExtension` | `.h` / `.cpp` (`.c`) by default, e.g. `.hpp` / `.cc`; the includes of the generated files are adapted and the runtime header is renamed too (`sc_statemachine.hpp`) |
+| `licenseHeader` / `licenseHeaderFile` | text (string or array of lines) or file put at the top of every generated file; wrapped in `/* … */` unless it already starts with `//` or `/*` |
+| `maxMicrosteps` | maximum number of transitions per step (default 1000) |
+| `writeOnlyIfChanged` | default `true`: files whose content did not change are not rewritten, so their modification time is kept and build systems do not recompile them |
+
+Files generated by several models (the runtime header) are written once; two models generating the same
+file with different contents (e.g. the same class name) is an error. Nothing is written if a model has
+errors.
+
+```bash
+hsm generate                       # all targets of ./hsm.gen.json ("Generated …" / "Unchanged …")
+hsm generate cpp                   # only the cpp target
+hsm generate --config sm.hsm.gen.json -o build/gen   # another configuration, all outputs into build/gen
+hsm generate --check               # writes nothing, exit 1 if a file is missing or out of date (for CI)
+hsm generate --list-outputs        # writes nothing, prints the absolute paths of the generated files
+hsm generate --list-inputs         # prints the configuration, the models and license header files
+hsm generate cpp model.hsm -o gen  # without configuration (as before; --config adds its cpp options)
+```
+
+`--namespace`, `--class-name`, `--std` and `--prefix` override the configuration. From code, the format
+is available as `parseGeneratorConfig(json)` and `generateTarget(machine, target, options)` of
+`hsm-language` (no file system access, usable in the browser); the file based part is
+`src/generator/generate-command.ts` (`loadGeneratorConfig`, `runGeneration`).
+
+### Installing the command line tool
+
+The CMake functions need the `hsm` command line tool (Node.js ≥ 20.10):
+
+- **In this repository**: `npm ci && npm run build -w packages/language`. `cmake/HsmGenerate.cmake` finds
+  `packages/language/bin/cli.js` next to it automatically.
+- **Globally**: `npm install -g ./packages/language` (links the package of this checkout, build it first) or
+  `cd packages/language && npm pack` and `npm install -g hsm-language-0.1.0.tgz` on any machine (the
+  package includes `schemas/`).
+- **As a dev dependency** of a project with a `package.json`: `npm install -D <path or tarball>`; CMake then
+  uses `npx --no-install hsm`.
+- Or set the CMake cache variable `HSM_EXECUTABLE` to the command, e.g.
+  `-DHSM_EXECUTABLE="node;/opt/hsm/packages/language/bin/cli.js"`.
+
+### CMake functions
+
+```cmake
+list(APPEND CMAKE_MODULE_PATH "${HSM_ROOT}/cmake")   # the cmake/ directory of this repository
+include(HsmGenerate)                                  # or: find_package(Hsm CONFIG REQUIRED PATHS "${HSM_ROOT}/cmake")
+
+add_library(statemachines STATIC)
+hsm_generate(TARGET statemachines
+    MODELS models/traffic-light.hsm models/door.hsm   # and / or CONFIG hsm.gen.json
+    NAMESPACE app                                    # cpp: namespace ("" for the global namespace)
+    STD 17)                                          # also required from the target (cxx_std_17)
+
+enable_testing()
+hsm_add_tests(TARGET statemachines TESTS tests/traffic-light.hsmtest MODELS models/traffic-light.hsm)
+```
+
+`hsm_generate(TARGET <target> [MODELS <file.hsm>...] [CONFIG <file>] [GENERATOR cpp|c] [OUTPUT_DIR <dir>]
+[NAMESPACE <ns>] [STD 17|11] [PREFIX <prefix>])`:
+
+- generates the code **at build time** into `OUTPUT_DIR` (default
+  `${CMAKE_CURRENT_BINARY_DIR}/hsm_generated/<target>`), adds the generated files to the sources of the
+  target and `OUTPUT_DIR` to its include directories (`PUBLIC` for libraries, `PRIVATE` for executables);
+- the generated files are determined at configure time (`hsm generate --list-outputs`); the models, the
+  configuration and license header files are dependencies of the generation (custom target
+  `<target>_hsm_generate`), so changing a model regenerates the code. Thanks to `writeOnlyIfChanged` only
+  files whose content changed are recompiled: a changed comment in the model recompiles nothing, a changed
+  transition `<Class>.cpp` (and the files including the header if the header changed, e.g. the comment of
+  a time event);
+- if the *set* of generated files changes (a state machine is renamed), the build fails once with
+  "The set of generated files changed …; build again" and CMake re-runs automatically on the next build;
+  changing the configuration file re-runs CMake as well;
+- with `CONFIG`, the models and options of the configuration are used (`MODELS` replaces its models, the
+  other arguments override its options); its `outDir` is ignored in favor of `OUTPUT_DIR`. Globs are
+  expanded at configure time: re-run CMake after adding a model file.
+
+`hsm_add_tests(TARGET <name> TESTS <file.hsmtest>... [MODELS <file.hsm>...] [JUNIT_DIR <dir>])` registers
+a CTest test `<name>.<file stem>` (label `hsm`) per test file that runs `hsm test` with a JUnit report in
+`JUNIT_DIR` (default `${CMAKE_CURRENT_BINARY_DIR}/hsm_test_results`).
+
+### Example
+
+[`examples/cmake`](examples/cmake) builds the traffic light (generated with `MODELS`) and the CD player
+(generated with the configuration [`examples/cmake/hsm.gen.json`](examples/cmake/hsm.gen.json): `.hpp` /
+`.cc` files with a license header) as static libraries, an application with a `std::chrono` timer service
+and operation callbacks ([`main.cpp`](examples/cmake/main.cpp)), a C++ test driving both classes with a
+virtual clock and the `.hsmtest` unit tests of both models:
+
+```bash
+npm ci && npm run build -w packages/language
+cmake -S examples/cmake -B build/cmake-example -G Ninja      # or "Unix Makefiles"
+cmake --build build/cmake-example
+ctest --test-dir build/cmake-example --output-on-failure     # statemachine_tests, models.traffic-light, models.cd-player
+build/cmake-example/traffic_light 30                         # runs the traffic light for 30 s
+```
+
+`npm test` runs this example end to end in a temporary directory (configure, build, ctest, incremental
+rebuilds after model changes; skipped without cmake; `HSM_CMAKE_GENERATOR='Unix Makefiles'` selects the
+generator).
 
 ## Importing itemis CREATE models
 

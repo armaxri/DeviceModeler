@@ -31,7 +31,7 @@ export type TraceEntry =
     | { readonly kind: 'enter'; readonly state: string; readonly node: ast.State }
     | { readonly kind: 'exit'; readonly state: string; readonly node: ast.State }
     /** The final state of a region was entered; `state` is the display name (`Owner.[*]`). */
-    | { readonly kind: 'final'; readonly state: string }
+    | { readonly kind: 'final'; readonly state: string; readonly region: RegionNode }
     /** A transition was taken (also initial transitions and the parts of compound transitions). */
     | { readonly kind: 'transition'; readonly node: ast.Transition; readonly source: string; readonly target: string; readonly label: string }
     /** A local reaction (including entry / exit reactions) was executed; `state` is the state machine name for its own reactions. */
@@ -52,6 +52,11 @@ export interface SimulationOptions {
     onOutEvent?: (event: OutEvent) => void;
     /** Called for every trace entry. */
     onTrace?: (entry: TraceEntry) => void;
+    /**
+     * Called whenever the guard of a transition or local reaction was evaluated (only if its trigger
+     * matched), with the result. Used for guard (decision) coverage.
+     */
+    onGuard?: (guard: ast.Expression, value: boolean) => void;
     /**
      * Maximum number of transitions per step and of steps per host call (event driven internal
      * queue); protects against endless loops. Default: 1000.
@@ -599,7 +604,7 @@ export class StatechartInterpreter {
             }
             return trigger.kind === 'always' || trigger.kind === 'oncycle';
         });
-        return matches && this.evaluator.guard(guard);
+        return matches && this.guard(guard);
     }
 
     private executeReaction(reaction: ast.LocalReaction, state: ast.State | ast.StateMachine): void {
@@ -611,7 +616,7 @@ export class StatechartInterpreter {
     /** Executes the `entry` or `exit` reactions of a state (or of the state machine) whose guard holds. */
     private runBuiltinReactions(state: ast.State | ast.StateMachine, kind: 'entry' | 'exit'): void {
         for (const reaction of state.reactions) {
-            if (hasBuiltinTrigger(reaction, kind) && this.evaluator.guard(reaction.guard)) {
+            if (hasBuiltinTrigger(reaction, kind) && this.guard(reaction.guard)) {
                 this.executeReaction(reaction, state);
             }
         }
@@ -732,7 +737,7 @@ export class StatechartInterpreter {
             this.exitVertex(current);
         }
         this.active.set(final.region, final);
-        this.emit({ kind: 'final', state: this.index.vertexName(final) });
+        this.emit({ kind: 'final', state: this.index.vertexName(final), region: final.region });
     }
 
     /** Marks a state active, executes its entry reactions and starts its timers. */
@@ -792,8 +797,8 @@ export class StatechartInterpreter {
         const outgoing = this.index.outgoing(choice);
         const isDefault = (t: ast.Transition) => !t.spec?.guard
             || (t.spec.triggers.some(trigger => ast.isBuiltinTrigger(trigger) && (trigger.kind === 'else' || trigger.kind === 'default')));
-        const chosen = outgoing.find(t => !isDefault(t) && this.evaluator.guard(t.spec?.guard))
-            ?? outgoing.find(t => isDefault(t) && this.evaluator.guard(t.spec?.guard));
+        const chosen = outgoing.find(t => !isDefault(t) && this.guard(t.spec?.guard))
+            ?? outgoing.find(t => isDefault(t) && this.guard(t.spec?.guard));
         if (!chosen) {
             throw new SimulationError(`${capitalize(choice.kind)} '${choice.name}' has no enabled outgoing transition`, choice);
         }
@@ -801,7 +806,7 @@ export class StatechartInterpreter {
     }
 
     private takeEntryPoint(entry: ast.PseudoState): void {
-        const transition = this.index.outgoing(entry).find(t => this.evaluator.guard(t.spec?.guard));
+        const transition = this.index.outgoing(entry).find(t => this.guard(t.spec?.guard));
         if (!transition) {
             throw new SimulationError(`Entry point '${entry.name}' has no enabled outgoing transition`, entry);
         }
@@ -812,7 +817,7 @@ export class StatechartInterpreter {
     private takeExitNode(exitNode: ast.PseudoState): void {
         const owner = this.index.ownerState(this.index.regionOf(exitNode));
         const transition = owner
-            ? this.index.exitTransitions(owner, exitNode.name).find(t => this.evaluator.guard(t.spec?.guard))
+            ? this.index.exitTransitions(owner, exitNode.name).find(t => this.guard(t.spec?.guard))
             : undefined;
         if (!owner || !transition) {
             throw new SimulationError(`Exit node '${exitNode.name}' was reached but ${owner ? `state '${owner.name}'` : 'its state'} has no enabled transition '# ${exitNode.name}>'`, exitNode);
@@ -1074,6 +1079,15 @@ export class StatechartInterpreter {
         const owner = region.$container;
         return region.name ? `region '${region.name}' of '${this.index.stateName(owner)}'`
             : `region #${owner.regions.indexOf(region) + 1} of '${this.index.stateName(owner)}'`;
+    }
+
+    /** Evaluates a guard (`undefined` is `true`) and reports the result to `onGuard`. */
+    private guard(expression: ast.Expression | undefined): boolean {
+        const value = this.evaluator.guard(expression);
+        if (expression) {
+            this.options.onGuard?.(expression, value);
+        }
+        return value;
     }
 
     private emit(entry: TraceEntry): void {
