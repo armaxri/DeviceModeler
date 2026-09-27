@@ -1,7 +1,7 @@
 import type { LineMap, Token } from './lexer.js';
 import type {
-    CppBinaryOperator, CppEnum, CppExpression, CppExpressionNode, CppInitializerElement, CppNamePart, CppQualifiedName,
-    CppRange, CppRecord, CppTemplateArgument, CppTypeName, CppTypeRef, CppUnaryOperator
+    CppBinaryOperator, CppExpression, CppExpressionNode, CppInitializerElement, CppNamePart, CppQualifiedName,
+    CppRange, CppTemplateArgument, CppTypeName, CppTypeRef, CppUnaryOperator
 } from './model.js';
 
 /**
@@ -583,7 +583,7 @@ export class TokenCursor {
 
     /** Parses `[N]` (the current token is `[`). */
     protected parseArrayDimension(): CppExpression | undefined {
-        const open = this.expect('[');
+        this.expect('[');
         if (this.accept(']')) {
             return undefined;
         }
@@ -591,7 +591,6 @@ export class TokenCursor {
         const expression = this.parseExpressionSpan(this.index, end);
         this.pos = end;
         this.expect(']');
-        void open;
         return expression;
     }
 
@@ -911,9 +910,4 @@ export function makeTypeRef(
         spelling, name: specifiers.name, const: specifiers.const, volatile: specifiers.volatile, pointer,
         reference, arrayDimensions, functionPointer, range
     };
-}
-
-/** Type guard helper for declared type names. */
-export function declaredOf(name: CppTypeName): CppEnum | CppRecord | undefined {
-    return name.kind === 'declared' ? name.declaration : undefined;
 }

@@ -240,7 +240,6 @@ export interface CppField extends CppDeclarationBase {
     readonly bitWidth?: CppExpression;
     /** Default member initializer (`= 5` or `{5}`; braces are kept as initializer list). */
     readonly initializer?: CppExpression;
-    readonly static: false;
 }
 
 /**

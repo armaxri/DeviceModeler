@@ -565,7 +565,7 @@ class DeclarationParser extends TokenCursor {
                 // anonymous union / struct member
                 record.fields.push(this.base<CppField>({
                     kind: 'field', name: '', qualifiedName: declared.qualifiedName, type: makeTypeRef(specifiers, 0, undefined, [], false, declared.range),
-                    access: record.access, static: false
+                    access: record.access
                 }, startToken, startToken, doc));
             }
             return;
@@ -626,7 +626,7 @@ class DeclarationParser extends TokenCursor {
                 } else if (record && !flags.has('static')) {
                     this.relevant = true;
                     record.fields.push(this.base<CppField>({
-                        kind: 'field', ...common, type, access: record.access, bitWidth, initializer, static: false
+                        kind: 'field', ...common, type, access: record.access, bitWidth, initializer
                     }, startToken, nameToken, declarationDoc));
                 } else if (flags.has('constexpr') || (declarator.pointer > 0 ? declarator.pointerConst : specifiers.const)) {
                     this.relevant = true;
