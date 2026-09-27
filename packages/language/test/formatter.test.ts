@@ -44,4 +44,23 @@ describe('formatter', () => {
     }
 }`);
     });
+
+    test('formats C++ names and member accesses', async () => {
+        const text = 'statemachine M{import "t.h" interface: var m:t :: Mode var p : t::P [*]->A state A A->A:always[m==t :: Mode :: B]/p . x=t::kP . y}';
+        const parsed = await parse(text, { 't.h': 'namespace t { enum class Mode { A, B }; struct P { int x; int y; }; constexpr P kP{1, 2}; }' });
+        const edits = await loader.services.Hsm.lsp.Formatter!.formatDocument(parsed.document, {
+            textDocument: { uri: parsed.document.uri.toString() },
+            options: { tabSize: 4, insertSpaces: true }
+        });
+        const formatted = TextDocument.applyEdits(parsed.document.textDocument, edits);
+        expect(formatted).toBe(`statemachine M {
+    import "t.h"
+    interface:
+        var m : t::Mode
+        var p : t::P
+    [*] -> A
+    state A
+    A -> A : always [m==t::Mode::B] / p.x=t::kP.y
+}`);
+    });
 });

@@ -47,6 +47,14 @@ export class HsmFormatter extends AbstractFormatter {
             formatter.keyword('->').surround(Formatting.oneSpace());
             formatter.keyword(':').prepend(Formatting.oneSpace()).append(Formatting.oneSpace());
             formatter.keyword('#').prepend(Formatting.oneSpace());
+        } else if (ast.isTypeReference(node) || ast.isCppReference(node)) {
+            // C++ names: `motor::Mode::Fast`
+            const formatter = this.getNodeFormatter<ast.TypeReference | ast.CppReference>(node);
+            formatter.keywords('::').surround(Formatting.noSpace());
+            formatter.keywords('.').surround(Formatting.noSpace());
+        } else if (ast.isMemberAccessExpression(node) || ast.isElementReference(node)) {
+            // `valueof(e).x`, `pos.x`, `Iface.x`
+            this.getNodeFormatter<ast.MemberAccessExpression | ast.ElementReference>(node).keywords('.').surround(Formatting.noSpace());
         } else if (ast.isReactionSpec(node) || ast.isLocalReaction(node)) {
             const formatter = this.getNodeFormatter(node);
             formatter.keyword('[').prepend(Formatting.oneSpace()).append(Formatting.noSpace());

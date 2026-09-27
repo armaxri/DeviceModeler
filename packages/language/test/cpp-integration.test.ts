@@ -2,6 +2,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { errors, parse, warnings } from './helpers.js';
+import { formatValue, StatechartInterpreter } from '../src/simulation/index.js';
+import { HsmTestWorkspace } from '../src/testing/index.js';
 
 const MOTOR_TYPES = fs.readFileSync(path.resolve(__dirname, 'cpp-header/motor_types.h'), 'utf-8');
 
@@ -56,5 +58,82 @@ describe('C++ header imports: validation', () => {
     test('missing header', async () => {
         const parsed = await parse(model('    [*] -> A\n    state A', 'nope.h'));
         expect(errors(parsed)[0]).toMatch(/^Cannot resolve the import 'nope.h': the header was not found/);
+    });
+});
+
+const CONTROLLER = `statemachine Controller {
+    import "motor_types.h"
+    interface:
+        in event moveTo : motor::Position
+        in event setMode : motor::Mode
+        out event arrived : motor::Position
+        var mode : motor::Mode = motor::kDefaultMode
+        var target : motor::Position
+        var flags : integer
+        operation measure() : motor::Position
+    [*] -> Idle
+    state Idle
+    state Moving
+    Idle -> Moving : moveTo [valueof(moveTo).x <= motor::kMaxSpeed] / target = valueof(moveTo); flags = motor::kStall | motor::kOverCurrent
+    Moving -> Idle : setMode [valueof(setMode) == motor::Mode::Off] / mode = valueof(setMode); target = measure(); raise arrived : target
+}`;
+
+describe('C++ header imports: interpreter and test language', () => {
+    test('host values of enum and struct variables', async () => {
+        const parsed = await parse(CONTROLLER, { 'motor_types.h': MOTOR_TYPES });
+        expect(errors(parsed)).toEqual([]);
+        const events: string[] = [];
+        const sim = new StatechartInterpreter(parsed.model, {
+            operations: { measure: () => ({ x: 7, z: 9 }) },
+            onOutEvent: event => events.push(event.text)
+        });
+        sim.enter();
+        expect(sim.getVariable('mode')).toBe('motor::Mode::Slow');
+        expect(sim.getVariable('target')).toEqual({ x: 0, y: 0, z: 0 });
+        sim.raise('moveTo', { x: 100, y: -50 });
+        sim.runCycle();
+        expect(sim.getVariable('target')).toEqual({ x: 100, y: -50, z: 0 });
+        expect(sim.getVariable('flags')).toBe(5);
+        expect(formatValue(sim.getValue('target'))).toBe('{x: 100, y: -50, z: 0}');
+        sim.raise('setMode', 0);
+        sim.runCycle();
+        expect(sim.getVariable('mode')).toBe('motor::Mode::Off');
+        expect(events).toEqual(['arrived({x: 7, y: 0, z: 9})']);
+        expect(() => sim.setVariable('mode', 'Turbo')).toThrow(/'Turbo' is not an enumerator of motor::Mode \(Off, Slow, Fast, Boost\)/);
+        expect(() => sim.setVariable('target', { w: 1 })).toThrow(/motor::Position has no member 'w'/);
+    });
+
+    test('unit tests assert enum values and mock operations returning structs', async () => {
+        const workspace = new HsmTestWorkspace();
+        const documents = await workspace.load([
+            { uri: 'memory:///cpp/motor_types.h', text: MOTOR_TYPES },
+            { uri: 'memory:///cpp/controller.hsm', text: CONTROLLER },
+            {
+                uri: 'memory:///cpp/controller.hsmtest', text: `testclass ControllerTest for statemachine Controller {
+    @Test
+    operation moves() {
+        enter
+        assert mode == motor::Mode::Slow
+        var p : motor::Position = motor::kParkPosition
+        p.z = 3
+        raise moveTo : p
+        proceed 1 cycle
+        assert active(Moving)
+        assert target.x == 100 && target.z == 3
+        mock measure returns (motor::kOrigin)
+        raise setMode : motor::Mode::Off
+        proceed 1 cycle
+        assert mode == motor::Mode::Off message "mode"
+        assert target.y == 0
+        assert called measure
+    }
+}`
+            }
+        ]);
+        for (const loaded of documents) {
+            expect(loaded.diagnostics.filter(d => d.severity === 1).map(d => d.message), loaded.uri).toEqual([]);
+        }
+        const results = workspace.runDocuments(documents);
+        expect(results.map(r => [r.name, r.status, r.message])).toEqual([['moves', 'passed', undefined]]);
     });
 });

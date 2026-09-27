@@ -4,11 +4,13 @@ import type { Diagnostic } from 'vscode-languageserver-types';
 import * as ast from '../generated/ast.js';
 import { createHsmServices } from '../hsm-module.js';
 import { loadImports, type FileReader, type HsmModelLoaderOptions } from '../hsm-document.js';
+import { cppHeaderStore } from '../cpp-headers.js';
+import { importKind } from '../imports.js';
 import { runTests, type TestResult, type TestRunOptions } from './runner.js';
 
-/** A file of a test workspace: an `.hsm` model or an `.hsmtest` test file. */
+/** A file of a test workspace: an `.hsm` model, an `.hsmtest` test file or a C/C++ header imported by a model. */
 export interface WorkspaceFile {
-    /** URI of the document; the extension selects the language (`.hsm` or `.hsmtest`). */
+    /** URI of the document; the extension selects the language (`.hsm` or `.hsmtest`) or a header (`.h`, `.hpp`, ...). */
     readonly uri: string;
     readonly text: string;
 }
@@ -46,7 +48,12 @@ export class HsmTestWorkspace {
 
     async load(files: readonly WorkspaceFile[]): Promise<LoadedDocument[]> {
         const workspace = this.services.shared.workspace;
-        const documents = files.map(file => {
+        // C/C++ headers imported by the models are not documents (see cpp-headers.ts)
+        const store = cppHeaderStore(this.services.shared);
+        for (const file of files.filter(f => importKind(f.uri) === 'header')) {
+            store.setText(URI.parse(file.uri), file.text);
+        }
+        const documents = files.filter(f => importKind(f.uri) !== 'header').map(file => {
             const uri = URI.parse(file.uri);
             if (workspace.LangiumDocuments.hasDocument(uri)) {
                 workspace.LangiumDocuments.deleteDocument(uri);
