@@ -1,0 +1,35 @@
+{
+    "name": "s7-entry-point",
+    "description": "A transition with # >E enters the composite state via its entry point E.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event a",
+        "        in event b",
+        "        var log : string",
+        "    [*] -> Idle",
+        "    state Idle",
+        "    state P {",
+        "        [*] -> Normal",
+        "        entry Fast",
+        "        state Normal",
+        "        state Turbo",
+        "        Fast -> Turbo : / log = \"fast\"",
+        "    }",
+        "    Idle -> P : a # >Fast",
+        "    Idle -> P : b",
+        "    P -> Idle : a",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "a"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.Turbo"], "variables": {"log": "fast"}}},
+        {"raise": "a"},
+        {"runCycle": true},
+        {"raise": "b"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.Normal"]}}
+    ]
+}

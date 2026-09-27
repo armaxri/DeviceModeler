@@ -1,0 +1,25 @@
+{
+    "name": "s2-variables-reinitialized-on-enter",
+    "description": "Entering the state machine again re-initializes the variables.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "        var n : integer = 5",
+        "    [*] -> A",
+        "    state A",
+        "    A -> A : go / n += 1",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"variables": {"n": 7}}},
+        {"exit": true},
+        {"enter": true},
+        {"expect": {"variables": {"n": 5}}}
+    ]
+}

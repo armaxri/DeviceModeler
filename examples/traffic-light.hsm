@@ -1,40 +1,71 @@
-// A pedestrian traffic light - hierarchical states with entry actions.
+// A pedestrian traffic light - hierarchical states, interfaces, time events and guards.
+/**
+ * Traffic light with a pedestrian request button. The lights are switched
+ * by the host through the internal operation `switchOn`.
+ */
 statemachine TrafficLight {
+    @CycleBased(100)
+
+    interface:
+        in event powerOn
+        in event powerOff
+        in event failure
+        in event reset
+        /** Raised with the bit mask of the lights when the light turns red. */
+        out event lightsChanged : integer
+
+    /** Push button of the pedestrian crossing. */
+    interface Pedestrian:
+        in event request
+        /** A pedestrian has pressed the button and waits for red. */
+        var waiting : boolean = false
+
+    internal:
+        const RED : integer = 1
+        const YELLOW : integer = 2
+        const GREEN : integer = 4
+        /** Bit mask of the lights that are on (`RED`, `YELLOW`, `GREEN`). */
+        var lights : integer = 0
+        /** Switches the lamps of the mask on and all others off. */
+        operation switchOn(mask : integer) : void
+
     [*] -> Off
 
     state Off {
-        entry / "allLightsOff()"
+        entry / lights = 0; switchOn(0)
     }
 
     state Operating {
         [*] -> Red
 
         state Red {
-            entry / "switchOn(RED)"
+            entry / lights = RED; switchOn(lights); raise lightsChanged : lights
         }
         state RedYellow {
-            entry / "switchOn(RED, YELLOW)"
+            entry / lights = RED | YELLOW; switchOn(lights)
         }
         state Green {
-            entry / "switchOn(GREEN)"
-            on pedestrianRequest / "requested = true"
+            entry / lights = GREEN; switchOn(lights)
+            Pedestrian.request / Pedestrian.waiting = true
         }
         state Yellow {
-            entry / "switchOn(YELLOW)"
+            entry / lights = YELLOW; switchOn(lights)
         }
 
-        Red -> RedYellow : timeout
-        RedYellow -> Green : timeout
-        Green -> Yellow : timeout [ "requested" ]
-        Yellow -> Red : timeout
+        Red -> RedYellow : after 20 s
+        RedYellow -> Green : after 2 s
+        /** Green lasts at least 30 s and only ends when a pedestrian is waiting. */
+        Green -> Yellow : after 30 s [Pedestrian.waiting]
+        Yellow -> Red : after 3 s / Pedestrian.waiting = false
     }
 
+    /** Failure mode: the yellow light blinks. */
     state Blinking {
-        do / "blink(YELLOW)"
+        every 500 ms / lights = lights ^ YELLOW; switchOn(lights)
     }
 
     Off -> Operating : powerOn
-    Operating -> Blinking : failure / "reportError()"
+    Operating -> Blinking : failure
     Blinking -> Operating : reset
     Operating -> Off : powerOff
     Blinking -> Off : powerOff

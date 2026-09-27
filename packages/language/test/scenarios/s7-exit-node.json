@@ -1,0 +1,37 @@
+{
+    "name": "s7-exit-node",
+    "description": "Reaching the exit node X exits the composite state completely and takes its # X> transition.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event fail",
+        "        operation log(msg : string) : void",
+        "    [*] -> P",
+        "    state P {",
+        "        exit / log(\"exit P\")",
+        "        region R1 {",
+        "            [*] -> A",
+        "            exit Error",
+        "            state A",
+        "            A -> Error : fail / log(\"fail\")",
+        "        }",
+        "        region R2 {",
+        "            [*] -> B",
+        "            state B {",
+        "                exit / log(\"exit B\")",
+        "            }",
+        "        }",
+        "    }",
+        "    state Failed",
+        "    state Other",
+        "    P -> Other : [false] # Error>",
+        "    P -> Failed : / log(\"handled\") # Error>",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "fail"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Failed"], "calls": ["log(\"fail\")", "log(\"exit B\")", "log(\"exit P\")", "log(\"handled\")"]}}
+    ]
+}

@@ -1,0 +1,25 @@
+{
+    "name": "s5-reaction-without-trigger-never-executed",
+    "description": "A local reaction without trigger and guard is never executed (like in itemis CREATE); always and oncycle match every step.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        var n1 : integer",
+        "        var n2 : integer",
+        "        var n3 : integer",
+        "    [*] -> A",
+        "    state A {",
+        "        / n1 += 1",
+        "        always / n2 += 1",
+        "        oncycle [n3 < 2] / n3 += 1",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"runCycle": true},
+        {"runCycle": true},
+        {"runCycle": true},
+        {"expect": {"variables": {"n1": 0, "n2": 3, "n3": 2}}}
+    ]
+}

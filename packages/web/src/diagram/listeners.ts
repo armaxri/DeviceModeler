@@ -1,6 +1,6 @@
 import { inject, injectable } from 'inversify';
 import {
-    MouseListener, SelectMouseListener, TYPES,
+    MouseListener, MoveMouseListener, SelectMouseListener, TYPES,
     type IActionHandler, type SModelElementImpl, type SModelRootImpl, type ViewerOptions
 } from 'sprotty';
 import { BringToFrontAction, SelectAction, SelectAllAction, type Action } from 'sprotty-protocol';
@@ -15,6 +15,8 @@ export interface DiagramCallbacks {
     dragEnd(draggedId: string, dropTargetId: string | undefined): void;
     selectionChanged(selected: string[], deselected: string[]): void;
     allSelected(select: boolean): void;
+    /** Whether the diagram can be edited (not while simulating). */
+    canEdit(): boolean;
 }
 
 export const DiagramCallbacks = Symbol('DiagramCallbacks');
@@ -25,7 +27,7 @@ function movableVertex(target: SModelElementImpl): VertexNode | undefined {
     while (current && !isVertexNode(current)) {
         current = 'parent' in current ? (current as { parent?: SModelElementImpl }).parent : undefined;
     }
-    if (current && isVertexNode(current) && !['region', 'initial', 'final'].includes(current.kind)) {
+    if (current && isVertexNode(current) && !['region', 'initial', 'final', 'definition'].includes(current.kind)) {
         return current;
     }
     return undefined;
@@ -41,7 +43,7 @@ export class HsmMouseListener extends MouseListener {
 
     override mouseDown(target: SModelElementImpl, event: MouseEvent): Action[] {
         this.callbacks.mouseDown(target, event);
-        const vertex = movableVertex(target);
+        const vertex = this.callbacks.canEdit() ? movableVertex(target) : undefined;
         this.drag = event.button === 0 && vertex ? { id: vertex.id, x: event.clientX, y: event.clientY, moved: false } : undefined;
         return [];
     }
@@ -104,6 +106,22 @@ function isWithin(element: SModelElementImpl, ancestor: SModelElementImpl | unde
         current = 'parent' in current ? (current as { parent?: SModelElementImpl }).parent : undefined;
     }
     return false;
+}
+
+/** Moving elements is disabled while the diagram cannot be edited (simulation). */
+@injectable()
+export class HsmMoveMouseListener extends MoveMouseListener {
+
+    @inject(DiagramCallbacks) protected callbacks!: DiagramCallbacks;
+
+    override mouseDown(target: SModelElementImpl, event: MouseEvent): (Action | Promise<Action>)[] {
+        if (!this.callbacks.canEdit()) {
+            this.startDragPosition = undefined;
+            this.hasDragged = false;
+            return [];
+        }
+        return super.mouseDown(target, event);
+    }
 }
 
 /** Selection without re-ordering the selected element (transitions have to stay on top). */

@@ -1,33 +1,18 @@
 import { monaco } from './monaco.js';
-import { HsmModelLoader, HsmMonarchSyntax, type ParsedModel } from 'hsm-language';
+import { HsmMonarchSyntax } from 'hsm-language';
+import { HsmModelService } from './model-service.js';
 import type { Diagnostic, Range, TextEdit } from 'vscode-languageserver-types';
 
+export { describeSyntaxProblem, type SyntaxProblem } from './model-service.js';
+
 export const LANGUAGE_ID = 'hsm';
-const DOCUMENT_URI = 'memory:///model.hsm';
+export const EDITOR_THEMES = { light: 'hsm-light', dark: 'hsm-dark' } as const;
 
 /**
  * Runs the Langium services of the HSM language directly in the browser and connects them
  * to the Monaco editor (validation markers, completion, formatting, go to definition, rename).
  */
-export class HsmLanguageSupport {
-
-    readonly loader = new HsmModelLoader();
-    private latest?: ParsedModel;
-    private queue: Promise<unknown> = Promise.resolve();
-
-    /** Parses, links and validates the text. Calls are serialized. */
-    parse(text: string): Promise<ParsedModel> {
-        const result = this.queue.then(async () => {
-            if (this.latest?.text === text) {
-                return this.latest;
-            }
-            const parsed = await this.loader.load(text, DOCUMENT_URI);
-            this.latest = parsed;
-            return parsed;
-        });
-        this.queue = result.catch(() => undefined);
-        return result;
-    }
+export class HsmLanguageSupport extends HsmModelService {
 
     private async document(model: monaco.editor.ITextModel) {
         return (await this.parse(model.getValue())).document;
@@ -35,7 +20,23 @@ export class HsmLanguageSupport {
 
     registerLanguage(): void {
         monaco.languages.register({ id: LANGUAGE_ID, extensions: ['.hsm'], aliases: ['HSM', 'hsm'] });
-        monaco.languages.setMonarchTokensProvider(LANGUAGE_ID, HsmMonarchSyntax as monaco.languages.IMonarchLanguage);
+        monaco.languages.setMonarchTokensProvider(LANGUAGE_ID, monarchSyntax());
+        monaco.editor.defineTheme(EDITOR_THEMES.light, {
+            base: 'vs', inherit: true, colors: {},
+            rules: [
+                { token: 'annotation', foreground: '9c5d00' },
+                { token: 'type', foreground: '267f99' },
+                { token: 'operator', foreground: '555555' }
+            ]
+        });
+        monaco.editor.defineTheme(EDITOR_THEMES.dark, {
+            base: 'vs-dark', inherit: true, colors: {},
+            rules: [
+                { token: 'annotation', foreground: 'dcdcaa' },
+                { token: 'type', foreground: '4ec9b0' },
+                { token: 'operator', foreground: 'c8c8c8' }
+            ]
+        });
         monaco.languages.setLanguageConfiguration(LANGUAGE_ID, {
             comments: { lineComment: '//', blockComment: ['/*', '*/'] },
             brackets: [['{', '}'], ['[', ']']],
@@ -54,7 +55,7 @@ export class HsmLanguageSupport {
         const services = this.loader.services.Hsm;
 
         monaco.languages.registerCompletionItemProvider(LANGUAGE_ID, {
-            triggerCharacters: ['>', ' ', '/'],
+            triggerCharacters: ['>', ' ', '/', '.', '('],
             provideCompletionItems: async (model, position) => {
                 const document = await this.document(model);
                 const list = await services.lsp.CompletionProvider?.getCompletion(document, {
@@ -150,6 +151,42 @@ export class HsmLanguageSupport {
             endColumn: d.range.end.character + 1
         })));
     }
+}
+
+type MonarchRule = { regex?: RegExp, include?: string, action?: { token?: string, cases?: Record<string, { token: string }> } };
+
+/**
+ * The generated Monarch grammar, adjusted for nicer highlighting: numbers, annotations (`@EventDriven`),
+ * built-in type names and the `[*]` pseudo state.
+ */
+function monarchSyntax(): monaco.languages.IMonarchLanguage {
+    const generated = HsmMonarchSyntax as unknown as { tokenizer: Record<string, MonarchRule[]> };
+    const rename: Record<string, string> = { HEX: 'number.hex', REAL: 'number.float', ID: 'identifier' };
+    const initial = generated.tokenizer.initial.map((rule): MonarchRule => {
+        const action = rule.action;
+        if (action?.token && rename[action.token]) {
+            return { ...rule, action: { ...action, token: rename[action.token] } };
+        }
+        if (action?.cases?.['@default']?.token === 'ID') {
+            return {
+                ...rule,
+                action: { cases: { '@keywords': { token: 'keyword' }, '@typeNames': { token: 'type' }, '@default': { token: 'identifier' } } }
+            };
+        }
+        return rule;
+    });
+    return {
+        ...HsmMonarchSyntax,
+        typeNames: ['integer', 'real', 'boolean', 'string', 'void'],
+        tokenizer: {
+            ...generated.tokenizer,
+            initial: [
+                { regex: /@[_a-zA-Z]\w*/, action: { token: 'annotation' } },
+                { regex: /\[\*\]/, action: { token: 'keyword' } },
+                ...initial
+            ]
+        }
+    } as unknown as monaco.languages.IMonarchLanguage;
 }
 
 function toMonacoRange(range: Range): monaco.IRange {

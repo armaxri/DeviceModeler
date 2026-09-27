@@ -1,0 +1,38 @@
+{
+    "name": "s4-region-order",
+    "description": "Orthogonal regions are processed in document order.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event e",
+        "        operation log(index : integer) : void",
+        "    [*] -> P",
+        "    state P {",
+        "        region First {",
+        "            [*] -> A",
+        "            state A {",
+        "                e / log(1)",
+        "            }",
+        "        }",
+        "        region Second {",
+        "            [*] -> B",
+        "            state B {",
+        "                e / log(2)",
+        "            }",
+        "        }",
+        "        region Third {",
+        "            [*] -> C",
+        "            state C {",
+        "                e / log(3)",
+        "            }",
+        "        }",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "e"},
+        {"runCycle": true},
+        {"expect": {"calls": ["log(1)", "log(2)", "log(3)"]}}
+    ]
+}

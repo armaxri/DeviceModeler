@@ -1,0 +1,30 @@
+{
+    "name": "s8-entry-reactions-before-sub-states",
+    "description": "A composite state executes its entry reactions before its regions are entered, regions in document order.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        operation log(msg : string) : void",
+        "    [*] -> P",
+        "    state P {",
+        "        entry / log(\"P\")",
+        "        region R1 {",
+        "            [*] -> A",
+        "            state A {",
+        "                entry / log(\"A\")",
+        "            }",
+        "        }",
+        "        region R2 {",
+        "            [*] -> B",
+        "            state B {",
+        "                entry / log(\"B\")",
+        "            }",
+        "        }",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"configuration": ["P.A", "P.B"], "calls": ["log(\"P\")", "log(\"A\")", "log(\"B\")"]}}
+    ]
+}

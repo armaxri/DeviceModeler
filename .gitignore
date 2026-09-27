@@ -3,3 +3,5 @@ out/
 dist/
 *.tsbuildinfo
 .vite/
+.claude/worktrees/
+coverage/

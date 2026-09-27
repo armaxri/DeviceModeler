@@ -1,0 +1,221 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { spawn, type ChildProcess } from 'node:child_process';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import * as esbuild from 'esbuild';
+import { createMessageConnection, StreamMessageReader, StreamMessageWriter, type MessageConnection } from 'vscode-jsonrpc/node';
+// @ts-expect-error untyped build helper (ES module script)
+import { bundleOptions } from '../../scripts/bundles.mjs';
+
+/*
+ * Starts the bundled language server (built into a temporary directory with the options of the
+ * extension build) with `--stdio` and talks LSP to it: diagnostics, cross-file linking of test files
+ * via the workspace index, hover with documentation, definition, references, rename, formatting,
+ * symbols, folding, completion and semantic tokens.
+ */
+
+interface Diagnostic {
+    severity?: number;
+    message: string;
+    range: { start: { line: number, character: number } };
+}
+
+const LAMP = `/** A lamp. */
+statemachine Lamp {
+    interface:
+        /** Switches the lamp on or off. */
+        in event toggle
+        var count : integer = 0
+
+    [*] -> Off
+    state Off
+    state On {
+        entry / count += 1
+    }
+    Off -> On : toggle
+    On -> Off : toggle
+}
+`;
+
+const LAMP_TEST = `testclass LampTest for statemachine Lamp {
+    @Test
+    operation switchesOn() {
+        enter
+        raise toggle
+        assert active(On)
+        assert count == 1
+    }
+}
+`;
+
+let dir: string;
+let server: ChildProcess;
+let connection: MessageConnection;
+const diagnostics = new Map<string, Diagnostic[]>();
+const waiters: Array<() => void> = [];
+
+function uriOf(relative: string): string {
+    return pathToFileURL(path.join(dir, relative)).toString();
+}
+
+/** Waits until diagnostics for the URI arrive that satisfy the predicate. */
+async function diagnosticsFor(uri: string, predicate: (d: Diagnostic[]) => boolean = () => true, timeoutMs = 20000): Promise<Diagnostic[]> {
+    const start = Date.now();
+    for (;;) {
+        const current = diagnostics.get(uri);
+        if (current && predicate(current)) {
+            return current;
+        }
+        if (Date.now() - start > timeoutMs) {
+            throw new Error(`no matching diagnostics for ${uri}: ${JSON.stringify(current)}`);
+        }
+        await new Promise<void>(resolve => {
+            waiters.push(resolve);
+            setTimeout(resolve, 200);
+        });
+    }
+}
+
+function position(text: string, search: string, occurrence = 0, delta = 0) {
+    let offset = -1;
+    for (let i = 0; i <= occurrence; i++) {
+        offset = text.indexOf(search, offset + 1);
+    }
+    const before = text.slice(0, offset + delta).split('\n');
+    return { line: before.length - 1, character: before[before.length - 1].length };
+}
+
+beforeAll(async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'hsm-lsp-'));
+    await fs.mkdir(path.join(dir, 'models'));
+    await fs.mkdir(path.join(dir, 'tests'));
+    await fs.writeFile(path.join(dir, 'models/lamp.hsm'), LAMP);
+    await fs.writeFile(path.join(dir, 'tests/lamp.hsmtest'), LAMP_TEST);
+    await esbuild.build({ ...bundleOptions('server', { outdir: path.join(dir, 'out') }), logLevel: 'warning', sourcemap: false });
+
+    server = spawn(process.execPath, [path.join(dir, 'out/server.cjs'), '--stdio'], { stdio: ['pipe', 'pipe', 'inherit'] });
+    connection = createMessageConnection(new StreamMessageReader(server.stdout!), new StreamMessageWriter(server.stdin!));
+    connection.onNotification('textDocument/publishDiagnostics', (params: { uri: string, diagnostics: Diagnostic[] }) => {
+        diagnostics.set(params.uri, params.diagnostics);
+        waiters.splice(0).forEach(resolve => resolve());
+    });
+    connection.onRequest('client/registerCapability', () => null);
+    connection.onRequest('workspace/configuration', (params: { items: unknown[] }) => params.items.map(() => null));
+    connection.listen();
+    const result = await connection.sendRequest<{ capabilities: Record<string, unknown> }>('initialize', {
+        processId: process.pid,
+        rootUri: pathToFileURL(dir).toString(),
+        workspaceFolders: [{ uri: pathToFileURL(dir).toString(), name: 'workspace' }],
+        capabilities: {
+            workspace: { workspaceFolders: true, configuration: true },
+            textDocument: { publishDiagnostics: {}, hover: { contentFormat: ['markdown', 'plaintext'] }, synchronization: {} }
+        }
+    });
+    for (const capability of ['hoverProvider', 'completionProvider', 'definitionProvider', 'referencesProvider', 'renameProvider',
+        'documentFormattingProvider', 'documentSymbolProvider', 'foldingRangeProvider', 'semanticTokensProvider']) {
+        expect(result.capabilities[capability], capability).toBeTruthy();
+    }
+    await connection.sendNotification('initialized', {});
+}, 120000);
+
+afterAll(async () => {
+    try {
+        await connection?.sendRequest('shutdown');
+        await connection?.sendNotification('exit');
+    } catch {
+        // already gone
+    }
+    connection?.dispose();
+    server?.kill();
+    await fs.rm(dir, { recursive: true, force: true });
+});
+
+function open(relative: string, languageId: string, text: string, version = 1): void {
+    connection.sendNotification('textDocument/didOpen', { textDocument: { uri: uriOf(relative), languageId, version, text } });
+}
+
+describe('HSM language server', () => {
+    it('links a test file to the state machine of another file of the workspace', async () => {
+        open('tests/lamp.hsmtest', 'hsmtest', LAMP_TEST);
+        const result = await diagnosticsFor(uriOf('tests/lamp.hsmtest'));
+        expect(result.filter(d => d.severity === 1)).toEqual([]);
+    });
+
+    it('reports errors of models and test files and updates them on changes', async () => {
+        open('models/broken.hsm', 'hsm', 'statemachine Broken {\n    [*] -> Missing\n    state A\n}\n');
+        const errors = await diagnosticsFor(uriOf('models/broken.hsm'), d => d.length > 0);
+        expect(errors.some(d => d.severity === 1 && /Missing/.test(d.message))).toBe(true);
+
+        const uri = uriOf('tests/lamp.hsmtest');
+        connection.sendNotification('textDocument/didChange', {
+            textDocument: { uri, version: 2 },
+            contentChanges: [{ text: LAMP_TEST.replace('active(On)', 'active(Dimmed)') }]
+        });
+        const testErrors = await diagnosticsFor(uri, d => d.some(e => e.severity === 1));
+        expect(testErrors.some(d => /Dimmed/.test(d.message))).toBe(true);
+        connection.sendNotification('textDocument/didChange', { textDocument: { uri, version: 3 }, contentChanges: [{ text: LAMP_TEST }] });
+        await diagnosticsFor(uri, d => !d.some(e => e.severity === 1));
+    });
+
+    it('shows the signature and documentation comment on hover', async () => {
+        open('models/lamp.hsm', 'hsm', LAMP);
+        await diagnosticsFor(uriOf('models/lamp.hsm'));
+        const hover = await connection.sendRequest<{ contents: { value: string } }>('textDocument/hover', {
+            textDocument: { uri: uriOf('models/lamp.hsm') }, position: position(LAMP, 'toggle', 1, 2)
+        });
+        expect(hover.contents.value).toContain('in event toggle');
+        expect(hover.contents.value).toContain('Switches the lamp on or off.');
+    });
+
+    it('navigates from a test file to the model (definition) and finds references across files', async () => {
+        const definition = await connection.sendRequest<Array<{ targetUri?: string, uri?: string }>>('textDocument/definition', {
+            textDocument: { uri: uriOf('tests/lamp.hsmtest') }, position: position(LAMP_TEST, 'toggle', 0, 2)
+        });
+        const target = Array.isArray(definition) ? definition[0] : definition;
+        expect(target.targetUri ?? target.uri).toBe(uriOf('models/lamp.hsm'));
+
+        const references = await connection.sendRequest<Array<{ uri: string }>>('textDocument/references', {
+            textDocument: { uri: uriOf('models/lamp.hsm') }, position: position(LAMP, 'toggle', 0, 2), context: { includeDeclaration: false }
+        });
+        expect(new Set(references.map(r => r.uri))).toEqual(new Set([uriOf('models/lamp.hsm'), uriOf('tests/lamp.hsmtest')]));
+    });
+
+    it('renames an event in the model and in the tests', async () => {
+        const edit = await connection.sendRequest<{ changes: Record<string, unknown[]> }>('textDocument/rename', {
+            textDocument: { uri: uriOf('models/lamp.hsm') }, position: position(LAMP, 'toggle', 0, 2), newName: 'press'
+        });
+        expect(edit.changes[uriOf('models/lamp.hsm')]).toHaveLength(3);
+        expect(edit.changes[uriOf('tests/lamp.hsmtest')]).toHaveLength(1);
+    });
+
+    it('formats, lists symbols, folds, completes and highlights', async () => {
+        const uri = uriOf('models/lamp.hsm');
+        const unformatted = 'statemachine Fmt {\n[*] -> A\n        state A\n}\n';
+        open('models/fmt.hsm', 'hsm', unformatted);
+        await diagnosticsFor(uriOf('models/fmt.hsm'));
+        const edits = await connection.sendRequest<unknown[]>('textDocument/formatting', {
+            textDocument: { uri: uriOf('models/fmt.hsm') }, options: { tabSize: 4, insertSpaces: true }
+        });
+        expect(edits.length).toBeGreaterThan(0);
+
+        const symbols = await connection.sendRequest<Array<{ name: string, children?: Array<{ name: string }> }>>('textDocument/documentSymbol', { textDocument: { uri } });
+        expect(symbols[0].name).toBe('Lamp');
+        const names = JSON.stringify(symbols);
+        expect(names).toContain('"On"');
+        expect(names).toContain('"toggle"');
+
+        const folding = await connection.sendRequest<unknown[]>('textDocument/foldingRange', { textDocument: { uri } });
+        expect(folding.length).toBeGreaterThan(0);
+
+        const completion = await connection.sendRequest<{ items: Array<{ label: string }> } | Array<{ label: string }>>('textDocument/completion', {
+            textDocument: { uri: uriOf('tests/lamp.hsmtest') }, position: position(LAMP_TEST, 'active(On)', 0, 7)
+        });
+        const labels = (Array.isArray(completion) ? completion : completion.items).map(item => item.label);
+        expect(labels).toEqual(expect.arrayContaining(['On', 'Off']));
+
+        const tokens = await connection.sendRequest<{ data: number[] }>('textDocument/semanticTokens/full', { textDocument: { uri } });
+        expect(tokens.data.length).toBeGreaterThan(0);
+    });
+});

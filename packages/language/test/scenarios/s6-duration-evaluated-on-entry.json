@@ -1,0 +1,25 @@
+{
+    "name": "s6-duration-evaluated-on-entry",
+    "description": "The duration is evaluated when the state is entered, after its entry reactions.",
+    "text": [
+        "statemachine M {",
+        "    @CycleBased(10)",
+        "    interface:",
+        "        var delay : integer = 100",
+        "    [*] -> A",
+        "    state A {",
+        "        entry / delay = delay * 2",
+        "    }",
+        "    state B",
+        "    A -> B : after delay ms",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"delay": 200}}},
+        {"runFor": 190},
+        {"expect": {"configuration": ["A"]}},
+        {"runFor": 10},
+        {"expect": {"configuration": ["B"]}}
+    ]
+}

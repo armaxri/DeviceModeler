@@ -1,0 +1,30 @@
+{
+    "name": "s7-choice-chain",
+    "description": "Choices can be chained; all effects are executed in order.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "        var n : integer = 7",
+        "        var log : string",
+        "    [*] -> A",
+        "    state A",
+        "    state R1",
+        "    state R2",
+        "    state R3",
+        "    choice C1",
+        "    choice C2",
+        "    A -> C1 : go / log = \"a\"",
+        "    C1 -> R1 : [n < 5] / log = log + \"1\"",
+        "    C1 -> C2 : else / log = log + \"2\"",
+        "    C2 -> R2 : [n < 10] / log = log + \"3\"",
+        "    C2 -> R3 : else / log = log + \"4\"",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["R2"], "variables": {"log": "a23"}}}
+    ]
+}

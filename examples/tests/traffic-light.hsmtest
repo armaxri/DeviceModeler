@@ -1,0 +1,83 @@
+// Unit tests of the traffic light (cycle based, 100 ms): time events, interfaces and out events.
+// Run with: hsm test examples/tests/traffic-light.hsmtest --machine examples/traffic-light.hsm
+testclass TrafficLightTest for statemachine TrafficLight {
+
+    @SetUp
+    operation switchOn() {
+        enter
+        raise powerOn
+        proceed 1 cycle
+    }
+
+    @Test
+    operation startsRed() {
+        assert active(TrafficLight.Operating.Red)
+        assert lights == RED
+        assert lightsChanged && valueof(lightsChanged) == 1 message "Red announces the new lights"
+        assert called switchOn with (RED)
+    }
+
+    @Test
+    operation cyclesThroughThePhases() {
+        proceed 20 s
+        assert active(RedYellow)
+        assert lights == (RED | YELLOW)
+        proceed 2 s
+        assert active(Green)
+        raise Pedestrian.request
+        proceed 1 cycle
+        assert Pedestrian.waiting
+        proceed 30 s
+        assert active(Yellow) message "the pedestrian request ends the green phase after 30 s"
+        proceed 3 s
+        assert active(Red)
+        assert !Pedestrian.waiting
+    }
+
+    @Test
+    operation blinksOnFailure() {
+        raise failure
+        proceed 1 cycle
+        assert active(Blinking)
+        proceed 500 ms
+        assert lights == (RED | YELLOW)
+        proceed 500 ms
+        assert lights == RED
+        assert called switchOn with (RED | YELLOW) times 1
+    }
+
+    @Test
+    operation staysGreenWithoutRequest() {
+        proceed 22 s
+        assert active(Green)
+        proceed 60 s
+        assert active(Green) message "the time event fires once, its guard is false without a request"
+    }
+
+    @Test
+    operation powerOff() {
+        raise powerOff
+        proceed 1 cycle
+        assert active(Off)
+        assert called switchOn with (0) times 2 message "Off is entered twice"
+    }
+
+    @Test
+    operation resetAfterFailure() {
+        raise failure
+        proceed 1 cycle
+        raise reset
+        proceed 1 cycle
+        assert active(Operating.Red) message "reset restarts the phases with red"
+    }
+
+    @Test
+    operation powerOffWhileBlinking() {
+        raise failure
+        proceed 1 cycle
+        raise powerOff
+        proceed 1 cycle
+        assert active(Off)
+        assert lights == 0
+    }
+}

@@ -1,0 +1,30 @@
+{
+    "name": "s5-transition-to-parent",
+    "description": "A transition from a sub state to its parent exits the parent and enters it by default.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event e",
+        "        in event up",
+        "        var entries : integer",
+        "    [*] -> P",
+        "    state P {",
+        "        entry / entries += 1",
+        "        [*] -> A",
+        "        state A",
+        "        state B",
+        "        A -> B : e",
+        "    }",
+        "    B -> P : up",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "e"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.B"]}},
+        {"raise": "up"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.A"], "variables": {"entries": 2}}}
+    ]
+}

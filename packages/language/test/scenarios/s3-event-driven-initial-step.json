@@ -1,0 +1,23 @@
+{
+    "name": "s3-event-driven-initial-step",
+    "description": "Event driven: after entering, a step without events is performed so that transitions without trigger fire.",
+    "text": [
+        "statemachine M {",
+        "    @EventDriven",
+        "    interface:",
+        "        in event go",
+        "    [*] -> A",
+        "    state A",
+        "    state B",
+        "    state C",
+        "    A -> B : always",
+        "    B -> C : go",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"configuration": ["B"]}},
+        {"raise": "go"},
+        {"expect": {"configuration": ["C"]}}
+    ]
+}

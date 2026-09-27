@@ -1,0 +1,71 @@
+{
+  "name": "hsmtest",
+  "scopeName": "source.hsmtest",
+  "fileTypes": [
+    ".hsmtest"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "name": "keyword.control.hsmtest",
+      "match": "\\b(statemachine|operation|testclass|readonly|message|proceed|returns|valueof|active|assert|called|const|enter|false|raise|times|while|else|exit|mock|true|with|for|var|as|if)\\b"
+    },
+    {
+      "name": "string.quoted.double.hsmtest",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "include": "#string-character-escape"
+        }
+      ]
+    },
+    {
+      "name": "string.quoted.single.hsmtest",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "include": "#string-character-escape"
+        }
+      ]
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.hsmtest",
+          "begin": "/\\*",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.hsmtest"
+            }
+          },
+          "end": "\\*/",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.hsmtest"
+            }
+          }
+        },
+        {
+          "begin": "//",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.whitespace.comment.leading.hsmtest"
+            }
+          },
+          "end": "(?=$)",
+          "name": "comment.line.hsmtest"
+        }
+      ]
+    },
+    "string-character-escape": {
+      "name": "constant.character.escape.hsmtest",
+      "match": "\\\\(x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|u\\{[0-9A-Fa-f]+\\}|[0-2][0-7]{0,2}|3[0-6][0-7]?|37[0-7]?|[4-7][0-7]?|.|$)"
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+    "name": "s5-exit-effect-entry-order",
+    "description": "Taking a transition: exit innermost first (exit reactions), then the effect, then enter outermost first.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event e",
+        "        operation log(msg : string) : void",
+        "    [*] -> A",
+        "    state A {",
+        "        exit / log(\"exit A\")",
+        "        [*] -> A1",
+        "        state A1 {",
+        "            exit / log(\"exit A1\")",
+        "        }",
+        "    }",
+        "    state B {",
+        "        entry / log(\"enter B\")",
+        "        [*] -> B1",
+        "        state B1 {",
+        "            entry / log(\"enter B1\")",
+        "        }",
+        "    }",
+        "    A1 -> B : e / log(\"effect\")",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "e"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["B.B1"], "calls": ["log(\"exit A1\")", "log(\"exit A\")", "log(\"effect\")", "log(\"enter B\")", "log(\"enter B1\")"]}}
+    ]
+}

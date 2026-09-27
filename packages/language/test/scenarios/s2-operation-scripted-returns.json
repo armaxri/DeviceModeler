@@ -1,0 +1,29 @@
+{
+    "name": "s2-operation-scripted-returns",
+    "description": "Scripted operation results are returned in call order; the last one is repeated.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event tick",
+        "        var sum : integer",
+        "        operation next() : integer",
+        "    [*] -> A",
+        "    state A {",
+        "        tick / sum += next()",
+        "    }",
+        "}"
+    ],
+    "operations": {"next": [1, 10, 100]},
+    "steps": [
+        {"enter": true},
+        {"raise": "tick"},
+        {"runCycle": true},
+        {"raise": "tick"},
+        {"runCycle": true},
+        {"raise": "tick"},
+        {"runCycle": true},
+        {"raise": "tick"},
+        {"runCycle": true},
+        {"expect": {"variables": {"sum": 211}, "calls": ["next()", "next()", "next()", "next()"]}}
+    ]
+}

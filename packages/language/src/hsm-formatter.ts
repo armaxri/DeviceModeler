@@ -20,20 +20,31 @@ export class HsmFormatter extends AbstractFormatter {
             }
         } else if (ast.isPseudoState(node)) {
             this.getNodeFormatter(node).property('name').prepend(Formatting.oneSpace());
-        } else if (ast.isStateAction(node)) {
-            this.getNodeFormatter(node).keyword('/').surround(Formatting.oneSpace());
-        } else if (ast.isInternalTransition(node) || ast.isTransition(node)) {
+        } else if (ast.isInterfaceScope(node) || ast.isInternalScope(node)) {
             const formatter = this.getNodeFormatter(node);
-            if (ast.isTransition(node)) {
-                formatter.keyword('->').surround(Formatting.oneSpace());
-                formatter.keyword(':').prepend(Formatting.oneSpace());
-            } else {
-                formatter.property('event').prepend(Formatting.oneSpace());
-            }
+            formatter.keyword(':').prepend(Formatting.noSpace());
+            formatter.properties('declarations').prepend(Formatting.indent({ allowMore: true }));
+        } else if (ast.isEventDeclaration(node) || ast.isVariableDeclaration(node) || ast.isParameter(node)) {
+            const formatter = this.getNodeFormatter<ast.EventDeclaration | ast.VariableDeclaration | ast.Parameter>(node);
+            formatter.keyword(':').surround(Formatting.oneSpace());
+            formatter.keyword('=').surround(Formatting.oneSpace());
+        } else if (ast.isOperationDeclaration(node)) {
+            const formatter = this.getNodeFormatter(node);
+            formatter.keyword('(').prepend(Formatting.noSpace()).append(Formatting.noSpace());
+            formatter.keyword(')').prepend(Formatting.noSpace());
+            formatter.keyword(':').surround(Formatting.oneSpace());
+            formatter.keywords(',').prepend(Formatting.noSpace()).append(Formatting.oneSpace());
+        } else if (ast.isTransition(node)) {
+            const formatter = this.getNodeFormatter(node);
+            formatter.keyword('->').surround(Formatting.oneSpace());
+            formatter.keyword(':').prepend(Formatting.oneSpace()).append(Formatting.oneSpace());
+            formatter.keyword('#').prepend(Formatting.oneSpace());
+        } else if (ast.isReactionSpec(node) || ast.isLocalReaction(node)) {
+            const formatter = this.getNodeFormatter(node);
             formatter.keyword('[').prepend(Formatting.oneSpace()).append(Formatting.noSpace());
             formatter.keyword(']').prepend(Formatting.noSpace());
             formatter.keyword('/').surround(Formatting.oneSpace());
-            formatter.property('event').prepend(Formatting.oneSpace());
+            formatter.keywords(',').prepend(Formatting.noSpace()).append(Formatting.oneSpace());
         }
     }
 }

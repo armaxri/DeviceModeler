@@ -1,15 +1,19 @@
 import type { AstNode } from 'langium';
 import type { ELK as ElkApi, ElkExtendedEdge, ElkNode, LayoutOptions } from 'elkjs/lib/elk-api.js';
 import * as ast from '../generated/ast.js';
-import { scopeOf, transitionLabel, type ScopeContainer } from '../model-utils.js';
+import {
+    definitionLines, hasDefinitionSection, nodeText, outgoingTransitions, scopeOf, transitionLabel, transitionPriority, type ScopeContainer
+} from '../model-utils.js';
+import { qualifiedName } from '../hsm-scope.js';
 import type {
     DiagramEdge, DiagramGraph, DiagramNode, DiagramNodeKind, LayoutDirection, LayoutOptionsInput, LayoutResult, Point, TextMeasure, TextStyle
 } from './diagram-model.js';
+import { helveticaTextWidth, monospaceTextWidth } from './text-metrics.js';
 
 /** Metrics shared by the layout and the rendering of the diagram. */
 export const DiagramMetrics = {
-    fontSize: { name: 14, body: 12, label: 12 } as Record<TextStyle, number>,
-    lineHeight: { name: 17, body: 15, label: 15 } as Record<TextStyle, number>,
+    fontSize: { name: 14, body: 12, label: 12, code: 11.5 } as Record<TextStyle, number>,
+    lineHeight: { name: 17, body: 15, label: 15, code: 15 } as Record<TextStyle, number>,
     headerHeight: 26,
     bodyPadding: 6,
     emptyBodyHeight: 12,
@@ -23,17 +27,33 @@ export const DiagramMetrics = {
         choice: 26,
         junction: 12,
         history: 26,
-        deephistory: 26
-    } as Record<string, number>
+        deephistory: 26,
+        sync: 44,
+        entry: 16,
+        exit: 16
+    } as Record<string, number>,
+    /** Thickness of the bar of a synchronization. */
+    syncThickness: 7,
+    /** Default maximum length of text lines (longer lines are wrapped or shortened). */
+    maxLineLength: 60
 };
 
-/** Rough text measurement used when no real font metrics are available (e.g. in Node.js). */
+/**
+ * Text measurement used when no real font metrics are available (e.g. in Node.js): uses the
+ * character widths of Helvetica (metric compatible with Arial / Liberation Sans) and of a
+ * monospace font for the definition section, so the layout is close to the one in the browser.
+ */
 export const approximateTextMeasure: TextMeasure = (text, style) => ({
-    width: Math.ceil(text.length * DiagramMetrics.fontSize[style] * 0.58),
+    width: Math.ceil(style === 'code'
+        ? monospaceTextWidth(text, DiagramMetrics.fontSize[style])
+        : helveticaTextWidth(text, DiagramMetrics.fontSize[style])),
     height: DiagramMetrics.lineHeight[style]
 });
 
 export const MACHINE_ID = '#machine';
+
+/** Id of the node showing the definition section (mapped to the state machine in `LayoutResult.elements`). */
+export const DEFINITION_ID = '#definitions';
 
 export function initialNodeId(scopeId: string): string {
     return `${scopeId}#initial`;
@@ -64,7 +84,9 @@ export async function layoutStateMachine(machine: ast.StateMachine, options: Lay
         direction: options.direction ?? 'DOWN',
         routing: options.routing ?? 'SPLINES',
         measure: options.measure ?? approximateTextMeasure,
-        elkOptions: options.elkOptions
+        elkOptions: options.elkOptions,
+        priorities: options.priorities ?? true,
+        maxLineLength: options.maxLineLength ?? DiagramMetrics.maxLineLength
     });
     const elk = options.elk as ElkInstance | undefined ?? (defaultElk ??= await createDefaultElk());
     return builder.build(elk);
@@ -75,6 +97,8 @@ interface BuildOptions {
     direction: LayoutDirection;
     routing: 'SPLINES' | 'ORTHOGONAL' | 'POLYLINE';
     measure: TextMeasure;
+    priorities: boolean;
+    maxLineLength: number;
 }
 
 class DiagramBuilder {
@@ -90,7 +114,7 @@ class DiagramBuilder {
     /** diagram id -> id of parent diagram node (undefined for top level nodes) */
     private readonly parents = new Map<string, string>();
     private readonly edges: Array<{ edge: DiagramEdge, elk: ElkExtendedEdge }> = [];
-    private readonly usedIds = new Set<string>([MACHINE_ID]);
+    private readonly usedIds = new Set<string>([MACHINE_ID, DEFINITION_ID]);
 
     constructor(private readonly machine: ast.StateMachine, private readonly options: BuildOptions) { }
 
@@ -125,6 +149,10 @@ class DiagramBuilder {
             }
         }
         this.applyEdgeLayout(result);
+        const definition = this.createDefinitionNode();
+        if (definition) {
+            this.placeDefinition(graph, definition);
+        }
         return { graph, elements: this.elements, ids: this.ids };
     }
 
@@ -198,6 +226,79 @@ class DiagramBuilder {
         }
     }
 
+    /** A box with the lines of the definition section (namespace, annotations, interfaces, internal scope). */
+    private createDefinitionNode(): DiagramNode | undefined {
+        if (!hasDefinitionSection(this.machine)) {
+            return undefined;
+        }
+        const m = DiagramMetrics;
+        const measure = this.options.measure;
+        const { lines, titles } = this.wrapLines(definitionLines(this.machine));
+        const nameWidth = measure(this.machine.name ?? '', 'name').width + measure(' definitions', 'body').width;
+        const bodyWidth = Math.max(0, ...lines.map(line => measure(line, 'code').width));
+        const width = Math.max(nameWidth + 2 * m.stateHorizontalPadding, bodyWidth + 2 * m.bodyPadding + 4, m.stateMinWidth);
+        const height = m.headerHeight + lines.length * m.lineHeight.code + 2 * m.bodyPadding;
+        const node: DiagramNode = {
+            id: DEFINITION_ID,
+            kind: 'definition',
+            name: this.machine.name,
+            body: lines,
+            bodyTitles: titles,
+            headerHeight: m.headerHeight,
+            x: 0, y: 0, width, height,
+            children: []
+        };
+        this.nodes.set(DEFINITION_ID, node);
+        this.elements.set(DEFINITION_ID, this.machine);
+        return node;
+    }
+
+    /**
+     * The definition section has no edges, so it is not laid out by ELK: it is placed at the top left
+     * corner (like in itemis CREATE). The laid out states are moved to the right of it (top-down layout)
+     * or below it (left-right layout, which tends to produce wide diagrams).
+     */
+    private placeDefinition(graph: DiagramGraph, definition: DiagramNode): void {
+        const padding = 20;
+        const spacing = 40;
+        definition.x = padding;
+        definition.y = padding;
+        const beside = this.options.direction === 'DOWN';
+        const dx = beside ? definition.width + spacing : 0;
+        const dy = beside ? 0 : definition.height + spacing;
+        for (const node of graph.children) {
+            node.x += dx;
+            node.y += dy;
+        }
+        for (const edge of graph.edges) {
+            edge.points = edge.points.map(p => ({ x: p.x + dx, y: p.y + dy }));
+            if (edge.label) {
+                edge.label.x += dx;
+                edge.label.y += dy;
+            }
+        }
+        graph.children.unshift(definition);
+        graph.width = Math.max(graph.width + dx, definition.width + 2 * padding);
+        graph.height = Math.max(graph.height + dy, definition.height + 2 * padding);
+    }
+
+    /**
+     * Wraps lines longer than the maximum line length at statement boundaries (`; `),
+     * segments which are still too long are shortened with an ellipsis.
+     */
+    private wrapLines(input: string[]): { lines: string[], titles: Array<string | undefined> } {
+        const lines: string[] = [];
+        const titles: Array<string | undefined> = [];
+        for (const line of input) {
+            const wrapped = wrapLine(line, this.options.maxLineLength);
+            for (const part of wrapped) {
+                lines.push(part);
+                titles.push(wrapped.length > 1 || part !== line ? line : undefined);
+            }
+        }
+        return { lines, titles };
+    }
+
     /** Creates the nodes of all vertices of the container including initial and final pseudo states. */
     private createScopeContent(container: ScopeContainer, scopeId: string, parentElk: ElkNode): DiagramNode[] {
         const result: DiagramNode[] = [];
@@ -223,11 +324,27 @@ class DiagramBuilder {
     }
 
     private createVertex(vertex: ast.Vertex, parentId: string, parentElk: ElkNode): DiagramNode {
-        const id = this.uniqueId(vertex.name || '#unnamed');
+        const id = this.uniqueId(vertex.name ? qualifiedName(vertex) : '#unnamed');
         if (ast.isPseudoState(vertex)) {
             const node = this.pseudoNode(id, vertex.kind as DiagramNodeKind, DiagramMetrics.pseudoSize[vertex.kind] ?? 20);
             node.name = vertex.name;
-            this.register(node, this.elkLeaf(id, node), parentId, parentElk, vertex);
+            if (vertex.kind === 'sync') {
+                // synchronization bar perpendicular to the layout direction (the flow of the transitions)
+                if (this.options.direction === 'DOWN') {
+                    node.height = DiagramMetrics.syncThickness;
+                } else {
+                    node.width = DiagramMetrics.syncThickness;
+                }
+            }
+            const elkNode = this.elkLeaf(id, node);
+            if ((vertex.kind === 'entry' || vertex.kind === 'exit') && vertex.name) {
+                // the name is shown next to the node, ELK reserves space for it
+                const size = this.options.measure(vertex.name, 'label');
+                node.label = { text: vertex.name, x: node.width + 3, y: (node.height - size.height) / 2, width: size.width + 2, height: size.height };
+                elkNode.labels = [{ id: `${id}#name`, text: vertex.name, width: size.width + 2, height: size.height }];
+                elkNode.layoutOptions = { 'elk.nodeLabels.placement': 'OUTSIDE V_CENTER H_RIGHT' };
+            }
+            this.register(node, elkNode, parentId, parentElk, vertex);
             return node;
         }
         return this.createState(vertex, id, parentId, parentElk);
@@ -236,7 +353,7 @@ class DiagramBuilder {
     private createState(state: ast.State, id: string, parentId: string, parentElk: ElkNode): DiagramNode {
         const m = DiagramMetrics;
         const measure = this.options.measure;
-        const body = stateBodyLines(state);
+        const { lines: body, titles } = this.wrapLines(stateBodyLines(state));
         const nameWidth = measure(state.name ?? '', 'name').width;
         const bodyWidth = Math.max(0, ...body.map(line => measure(line, 'body').width));
         const width = Math.max(nameWidth + 2 * m.stateHorizontalPadding, bodyWidth + 2 * m.bodyPadding + 4, m.stateMinWidth);
@@ -247,6 +364,7 @@ class DiagramBuilder {
             kind: 'state',
             name: state.name,
             body,
+            bodyTitles: titles,
             composite,
             x: 0, y: 0, width, height: m.headerHeight + bodyHeight,
             headerHeight: m.headerHeight,
@@ -321,6 +439,15 @@ class DiagramBuilder {
     }
 
     private createTransitions(): void {
+        const outgoing = new Map<ast.Vertex, ast.Transition[]>();
+        this.outgoing = vertex => {
+            let result = outgoing.get(vertex);
+            if (!result) {
+                result = outgoingTransitions(vertex);
+                outgoing.set(vertex, result);
+            }
+            return result;
+        };
         const visit = (container: ScopeContainer) => {
             const scopeId = this.ids.get(container)!;
             for (const transition of container.transitions) {
@@ -336,6 +463,8 @@ class DiagramBuilder {
         visit(this.machine);
     }
 
+    private outgoing: (vertex: ast.Vertex) => ast.Transition[] = outgoingTransitions;
+
     private createTransition(transition: ast.Transition, scopeId: string): void {
         const source = transition.initial ? this.findId(initialNodeId(scopeId)) : this.ids.get(transition.source?.ref as AstNode);
         const target = transition.final ? this.findId(finalNodeId(scopeId)) : this.ids.get(transition.target?.ref as AstNode);
@@ -344,18 +473,26 @@ class DiagramBuilder {
         }
         // ids derived from the end points stay stable while other transitions are added or removed
         const id = this.uniqueId(`${source}->${target}`);
-        const text = transitionLabel(transition);
+        const sourceVertex = transition.source?.ref;
+        const priority = sourceVertex && !transition.initial ? transitionPriority(transition, this.outgoing(sourceVertex)) : undefined;
+        const spec = transitionLabel(transition);
+        const fullText = priority !== undefined && this.options.priorities ? (spec ? `${priority}: ${spec}` : String(priority)) : spec;
+        const text = shorten(fullText, this.options.maxLineLength);
         const edge: DiagramEdge = {
             id,
             source,
             target,
             routing: 'polyline',
-            points: []
+            points: [],
+            priority
         };
         const elkEdge: ElkExtendedEdge = { id, sources: [source], targets: [target] };
         if (text) {
             const size = this.options.measure(text, 'label');
             edge.label = { text, x: 0, y: 0, width: size.width + 4, height: size.height };
+            if (text !== fullText) {
+                edge.label.title = fullText;
+            }
             elkEdge.labels = [{ id: `${id}#label`, text, width: size.width + 4, height: size.height }];
         }
         const container = this.edgeContainer(source, target);
@@ -412,6 +549,11 @@ class DiagramBuilder {
                     node.y = child.y ?? 0;
                     node.width = child.width ?? node.width;
                     node.height = child.height ?? node.height;
+                    const label = child.labels?.[0];
+                    if (node.label && label && label.x !== undefined && label.y !== undefined) {
+                        node.label.x = label.x;
+                        node.label.y = label.y;
+                    }
                 }
                 visit(child);
             }
@@ -496,14 +638,43 @@ export function stateBodyLines(state: ast.State): string[] {
     if (state.description) {
         lines.push(...state.description.split(/\r?\n/));
     }
-    for (const behavior of state.behaviors) {
-        if (ast.isStateAction(behavior)) {
-            lines.push(`${behavior.kind} / ${behavior.action}`);
-        } else {
-            lines.push(transitionLabel(behavior));
-        }
+    for (const reaction of state.reactions) {
+        lines.push(nodeText(reaction));
     }
     return lines;
+}
+
+/** Shortens a text to at most `max` characters (with an ellipsis). */
+export function shorten(text: string, max: number): string {
+    return text.length > max ? text.substring(0, Math.max(1, max - 1)).trimEnd() + '…' : text;
+}
+
+/**
+ * Splits a line which is longer than `max` characters at statement boundaries (`; `) into
+ * several lines (continuation lines are indented), parts which are still too long are shortened.
+ */
+export function wrapLine(line: string, max: number): string[] {
+    if (line.length <= max) {
+        return [line];
+    }
+    const indent = '    ';
+    const segments = line.split(/(?<=;) /);
+    const result: string[] = [];
+    let current = '';
+    for (const segment of segments) {
+        if (!current) {
+            current = (result.length === 0 ? '' : indent) + segment;
+        } else if (current.length + 1 + segment.length <= max) {
+            current += ' ' + segment;
+        } else {
+            result.push(current);
+            current = indent + segment;
+        }
+    }
+    if (current) {
+        result.push(current);
+    }
+    return result.map(part => shorten(part, max));
 }
 
 /** Returns the scope container in which new children of the given diagram element are created. */

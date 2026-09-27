@@ -1,0 +1,767 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic hsm-export" width="853" height="1363" viewBox="0 0 853 1363" font-family="Helvetica, Arial, sans-serif">
+<title>Door</title>
+<style><![CDATA[
+.theme-classic, .theme-modern, .theme-dark {
+    --hsm-font: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
+    --hsm-select: #1a73e8;
+    --hsm-error: #d32f2f;
+    --hsm-warning: #f5a623;
+    --hsm-mono: "DejaVu Sans Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --hsm-def-fill: #fbfbf8;
+    --hsm-def-stroke: #b8b8b0;
+    --hsm-muted: #6e6e6e;
+    --hsm-keyword: #7a1f47;
+}
+
+/* PlantUML "classic" skin: light yellow states with dark red borders */
+.theme-classic {
+    --hsm-bg: #ffffff;
+    --hsm-state-fill: #fefece;
+    --hsm-state-stroke: #a80036;
+    --hsm-text: #000000;
+    --hsm-edge: #a80036;
+    --hsm-pseudo: #000000;
+    --hsm-grid: #f3f3f3;
+}
+
+/* current PlantUML default look */
+.theme-modern {
+    --hsm-bg: #ffffff;
+    --hsm-state-fill: #f1f1f1;
+    --hsm-state-stroke: #181818;
+    --hsm-text: #000000;
+    --hsm-edge: #181818;
+    --hsm-pseudo: #222222;
+    --hsm-grid: #f5f5f5;
+}
+
+.theme-dark {
+    --hsm-bg: #1e2227;
+    --hsm-state-fill: #2d333b;
+    --hsm-state-stroke: #9fb3c8;
+    --hsm-text: #e6edf3;
+    --hsm-edge: #9fb3c8;
+    --hsm-pseudo: #e6edf3;
+    --hsm-grid: #23282e;
+    --hsm-select: #58a6ff;
+    --hsm-def-fill: #252a30;
+    --hsm-def-stroke: #56606b;
+    --hsm-muted: #8b949e;
+    --hsm-keyword: #ff9ab5;
+}
+
+.theme-modern {
+    --hsm-keyword: #0b4f9c;
+}
+
+.sprotty-graph {
+    background: var(--hsm-bg);
+    font-family: var(--hsm-font);
+}
+
+.sprotty-graph text {
+    font-family: var(--hsm-font);
+    fill: var(--hsm-text);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.export-background {
+    fill: var(--hsm-bg);
+}
+
+/* ---- states ---- */
+
+.state-shape {
+    fill: var(--hsm-state-fill);
+    stroke: var(--hsm-state-stroke);
+    stroke-width: 1.5px;
+}
+
+.state-separator {
+    stroke: var(--hsm-state-stroke);
+    stroke-width: 1.5px;
+}
+
+.state-name {
+    font-size: 14px;
+    text-anchor: middle;
+}
+
+.state-body {
+    font-size: 12px;
+}
+
+/* ---- regions ---- */
+
+.region-shape {
+    fill: transparent;
+    stroke: none;
+}
+
+.region-separator {
+    stroke: var(--hsm-state-stroke);
+    stroke-width: 1.2px;
+    stroke-dasharray: 6 4;
+}
+
+.region-name {
+    font-size: 11px;
+    font-style: italic;
+    opacity: 0.75;
+}
+
+.region.selected > .region-shape {
+    fill: var(--hsm-select);
+    fill-opacity: 0.06;
+    stroke: var(--hsm-select);
+    stroke-width: 1.5px;
+    stroke-dasharray: 4 3;
+}
+
+/* ---- pseudo states ---- */
+
+.initial-shape,
+.junction-shape,
+.final-inner {
+    fill: var(--hsm-pseudo);
+}
+
+.final-outer {
+    fill: var(--hsm-bg);
+    stroke: var(--hsm-pseudo);
+    stroke-width: 1.5px;
+}
+
+.choice-shape,
+.history-shape {
+    fill: var(--hsm-state-fill);
+    stroke: var(--hsm-state-stroke);
+    stroke-width: 1.5px;
+}
+
+.history-text {
+    font-size: 12px;
+    font-weight: bold;
+    text-anchor: middle;
+}
+
+.sync-shape {
+    fill: var(--hsm-pseudo);
+}
+
+.entry-shape,
+.exit-shape {
+    fill: var(--hsm-bg);
+    stroke: var(--hsm-pseudo);
+    stroke-width: 1.5px;
+}
+
+.exit-cross {
+    fill: none;
+    stroke: var(--hsm-pseudo);
+    stroke-width: 1.3px;
+}
+
+.node-label {
+    font-size: 12px;
+}
+
+/* ---- definition section ---- */
+
+.definition-shape {
+    fill: var(--hsm-def-fill);
+    stroke: var(--hsm-def-stroke);
+    stroke-width: 1.2px;
+}
+
+.definition-separator {
+    stroke: var(--hsm-def-stroke);
+    stroke-width: 1px;
+}
+
+.definition-header {
+    font-size: 14px;
+}
+
+.definition-name {
+    font-weight: bold;
+}
+
+.sprotty-graph .definition-kind {
+    font-size: 11px;
+    font-style: italic;
+    fill: var(--hsm-muted);
+}
+
+.definition-line {
+    font-size: 11.5px;
+}
+
+.sprotty-graph .definition-line {
+    font-family: var(--hsm-mono);
+}
+
+.sprotty-graph .definition-scope {
+    fill: var(--hsm-keyword);
+}
+
+/* ---- transitions ---- */
+
+.transition-line {
+    fill: none;
+    stroke: var(--hsm-edge);
+    stroke-width: 1.2px;
+}
+
+.transition-arrow {
+    fill: var(--hsm-edge);
+    stroke: var(--hsm-edge);
+    stroke-width: 0.6px;
+    stroke-linejoin: round;
+}
+
+.transition-hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 12px;
+}
+
+.transition-label text {
+    font-size: 12px;
+}
+
+.transition-label-hit {
+    fill: transparent;
+}
+
+/* ---- interaction feedback ---- */
+
+.hsm-node.mouseover > .state-shape,
+.hsm-node.mouseover > .choice-shape,
+.hsm-node.mouseover > .history-shape {
+    stroke-width: 2.5px;
+}
+
+.hsm-node.mouseover > .initial-shape,
+.hsm-node.mouseover > .junction-shape,
+.hsm-node.mouseover > .sync-shape,
+.hsm-node.mouseover > .entry-shape,
+.hsm-node.mouseover > .exit-shape,
+.hsm-node.mouseover > .definition-shape,
+.hsm-node.mouseover > .final-outer {
+    stroke: var(--hsm-select);
+    stroke-width: 2px;
+}
+
+.hsm-node.selected > .state-shape,
+.hsm-node.selected > .choice-shape,
+.hsm-node.selected > .history-shape,
+.hsm-node.selected > .entry-shape,
+.hsm-node.selected > .exit-shape,
+.hsm-node.selected > .definition-shape,
+.hsm-node.selected > .final-outer {
+    stroke: var(--hsm-select);
+    stroke-width: 2.5px;
+}
+
+.hsm-node.selected > .state-separator,
+.hsm-node.selected > .definition-separator {
+    stroke: var(--hsm-select);
+}
+
+.hsm-node.selected > .initial-shape,
+.hsm-node.selected > .sync-shape,
+.hsm-node.selected > .junction-shape {
+    stroke: var(--hsm-select);
+    stroke-width: 3px;
+}
+
+.hsm-node.pending-source > .state-shape,
+.hsm-node.pending-source > .choice-shape,
+.hsm-node.pending-source > .history-shape,
+.hsm-node.pending-source > .initial-shape,
+.hsm-node.pending-source > .sync-shape,
+.hsm-node.pending-source > .entry-shape,
+.hsm-node.pending-source > .exit-shape,
+.hsm-node.pending-source > .junction-shape {
+    stroke: var(--hsm-select);
+    stroke-width: 3px;
+    stroke-dasharray: 5 3;
+}
+
+.transition.mouseover .transition-line {
+    stroke-width: 2px;
+}
+
+.transition.selected .transition-line {
+    stroke: var(--hsm-select);
+    stroke-width: 2px;
+}
+
+.transition.selected .transition-arrow {
+    fill: var(--hsm-select);
+    stroke: var(--hsm-select);
+}
+
+.transition.selected .transition-label text {
+    fill: var(--hsm-select);
+}
+
+/* ---- problems ---- */
+
+.hsm-node.has-error > .state-shape,
+.hsm-node.has-error > .choice-shape,
+.hsm-node.has-error > .entry-shape,
+.hsm-node.has-error > .exit-shape,
+.hsm-node.has-error > .definition-shape,
+.hsm-node.has-error > .history-shape {
+    stroke: var(--hsm-error);
+}
+
+.transition.has-error .transition-line {
+    stroke: var(--hsm-error);
+    stroke-dasharray: 5 3;
+}
+
+.issue circle {
+    stroke: var(--hsm-bg);
+    stroke-width: 1.5px;
+}
+
+.issue-error circle {
+    fill: var(--hsm-error);
+}
+
+.issue-warning circle {
+    fill: var(--hsm-warning);
+}
+
+.sprotty-graph .issue text {
+    fill: #ffffff;
+    font-size: 11px;
+    font-weight: bold;
+    text-anchor: middle;
+}
+
+.hsm-export .issue {
+    display: none;
+}
+
+/* ---- simulation ---- */
+
+.theme-classic, .theme-modern {
+    --hsm-active-fill: #d4f5cc;
+    --hsm-active-fill-composite: #effbeb;
+    --hsm-active-stroke: #1e8e3e;
+    --hsm-taken: #ff6d00;
+    --hsm-breakpoint: #e53935;
+}
+
+.theme-dark {
+    --hsm-active-fill: #1f4a2b;
+    --hsm-active-fill-composite: #22362a;
+    --hsm-active-stroke: #4ade80;
+    --hsm-taken: #ffa94d;
+    --hsm-breakpoint: #ff5252;
+}
+
+.state-shape,
+.transition-line,
+.transition-arrow {
+    transition: fill 0.25s, stroke 0.9s ease-out, stroke-width 0.9s ease-out;
+}
+
+.hsm-node.active > .state-shape {
+    fill: var(--hsm-active-fill);
+    stroke: var(--hsm-active-stroke);
+    stroke-width: 3px;
+}
+
+.hsm-node.active.composite > .state-shape {
+    fill: var(--hsm-active-fill-composite);
+}
+
+.hsm-node.active > .state-separator {
+    stroke: var(--hsm-active-stroke);
+    stroke-width: 2px;
+}
+
+.hsm-node.active > .state-name {
+    font-weight: bold;
+}
+
+.hsm-node.active > .final-outer {
+    stroke: var(--hsm-active-stroke);
+    stroke-width: 3px;
+}
+
+.hsm-node.active > .final-inner {
+    fill: var(--hsm-active-stroke);
+}
+
+/* taken transitions are highlighted immediately and fade out when the flag is removed */
+.transition.taken .transition-line {
+    transition: none;
+    stroke: var(--hsm-taken);
+    stroke-width: 3.5px;
+}
+
+.transition.taken .transition-arrow {
+    transition: none;
+    fill: var(--hsm-taken);
+    stroke: var(--hsm-taken);
+}
+
+.breakpoint-marker circle {
+    fill: var(--hsm-breakpoint);
+    stroke: var(--hsm-bg);
+    stroke-width: 1.5px;
+}
+
+.hsm-export .breakpoint-marker {
+    display: none;
+}
+
+/* ---- coverage (renderSvg highlight: 'covered' / 'uncovered') ---- */
+
+.theme-classic, .theme-modern {
+    --hsm-covered-fill: #d4f5cc;
+    --hsm-covered-stroke: #1e8e3e;
+    --hsm-uncovered-fill: #fde0e0;
+    --hsm-uncovered-stroke: #d32f2f;
+}
+
+.theme-dark {
+    --hsm-covered-fill: #1f4a2b;
+    --hsm-covered-stroke: #4ade80;
+    --hsm-uncovered-fill: #4a1f24;
+    --hsm-uncovered-stroke: #ff6b6b;
+}
+
+.hsm-node.hsm-covered > .state-shape,
+.hsm-node.hsm-covered > .choice-shape,
+.hsm-node.hsm-covered > .history-shape {
+    fill: var(--hsm-covered-fill);
+    stroke: var(--hsm-covered-stroke);
+    stroke-width: 2px;
+}
+
+.hsm-node.hsm-covered.composite > .state-shape,
+.hsm-node.hsm-uncovered.composite > .state-shape {
+    fill-opacity: 0.5;
+}
+
+.hsm-node.hsm-covered > .state-separator {
+    stroke: var(--hsm-covered-stroke);
+}
+
+.hsm-node.hsm-covered > .initial-shape,
+.hsm-node.hsm-covered > .junction-shape,
+.hsm-node.hsm-covered > .sync-shape,
+.hsm-node.hsm-covered > .final-inner {
+    fill: var(--hsm-covered-stroke);
+}
+
+.hsm-node.hsm-covered > .final-outer,
+.hsm-node.hsm-covered > .entry-shape,
+.hsm-node.hsm-covered > .exit-shape,
+.hsm-node.hsm-covered > .exit-cross {
+    stroke: var(--hsm-covered-stroke);
+}
+
+.hsm-node.hsm-uncovered > .state-shape,
+.hsm-node.hsm-uncovered > .choice-shape,
+.hsm-node.hsm-uncovered > .history-shape {
+    fill: var(--hsm-uncovered-fill);
+    stroke: var(--hsm-uncovered-stroke);
+    stroke-width: 2px;
+    stroke-dasharray: 6 3;
+}
+
+.hsm-node.hsm-uncovered > .state-separator {
+    stroke: var(--hsm-uncovered-stroke);
+}
+
+.hsm-node.hsm-uncovered > .initial-shape,
+.hsm-node.hsm-uncovered > .junction-shape,
+.hsm-node.hsm-uncovered > .sync-shape,
+.hsm-node.hsm-uncovered > .final-inner {
+    fill: var(--hsm-uncovered-stroke);
+}
+
+.hsm-node.hsm-uncovered > .final-outer,
+.hsm-node.hsm-uncovered > .entry-shape,
+.hsm-node.hsm-uncovered > .exit-shape,
+.hsm-node.hsm-uncovered > .exit-cross {
+    stroke: var(--hsm-uncovered-stroke);
+}
+
+.transition.hsm-covered .transition-line {
+    stroke: var(--hsm-covered-stroke);
+    stroke-width: 2px;
+}
+
+.transition.hsm-covered .transition-arrow {
+    fill: var(--hsm-covered-stroke);
+    stroke: var(--hsm-covered-stroke);
+}
+
+.transition.hsm-uncovered .transition-line {
+    stroke: var(--hsm-uncovered-stroke);
+    stroke-width: 2px;
+    stroke-dasharray: 6 3;
+}
+
+.transition.hsm-uncovered .transition-arrow {
+    fill: var(--hsm-uncovered-stroke);
+    stroke: var(--hsm-uncovered-stroke);
+}
+
+.sprotty-graph .transition.hsm-uncovered .transition-label text {
+    fill: var(--hsm-uncovered-stroke);
+}
+
+/* ---- title and legend of rendered SVG files (renderSvg) ---- */
+
+.hsm-title {
+    font-size: 16px;
+    font-weight: bold;
+}
+
+.hsm-legend-label {
+    font-size: 12px;
+}
+
+.hsm-legend-frame {
+    fill: var(--hsm-bg);
+    stroke: var(--hsm-def-stroke);
+    stroke-width: 1px;
+}
+]]></style>
+<rect class="export-background" width="100%" height="100%"/>
+<g>
+<g class="hsm-node definition" transform="translate(20, 20)">
+<rect class="definition-shape" x="0" y="0" rx="3" ry="3" width="196" height="218"/>
+<text class="definition-header" x="8" y="17.9"><tspan class="definition-name">Door</tspan><tspan class="definition-kind" dx="6">definitions</tspan></text>
+<line class="definition-separator" x1="0" y1="26" x2="196" y2="26"/>
+<text class="definition-line definition-scope" x="8" y="43.53">@EventDriven</text>
+<text class="definition-line definition-scope" x="8" y="58.53">@ChildFirstExecution</text>
+<text class="definition-line definition-scope" x="8" y="73.53">interface:</text>
+<text class="definition-line" x="8" y="88.53">  in event open</text>
+<text class="definition-line" x="8" y="103.53">  in event close</text>
+<text class="definition-line" x="8" y="118.53">  in event obstacle</text>
+<text class="definition-line" x="8" y="133.53">  in event motorStopped</text>
+<text class="definition-line" x="8" y="148.53">  in event serviceDone</text>
+<text class="definition-line" x="8" y="163.53">  in event maintenance</text>
+<text class="definition-line" x="8" y="178.53">  in event lower</text>
+<text class="definition-line" x="8" y="193.53">  out event alarm</text>
+<text class="definition-line" x="8" y="208.53">  var cycles : integer = 0</text>
+</g>
+<g class="hsm-node initial" transform="translate(766, 20)">
+<circle class="initial-shape" cx="10" cy="10" r="10"/>
+</g>
+<g class="hsm-node state" transform="translate(719, 76)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="114" height="53"/>
+<text class="state-name" x="57" y="17.9">Closed</text>
+<line class="state-separator" x1="0" y1="26" x2="114" y2="26"/>
+<text class="state-body" x="6" y="43.7">entry / cycles += 1</text>
+</g>
+<g class="hsm-node state composite" transform="translate(370, 224)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="280" height="247"/>
+<text class="state-name" x="140" y="17.9">Moving</text>
+<line class="state-separator" x1="0" y1="26" x2="280" y2="26"/>
+<g class="hsm-node entry-point" transform="translate(36, 40)">
+<title>Entry point Opening</title>
+<circle class="entry-shape" cx="8" cy="8" r="7.25"/>
+<text class="node-label" x="23" y="12.2">Opening</text>
+</g>
+<g class="hsm-node entry-point" transform="translate(201, 40)">
+<title>Entry point Closing</title>
+<circle class="entry-shape" cx="8" cy="8" r="7.25"/>
+<text class="node-label" x="23" y="12.2">Closing</text>
+</g>
+<g class="hsm-node exit-point" transform="translate(137, 217)">
+<title>Exit node Blocked</title>
+<circle class="exit-shape" cx="8" cy="8" r="7.25"/>
+<path class="exit-cross" d="M 2.87,2.87 L 13.13,13.13 M 2.87,13.13 L 13.13,2.87"/>
+<text class="node-label" x="23" y="12.2">Blocked</text>
+</g>
+<g class="hsm-node state" transform="translate(14, 92)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="60" height="38"/>
+<text class="state-name" x="30" y="17.9">Up</text>
+<line class="state-separator" x1="0" y1="26" x2="60" y2="26"/>
+</g>
+<g class="hsm-node state" transform="translate(177, 92)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="64" height="38"/>
+<text class="state-name" x="32" y="17.9">Down</text>
+<line class="state-separator" x1="0" y1="26" x2="64" y2="26"/>
+</g>
+</g>
+<g class="hsm-node state composite" transform="translate(524, 641)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="240" height="602"/>
+<text class="state-name" x="120" y="17.9">Service</text>
+<line class="state-separator" x1="0" y1="26" x2="240" y2="26"/>
+<g class="hsm-node region" transform="translate(0, 32)">
+<rect class="region-shape" x="0" y="0" width="240" height="282"/>
+<text class="region-name" x="6" y="14">Lock</text>
+<g class="hsm-node initial" transform="translate(46, 27)">
+<circle class="initial-shape" cx="10" cy="10" r="10"/>
+</g>
+<g class="hsm-node state" transform="translate(12, 83)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="87" height="38"/>
+<text class="state-name" x="43.5" y="17.9">Unlocked</text>
+<line class="state-separator" x1="0" y1="26" x2="87" y2="26"/>
+</g>
+<g class="hsm-node state" transform="translate(66, 208)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="74" height="38"/>
+<text class="state-name" x="37" y="17.9">Locked</text>
+<line class="state-separator" x1="0" y1="26" x2="74" y2="26"/>
+</g>
+</g>
+<g class="hsm-node region" transform="translate(0, 314)">
+<rect class="region-shape" x="0" y="0" width="240" height="288"/>
+<line class="region-separator" x1="0" y1="0" x2="240" y2="0"/>
+<text class="region-name" x="6" y="14">Light</text>
+<g class="hsm-node initial" transform="translate(152, 51)">
+<circle class="initial-shape" cx="10" cy="10" r="10"/>
+</g>
+<g class="hsm-node state" transform="translate(132, 107)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="60" height="38"/>
+<text class="state-name" x="30" y="17.9">Off</text>
+<line class="state-separator" x1="0" y1="26" x2="60" y2="26"/>
+</g>
+<g class="hsm-node state" transform="translate(168, 232)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="60" height="38"/>
+<text class="state-name" x="30" y="17.9">On</text>
+<line class="state-separator" x1="0" y1="26" x2="60" y2="26"/>
+</g>
+</g>
+</g>
+<g class="hsm-node sync" transform="translate(483, 584)">
+<title>Fork</title>
+<rect class="sync-shape" x="0" y="0" width="44" height="7" rx="1.5" ry="1.5"/>
+</g>
+<g class="hsm-node sync" transform="translate(700, 1336)">
+<title>Join</title>
+<rect class="sync-shape" x="0" y="0" width="44" height="7" rx="1.5" ry="1.5"/>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 776,40 C 776,40 776,58 776,76"/>
+<path class="transition-arrow" d="M 776,76 L 780.5,66 L 776,69 L 771.5,66 Z"/>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 738,129 C 556,151 556,162 556,168.75 C 556,175.5 556,178 556,180.5 C 556,183 556,185.5 556,191.25 C 556,197 556,206 406,224"/>
+<path class="transition-arrow" d="M 406,224 L 416.46,227.28 L 412.95,223.17 L 415.39,218.34 Z"/>
+<g class="transition-label">
+<text x="444" y="184.7">1: open # &gt;Opening</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 795,129 C 797,151 797,162 797,170.25 C 797,178.5 797,184 797,189.5 C 797,195 797,200.5 797,253.08 C 797,305.67 797,405.33 797,460.25 C 797,515.17 797,525.33 797,535.5 C 797,545.67 797,555.83 797,565.08 C 797,574.33 797,582.67 797,592.33 C 797,602 797,613 742,641"/>
+<path class="transition-arrow" d="M 742,641 L 752.95,640.47 L 748.24,637.82 L 748.87,632.45 Z"/>
+<g class="transition-label">
+<text x="708" y="354.7">2: maintenance</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 617,1243 C 617,1249 617,1258 573.17,1262.5 C 529.33,1267 441.67,1267 397.83,1264 C 354,1261 354,1255 354,1146 C 354,1037 354,825 354,715.08 C 354,605.17 354,597.33 354,589.5 C 354,581.67 354,573.83 354,559.75 C 354,545.67 354,525.33 354,491.75 C 354,458.17 354,411.33 354,364.5 C 354,317.67 354,270.83 354,244.42 C 354,218 354,212 364.33,209 C 374.67,206 395.33,206 405.67,210.5 C 416,215 416,224 416,224"/>
+<path class="transition-arrow" d="M 416,224 L 406,219.5 L 409,224 L 406,228.5 Z"/>
+<g class="transition-label">
+<text x="258" y="544.7">lower # &gt;Closing</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 404,354 L 404,372 L 404,384.75 L 404,395.38 L 404,406 L 404,414.5 L 404,427.25 L 404,440 L 404,457 L 404,477 L 404,491 L 451.67,498 L 499.33,505 L 594.67,505 L 642.33,500.33 L 690,495.67 L 690,486.33 L 690,439.5 L 690,392.67 L 690,308.33 L 690,263.17 L 690,218 L 690,212 L 704.33,209 L 718.67,206 L 747.33,206 L 761.67,203 L 776,200 L 776,194 L 776,187.92 L 776,181.83 L 776,175.67 L 776,167.96 L 776,160.25 L 776,151 L 776,129"/>
+<path class="transition-arrow" d="M 776,129 L 771.5,139 L 776,136 L 780.5,139 Z"/>
+<g class="transition-label">
+<text x="681" y="184.7">2: motorStopped</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 590,354 L 590,372 L 590,384.75 L 590,395.38 L 590,406 L 590,414.5 L 590,427.25 L 590,440 L 590,457 L 590,477 L 590,485 L 602.67,489 L 615.33,493 L 640.67,493 L 653.33,490.33 L 666,487.67 L 666,482.33 L 666,434.5 L 666,386.67 L 666,296.33 L 666,248.42 L 666,200.5 L 666,195 L 666,189.5 L 666,184 L 666,178.5 L 666,170.25 L 666,162 L 666,151 L 757,129"/>
+<path class="transition-arrow" d="M 757,129 L 746.22,126.98 L 750.2,130.64 L 748.34,135.72 Z"/>
+<g class="transition-label">
+<text x="571" y="184.7">2: motorStopped</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 394,471 C 505,505 505,519 505,528.75 C 505,538.5 505,544 505,550.87 C 505,557.75 505,566 505,584"/>
+<path class="transition-arrow" d="M 505,584 L 509.5,574 L 505,577 L 500.5,574 Z"/>
+<g class="transition-label">
+<text x="369" y="544.7">/ raise alarm # Blocked&gt;</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 498,591 L 498,591 L 512.1,613 L 639,635 L 639,667 L 639,667 L 639,700 L 639,709.5 L 639,717.42 L 639,725.33 L 639,731.67 L 639,747.17 L 639,762.67 L 639,787.33 L 639,803.92 L 639,820.5 L 639,829 L 639,839.63 L 639,850.25 L 639,863 L 639,881"/>
+<path class="transition-arrow" d="M 639,881 L 643.5,871 L 639,874 L 634.5,871 Z"/>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 512,591 L 512,591 L 534,613 L 732,635 L 732,667 L 732,739 L 732,811 L 732,883 L 732,955 L 732,1006 L 732,1015.5 L 732,1023.42 L 732,1031.33 L 732,1037.67 L 732,1053.17 L 732,1068.67 L 732,1093.33 L 732,1109.92 L 732,1126.5 L 732,1135 L 732,1145.63 L 732,1156.25 L 732,1169 L 732,1187"/>
+<path class="transition-arrow" d="M 732,1187 L 736.5,1177 L 732,1180 L 727.5,1177 Z"/>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 627,919 L 627,919 L 627,919 L 627,955 L 627,1027 L 627,1099 L 627,1171 L 627,1243 L 627,1249 L 709,1267 L 709,1276 L 709,1281.75 L 709,1287.5 L 709,1290 L 709,1292.5 L 709,1295 L 709,1297.5 L 709,1303.25 L 709,1309 L 709,1318 L 711,1336"/>
+<path class="transition-arrow" d="M 711,1336 L 714.37,1325.56 L 710.23,1329.04 L 705.42,1326.56 Z"/>
+<g class="transition-label">
+<text x="636" y="1296.7">serviceDone</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 722,1225 L 722,1225 L 722,1225 L 722,1243 L 722,1243 L 722,1267 L 722,1279.75 L 722,1292.5 L 722,1305.25 L 722,1318 L 722,1336"/>
+<path class="transition-arrow" d="M 722,1336 L 726.5,1326 L 722,1329 L 717.5,1326 Z"/>
+<g class="transition-label">
+<text x="729" y="1296.7">serviceDone</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 733,1336 C 814,1318 814,1309 814,1299 C 814,1289 814,1278 814,1218 C 814,1158 814,1049 814,940 C 814,831 814,722 814,659.67 C 814,597.33 814,581.67 814,568.75 C 814,555.83 814,545.67 814,535.5 C 814,525.33 814,515.17 814,460.25 C 814,405.33 814,305.67 814,251.25 C 814,196.83 814,187.67 814,176.21 C 814,164.75 814,151 814,129"/>
+<path class="transition-arrow" d="M 814,129 L 809.5,139 L 814,136 L 818.5,139 Z"/>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 414,280 C 414,280 414,298 414,316"/>
+<path class="transition-arrow" d="M 414,316 L 418.5,306 L 414,309 L 409.5,306 Z"/>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 579,280 C 579,280 579,298 579,316"/>
+<path class="transition-arrow" d="M 579,316 L 583.5,306 L 579,309 L 574.5,306 Z"/>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 424,354 C 488,372 488,381 488,386.75 C 488,392.5 488,395 488,397.5 C 488,400 488,402.5 488,408.25 C 488,414 488,423 512,441"/>
+<path class="transition-arrow" d="M 512,441 L 506.7,431.4 L 506.4,436.8 L 501.3,438.6 Z"/>
+<g class="transition-label">
+<text x="423" y="401.7">1: obstacle</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 568,354 C 568,372 568,380.25 568,387.13 C 568,394 568,399.5 568,406.75 C 568,414 568,423 518,441"/>
+<path class="transition-arrow" d="M 518,441 L 528.93,441.85 L 524.59,438.63 L 525.88,433.38 Z"/>
+<g class="transition-label">
+<text x="503" y="401.7">1: obstacle</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 580,720 C 580,720 580,738 580,756"/>
+<path class="transition-arrow" d="M 580,756 L 584.5,746 L 580,749 L 575.5,746 Z"/>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 580,794 C 615,812 615,821 615,828.25 C 615,835.5 615,841 615,847.88 C 615,854.75 615,863 615,881"/>
+<path class="transition-arrow" d="M 615,881 L 619.5,871 L 615,874 L 610.5,871 Z"/>
+<g class="transition-label">
+<text x="580" y="841.7">close</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 686,1026 C 686,1026 686,1044 686,1062"/>
+<path class="transition-arrow" d="M 686,1062 L 690.5,1052 L 686,1055 L 681.5,1052 Z"/>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 686,1100 C 712,1118 712,1127 712,1134.25 C 712,1141.5 712,1147 712,1153.88 C 712,1160.75 712,1169 712,1187"/>
+<path class="transition-arrow" d="M 712,1187 L 716.5,1177 L 712,1180 L 707.5,1177 Z"/>
+<g class="transition-label">
+<text x="679" y="1147.7">open</text>
+</g>
+</g>
+</g>
+</svg>

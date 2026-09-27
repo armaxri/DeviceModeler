@@ -1,0 +1,16 @@
+{
+    "name": "s2-unknown-event",
+    "description": "Raising an unknown event is an error.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "    [*] -> A",
+        "    state A",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "nope", "expectError": "Unknown event 'nope'"}
+    ]
+}

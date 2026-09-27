@@ -1,0 +1,24 @@
+{
+    "name": "s6-run-for",
+    "description": "runFor runs a cycle at every multiple of the cycle period.",
+    "text": [
+        "statemachine M {",
+        "    @CycleBased(50)",
+        "    interface:",
+        "        var cycles : integer",
+        "    [*] -> A",
+        "    state A {",
+        "        oncycle / cycles += 1",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"runFor": 49},
+        {"expect": {"variables": {"cycles": 0}}},
+        {"runFor": 1},
+        {"expect": {"variables": {"cycles": 1}}},
+        {"runFor": 500},
+        {"expect": {"variables": {"cycles": 11}}}
+    ]
+}

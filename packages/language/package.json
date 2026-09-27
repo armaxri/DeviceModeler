@@ -17,13 +17,15 @@
   "files": [
     "bin",
     "out",
-    "src"
+    "src",
+    "schemas"
   ],
   "scripts": {
     "langium:generate": "langium generate",
     "build": "langium generate && tsc -b tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepack": "npm run build"
   },
   "dependencies": {
     "commander": "~15.0.0",

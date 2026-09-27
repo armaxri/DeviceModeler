@@ -10,7 +10,7 @@
     },
     {
       "name": "keyword.control.hsm",
-      "match": "\\b(statemachine|deephistory|junction|history|choice|region|entry|state|exit|do|on)\\b"
+      "match": "\\b(statemachine|deephistory|interface|namespace|operation|internal|junction|readonly|default|history|oncycle|valueof|active|always|choice|region|after|const|entry|event|every|false|raise|state|else|exit|sync|true|out|var|as|in)\\b"
     },
     {
       "name": "string.quoted.double.hsm",

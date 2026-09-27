@@ -5,7 +5,14 @@ import { NodeFileSystem } from 'langium/node';
 import { createHsmServices } from '../hsm-module.js';
 import { HsmModelLoader } from '../hsm-document.js';
 import { generatePlantUml } from '../generator/plantuml.js';
+import { GENERATOR_CONFIG_FILE } from '../generator/config.js';
+import { runGenerateCommand, type GenerateCommandOptions } from '../generator/generate-command.js';
 import { layoutStateMachine } from '../diagram/layout.js';
+import { importSct } from '../importer/sct-importer.js';
+import { StatechartInterpreter } from '../simulation/interpreter.js';
+import { formatTraceEntry, runScenario, validateScenario, type ScenarioStep } from '../simulation/scenario.js';
+import { runTestCommand, type TestCommandOptions } from '../testing/test-command.js';
+import { registerRenderCommands } from './render-commands.js';
 
 const severities = ['', 'error', 'warning', 'info', 'hint'];
 
@@ -54,6 +61,24 @@ export function createProgram(): Command {
             console.log(`Generated ${out}`);
         });
 
+    program.command('generate')
+        .argument('[target]', 'target language: cpp or c (default: all targets of the configuration)')
+        .argument('[files...]', '.hsm files (default: the models of the generator configuration)')
+        .option('-c, --config <file>', `generator configuration (default: ${GENERATOR_CONFIG_FILE} in the current directory if no files are given)`)
+        .option('-o, --out <dir>', 'output directory (default: outDir of the configuration, or the directory of the model)')
+        .option('-n, --namespace <namespace>', 'cpp: namespace of the generated class, e.g. a::b (default: the namespace of the model, "" for none)')
+        .option('--class-name <name>', 'cpp: name of the generated class and files (default: the state machine name)')
+        .option('--std <standard>', 'cpp: C++ standard of the generated code, 17 or 11 (default: 17)')
+        .option('-p, --prefix <prefix>', 'c: prefix of the generated functions and files (default: the state machine name in snake case)')
+        .option('--check', 'writes nothing; exits with 1 if a generated file is missing or out of date (for CI)')
+        .option('--list-outputs', 'writes nothing; prints the absolute paths of the generated files (for build systems)')
+        .option('--list-inputs', 'writes nothing; prints the configuration file and the models (for build systems)')
+        .option('--outputs-file <file>', 'fails and updates the file if the generated files differ from the list in it (used by the CMake integration)')
+        .description('generates code for state machines (cpp: sc_statemachine.h, <Class>.h, <Class>.cpp; c: sc_types.h, <prefix>.h, <prefix>.c); only changed files are written')
+        .action(async (target: string | undefined, files: string[], options: GenerateCommandOptions) => {
+            process.exitCode = await runGenerateCommand(target, files, options);
+        });
+
     program.command('layout')
         .argument('<file>', '.hsm file')
         .option('-d, --direction <direction>', 'DOWN or RIGHT', 'DOWN')
@@ -64,7 +89,91 @@ export function createProgram(): Command {
             console.log(JSON.stringify(graph, undefined, 2));
         });
 
+    program.command('simulate')
+        .argument('<file>', '.hsm file')
+        .option('-s, --script <scenario>', 'scenario file (JSON, see packages/language/test/scenarios/README.md) to run against the model')
+        .option('-e, --events <events>', 'without script: comma separated in events raised one after another (cycle based: each followed by a run cycle)')
+        .option('-q, --quiet', 'print only the active states after each step, not the trace')
+        .description('runs the state machine in the interpreter and prints the trace and the active states')
+        .action(async (file: string, options: { script?: string, events?: string, quiet?: boolean }) => {
+            const { parsed, errors } = await load(file);
+            if (errors > 0 || parsed.hasSyntaxErrors) {
+                process.exitCode = 1;
+                return;
+            }
+            const printTrace = options.quiet ? () => { /* quiet */ } : (line: string) => console.log(line);
+            if (options.script) {
+                const scenario = validateScenario(JSON.parse(await fs.readFile(options.script, 'utf-8')), options.script);
+                const result = runScenario(parsed.model, scenario, {
+                    onTrace: entry => printTrace(formatTraceEntry(entry)),
+                    onStep: (step, index, sim) => {
+                        console.log(`#${index} ${describeStep(step)}${step.expect ? '' : `  -> [${sim.activeStates.join(', ')}]`}`);
+                    },
+                    onFailure: failure => console.log(`   FAILED: ${failure.message}`)
+                });
+                for (const failure of result.failures) {
+                    console.error(`${options.script}: step ${failure.step}: ${failure.message}`);
+                }
+                console.log(result.passed ? `${scenario.name ?? options.script}: passed` : `${scenario.name ?? options.script}: FAILED`);
+                process.exitCode = result.passed ? 0 : 1;
+                return;
+            }
+            const sim = new StatechartInterpreter(parsed.model, { onTrace: entry => printTrace(formatTraceEntry(entry)) });
+            console.log(`> enter (${sim.executionMode === 'cycle' ? `cycle based, ${sim.cyclePeriod} ms` : 'event driven'}, ${sim.executionOrder})`);
+            sim.enter();
+            console.log(`  active: [${sim.activeStates.join(', ')}]`);
+            for (const event of (options.events ?? '').split(',').map(e => e.trim()).filter(e => e)) {
+                console.log(`> raise ${event}`);
+                sim.raise(event);
+                if (sim.executionMode === 'cycle') {
+                    sim.runCycle();
+                }
+                console.log(`  active: [${sim.activeStates.join(', ')}]${sim.isFinal() ? ' (final)' : ''}`);
+            }
+        });
+
+    program.command('test')
+        .argument('<files...>', 'unit test files (.hsmtest)')
+        .option('-m, --machine <files...>', 'state machine files (.hsm) or directories; the .hsm files next to the test files are loaded automatically')
+        .option('--junit <file>', 'writes a JUnit XML report')
+        .option('-v, --verbose', 'prints the trace of every test')
+        .option('--coverage', 'collects the model coverage (states, transitions, reactions, guard decisions)')
+        .option('--coverage-dir <dir>', 'directory of the coverage reports (default: coverage)')
+        .option('--coverage-format <formats>', 'comma separated: text, json, lcov, cobertura, html (default: text,lcov,html)')
+        .option('--coverage-threshold <thresholds>', 'minimum coverage in %, e.g. states=100,transitions=90 (exit code 1 if not met)')
+        .description('runs the unit tests of state machines')
+        .action(async (files: string[], options: TestCommandOptions) => {
+            process.exitCode = await runTestCommand(files, options);
+        });
+
+    program.command('import')
+        .argument('<file>', 'itemis CREATE / YAKINDU statechart (.sct)')
+        .option('-o, --out <file>', 'output file (default: <file>.hsm)')
+        .description('converts an itemis CREATE (.sct) statechart into an .hsm model')
+        .action(async (file: string, options: { out?: string }) => {
+            const { text, warnings } = importSct(await fs.readFile(file, 'utf-8'));
+            for (const warning of warnings) {
+                console.error(`${file}: warning: ${warning}`);
+            }
+            const out = options.out ?? file.replace(/\.sct$/, '') + '.hsm';
+            await fs.writeFile(out, text);
+            console.log(`Generated ${out}`);
+        });
+
+    registerRenderCommands(program);
+
     return program;
+}
+
+/** Short text of a scenario step, e.g. `raise play` or `expect {"active":["Closed"]}`. */
+function describeStep(step: ScenarioStep): string {
+    const { comment: _comment, expectError, value: eventValue, ...action } = step;
+    const [key, value] = Object.entries(action)[0] ?? ['?', ''];
+    let text = value === true ? key : `${key} ${typeof value === 'string' ? value : JSON.stringify(value)}`;
+    if (eventValue !== undefined) {
+        text += ` : ${JSON.stringify(eventValue)}`;
+    }
+    return `${text}${expectError !== undefined ? ` (expecting error '${expectError}')` : ''}`;
 }
 
 createProgram().parseAsync(process.argv).catch(error => {

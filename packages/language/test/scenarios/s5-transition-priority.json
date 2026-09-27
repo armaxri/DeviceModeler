@@ -1,0 +1,25 @@
+{
+    "name": "s5-transition-priority",
+    "description": "The outgoing transitions of a state are checked in document order; the first enabled one is taken.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event e",
+        "        var x : integer = 1",
+        "    [*] -> A",
+        "    state A",
+        "    state B",
+        "    state C",
+        "    state D",
+        "    A -> B : e [x > 5]",
+        "    A -> C : e",
+        "    A -> D : e",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "e"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["C"]}}
+    ]
+}

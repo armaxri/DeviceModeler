@@ -1,0 +1,22 @@
+{
+    "name": "s7-choice-without-enabled-branch",
+    "description": "A choice without enabled branch is a runtime error.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "        var x : integer",
+        "    [*] -> A",
+        "    state A",
+        "    state B",
+        "    choice C",
+        "    A -> C : go",
+        "    C -> B : [x > 0]",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "go"},
+        {"runCycle": true, "expectError": "Choice 'C' has no enabled outgoing transition"}
+    ]
+}

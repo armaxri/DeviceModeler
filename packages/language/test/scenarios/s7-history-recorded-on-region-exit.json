@@ -1,0 +1,42 @@
+{
+    "name": "s7-history-recorded-on-region-exit",
+    "description": "History is recorded when the region is exited (its state is left), not by transitions inside the region.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event next",
+        "        in event restore",
+        "        in event leave",
+        "        in event back",
+        "    [*] -> P",
+        "    state P {",
+        "        [*] -> A",
+        "        history H",
+        "        state A",
+        "        state B",
+        "        state C",
+        "        A -> B : next",
+        "        B -> C : next",
+        "        C -> H : restore",
+        "    }",
+        "    state Q",
+        "    P -> Q : leave",
+        "    Q -> H : back",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "next"},
+        {"runCycle": true},
+        {"raise": "leave"},
+        {"runCycle": true},
+        {"raise": "back"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.B"]}},
+        {"raise": "next"},
+        {"runCycle": true},
+        {"raise": "restore"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.B"]}}
+    ]
+}

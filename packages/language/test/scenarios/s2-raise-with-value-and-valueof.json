@@ -1,0 +1,26 @@
+{
+    "name": "s2-raise-with-value-and-valueof",
+    "description": "raise e : v stores the value; valueof(e) returns the value of the most recent occurrence.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event set : integer",
+        "        out event echo : integer",
+        "        var last : integer",
+        "    [*] -> A",
+        "    state A {",
+        "        set [valueof(set) > 0] / last = valueof(set); raise echo : last * 2",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"last": 0}}},
+        {"raise": "set", "value": 21},
+        {"runCycle": true},
+        {"expect": {"variables": {"last": 21}, "outEvents": ["echo(42)"]}},
+        {"raise": "set", "value": -1},
+        {"runCycle": true},
+        {"expect": {"variables": {"last": 21}, "outEvents": []}}
+    ]
+}

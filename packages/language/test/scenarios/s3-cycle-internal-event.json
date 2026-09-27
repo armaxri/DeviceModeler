@@ -1,0 +1,38 @@
+{
+    "name": "s3-cycle-internal-event",
+    "description": "Cycle based: an internal event is visible to regions processed later in the same cycle, not to earlier ones.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "        var first : integer",
+        "        var second : integer",
+        "    internal:",
+        "        event ping",
+        "    [*] -> S",
+        "    state S {",
+        "        region R1 {",
+        "            [*] -> A",
+        "            state A {",
+        "                ping / first += 1",
+        "                go / raise ping",
+        "            }",
+        "        }",
+        "        region R2 {",
+        "            [*] -> B",
+        "            state B {",
+        "                ping / second += 1",
+        "            }",
+        "        }",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"variables": {"first": 0, "second": 1}}},
+        {"runCycle": true},
+        {"expect": {"variables": {"first": 0, "second": 1}}}
+    ]
+}

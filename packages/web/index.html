@@ -17,9 +17,9 @@
                 <option value="">Examples…</option>
             </select>
             <button id="btn-new" title="New state machine">New</button>
-            <button id="btn-open" title="Open a .hsm file">Open…</button>
+            <button id="btn-open" title="Open a .hsm file or import an itemis CREATE .sct file">Open…</button>
             <button id="btn-save" title="Download the model (.hsm)">Save</button>
-            <input type="file" id="file-input" accept=".hsm,.txt" hidden />
+            <input type="file" id="file-input" accept=".hsm,.txt,.sct" hidden />
         </div>
         <div class="group">
             <button id="btn-undo" title="Undo (Ctrl+Z)">↶</button>
@@ -28,20 +28,23 @@
         </div>
         <div class="group">
             <label><span class="label-text">Layout</span>
-                <select id="direction-select">
+                <select id="direction-select" title="Layout direction">
                     <option value="DOWN">Top → bottom</option>
                     <option value="RIGHT">Left → right</option>
                 </select>
             </label>
             <label><span class="label-text">Edges</span>
-                <select id="routing-select">
+                <select id="routing-select" title="Edge routing">
                     <option value="SPLINES">Splines</option>
                     <option value="ORTHOGONAL">Orthogonal</option>
                     <option value="POLYLINE">Polyline</option>
                 </select>
             </label>
+            <label class="toggle" title="Show the priorities of transitions leaving a state with several outgoing transitions">
+                <input type="checkbox" id="priorities-toggle" checked /><span>Priorities</span>
+            </label>
             <label><span class="label-text">Theme</span>
-                <select id="theme-select">
+                <select id="theme-select" title="Theme">
                     <option value="classic">PlantUML classic</option>
                     <option value="modern">PlantUML modern</option>
                     <option value="dark">Dark</option>
@@ -49,6 +52,9 @@
             </label>
         </div>
         <div class="spacer"></div>
+        <div class="group">
+            <button id="btn-simulate" class="simulate" title="Simulate the state machine (the model must not contain errors)">▶ Simulate</button>
+        </div>
         <div class="group">
             <button id="btn-svg" title="Export the diagram as SVG">Export SVG</button>
             <button id="btn-plantuml" title="Show the model as PlantUML">PlantUML</button>

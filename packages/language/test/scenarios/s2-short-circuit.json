@@ -1,0 +1,21 @@
+{
+    "name": "s2-short-circuit",
+    "description": "&& and || short-circuit: the right operand is not evaluated when the result is known.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        var r1 : boolean = true",
+        "        var r2 : boolean",
+        "        operation check() : boolean",
+        "    [*] -> A",
+        "    state A {",
+        "        entry / r1 = false && check(); r2 = true || check(); r1 = r1 || check()",
+        "    }",
+        "}"
+    ],
+    "operations": {"check": [true]},
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"r1": true, "r2": true}, "calls": ["check()"]}}
+    ]
+}

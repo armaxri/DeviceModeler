@@ -1,0 +1,24 @@
+{
+    "name": "s2-operation-default-return",
+    "description": "Operations without implementation return the default value of their return type.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        var i : integer = 5",
+        "        var b : boolean = true",
+        "        var s : string = \"x\"",
+        "        operation geti() : integer",
+        "        operation getb() : boolean",
+        "        operation gets() : string",
+        "        operation log(msg : string) : void",
+        "    [*] -> A",
+        "    state A {",
+        "        entry / i = geti(); b = getb(); s = gets(); log(\"done\")",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"i": 0, "b": false, "s": ""}, "calls": ["geti()", "getb()", "gets()", "log(\"done\")"]}}
+    ]
+}

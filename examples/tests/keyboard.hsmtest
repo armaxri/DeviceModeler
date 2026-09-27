@@ -1,0 +1,54 @@
+// Unit tests of the keyboard (cycle based): orthogonal regions and the final state.
+// Run with: hsm test examples/tests/keyboard.hsmtest --machine examples/keyboard.hsm
+testclass KeyboardTest for statemachine Keyboard {
+
+    @SetUp
+    operation plugIn() {
+        enter
+    }
+
+    operation press(capsLockKey : boolean, numLockKey : boolean) {
+        if (capsLockKey) {
+            raise capsLock
+        }
+        if (numLockKey) {
+            raise numLock
+        }
+        proceed 1 cycle
+    }
+
+    @Test
+    operation regionsAreIndependent() {
+        assert active(CapsOff) && active(NumOff)
+        press(true, false)
+        assert active(CapsOn) && active(NumOff)
+        assert led && valueof(led) == CAPS
+        assert called setLed with (CAPS, true)
+        press(false, true)
+        assert active(CapsOn) && active(NumOn)
+        assert !led message "led is only raised in the cycle in which CapsOn is entered"
+        press(true, true)
+        assert active(CapsOff) && active(NumOff)
+        assert called setLed with (NUM, false) times 1
+    }
+
+    @Test
+    operation suspendKeepsNothing() {
+        press(true, true)
+        raise suspend
+        proceed 1 cycle
+        assert active(Suspended)
+        assert called setLed with (CAPS, false)
+        raise wakeUp
+        proceed 1 cycle
+        assert active(CapsOff) && active(NumOff) message "Active is entered by default after waking up"
+    }
+
+    @Test
+    operation unplugFinishes() {
+        raise unplug
+        proceed 1 cycle
+        assert is_final
+        assert !active(Active)
+    }
+}

@@ -2,12 +2,15 @@ import 'reflect-metadata';
 import { Container, ContainerModule } from 'inversify';
 import {
     configureActionHandler, configureModelElement, configureViewerOptions, labelEditUiModule, loadDefaultModules,
-    moveFeature, SelectMouseListener, SGraphView, TYPES, LocalModelSource, undoRedoModule, selectFeature
+    moveFeature, MoveMouseListener, SelectMouseListener, SGraphView, TYPES, LocalModelSource, undoRedoModule, selectFeature
 } from 'sprotty';
 import { SelectAction, SelectAllAction } from 'sprotty-protocol';
 import { DiagramTypes, StateMachineGraph, TransitionEdge, VertexNode } from './model.js';
-import { ChoiceView, FinalView, HistoryView, InitialView, JunctionView, RegionView, StateView, TransitionView } from './views.js';
-import { DiagramCallbacks, HsmMouseListener, HsmSelectMouseListener, SelectionTracker } from './listeners.js';
+import {
+    ChoiceView, DefinitionView, EntryPointView, ExitPointView, FinalView, HistoryView, InitialView, JunctionView, RegionView, StateView, SyncView,
+    TransitionView
+} from './views.js';
+import { DiagramCallbacks, HsmMouseListener, HsmMoveMouseListener, HsmSelectMouseListener, SelectionTracker } from './listeners.js';
 
 export function createDiagramContainer(baseDiv: string, callbacks: DiagramCallbacks): Container {
     const hsmModule = new ContainerModule((bind, unbind, isBound, rebind) => {
@@ -16,6 +19,7 @@ export function createDiagramContainer(baseDiv: string, callbacks: DiagramCallba
         bind(HsmMouseListener).toSelf().inSingletonScope();
         bind(TYPES.MouseListener).toService(HsmMouseListener);
         rebind(SelectMouseListener).to(HsmSelectMouseListener).inSingletonScope();
+        rebind(MoveMouseListener).to(HsmMoveMouseListener).inSingletonScope();
 
         const context = { bind, unbind, isBound, rebind };
         configureModelElement(context, DiagramTypes.graph, StateMachineGraph, SGraphView);
@@ -27,6 +31,10 @@ export function createDiagramContainer(baseDiv: string, callbacks: DiagramCallba
         configureModelElement(context, DiagramTypes.junction, VertexNode, JunctionView);
         configureModelElement(context, DiagramTypes.history, VertexNode, HistoryView);
         configureModelElement(context, DiagramTypes.deephistory, VertexNode, HistoryView);
+        configureModelElement(context, DiagramTypes.sync, VertexNode, SyncView);
+        configureModelElement(context, DiagramTypes.entry, VertexNode, EntryPointView);
+        configureModelElement(context, DiagramTypes.exit, VertexNode, ExitPointView);
+        configureModelElement(context, DiagramTypes.definition, VertexNode, DefinitionView, { disable: [moveFeature] });
         configureModelElement(context, DiagramTypes.transition, TransitionEdge, TransitionView, { enable: [selectFeature] });
 
         configureViewerOptions(context, {

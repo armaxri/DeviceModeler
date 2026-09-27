@@ -1,14 +1,25 @@
 import { describe, expect, test } from 'vitest';
 import * as ast from '../src/generated/ast.js';
-import { applyEdits, ModelEditor, parseTransitionLabel, type EditResult } from '../src/edit/model-edits.js';
+import { applyEdits, ModelEditor, type EditResult } from '../src/edit/model-edits.js';
 import { allVertices } from '../src/model-utils.js';
 import { parse } from './helpers.js';
 
 const base = `statemachine M {
+    interface:
+        in event go
+        in event next
+        in event reset
+        in event start
+        var x : integer
+        operation a() : void
+        operation b() : void
+        operation init() : void
+        operation log(msg : string) : void
+
     [*] -> A
 
     state A {
-        entry / "a()"
+        entry / a()
     }
     state B {
         [*] -> B1
@@ -75,15 +86,15 @@ describe('ModelEditor', () => {
 
     test('rejects duplicate names', async () => {
         const parsed = await parse(base);
-        expect(() => new ModelEditor(base, parsed.model).addVertex(parsed.model, 'state', 'A')).toThrow(`A state named 'A' already exists.`);
+        expect(() => new ModelEditor(base, parsed.model).addVertex(parsed.model, 'state', 'A')).toThrow(`A state named 'A' already exists here.`);
         expect(() => new ModelEditor(base, parsed.model).addVertex(parsed.model, 'state', 'state')).toThrow('is not a valid name');
     });
 
     test('add transition between nested states', async () => {
-        const { text, parsed } = await edit(base, (e, f) => e.addTransition(f('B2'), f('A'), { event: 'reset', guard: 'x > 1', effect: 'log("x")' }));
-        expect(text).toContain(`    A -> B : go\n    B2 -> A : reset ["x > 1"] / "log(\\"x\\")"\n}`);
+        const { text, parsed } = await edit(base, (e, f) => e.addTransition(f('B2'), f('A'), 'reset [x > 1] / log("x")'));
+        expect(text).toContain(`    A -> B : go\n    B2 -> A : reset [x > 1] / log("x")\n}`);
         const t = parsed.model.transitions[2];
-        expect(t.effect).toBe('log("x")');
+        expect(t.spec?.effect?.statements).toHaveLength(1);
     });
 
     test('add transition within composite state', async () => {
@@ -109,11 +120,10 @@ describe('ModelEditor', () => {
 
     test('delete state removes its transitions', async () => {
         const { text } = await edit(base, (e, f) => e.deleteElements([f('B')]));
-        expect(text).toBe(`statemachine M {
-    [*] -> A
+        expect(text.substring(text.indexOf('    [*] -> A'))).toBe(`    [*] -> A
 
     state A {
-        entry / "a()"
+        entry / a()
     }
 
 }
@@ -134,7 +144,7 @@ describe('ModelEditor', () => {
         const { text, parsed } = await edit(base, (e, f) => e.moveVertex(f('A'), f('B') as ast.State));
         expect(text).toContain(`        state B2 // comment
         state A {
-            entry / "a()"
+            entry / a()
         }
         B1 -> B2 : next`);
         expect(parsed.diagnostics.filter(d => d.severity === 1)).toEqual([]);
@@ -153,11 +163,11 @@ describe('ModelEditor', () => {
 
     test('state actions', async () => {
         let { text } = await edit(base, (e, f) => e.setStateAction(f('A') as ast.State, 'exit', 'b()'));
-        expect(text).toContain(`        entry / "a()"\n        exit / "b()"\n    }`);
+        expect(text).toContain(`        entry / a()\n        exit / b()\n    }`);
         ({ text } = await edit(text, (e, f) => e.setStateAction(f('A') as ast.State, 'entry', '')));
-        expect(text).toContain(`    state A {\n        exit / "b()"\n    }`);
-        ({ text } = await edit(text, (e, f) => e.setStateAction(f('B2') as ast.State, 'do', 'work()')));
-        expect(text).toContain(`        state B2 {\n            do / "work()"\n        } // comment`);
+        expect(text).toContain(`    state A {\n        exit / b()\n    }`);
+        ({ text } = await edit(text, (e, f) => e.setStateAction(f('B2') as ast.State, 'entry', 'x = 1; b()')));
+        expect(text).toContain(`        state B2 {\n            entry / x = 1; b()\n        } // comment`);
     });
 
     test('state description', async () => {
@@ -168,9 +178,9 @@ describe('ModelEditor', () => {
     });
 
     test('update transition label', async () => {
-        const { text } = await edit(base, (e, _f, m) => e.updateTransitionLabel(m.transitions[1], { event: 'start', effect: 'init()' }));
-        expect(text).toContain('A -> B : start / "init()"\n');
-        const { text: cleared } = await edit(base, (e, _f, m) => e.updateTransitionLabel(m.transitions[1], {}));
+        const { text } = await edit(base, (e, _f, m) => e.updateTransitionLabel(m.transitions[1], 'start / init()'));
+        expect(text).toContain('A -> B : start / init()\n');
+        const { text: cleared } = await edit(base, (e, _f, m) => e.updateTransitionLabel(m.transitions[1], ''));
         expect(cleared).toContain('    A -> B\n}');
     });
 
@@ -190,14 +200,98 @@ describe('ModelEditor', () => {
     });
 });
 
-describe('parseTransitionLabel', () => {
-    test('full label', () => {
-        expect(parseTransitionLabel('open [a[0] > 1] / doIt(1)')).toEqual({ event: 'open', guard: 'a[0] > 1', effect: 'doIt(1)' });
+describe('qualified names', () => {
+    test('rename updates qualified references', async () => {
+        const text = `statemachine M {
+    [*] -> A
+    state A { [*] -> X state X }
+    state B { [*] -> X state X }
+    B.X -> A.X
+    A.X -> B
+}`;
+        const { text: result } = await edit(text, (e, f, m) => e.renameVertex((m.vertices[0] as ast.State), 'Alpha'));
+        expect(result).toContain('B.X -> Alpha.X');
+        expect(result).toContain('Alpha.X -> B');
+        expect(result).toContain('[*] -> Alpha');
     });
-    test('guard only', () => {
-        expect(parseTransitionLabel(' [ready]')).toEqual({ guard: 'ready' });
+
+    test('new transitions use the shortest unambiguous name', async () => {
+        const text = `statemachine M {
+    [*] -> A
+    state A { [*] -> X state X }
+    state B { [*] -> X state X }
+}`;
+        const parsed = await parse(text);
+        const a = parsed.model.vertices[0] as ast.State;
+        const b = parsed.model.vertices[1] as ast.State;
+        const result = applyEdits(text, new ModelEditor(text, parsed.model).addTransition(a.vertices[0], b.vertices[0]).edits);
+        expect(result).toContain('A.X -> B.X');
     });
-    test('invalid', () => {
-        expect(parseTransitionLabel('a b')).toContain('Unexpected text');
+});
+
+describe('pseudo states', () => {
+    for (const kind of ['sync', 'entry', 'exit'] as const) {
+        test(`add ${kind}`, async () => {
+            const { text, result } = await edit(base, (e, f) => e.addVertex(f('B') as ast.State, kind));
+            const name = { sync: 'Sync1', entry: 'Entry1', exit: 'Exit1' }[kind];
+            expect(result.createdName).toBe(name);
+            expect(text).toContain(`        state B2 // comment\n        ${kind} ${name}\n`);
+            expect(text.substring(result.selectOffset!)).toMatch(new RegExp(`^${kind} ${name}`));
+        });
+    }
+});
+
+describe('definition section', () => {
+    test('add declarations to the existing interface', async () => {
+        let { text } = await edit(base, e => e.addDeclaration({ kind: 'out event', name: 'done', type: 'integer' }));
+        expect(text).toContain(`        operation log(msg : string) : void\n        out event done : integer\n\n    [*] -> A`);
+        ({ text } = await edit(text, e => e.addDeclaration({ kind: 'var', name: 'count', type: 'integer', value: '0' })));
+        expect(text).toContain(`        out event done : integer\n        var count : integer = 0\n`);
+        ({ text } = await edit(text, e => e.addDeclaration({ kind: 'operation', name: 'beep', type: 'void' })));
+        expect(text).toContain(`        operation beep() : void\n`);
+    });
+
+    test('internal events create the internal scope', async () => {
+        const { text, parsed } = await edit(base, e => e.addDeclaration({ kind: 'internal event', name: 'tick' }));
+        expect(text).toContain(`        operation log(msg : string) : void\n\n    internal:\n        event tick\n\n    [*] -> A`);
+        expect(parsed.model.scopes).toHaveLength(2);
+    });
+
+    test('creates the interface in a machine without definition section', async () => {
+        const { text, parsed } = await edit(`statemachine M {\n    [*] -> A\n    state A\n}\n`, e => e.addDeclaration({ kind: 'in event', name: 'go' }));
+        expect(text).toBe(`statemachine M {\n    interface:\n        in event go\n\n    [*] -> A\n    state A\n}\n`);
+        expect(parsed.model.scopes[0].declarations[0].name).toBe('go');
+    });
+
+    test('the unnamed interface is inserted before other scopes', async () => {
+        const source = `statemachine M {\n    @EventDriven\n\n    internal:\n        var x : integer\n\n    state A\n}\n`;
+        const { text } = await edit(source, e => e.addDeclaration({ kind: 'in event', name: 'go' }));
+        expect(text).toBe(`statemachine M {\n    @EventDriven\n\n    interface:\n        in event go\n\n    internal:\n        var x : integer\n\n    state A\n}\n`);
+    });
+
+    test('named interfaces and empty scopes', async () => {
+        const source = `statemachine M {\n    interface:\n    state A\n}\n`;
+        let { text } = await edit(source, e => e.addDeclaration({ kind: 'in event', name: 'go' }));
+        expect(text).toBe(`statemachine M {\n    interface:\n        in event go\n    state A\n}\n`);
+        ({ text } = await edit(text, e => e.addDeclaration({ kind: 'in event', name: 'request', scope: 'Pedestrian' })));
+        expect(text).toContain(`        in event go\n\n    interface Pedestrian:\n        in event request\n    state A`);
+    });
+
+    test('rejects duplicates and invalid names', async () => {
+        const parsed = await parse(base);
+        const editor = new ModelEditor(base, parsed.model);
+        expect(() => editor.addDeclaration({ kind: 'in event', name: 'go' })).toThrow(`'go' is already declared.`);
+        expect(() => editor.addDeclaration({ kind: 'var', name: '1x' })).toThrow('not a valid name');
+        expect(() => editor.addDeclaration({ kind: 'var', name: 'y', type: 'in' })).toThrow('not a valid type');
+    });
+
+    test('new states are added after the definition section', async () => {
+        const { text } = await edit(`statemachine M {\n    interface:\n        in event go\n}\n`, (e, _f, m) => e.addVertex(m, 'state', 'A'));
+        expect(text).toBe(`statemachine M {\n    interface:\n        in event go\n\n    state A\n}\n`);
+    });
+
+    test('new states keep the namespace', async () => {
+        const { text } = await edit(`statemachine M {\n    namespace a.b\n}\n`, (e, _f, m) => e.addVertex(m, 'state', 'A'));
+        expect(text).toBe(`statemachine M {\n    namespace a.b\n\n    state A\n}\n`);
     });
 });

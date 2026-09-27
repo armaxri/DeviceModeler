@@ -12,6 +12,11 @@ function baseline(top: number, height: number, fontSize: number): number {
     return top + height / 2 + fontSize * 0.35;
 }
 
+/** SVG collapses white space: leading blanks (indentation of wrapped lines) become non-breaking spaces. */
+function preserveIndent(line: string): string {
+    return line.replace(/^ +/, match => ' '.repeat(match.length));
+}
+
 function issueMarker(issue: Issue | undefined, x: number, y: number): VNode | undefined {
     if (!issue) {
         return undefined;
@@ -24,8 +29,21 @@ function issueMarker(issue: Issue | undefined, x: number, y: number): VNode | un
     </g>;
 }
 
+/** Simulation breakpoint: a small red dot. */
+function breakpointMarker(enabled: boolean, x: number, y: number): VNode | undefined {
+    if (!enabled) {
+        return undefined;
+    }
+    return <g class-breakpoint-marker={true} transform={`translate(${x}, ${y})`}>
+        <title>Breakpoint (right-click to remove)</title>
+        <circle r={5} cx={0} cy={0} />
+    </g>;
+}
+
 function vertexClasses(node: Readonly<VertexNode>): Record<string, boolean> {
     return {
+        'class-active': node.active,
+        'class-breakpoint': node.breakpoint,
         'class-hsm-node': true,
         'class-selected': node.selected,
         'class-mouseover': node.hoverFeedback,
@@ -54,9 +72,12 @@ export class StateView extends ShapeView {
             <text class-state-name={true} x={width / 2} y={baseline(0, header, m.fontSize.name)}>{node.name ?? ''}</text>
             <line class-state-separator={true} x1={0} y1={header} x2={width} y2={header} />
             {...node.body.map((line, i) =>
-                <text class-state-body={true} x={m.bodyPadding} y={baseline(header + m.bodyPadding + i * lineHeight, lineHeight, m.fontSize.body)}>{line}</text>)}
+                <text class-state-body={true} x={m.bodyPadding} y={baseline(header + m.bodyPadding + i * lineHeight, lineHeight, m.fontSize.body)}>
+                    {preserveIndent(line)}{node.bodyTitles[i] ? <title>{node.bodyTitles[i]}</title> : undefined}
+                </text>)}
             {context.renderChildren(node)}
             {issueMarker(node.issue, width - 4, 4)}
+            {breakpointMarker(node.breakpoint, 9, 9)}
         </g>;
     }
 }
@@ -158,6 +179,98 @@ export class HistoryView extends ShapeView {
     }
 }
 
+/** Synchronization (fork / join): a black bar perpendicular to the flow of the transitions. */
+@injectable()
+export class SyncView extends ShapeView {
+    render(node: Readonly<VertexNode>, context: RenderingContext): VNode | undefined {
+        if (!this.isVisible(node, context)) {
+            return undefined;
+        }
+        const { width: w, height: h } = node.size;
+        return <g {...vertexClasses(node)} class-sync={true}>
+            <title>{node.name ?? ''}</title>
+            <rect class-sync-shape={true} x={0} y={0} width={w} height={h} rx={1.5} ry={1.5} />
+            {issueMarker(node.issue, w, 0)}
+        </g>;
+    }
+}
+
+function nodeLabel(node: Readonly<VertexNode>): VNode | undefined {
+    const label = node.label;
+    if (!label) {
+        return undefined;
+    }
+    return <text class-node-label={true} x={label.x + 1} y={baseline(label.y, label.height, m.fontSize.label)}>{label.text}</text>;
+}
+
+/** Named entry point (itemis CREATE): a small hollow circle with the name next to it. */
+@injectable()
+export class EntryPointView extends ShapeView {
+    render(node: Readonly<VertexNode>, context: RenderingContext): VNode | undefined {
+        if (!this.isVisible(node, context)) {
+            return undefined;
+        }
+        const r = node.size.width / 2;
+        return <g {...vertexClasses(node)} class-entry-point={true}>
+            <title>{`Entry point ${node.name ?? ''}`}</title>
+            <circle class-entry-shape={true} cx={r} cy={r} r={r - 0.75} />
+            {nodeLabel(node)}
+            {issueMarker(node.issue, 2 * r, 0)}
+        </g>;
+    }
+}
+
+/** Exit node (itemis CREATE): a circle with a cross and the name next to it. */
+@injectable()
+export class ExitPointView extends ShapeView {
+    render(node: Readonly<VertexNode>, context: RenderingContext): VNode | undefined {
+        if (!this.isVisible(node, context)) {
+            return undefined;
+        }
+        const r = node.size.width / 2;
+        const d = (r - 0.75) * Math.SQRT1_2;
+        return <g {...vertexClasses(node)} class-exit-point={true}>
+            <title>{`Exit node ${node.name ?? ''}`}</title>
+            <circle class-exit-shape={true} cx={r} cy={r} r={r - 0.75} />
+            <path class-exit-cross={true} d={`M ${r - d},${r - d} L ${r + d},${r + d} M ${r - d},${r + d} L ${r + d},${r - d}`} />
+            {nodeLabel(node)}
+            {issueMarker(node.issue, 2 * r, 0)}
+        </g>;
+    }
+}
+
+/**
+ * The definition section (namespace, annotations, interfaces, internal scope) as a box with the
+ * name of the state machine in the header and the declarations as monospace text lines.
+ */
+@injectable()
+export class DefinitionView extends ShapeView {
+    render(node: Readonly<VertexNode>, context: RenderingContext): VNode | undefined {
+        if (!this.isVisible(node, context)) {
+            return undefined;
+        }
+        const { width, height } = node.size;
+        const header = node.headerHeight;
+        const lineHeight = m.lineHeight.code;
+        return <g {...vertexClasses(node)} class-definition={true}>
+            <title>Definition section – double-click to edit it in the text</title>
+            <rect class-definition-shape={true} x={0} y={0} rx={3} ry={3} width={width} height={height} />
+            <text class-definition-header={true} x={m.bodyPadding + 2} y={baseline(0, header, m.fontSize.name)}>
+                <tspan class-definition-name={true}>{node.name ?? ''}</tspan>
+                <tspan class-definition-kind={true} dx={6}>definitions</tspan>
+            </text>
+            <line class-definition-separator={true} x1={0} y1={header} x2={width} y2={header} />
+            {...node.body.map((line, i) =>
+                <text class-definition-line={true} class-definition-scope={!line.startsWith(' ')}
+                    x={m.bodyPadding + 2} y={baseline(header + m.bodyPadding + i * lineHeight, lineHeight, m.fontSize.code)}>
+                    {preserveIndent(line)}
+                    {node.bodyTitles[i] ? <title>{node.bodyTitles[i]}</title> : undefined}
+                </text>)}
+            {issueMarker(node.issue, width - 4, 4)}
+        </g>;
+    }
+}
+
 /** Renders a transition along the route computed by ELK, with a PlantUML like arrow head. */
 @injectable()
 export class TransitionView implements IView {
@@ -174,7 +287,9 @@ export class TransitionView implements IView {
             previous = points[i];
         }
         const label = edge.label;
+        const middle = points[Math.floor(points.length / 2)];
         return <g class-transition={true} class-selected={edge.selected} class-mouseover={edge.hoverFeedback}
+            class-taken={edge.taken} class-breakpoint={edge.breakpoint}
             class-has-error={edge.issue?.severity === 'error'} class-has-warning={edge.issue?.severity === 'warning'}>
             <path class-transition-hit={true} d={path} />
             <path class-transition-line={true} d={path} />
@@ -182,9 +297,12 @@ export class TransitionView implements IView {
             {label
                 ? <g class-transition-label={true}>
                     <rect class-transition-label-hit={true} x={label.x} y={label.y} width={label.width} height={label.height} />
-                    <text x={label.x + 2} y={baseline(label.y, label.height, m.fontSize.label)}>{label.text}</text>
+                    <text x={label.x + 2} y={baseline(label.y, label.height, m.fontSize.label)}>
+                        {label.text}{label.title ? <title>{label.title}</title> : undefined}
+                    </text>
                 </g>
                 : undefined}
+            {breakpointMarker(edge.breakpoint, label ? label.x - 7 : middle.x, label ? label.y + label.height / 2 : middle.y)}
             {issueMarker(edge.issue, label ? label.x + label.width + 8 : (points[0].x + end.x) / 2, label ? label.y + label.height / 2 : (points[0].y + end.y) / 2)}
         </g>;
     }

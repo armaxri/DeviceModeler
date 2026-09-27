@@ -1,0 +1,21 @@
+{
+    "name": "s2-postfix-increment",
+    "description": "x++ and x-- update the variable; the value of the expression is the value before the operation.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        var i : integer = 5",
+        "        var r : real = 0.5",
+        "        var a : integer",
+        "        var b : integer",
+        "    [*] -> A",
+        "    state A {",
+        "        entry / a = i++; b = i--; i++; r++",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"i": 6, "a": 5, "b": 6, "r": 1.5}}}
+    ]
+}

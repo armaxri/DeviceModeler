@@ -1,0 +1,19 @@
+{
+    "name": "s2-integer-64-bit",
+    "description": "Integers are 64-bit signed and wrap around on overflow; hex literals.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        var big : integer = 0x7FFFFFFF",
+        "        var wrapped : integer",
+        "    [*] -> A",
+        "    state A {",
+        "        entry / big = big * 2 + 1; wrapped = 0x7FFFFFFFFFFFFFFF; wrapped += 1; wrapped = wrapped / 0x100000000",
+        "    }",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"big": 4294967295, "wrapped": -2147483648}}}
+    ]
+}
