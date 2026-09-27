@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import 'sprotty/css/sprotty.css';
 import '@hsm-web/styles/app.css';
-import '@hsm-web/styles/diagram.css';
+import '@hsm-web/styles/diagram-styles.js';
 import '@hsm-web/styles/simulation.css';
 import './webview.css';
 import ElkApi from 'elkjs/lib/elk-api.js';
