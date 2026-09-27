@@ -9,7 +9,7 @@ import { generatePlantUml } from '../generator/plantuml.js';
 import { GENERATOR_CONFIG_FILE } from '../generator/config.js';
 import { runGenerateCommand, type GenerateCommandOptions } from '../generator/generate-command.js';
 import { layoutStateMachine } from '../diagram/layout.js';
-import { importSct } from '../importer/sct-importer.js';
+import { importSct, importSctFiles } from '../importer/sct-importer.js';
 import { StatechartInterpreter } from '../simulation/interpreter.js';
 import { formatTraceEntry, runScenario, validateScenario, type ScenarioStep } from '../simulation/scenario.js';
 import { runTestCommand, type TestCommandOptions } from '../testing/test-command.js';
@@ -157,17 +157,27 @@ export function createProgram(): Command {
         });
 
     program.command('import')
-        .argument('<file>', 'itemis CREATE / YAKINDU statechart (.sct)')
-        .option('-o, --out <file>', 'output file (default: <file>.hsm)')
-        .description('converts an itemis CREATE (.sct) statechart into an .hsm model')
-        .action(async (file: string, options: { out?: string }) => {
-            const { text, warnings } = importSct(await fs.readFile(file, 'utf-8'));
-            for (const warning of warnings) {
-                console.error(`${file}: warning: ${warning}`);
+        .argument('<files...>', 'itemis CREATE / YAKINDU statecharts (.sct); submachine states referencing one of the other files become submachine instances')
+        .option('-o, --out <file>', 'output file for a single statechart (default: <file>.hsm)')
+        .description('converts itemis CREATE (.sct) statecharts into .hsm models')
+        .action(async (files: string[], options: { out?: string }) => {
+            if (options.out && files.length > 1) {
+                console.error('--out can only be used with a single statechart');
+                process.exitCode = 2;
+                return;
             }
-            const out = options.out ?? file.replace(/\.sct$/, '') + '.hsm';
-            await fs.writeFile(out, text);
-            console.log(`Generated ${out}`);
+            const inputs = await Promise.all(files.map(async fileName => ({ fileName, xml: await fs.readFile(fileName, 'utf-8') })));
+            const results = inputs.length === 1
+                ? [{ ...importSct(inputs[0].xml), fileName: inputs[0].fileName.replace(/\.sct$/, '') + '.hsm' }]
+                : importSctFiles(inputs);
+            for (const [index, result] of results.entries()) {
+                for (const warning of result.warnings) {
+                    console.error(`${files[index]}: warning: ${warning}`);
+                }
+                const out = options.out ?? result.fileName;
+                await fs.writeFile(out, result.text);
+                console.log(`Generated ${out}`);
+            }
         });
 
     program.command('cpp-header')

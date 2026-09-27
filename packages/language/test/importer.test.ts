@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { isPseudoState, isState, type Transition } from '../src/generated/ast.js';
 import { qualifiedName } from '../src/hsm-scope.js';
-import { importSct } from '../src/importer/sct-importer.js';
+import { importSct, importSctFiles } from '../src/importer/sct-importer.js';
 import { parseXml } from '../src/importer/xml.js';
 import { allTransitions, allVertices } from '../src/model-utils.js';
 import { errors, parse } from './helpers.js';
@@ -434,5 +434,21 @@ describe('sct importer', () => {
         expect(text).toContain('// TODO import: submachine state');
         expect(warnings.join('\n')).toContain('submachine state');
         expect(() => importSct('<a/>')).toThrow(/does not contain an itemis CREATE statechart/);
+    });
+
+    test('submachine states become instances of the referenced statecharts imported together', async () => {
+        const parent = statechart('interface:\nin event go', region('main', entry('a'),
+            vertex('State', 'a', { name: 'Driving', referencedStatechart: 'Motor.sct#_root' }),
+            vertex('State', 'b', { name: 'Parking', referencedStatechart: 'Motor.sct#_root' })));
+        const motor = statechart('interface:\nin event start', region('main', entry('m'), state('m', 'Off'))).replace('name="Test"', 'name="Motor"');
+        const [door, imported] = importSctFiles([{ fileName: 'dir/Door.sct', xml: parent }, { fileName: 'dir/Motor.sct', xml: motor }]);
+        expect(door.fileName).toBe('dir/Door.hsm');
+        expect(imported.fileName).toBe('dir/Motor.hsm');
+        expect(door.text).toContain('    import "Motor.hsm"\n');
+        expect(door.text).toContain('    internal:\n        var motor : Motor\n        var motor2 : Motor');
+        expect(door.text).toContain('state Driving : motor');
+        expect(door.text).toContain('state Parking : motor2');
+        const parsed = await parse(door.text, { 'Motor.hsm': imported.text });
+        expect(errors(parsed)).toEqual([]);
     });
 });

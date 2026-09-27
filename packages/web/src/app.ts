@@ -1,5 +1,5 @@
 import { monaco } from './monaco.js';
-import { generatePlantUml, importSct, type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ParsedModel, type TextEdit } from 'hsm-language';
+import { generatePlantUml, importSct, importSctFiles, type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ParsedModel, type TextEdit } from 'hsm-language';
 import { EDITOR_THEMES, HsmLanguageSupport, LANGUAGE_ID } from './language-support.js';
 import { DiagramController, type DiagramHost, type DiagramSettings, type StatusSeverity, type TextRange } from './diagram-controller.js';
 import { createWorkerElk } from './diagram/elk.js';
@@ -160,6 +160,25 @@ export class HsmApp implements DiagramHost {
         fileInput.addEventListener('change', async () => {
             const selected = [...fileInput.files ?? []];
             const models = selected.filter(f => !/\.sct$/i.test(f.name));
+            const statecharts = selected.filter(f => /\.sct$/i.test(f.name));
+            if (statecharts.length > 1) {
+                // several itemis CREATE statecharts: submachine states referencing each other become instances
+                try {
+                    const results = importSctFiles(await Promise.all(statecharts.map(async f => ({ fileName: f.name, xml: await f.text() }))));
+                    for (const result of results) {
+                        this.files.set(result.fileName, result.text);
+                    }
+                    this.saveFiles();
+                    this.loadText(results[0].text, results[0].fileName);
+                    const warnings = results.flatMap(r => r.warnings);
+                    this.setStatus(`Imported ${statecharts.map(f => f.name).join(', ')}${warnings.length > 0 ? ` with ${warnings.length} warning(s): ${warnings.join(' ')}` : '.'}`,
+                        warnings.length > 0 ? 'warning' : 'info');
+                } catch (error) {
+                    this.setStatus(`Import failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
+                }
+                fileInput.value = '';
+                return;
+            }
             if (models.length > 1 || (models.length === 1 && selected.length > 1)) {
                 // several files: all of them are available for imports, the first one is edited
                 for (const model of models) {
