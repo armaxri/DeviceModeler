@@ -1,4 +1,4 @@
-import type { TextEdit } from 'hsm-language';
+import type { DiagramSubmachine, TextEdit } from 'hsm-language';
 import type { DiagramController, DiagramHost, StatusSeverity, TextRange } from '@hsm-web/diagram-controller.js';
 import { byId, h } from '@hsm-web/ui/dom.js';
 import type { FromWebview, ToWebview, WebviewSettings } from '../common/protocol.js';
@@ -24,6 +24,8 @@ export class WebviewHost implements DiagramHost {
     private readonly pending = new Map<number, (ok: boolean) => void>();
     private statusTimer?: ReturnType<typeof setTimeout>;
     private settings?: WebviewSettings;
+    /** The imported files of the last text message (JSON), to detect changes. */
+    private filesKey = '';
 
     constructor(private readonly vscode: VsCodeApi) {
         this.buildLayout();
@@ -119,10 +121,19 @@ export class WebviewHost implements DiagramHost {
             case 'settings':
                 this.applySettings(message.settings);
                 break;
-            case 'text':
+            case 'text': {
                 this.vscode.setState({ uri: message.uri });
-                this.textChanged(message.text, message.version, message.fileName);
+                // imports are resolved against the files sent by the extension
+                const files = message.files ?? {};
+                const key = JSON.stringify([message.uri, files]);
+                const filesChanged = key !== this.filesKey;
+                if (filesChanged) {
+                    this.filesKey = key;
+                    this.controller.language.setWorkspace(message.uri, files);
+                }
+                this.textChanged(message.text, message.version, message.fileName, filesChanged);
                 break;
+            }
             case 'cursor':
                 this.controller.selectElementAtOffset(message.offset);
                 break;
@@ -147,10 +158,10 @@ export class WebviewHost implements DiagramHost {
         }
     }
 
-    private textChanged(text: string, version: number, fileName: string): void {
+    private textChanged(text: string, version: number, fileName: string, filesChanged = false): void {
         this.version = version;
         byId('file-name').textContent = fileName;
-        if (this.received && text === this.text) {
+        if (this.received && text === this.text && !filesChanged) {
             return;
         }
         this.text = text;
@@ -204,6 +215,14 @@ export class WebviewHost implements DiagramHost {
 
     redo(): void {
         this.post({ type: 'redo' });
+    }
+
+    openStateMachine(submachine: DiagramSubmachine): boolean {
+        if (!submachine.uri) {
+            return false;
+        }
+        this.post({ type: 'openFile', uri: submachine.uri });
+        return true;
     }
 
     simulationStateChanged(running: boolean): void {

@@ -41,7 +41,7 @@ export interface HsmModelLoaderOptions {
 export interface LoadOptions {
     /**
      * Texts of other files, by URI or by path relative to the loaded document (`motor.hsm`). Imported
-     * files are taken from here first, then from the documents loaded before, then from `readFile`.
+     * files are taken from here first, then read with `readFile`, then from the documents loaded before.
      */
     files?: Record<string, string>;
 }
@@ -51,8 +51,8 @@ export interface LoadOptions {
  * e.g. directly in the browser or in a command line tool.
  *
  * Imports (`import "motor.hsm"`) are loaded transitively, relative to the URI of the importing
- * document (see imports.ts): from the `files` given to {@link load}, from previously loaded documents
- * or with the `readFile` function of the options. Imports that cannot be loaded are reported by the
+ * document (see imports.ts): from the `files` given to {@link load}, with the `readFile` function of the
+ * options or from previously loaded documents. Imports that cannot be loaded are reported by the
  * validator ("file not found").
  */
 export class HsmModelLoader {
@@ -112,8 +112,8 @@ export function replaceDocument(shared: LangiumSharedServices, uri: URI, text: s
 
 /**
  * Loads the `.hsm` files imported (transitively) by the given documents that are not among them:
- * from `files` (by URI or by path relative to the first document), else the text of an already loaded
- * document, else `readFile`. The documents are created anew (and replace loaded ones), so that they
+ * from `files` (by URI or by path relative to the first document), else with `readFile`, else the
+ * text of an already loaded document. The documents are created anew (and replace loaded ones), so that they
  * can be built together with the importing documents. Returns the new documents (not built yet).
  */
 export async function loadImports(shared: LangiumSharedServices, roots: LangiumDocument[], files: Record<string, string>, readFile: FileReader): Promise<LangiumDocument[]> {
@@ -144,11 +144,11 @@ export async function loadImports(shared: LangiumSharedServices, roots: LangiumD
             }
             seen.add(key);
             let text = given.get(key);
-            if (text === undefined && documents.hasDocument(uri)) {
-                text = documents.getDocument(uri)!.textDocument.getText();
-            }
             if (text === undefined) {
                 text = await readFile(uri);
+            }
+            if (text === undefined && documents.hasDocument(uri)) {
+                text = documents.getDocument(uri)!.textDocument.getText();
             }
             if (text === undefined) {
                 continue;

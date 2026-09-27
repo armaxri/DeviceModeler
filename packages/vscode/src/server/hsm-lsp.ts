@@ -1,11 +1,12 @@
-import { GrammarUtils, isReference, type AstNode, type MaybePromise, type Module } from 'langium';
+import { AstUtils, CstUtils, GrammarUtils, isReference, type AstNode, type LangiumDocument, type MaybePromise, type Module } from 'langium';
 import {
-    AbstractSemanticTokenProvider, MultilineCommentHoverProvider, type LangiumServices, type PartialLangiumServices, type SemanticTokenAcceptor
+    AbstractSemanticTokenProvider, DefaultDefinitionProvider, MultilineCommentHoverProvider,
+    type LangiumServices, type PartialLangiumServices, type SemanticTokenAcceptor
 } from 'langium/lsp';
-import { SemanticTokenModifiers, SemanticTokenTypes } from 'vscode-languageserver';
+import { LocationLink, SemanticTokenModifiers, SemanticTokenTypes, type DefinitionParams } from 'vscode-languageserver';
 import {
-    createHsmServices, isEventDeclaration, isInterfaceScope, isOperationDeclaration, isPseudoState, isState, isStateMachine, isVariableDeclaration,
-    nodeText, qualifiedName, type HsmServiceExtensions
+    createHsmServices, isEventDeclaration, isImportPath, isInterfaceScope, isOperationDeclaration, isPseudoState, isState, isStateMachine,
+    isTypeReference, isVariableDeclaration, machineType, nodeText, qualifiedName, resolvedImports, type HsmServiceExtensions, type StateMachine
 } from 'hsm-language';
 import type { DefaultSharedModuleContext } from 'langium/lsp';
 
@@ -104,11 +105,39 @@ export function hoverSignature(node: AstNode): string | undefined {
     return undefined;
 }
 
+/**
+ * Go to definition: additionally from the name of an imported state machine used as a type
+ * (`var motor : Motor`) and from an import path (`import "motor.hsm"`) to the imported state machine.
+ */
+export class HsmDefinitionProvider extends DefaultDefinitionProvider {
+
+    override getDefinition(document: LangiumDocument, params: DefinitionParams): MaybePromise<LocationLink[] | undefined> {
+        const root = document.parseResult.value.$cstNode;
+        const leaf = root ? CstUtils.findLeafNodeAtOffset(root, document.textDocument.offsetAt(params.position)) : undefined;
+        const node = leaf?.astNode;
+        let machine: StateMachine | undefined;
+        if (isTypeReference(node)) {
+            machine = machineType(node);
+        } else if (isImportPath(node)) {
+            const owner = AstUtils.getContainerOfType(node, isStateMachine);
+            machine = owner ? resolvedImports(owner).find(i => i.node === node)?.machine : undefined;
+        }
+        const target = machine?.$cstNode;
+        const targetDocument = machine?.$document;
+        if (leaf && target && targetDocument) {
+            const name = GrammarUtils.findNodeForProperty(target, 'name') ?? target;
+            return [LocationLink.create(targetDocument.textDocument.uri, target.range, name.range, leaf.range)];
+        }
+        return super.getDefinition(document, params);
+    }
+}
+
 /** Language server features added to both languages. */
 export const HsmLspModule: Module<LangiumServices, PartialLangiumServices> = {
     lsp: {
         SemanticTokenProvider: services => new HsmSemanticTokenProvider(services),
-        HoverProvider: services => new HsmHoverProvider(services)
+        HoverProvider: services => new HsmHoverProvider(services),
+        DefinitionProvider: services => new HsmDefinitionProvider(services)
     }
 };
 

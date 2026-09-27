@@ -50,6 +50,32 @@ const LAMP_TEST = `testclass LampTest for statemachine Lamp {
 }
 `;
 
+const MOTOR = `statemachine Motor {
+    interface:
+        in event start
+        out event stopped
+    [*] -> Off
+    state Off
+    state On
+    Off -> On : start
+    On -> Off : start / raise stopped
+}
+`;
+
+const GATE = `statemachine Gate {
+    import "parts/motor.hsm"
+    interface:
+        in event open
+    internal:
+        var motor : Motor
+    [*] -> Closed
+    state Closed
+    state Moving : motor
+    Closed -> Moving : open / raise motor.start
+    Moving -> Closed : motor.stopped
+}
+`;
+
 let dir: string;
 let server: ChildProcess;
 let connection: MessageConnection;
@@ -93,6 +119,9 @@ beforeAll(async () => {
     await fs.mkdir(path.join(dir, 'tests'));
     await fs.writeFile(path.join(dir, 'models/lamp.hsm'), LAMP);
     await fs.writeFile(path.join(dir, 'tests/lamp.hsmtest'), LAMP_TEST);
+    await fs.mkdir(path.join(dir, 'models/parts'));
+    await fs.writeFile(path.join(dir, 'models/parts/motor.hsm'), MOTOR);
+    await fs.writeFile(path.join(dir, 'models/gate.hsm'), GATE);
     await esbuild.build({ ...bundleOptions('server', { outdir: path.join(dir, 'out') }), logLevel: 'warning', sourcemap: false });
 
     server = spawn(process.execPath, [path.join(dir, 'out/server.cjs'), '--stdio'], { stdio: ['pipe', 'pipe', 'inherit'] });
@@ -217,5 +246,34 @@ describe('HSM language server', () => {
 
         const tokens = await connection.sendRequest<{ data: number[] }>('textDocument/semanticTokens/full', { textDocument: { uri } });
         expect(tokens.data.length).toBeGreaterThan(0);
+    });
+
+    it('resolves imports of other state machines of the workspace and relinks on changes', async () => {
+        open('models/gate.hsm', 'hsm', GATE);
+        const gateUri = uriOf('models/gate.hsm');
+        expect((await diagnosticsFor(gateUri)).filter(d => d.severity === 1)).toEqual([]);
+
+        // go to definition from the type name of the instance to the imported state machine
+        const definition = await connection.sendRequest<Array<{ targetUri?: string, uri?: string }>>('textDocument/definition', {
+            textDocument: { uri: gateUri }, position: position(GATE, 'Motor', 0, 2)
+        });
+        const target = Array.isArray(definition) ? definition[0] : definition;
+        expect(target.targetUri ?? target.uri).toBe(uriOf('models/parts/motor.hsm'));
+
+        // the motor loses its in event: the gate is relinked and reports the unresolved reference
+        const motorUri = uriOf('models/parts/motor.hsm');
+        open('models/parts/motor.hsm', 'hsm', MOTOR);
+        connection.sendNotification('textDocument/didChange', {
+            textDocument: { uri: motorUri, version: 2 }, contentChanges: [{ text: MOTOR.replace(/start/g, 'go') }]
+        });
+        const errors = await diagnosticsFor(gateUri, d => d.some(e => e.severity === 1));
+        expect(errors.some(d => /motor\.start/.test(d.message))).toBe(true);
+        connection.sendNotification('textDocument/didChange', { textDocument: { uri: motorUri, version: 3 }, contentChanges: [{ text: MOTOR }] });
+        await diagnosticsFor(gateUri, d => !d.some(e => e.severity === 1));
+
+        // an import of a file that does not exist
+        open('models/lost.hsm', 'hsm', 'statemachine Lost {\n    import "nowhere.hsm"\n    [*] -> A\n    state A\n}\n');
+        const lost = await diagnosticsFor(uriOf('models/lost.hsm'), d => d.length > 0);
+        expect(lost.some(d => d.severity === 1 && /nowhere\.hsm/.test(d.message))).toBe(true);
     });
 });
