@@ -260,8 +260,11 @@ statemachine CdPlayer "optional description" {
 
 - **Definition section**: `interface:`, named interfaces
   (`interface Pedestrian:` – their members are referenced as `Pedestrian.request`) and `internal:`
-  with `in event`, `out event`, `event`, `var`, `var readonly`, `const` and `operation` declarations.
-  Types: `integer`, `real`, `boolean`, `string`, `void`. It may start with `namespace a.b` and
+  with `in event`, `out event`, `event`, `var`, `var readonly`, `const`, `operation` and `alias`
+  declarations. Types: `integer`, `real`, `boolean`, `string`, `void` and **type aliases**
+  (`alias Speed : integer`, also aliases of aliases; `Iface.Speed` for aliases of a named interface,
+  the simple name works if it is unambiguous). An alias has exactly the semantics of its base type;
+  the code generators use the base type. It may start with `namespace a.b` and
   annotations: `@CycleBased(period)`, `@EventDriven`, `@ParentFirstExecution`, `@ChildFirstExecution`.
 - **Reactions** (transition labels and local reactions of states) have the form
   `trigger, trigger [guard] / effect`; every part is optional (a local reaction needs the effect).
@@ -271,8 +274,10 @@ statemachine CdPlayer "optional description" {
   `raise event` / `raise event : value`.
 - **Expressions**: `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `<<=`, `>>=`, `&=`, `|=`, `^=`, `? :`, `||`,
   `&&`, `|`, `^`, `&`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `<<`, `>>`, `+`, `-`, `*`, `/`, `%`, `!`,
-  `~`, `as` casts, literals (`true`, `42`, `0x1F`, `1.5`, `"text"`), `valueof(event)` and
-  `active(State)`.
+  `~`, `as` casts, literals (`true`, `42`, `0x1F`, `1.5`, `"text"`, `null`), `valueof(event)` and
+  `active(State)`. `null` can only be assigned to, passed as or compared with a `string` (and `null`);
+  it denotes the empty string (`s == null` is `s == ""`) in the interpreter and in the generated C and
+  C++ code (`std::string` cannot be null).
 - **States** are referenced by (partially) qualified names: `Playing`, `Active.Playing` or
   `Closed.Active.Playing`. A name is resolved in the scope of the transition first and then outwards,
   so sibling states must have different names, but states in different composite states may share a
@@ -281,7 +286,12 @@ statemachine CdPlayer "optional description" {
 - **Orthogonal regions**: `state S { region A { ... } region B { ... } }` (regions may be unnamed).
 - **Entry points and exit nodes** (inside a composite state `C`): `entry E` / `exit X`. A transition
   to `C` ending with `# >E` enters `C` via `E`; when `X` is reached, `C` is left by the transition
-  `C -> ... # X>`.
+  `C -> ... # X>`. As in itemis CREATE, one transition may handle several exit nodes
+  (`C -> Done # X1> X2>`), and entry points / exit nodes in different orthogonal regions of `C` may
+  have the same name: `# >failure` enters every region that has an entry point `failure` through it
+  (the other regions by default), and reaching any exit node `X` takes the `# X>` transition. Of
+  several entry points on one transition (`# >E1 >E2`) only the first one is used (warning, like
+  itemis CREATE).
 - **Synchronization**: `sync S` joins several incoming transitions (from orthogonal regions) and forks
   into several outgoing transitions.
 - **Priorities**: the outgoing transitions of a vertex are checked in the order of the text; the first
@@ -923,25 +933,33 @@ syntax); the diagram layout of the `.sct` file is ignored. The structure is mapp
 | choice (dynamic / static)                       | `choice Choice1` / `junction Junction1`                             |
 | synchronization                                 | `sync Sync1`                                                        |
 | final state                                     | `Source -> [*]` in the region of the final state                    |
-| transition `spec # >entry` / `# exit>`          | `Source -> Target : spec # >entry` / `# exit>`                      |
+| transition `spec # >entry` / `# ex1> ex2>`      | `Source -> Target : spec # >entry` / `# ex1> ex2>`                  |
 | `active(Statechart.main_region.A.r.B)`          | `active(B)` (shortest unambiguous name, regions are not part of it) |
 
 Details and limitations (each of them is reported as a warning):
 
 - State names that are not valid identifiers or clash with keywords are sanitized (`Door Open` →
   `state Door_Open "Door Open"`, `entry` → `entry_`) and made unique among the vertices of the same
-  state (itemis names only need to be unique per region).
+  state (itemis names only need to be unique per region); entry points and exit nodes of different
+  regions keep a shared name (`# >failure` enters all of them, like in itemis CREATE).
 - Transitions are declared in the innermost container of source and target and keep the order of the
   itemis model, i.e. their priority. Multi-line effects get `;` separators, number suffixes (`1.5f`)
   are removed.
-- A transition which handles several exit nodes (`# ex1> ex2>`) is duplicated per exit node; the
-  unnamed (default) exit is handled by the transitions without trigger.
+- A transition which handles several exit nodes (`# ex1> ex2>`) is imported as it is; the unnamed
+  (default) exits are handled by the transitions without trigger (`# Exit1>`).
 - Local reactions of the statechart itself (e.g. `oncycle / x += 1` in the `internal:` scope) are
   placed after the definition section.
 - Several final states of one region are merged into the final state `[*]` of the region.
 - An entry through a named history (`# >hist`) targets the history pseudo state; an unknown entry
-  point name enters by default. Entry points with the same name in several orthogonal regions cannot
-  be expressed: only one of them is used.
+  point name enters by default. Of several entry points (`# >e1 >e2`) the known ones are kept (only
+  the first one is used, the validator warns like itemis CREATE).
+- Type aliases (`alias inti : integer`) and `null` are copied unchanged; `event e : void` becomes
+  `event e`.
 - Not supported (kept as `// TODO import: …` comments): submachine states (referenced statecharts),
-  `@SuperSteps` / `@EventBuffering` and imports. Type aliases and `null` are copied unchanged and
-  reported by the validator.
+  `@SuperSteps` / `@EventBuffering` and imports.
+- Result for the 215 `.sct` files of the itemis CREATE repository: 213 are imported without syntax or
+  linking errors (the other two use outdated syntax or an unqualified member of a named interface, which current
+  itemis CREATE rejects as well); the remaining
+  validation errors are mostly in itemis validation test models that are invalid on purpose, or in
+  features HSM checks more strictly (raising `in` events internally, operations called without
+  parentheses, `out` events as triggers, `%` on reals).

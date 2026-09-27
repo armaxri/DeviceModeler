@@ -44,13 +44,19 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 
 ## Phase 3 – Migration from itemis CREATE ✅
 
-- ✅ `.sct` importer (CLI `hsm import`, "Open…" in the web editor); 201 of the 215 `.sct` files of
-  the upstream itemis repository imported without syntax or linking errors (before the grammar
-  additions below)
+- ✅ `.sct` importer (CLI `hsm import`, "Open…" in the web editor); 213 of the 215 `.sct` files of
+  the upstream itemis repository are imported without syntax or linking errors (201 before the grammar
+  additions below; the remaining two use outdated syntax that itemis CREATE rejects as well)
 - ✅ Grammar additions found by the importer: events as conditions (`[e1 && x > 0]`), `x++` / `x--`,
   local reactions of the statechart itself
-- 📋 Remaining gaps: `null`, type aliases, transitions handling several exit nodes or entry points at
-  once, entry points with the same name in several orthogonal regions
+- ✅ `null` literal (only compatible with `string`, denotes the empty string in all implementations)
+- ✅ Type aliases (`alias Name : type`, chains, cycles reported; generators use the base type)
+- ✅ Transitions handling several exit nodes (`# X1> X2>`) or selecting several entry points
+  (`# >E1 >E2`, only the first one is used like in itemis CREATE)
+- ✅ Entry points / exit nodes with the same name in several orthogonal regions (`# >failure` enters
+  every region through its `failure` entry point)
+- 📋 Remaining differences found in the upstream models: raising `in` events inside the machine,
+  operations called without parentheses, `out` events as triggers, `%` on reals
 - 📋 Import test suite based on real-world models from users
 - 💭 Keep manual layout from `.sct` notation models (saved positions)
 

@@ -28,6 +28,16 @@ as **Deviation**.
 - Integer arithmetic wraps around on overflow (two's complement). Integer division or `%` by zero
   and shift amounts outside `0..63` are runtime errors. Real arithmetic follows IEEE 754 (division
   by zero yields an infinity).
+- **Type aliases** (`alias Name : type`) are other names for their base type (resolved through
+  chains of aliases); they have no semantics of their own.
+- **`null`** (itemis CREATE) has its own type, which can only be assigned to `string` variables,
+  parameters and event values and compared (`==`, `!=`) with strings and `null`. It denotes the
+  **empty string**: `s = null` sets `s` to `""`, `s == null` is `true` iff `s` is empty, `null == null`
+  is `true`. The type of a variable cannot be inferred from `null`.
+  **Deviation:** in itemis CREATE the type of `null` is not compatible with `string` in the default
+  domain (it is meant for pointer types of the C/C++ domains, `null == null` is valid); HSM allows it
+  for strings because `std::string` in the generated C++ code and the string buffers in C cannot be
+  null, all implementations use the empty string. Pointer types may follow with C/C++ header types.
 - `+` on two strings concatenates them. `%` and the bitwise and shift operators apply to integers
   only, relational operators (`<` ...) to numbers only (see `hsm-typesystem.ts`).
 - A variable without declared type has the type of its initializer (no initializer: `integer`).
@@ -179,11 +189,17 @@ checked in steps; they are only taken when the exit node `X` is reached (§7).
   history the outgoing (default) transition of the history pseudo state is taken, otherwise the
   initial transition of the region.
 - **Entry points** (`entry E` inside composite `C`): a transition to `C` with `# >E` enters `C`
-  via `E` by taking the outgoing transition of `E`. Orthogonal regions of `C` not entered through
-  the entry point are entered by default.
+  via `E` by taking the outgoing transition of `E`. Entry points with the same name may be placed in
+  several orthogonal regions of `C` (as in itemis CREATE): every region of `C` that has an entry point
+  `E` is entered through it (regions in document order), orthogonal regions without such an entry
+  point are entered by default. A transition may list several entry points (`# >E1 >E2`); as in itemis
+  CREATE, only the **first** one is used (the validator warns about the others).
 - **Exit nodes** (`exit X` inside composite `C`): when a transition reaches `X`, `C` is exited
-  completely and the first transition from `C` with `# X>` (priority order) whose guard holds is
-  taken; its triggers are ignored. If there is none, the runtime reports an error.
+  completely and the first transition from `C` whose exit specification lists `X` (`# X>`, also
+  `# X> Y>`: one transition may handle several exit nodes) and whose guard holds is taken (priority
+  order); its triggers are ignored. If there is none, the runtime reports an error. Exit nodes with the
+  same name may be placed in several orthogonal regions of `C`; reaching any of them has the same
+  effect.
 - **Synchronization** (`sync`): a sync with more than one incoming transition is a join. It is
   checked when the first of its source states is processed in a step (as one of that state's
   outgoing transitions) and fires when all incoming transitions are enabled in the same step
