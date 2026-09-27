@@ -1,11 +1,17 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
-import { generatePlantUml, HsmModelLoader, importSct, layoutStateMachine, renderSvg, type ParsedModel } from 'hsm-language';
+import {
+    generatePlantUml, HsmModelLoader, importSct, layoutFileName, layoutStateMachineWithLayout, parseManualLayout, renderSvg, serializeManualLayout,
+    type ManualLayout, type ParsedModel
+} from 'hsm-language';
 import { runGeneration } from '../../../language/src/generator/generate-command.js';
 import type { DiagramManager } from './diagram-panel.js';
 import type { HsmTestController } from './test-controller.js';
 import { effectiveTheme } from './logic/webview.js';
 import { resolveGeneration, type CppSettings } from './logic/generator-config.js';
+import type { LayoutCommand } from '../common/protocol.js';
+import { hasLayoutFile, workspaceLayoutFs } from './layout-files.js';
+import { layoutPathOf } from './logic/layout-file.js';
 
 export interface CommandContext {
     diagrams: DiagramManager;
@@ -92,6 +98,26 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
         }
     });
 
+    // manual layout (experimental): commands of the diagram (also buttons in its toolbar)
+    const layoutCommands: Record<string, LayoutCommand> = {
+        'hsm.layoutManual': 'manual',
+        'hsm.layoutAuto': 'auto',
+        'hsm.autoArrange': 'arrange',
+        'hsm.resetLayout': 'reset'
+    };
+    for (const [id, command] of Object.entries(layoutCommands)) {
+        register(id, async (arg?: unknown) => {
+            const uri = arg instanceof vscode.Uri ? arg : vscode.window.activeTextEditor?.document.languageId === 'hsm'
+                ? vscode.window.activeTextEditor.document.uri : undefined;
+            if (uri && !commands.diagrams.get(uri)) {
+                await (await commands.diagrams.open(uri)).whenReady();
+            }
+            if (!commands.diagrams.layoutCommand(uri, command)) {
+                vscode.window.showWarningMessage('HSM: Open the diagram of an .hsm file first.');
+            }
+        });
+    }
+
     register('hsm.exportPlantUml', async (arg?: unknown) => {
         const uri = modelUri(arg, commands.diagrams);
         if (!uri) {
@@ -128,9 +154,26 @@ function modelUri(arg: unknown, diagrams: DiagramManager): vscode.Uri | undefine
 }
 
 /**
+ * The manual layout of a model (experimental): the sidecar file `<model>.hsm.layout`, undefined if
+ * there is none or it is invalid.
+ */
+export async function readManualLayout(uri: vscode.Uri): Promise<ManualLayout | undefined> {
+    if (!hasLayoutFile(uri)) {
+        return undefined;
+    }
+    const content = await workspaceLayoutFs(uri).read(layoutPathOf(uri.path));
+    try {
+        return content === undefined ? undefined : parseManualLayout(content);
+    } catch {
+        return undefined;
+    }
+}
+
+/**
  * The diagram of a model as SVG document (`renderSvg` of the language package: the same look as the
  * diagram view, styles embedded). Layout options follow the `hsm.diagram.*` settings; with the theme
- * `auto` the light theme is used (exported files are usually embedded in light documents).
+ * `auto` the light theme is used (exported files are usually embedded in light documents). A manual
+ * layout (`<model>.hsm.layout` in the mode `manual`) is applied.
  */
 export async function renderModelSvg(document: vscode.TextDocument): Promise<string> {
     const parsed = await parseModel(document);
@@ -138,11 +181,11 @@ export async function renderModelSvg(document: vscode.TextDocument): Promise<str
         throw new Error(`${path.basename(document.uri.path)} contains syntax errors.`);
     }
     const config = vscode.workspace.getConfiguration('hsm.diagram', document.uri);
-    const { graph } = await layoutStateMachine(parsed.model, {
+    const { graph } = await layoutStateMachineWithLayout(parsed.model, {
         direction: config.get<string>('direction') === 'RIGHT' ? 'RIGHT' : 'DOWN',
         routing: (['SPLINES', 'ORTHOGONAL', 'POLYLINE'] as const).find(r => r === config.get<string>('edgeRouting')) ?? 'SPLINES',
         priorities: config.get<boolean>('priorities', true)
-    });
+    }, await readManualLayout(document.uri));
     return renderSvg(graph, { theme: effectiveTheme(config.get<string>('theme', 'auto'), config.get<string>('lightTheme', 'classic'), false) });
 }
 
@@ -195,10 +238,13 @@ export async function generateCppFor(uri: vscode.Uri, output: vscode.LogOutputCh
     return written;
 }
 
-/** `HSM: Import itemis CREATE model`: converts an `.sct` file into an `.hsm` file next to it. */
+/**
+ * `HSM: Import itemis CREATE model`: converts an `.sct` file into an `.hsm` file next to it. The
+ * arrangement of the itemis diagram becomes the manual layout `<model>.hsm.layout` (experimental).
+ */
 export async function importSctFile(uri: vscode.Uri, output: vscode.LogOutputChannel): Promise<vscode.Uri | undefined> {
     const xml = new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
-    const { text, warnings } = importSct(xml);
+    const { text, warnings, layout } = importSct(xml);
     const target = uri.with({ path: uri.path.replace(/\.sct$/i, '') + '.hsm' });
     let exists = false;
     try {
@@ -213,6 +259,13 @@ export async function importSctFile(uri: vscode.Uri, output: vscode.LogOutputCha
             return undefined;
         }
     }
+    // the layout first: a diagram opened for the model reads it
+    const layoutTarget = target.with({ path: layoutFileName(target.path) });
+    if (layout) {
+        await vscode.workspace.fs.writeFile(layoutTarget, new TextEncoder().encode(serializeManualLayout(layout)));
+    } else {
+        await workspaceLayoutFs(target).delete(layoutTarget.path);
+    }
     await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(text));
     for (const warning of warnings) {
         output.warn(`${path.basename(uri.path)}: ${warning}`);
@@ -222,7 +275,8 @@ export async function importSctFile(uri: vscode.Uri, output: vscode.LogOutputCha
         vscode.window.showWarningMessage(`Imported ${path.basename(uri.path)} with ${warnings.length} warning(s) – see the output 'HSM'.`, 'Show Output')
             .then(choice => choice && output.show());
     } else {
-        vscode.window.showInformationMessage(`Imported ${path.basename(uri.path)} as ${path.basename(target.path)}.`);
+        vscode.window.showInformationMessage(`Imported ${path.basename(uri.path)} as ${path.basename(target.path)}`
+            + (layout ? ` (arrangement of the itemis diagram in ${path.basename(layoutTarget.path)}).` : '.'));
     }
     return target;
 }

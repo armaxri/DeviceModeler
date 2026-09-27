@@ -5,7 +5,9 @@ export default defineConfig({
     resolve: {
         alias: {
             // the TypeScript sources of the language package (as in the bundles)
-            'hsm-language': path.resolve(__dirname, '../language/src/index.ts')
+            'hsm-language': path.resolve(__dirname, '../language/src/index.ts'),
+            // modules of the web app shared with the webview (DOM-free ones only)
+            '@hsm-web': path.resolve(__dirname, '../web/src')
         }
     },
     test: {
