@@ -35,6 +35,7 @@
         },
         "cpp": { "$ref": "#/definitions/cpp" },
         "c": { "$ref": "#/definitions/c" },
+        "headers": { "$ref": "#/definitions/headers" },
         "writeOnlyIfChanged": {
             "description": "Only write files whose content changed, keeping the modification time of the others so that build systems do not recompile them (default: true).",
             "type": "boolean",
@@ -42,6 +43,34 @@
         }
     },
     "definitions": {
+        "headers": {
+            "description": "Analysis of imported C/C++ headers (import \"motor_types.h\" in a model, see docs/cpp-integration.md). Used by hsm (CLI), the language server of the VS Code extension (the nearest configuration above a model) and the generator.",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "includePaths": {
+                    "description": "Include directories (relative to the configuration file), searched after the directory of the model for imported headers and for the #includes of headers (like -I).",
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1 }
+                },
+                "defines": {
+                    "description": "Predefined macros for #if / #ifdef in the headers (like -D): \"NAME\": \"value\", \"\" for a macro without value.",
+                    "type": "object",
+                    "additionalProperties": { "type": ["string", "number"] },
+                    "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }
+                },
+                "dataModel": {
+                    "description": "Data model of the target, e.g. { \"longBits\": 32, \"pointerBits\": 32 } for 32-bit microcontrollers (default: LP64 as on Linux x86-64, signed char).",
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "longBits": { "enum": [32, 64], "description": "Bits of long / unsigned long (default: 64)." },
+                        "pointerBits": { "enum": [32, 64], "description": "Bits of pointers, size_t, ptrdiff_t, intptr_t (default: 64)." },
+                        "charSigned": { "type": "boolean", "description": "Whether plain char is signed (default: true)." }
+                    }
+                }
+            }
+        },
         "outDir": {
             "description": "Output directory, relative to the configuration file (default: the directory of each model). hsm generate --out and hsm_generate(OUTPUT_DIR) override it.",
             "type": "string"

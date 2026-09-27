@@ -18,6 +18,12 @@
  * | choice (dynamic / static)            | `choice` / `junction`                 |
  * | synchronization                      | `sync`                                |
  * | final state                          | `Source -> [*]`                       |
+ * | submachine state (referenced chart)  | `import "M.hsm"`, `var m : M`, `state S : m` |
+ *
+ * Submachine states (states referencing another statechart) become submachine instances if the
+ * referenced statechart is known ({@link SctImportOptions.referencedStatechart}, e.g. because it is
+ * imported together): an import of its `.hsm` file, an instance variable in the internal scope and
+ * the binding of the state. Otherwise they are imported as simple states with a TODO comment.
  */
 import { HSM_KEYWORDS } from '../edit/model-edits.js';
 import { parseXml, type XmlElement } from './xml.js';
@@ -27,6 +33,21 @@ export interface SctImportOptions {
     mainStateName?: string;
     /** Indentation unit of the generated text (default four spaces). */
     indent?: string;
+    /**
+     * Resolves a statechart referenced by a submachine state: `reference` is the referenced file
+     * (the part of the `href` before `#`, e.g. `Motor.sct`, empty for a reference into the same
+     * file). Returns the name of the imported state machine and the path of its `.hsm` file relative
+     * to the generated file (e.g. `{ machine: 'Motor', path: 'Motor.hsm' }`), or `undefined` if the
+     * statechart is not imported (the state is imported as a simple state with a TODO comment).
+     */
+    referencedStatechart?: (reference: string) => { machine: string, path: string } | undefined;
+}
+
+/** The name of the statechart of an `.sct` file as it is imported (`undefined` if the file contains none). */
+export function sctStatechartName(xml: string): string | undefined {
+    const root = parseXml(xml);
+    const statechart = root.name === 'sgraph:Statechart' ? root : root.children.find(c => c.name === 'sgraph:Statechart');
+    return statechart ? sanitizeName(statechart.attributes['name'] ?? '') || 'Statechart' : undefined;
 }
 
 export interface SctImportResult {
@@ -39,6 +60,33 @@ export interface SctImportResult {
 /** Converts the content of an itemis CREATE `.sct` file into HSM text. */
 export function importSct(xml: string, options: SctImportOptions = {}): SctImportResult {
     return new SctImporter(options).run(xml);
+}
+
+/**
+ * Imports several `.sct` files together, so that submachine states referencing one of the other
+ * statecharts become submachine instances (see {@link SctImportOptions.referencedStatechart}). The
+ * generated files are named after the `.sct` files (`Motor.sct` -> `Motor.hsm`, in the same directory).
+ */
+export function importSctFiles(files: Array<{ fileName: string, xml: string }>, options: Omit<SctImportOptions, 'referencedStatechart'> = {}): Array<SctImportResult & { fileName: string }> {
+    const baseName = (fileName: string) => fileName.replace(/^.*[\\/]/, '');
+    const machines = new Map<string, string>();
+    for (const file of files) {
+        const name = sctStatechartName(file.xml);
+        if (name) {
+            machines.set(baseName(file.fileName), name);
+        }
+    }
+    return files.map(file => {
+        const result = importSct(file.xml, {
+            ...options,
+            referencedStatechart: reference => {
+                const target = reference ? baseName(reference) : baseName(file.fileName);
+                const machine = machines.get(target);
+                return machine ? { machine, path: target.replace(/\.sct$/i, '.hsm') } : undefined;
+            }
+        });
+        return { ...result, fileName: file.fileName.replace(/\.sct$/i, '.hsm') };
+    });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -85,6 +133,8 @@ interface StateNode extends VertexBase, ContainerBase {
     reactions: string[][];
     comments: string[];
     description?: string;
+    /** Name of the submachine instance bound to the state (`state S : motor`). */
+    submachine?: string;
 }
 
 interface PseudoNode extends VertexBase {
@@ -106,8 +156,10 @@ interface TransitionNode {
     target: VertexNode | 'final';
     /** Normalized reaction text (lines), without `# ...` part. */
     spec: string[];
-    entryPoint?: string;
-    exitPoint?: string;
+    /** Entry points selected by the transition (`# >E1 >E2`; only the first one is used). */
+    entryPoints: string[];
+    /** Exit nodes handled by the transition (`# X1> X2>`). */
+    exitPoints: string[];
     container: Container;
     order: [number, number];
 }
@@ -129,8 +181,13 @@ class SctImporter {
     private machine!: MachineNode;
     private statechartName = '';
     private orderCounter = 0;
+    private readonly options: SctImportOptions;
+    /** Imports (`.hsm` paths) and instance declarations of submachine states. */
+    private readonly imports: string[] = [];
+    private readonly instances: Array<{ name: string, machine: string }> = [];
 
     constructor(options: SctImportOptions) {
+        this.options = options;
         this.indentUnit = options.indent ?? '    ';
         this.mainStateName = options.mainStateName ?? 'Main';
     }
@@ -155,6 +212,13 @@ class SctImporter {
         const lines: string[] = [];
         lines.push(`statemachine ${machineName}${machineName !== this.statechartName && this.statechartName ? ' ' + quote(this.statechartName) : ''} {`);
         const definition = this.convertSpecification(statechart.attributes['specification'] ?? '', statechart.attributes['namespace']);
+        // submachine states: imports of the referenced state machines and their instances
+        if (this.imports.length > 0) {
+            lines.push(...this.imports.map(path => `${this.indentUnit}import ${quote(path)}`), '');
+        }
+        if (this.instances.length > 0) {
+            definition.push('internal:', ...this.instances.map(i => `${this.indentUnit}var ${i.name} : ${i.machine}`));
+        }
         if (definition.length > 0) {
             lines.push(...definition.map(line => line ? this.indentUnit + line : ''));
             lines.push('');
@@ -184,7 +248,7 @@ class SctImporter {
             for (const region of regions) {
                 this.convertRegionOf(main, region, regions.length);
             }
-            this.machine.transitions.push({ source: 'initial', target: main, spec: [], container: this.machine, order: [-1, 0] });
+            this.machine.transitions.push({ source: 'initial', target: main, spec: [], entryPoints: [], exitPoints: [], container: this.machine, order: [-1, 0] });
         }
     }
 
@@ -218,8 +282,7 @@ class SctImporter {
                         state.comments.push(...documentation.trim().split(/\r?\n/).map(line => `// ${line.trim()}`.trimEnd()));
                     }
                     if (vertex.attributes['referencedStatechart'] !== undefined || vertex.children.some(c => c.name === 'referencedStatechart')) {
-                        state.comments.push(`// TODO import: submachine state (referenced statechart) is not supported`);
-                        this.warn(`State '${name}' is a submachine state; referenced statecharts are not supported and were ignored.`);
+                        this.convertSubmachineState(state, vertex, name);
                     }
                     state.reactions = this.splitReactions(vertex.attributes['specification'] ?? '', name);
                     const regions = vertex.children.filter(c => c.name === 'regions');
@@ -272,6 +335,33 @@ class SctImporter {
         return state;
     }
 
+    /** A state referencing another statechart: an instance of the imported state machine bound to the state. */
+    private convertSubmachineState(state: StateNode, vertex: XmlElement, name: string): void {
+        const href = vertex.attributes['referencedStatechart'] ?? vertex.children.find(c => c.name === 'referencedStatechart')?.attributes['href'] ?? '';
+        const reference = href.split('#')[0];
+        const resolved = this.options.referencedStatechart?.(reference);
+        if (!resolved) {
+            state.comments.push(`// TODO import: submachine state (referenced statechart${reference ? ` ${reference}` : ''}) - import the referenced statechart together with this one`);
+            this.warn(`State '${name}' is a submachine state; the referenced statechart${reference ? ` '${reference}'` : ''} was not imported with it and was ignored.`);
+            return;
+        }
+        if (resolved.machine === this.machine.name) {
+            state.comments.push(`// TODO import: submachine state referencing its own statechart (recursion is not supported)`);
+            this.warn(`State '${name}' references its own statechart; this is not supported and was ignored.`);
+            return;
+        }
+        if (!this.imports.includes(resolved.path)) {
+            this.imports.push(resolved.path);
+        }
+        const base = resolved.machine.charAt(0).toLowerCase() + resolved.machine.slice(1);
+        let instance = sanitizeName(base) || 'instance';
+        for (let i = 2; this.instances.some(existing => existing.name === instance) || HSM_KEYWORDS.has(instance); i++) {
+            instance = `${sanitizeName(base)}${i}`;
+        }
+        this.instances.push({ name: instance, machine: resolved.machine });
+        state.submachine = instance;
+    }
+
     private createPseudo(kind: PseudoKind, name: string, container: Container, path: string[], element: XmlElement): PseudoNode {
         const pseudo: PseudoNode = {
             kind, id: element.attributes['xmi:id'] ?? '', name: '', originalName: name || undefined, container,
@@ -283,16 +373,36 @@ class SctImporter {
         return pseudo;
     }
 
-    /** Assigns unique, valid names to all vertices (siblings are the vertices of all regions of a state). */
+    /**
+     * Assigns unique, valid names to all vertices (siblings are the vertices of all regions of a state).
+     * Entry points and exit nodes of different regions may keep the same name (like in itemis CREATE).
+     */
     private assignNames(owner: MachineNode | StateNode): void {
         const siblings = owner.kind === 'state' && owner.regions.length > 0
             ? owner.regions.flatMap(r => r.vertices)
             : owner.vertices;
         const used = new Set<string>();
+        const holders = new Map<string, VertexNode[]>();
+        const isPoint = (v: VertexNode) => v.kind === 'entry' || v.kind === 'exit';
+        const name = (vertex: VertexNode, base: string, alwaysNumber = false): string => {
+            const free = (candidate: string) => (holders.get(candidate) ?? [])
+                .every(h => isPoint(vertex) && h.kind === vertex.kind && h.container !== vertex.container);
+            let result: string;
+            if (!alwaysNumber && free(base)) {
+                result = base;
+            } else {
+                // `used` contains all names; skip names that are taken for this vertex
+                const scratch = new Set([...used].filter(n => !free(n)));
+                result = uniqueName(base, scratch, alwaysNumber);
+            }
+            used.add(result);
+            holders.set(result, [...holders.get(result) ?? [], vertex]);
+            return result;
+        };
         for (const vertex of siblings.filter(v => v.originalName)) {
             const original = vertex.originalName!;
             const base = sanitizeName(original);
-            vertex.name = uniqueName(base, used);
+            vertex.name = name(vertex, base);
             if (vertex.name !== original) {
                 const what = vertex.kind === 'state' ? 'State' : `${capitalize(vertex.kind)}`;
                 this.warn(`${what} '${original}' was renamed to '${vertex.name}'${base === vertex.name ? '' : ' (duplicate name)'}.`);
@@ -306,7 +416,7 @@ class SctImporter {
                 : vertex.kind === 'history' ? 'H'
                     : vertex.kind === 'deephistory' ? 'DH'
                         : capitalize(vertex.kind);
-            vertex.name = uniqueName(base, used, vertex.kind !== 'history' && vertex.kind !== 'deephistory');
+            vertex.name = name(vertex, base, vertex.kind !== 'history' && vertex.kind !== 'deephistory');
             if (vertex.kind === 'state') {
                 this.warn(`An unnamed state was named '${vertex.name}'.`);
             }
@@ -370,50 +480,49 @@ class SctImporter {
         const spec = this.normalizeReaction(splitLines(reaction), `transition leaving '${sourceName}'`);
 
         // a transition to a named entry point enters the composite state through the entry point
-        let entryPoint: string | undefined;
+        let entryPoints: string[] = [];
         if (target !== 'final' && target.kind === 'entry') {
             const entry = target;
             const owner = ownerState(entry.container);
             if (owner) {
-                entryPoint = entry.name;
+                entryPoints = [entry.name];
                 target = owner;
                 targetContainer = owner.container;
             }
         }
         if (entries.length > 0) {
-            if (entries.length > 1) {
-                this.warn(`Transition '${sourceName}' -> '${targetName(target)}' selects several entry points (${entries.join(', ')}); only '${entries[0]}' was kept.`);
-            }
             const history = this.namedHistory(target, entries[0]);
             if (history) {
                 // itemis CREATE can enter a state through a named history entry: HSM targets the history pseudo state
                 target = history;
                 targetContainer = history.container;
             } else if (entries[0] !== 'default' && this.namedPoints(target, 'entry').some(p => p.originalName === entries[0])) {
-                entryPoint = this.resolvePointName(target, 'entry', entries[0]);
+                // itemis CREATE uses only the first entry point; the others are kept (HSM warns about them, like itemis)
+                const entryTarget = target;
+                const known = entries.slice(1).filter(name => name !== 'default' && this.namedPoints(entryTarget, 'entry').some(p => p.originalName === name));
+                if (known.length < entries.length - 1) {
+                    this.warn(`Transition '${sourceName}' -> '${targetName(target)}' selects unknown entry points (${entries.slice(1).filter(e => !known.includes(e)).join(', ')}); they were dropped (only the first entry point is used).`);
+                }
+                entryPoints = [...new Set([entries[0], ...known].map(name => this.resolvePointName(entryTarget, 'entry', name)))];
             } else if (entries[0] !== 'default') {
                 this.warn(`'${targetName(target)}' has no entry point named '${entries[0]}'; the transition from '${sourceName}' enters it by default (like itemis CREATE).`);
             }
+            if (entries.length > 1 && entryPoints.length <= 1) {
+                this.warn(`Transition '${sourceName}' -> '${targetName(target)}' selects several entry points (${entries.join(', ')}); only '${entries[0]}' is used (like itemis CREATE).`);
+            }
         }
 
-        let exitPoints: Array<string | undefined> = [undefined];
+        let exitPoints: string[] = [];
         if (isVertexNode(source) && source.kind === 'state') {
             if (exits.length > 0) {
                 exitPoints = exits.flatMap(name => name === 'default'
                     ? this.unnamedPoints(source, 'exit')
                     : [this.resolvePointName(source, 'exit', name)]);
-                if (exits.length > 1) {
-                    this.warn(`Transition '${source.name}' -> '${targetName(target)}' handles several exit nodes (${exits.join(', ')}); it was duplicated for each exit node.`);
-                }
-            } else {
-                const defaultExits = this.unnamedPoints(source, 'exit');
-                if (defaultExits.length > 0 && !hasTrigger(reaction)) {
-                    exitPoints = defaultExits;
-                    if (defaultExits.length > 1) {
-                        this.warn(`Transition '${source.name}' -> '${targetName(target)}' handles several default exits; it was duplicated for each exit node.`);
-                    }
-                }
+            } else if (!hasTrigger(reaction)) {
+                // itemis CREATE: a transition without trigger and exit specification handles the default (unnamed) exits
+                exitPoints = this.unnamedPoints(source, 'exit');
             }
+            exitPoints = [...new Set(exitPoints)];
         } else if (exits.length > 0) {
             this.warn(`Exit node specification '# ${exits.join('> ')}>' on a transition leaving '${sourceName}' was ignored.`);
         }
@@ -433,9 +542,7 @@ class SctImporter {
         } else {
             return [];
         }
-        return exitPoints.map(exitPoint => ({
-            source: transitionSource, target: target!, spec, entryPoint, exitPoint, container, order
-        }));
+        return [{ source: transitionSource, target: target!, spec, entryPoints, exitPoints, container, order }];
     }
 
     /**
@@ -484,9 +591,7 @@ class SctImporter {
             this.warn(`'${targetName(state)}' has no ${kind === 'entry' ? 'entry point' : 'exit node'} named '${name}'.`);
             return sanitizeName(name);
         }
-        if (matches.length > 1) {
-            this.warn(`'${targetName(state)}' has ${matches.length} ${kind === 'entry' ? 'entry points' : 'exit nodes'} named '${name}' (in different regions); HSM uses only '${matches[0].name}' for '# ${kind === 'entry' ? '>' + name : name + '>'}'.`);
-        }
+        // several regions may have an entry point / exit node with this name: they all keep the name
         return matches[0].name;
     }
 
@@ -620,9 +725,8 @@ class SctImporter {
                 // local reactions of the statechart itself are placed after the definition section
                 machineReactions.push(...this.normalizeReaction([trimmed], 'the statechart'));
             } else {
-                if (/^alias\b/.test(trimmed)) {
-                    this.warn(`Type aliases are not supported: '${trimmed}'.`);
-                }
+                // itemis CREATE allows `event e : void` for events without value; HSM omits the type
+                converted = mapCode(converted, code => code.replace(/^(\s*(?:(?:in|out)\s+)?event\s+\w+)\s*:\s*void\b/, '$1'));
                 scopes.push(trimmed ? this.indentUnit + converted : '');
             }
         }
@@ -675,7 +779,7 @@ class SctImporter {
     private emitState(state: StateNode, level: number): string[] {
         const indent = this.indentUnit.repeat(level);
         const inner = indent + this.indentUnit;
-        const header = `${indent}state ${state.name}${state.description !== undefined ? ' ' + quote(state.description) : ''}`;
+        const header = `${indent}state ${state.name}${state.submachine ? ` : ${state.submachine}` : ''}${state.description !== undefined ? ' ' + quote(state.description) : ''}`;
         const body: string[] = [];
         for (const reaction of state.reactions) {
             const rewritten = this.rewriteReaction(reaction, state);
@@ -714,7 +818,8 @@ class SctImporter {
         const source = t.source === 'initial' ? '[*]' : this.referenceName(t.source, t.container);
         const target = t.target === 'final' ? '[*]' : this.referenceName(t.target, t.container);
         const spec = this.rewriteReaction(t.spec, t.container);
-        const suffix = t.entryPoint ? ` # >${t.entryPoint}` : t.exitPoint ? ` # ${t.exitPoint}>` : '';
+        const points = [...t.entryPoints.map(e => `>${e}`), ...t.exitPoints.map(x => `${x}>`)];
+        const suffix = points.length > 0 ? ` # ${points.join(' ')}` : '';
         if (spec.length === 0) {
             return [`${indent}${source} -> ${target}${suffix}`];
         }

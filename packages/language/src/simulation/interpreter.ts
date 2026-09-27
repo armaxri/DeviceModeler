@@ -1,6 +1,7 @@
-import type { AstNode } from 'langium';
+import { AstUtils, type AstNode } from 'langium';
 import * as ast from '../generated/ast.js';
-import { transitionLabel, nodeText } from '../model-utils.js';
+import { instanceMachine, referableName } from '../imports.js';
+import { entryPointOf, transitionLabel, nodeText } from '../model-utils.js';
 import type { EventDirection } from '../hsm-typesystem.js';
 import { SimulationError } from './errors.js';
 import { ExpressionEvaluator, type EvaluationContext } from './expressions.js';
@@ -8,7 +9,7 @@ import {
     isFinalState, ModelIndex, type ActiveVertex, type FinalState, type RegionNode, type TargetVertex
 } from './model-index.js';
 import {
-    convert, defaultValueOf, formatCall, formatValue, fromHost, toHost, declaredType, typeOfValue, type HostValue, type TypeName, type Value
+    convert, defaultValueOf, formatCall, formatValue, fromHost, toHost, declaredType, runtimeTypeOfValue, type HostValue, type RuntimeType, type Value
 } from './values.js';
 
 /** Implementation of an operation provided by the host. Arguments are given in parameter order (varargs flattened). */
@@ -83,6 +84,39 @@ interface EnterTarget {
     entryPoint?: string;
 }
 
+/** Event driven: an event waiting for its step in the internal queue (`event` undefined: a step without event). */
+interface QueueEntry {
+    readonly target: StatechartInterpreter;
+    readonly event?: ast.EventDeclaration;
+}
+
+/** State shared by a state machine and all its submachine instances. */
+interface SharedRuntime {
+    /** Virtual clock in ns. */
+    now: number;
+    timerSequence: number;
+    /** Number of the current (or last) step, counted from construction. */
+    stepNumber: number;
+    /** Event driven: internal events (also of instances) waiting for their step. */
+    readonly internalQueue: QueueEntry[];
+}
+
+/**
+ * The parent of a submachine instance (internal: instances are created by the interpreter of the
+ * parent state machine, see docs/semantics.md §9).
+ */
+export interface InstanceContext {
+    readonly parent: StatechartInterpreter;
+    /** The instance variable (`var motor : Motor`). */
+    readonly instance: ast.VariableDeclaration;
+    /** The state the instance is bound to (`state Moving : motor`), if any. */
+    readonly state?: ast.State;
+    /** @internal */
+    readonly shared: unknown;
+}
+
+const MAX_INSTANCE_DEPTH = 16;
+
 const NS_PER_UNIT: Record<string, number> = { s: 1e9, ms: 1e6, us: 1e3, ns: 1 };
 const NS_PER_MS = 1e6;
 
@@ -113,24 +147,37 @@ export class StatechartInterpreter {
 
     private readonly operations: Record<string, OperationImplementation>;
     private readonly options: SimulationOptions;
+    private readonly shared: SharedRuntime;
+    /** Set for submachine instances: the parent interpreter, the instance variable and the bound state. */
+    private readonly context?: InstanceContext;
+    /** Prefix of names in traces and host API calls: `''` for the state machine, `motor.` for an instance. */
+    private readonly prefix: string;
+    /** The submachine instances of this machine by their variable. */
+    private readonly instances = new Map<ast.VariableDeclaration, StatechartInterpreter>();
+    /** The instance bound to a state. */
+    private readonly bindings = new Map<ast.State, StatechartInterpreter>();
+    /** Instance: whether it has been entered (its bound state is active). */
+    private instanceActive = false;
+    /**
+     * Instance: out events raised by the instance and still visible to the parent, with the number of
+     * the step they were raised in and the parent's triggers / expressions that tested them in that step.
+     */
+    private readonly outOccurrences = new Map<ast.EventDeclaration, { step: number, seen: Set<AstNode> }>();
     private readonly maxMicrosteps: number;
     private readonly evaluator: ExpressionEvaluator;
 
     private readonly active = new Map<RegionNode, ActiveVertex>();
     private readonly history = new Map<RegionNode, ActiveVertex>();
     private readonly values = new Map<ast.VariableDeclaration, Value>();
-    private readonly variableTypes = new Map<ast.VariableDeclaration, TypeName | undefined>();
+    private readonly variableTypes = new Map<ast.VariableDeclaration, RuntimeType | undefined>();
     private readonly eventValues = new Map<ast.EventDeclaration, Value | undefined>();
     private readonly timers = new Map<ast.TimeTrigger, Timer>();
-    private timerSequence = 0;
 
     /** Events present in the current step. */
     private readonly present = new Set<ast.EventDeclaration>();
     private readonly presentTimers = new Set<ast.TimeTrigger>();
-    /** Cycle based: events collected for the next cycle. */
+    /** Cycle based: events collected for the next cycle (instances: for the next step of the instance). */
     private readonly collected = new Set<ast.EventDeclaration>();
-    /** Event driven: internal events waiting for their step. */
-    private readonly internalQueue: ast.EventDeclaration[] = [];
     /** Event driven: in events raised by the host while a step is running. */
     private readonly hostQueue: ast.EventDeclaration[] = [];
 
@@ -141,29 +188,73 @@ export class StatechartInterpreter {
     private busy = false;
     private running = false;
 
-    private now = 0;
     private enterTime = 0;
     private nextCycle = 0;
 
     private lastTrace: TraceEntry[] = [];
     private lastOutEvents: OutEvent[] = [];
 
-    constructor(machine: ast.StateMachine, options: SimulationOptions = {}) {
+    /**
+     * Creates an interpreter for the state machine. `context` is internal: it is used by the interpreter
+     * to create its submachine instances.
+     */
+    constructor(machine: ast.StateMachine, options: SimulationOptions = {}, context?: InstanceContext) {
         this.machine = machine;
         this.options = options;
-        this.operations = { ...options.operations };
+        this.context = context;
+        this.operations = context ? {} : { ...options.operations };
         this.maxMicrosteps = options.maxMicrosteps ?? 1000;
         this.index = new ModelIndex(machine);
         this.evaluator = new ExpressionEvaluator(this.createContext());
-        const annotation = (name: string) => machine.annotations.find(a => a.name === name);
-        this.executionMode = annotation('EventDriven') && !annotation('CycleBased') ? 'event' : 'cycle';
-        this.executionOrder = annotation('ChildFirstExecution') ? 'child-first' : 'parent-first';
-        const period = annotation('CycleBased')?.arguments[0];
-        this.cyclePeriod = period ? Number(this.evaluator.evaluate(period)) : 200;
-        if (!(this.cyclePeriod > 0)) {
-            throw new SimulationError(`Invalid cycle period ${this.cyclePeriod}`, period);
+        if (context) {
+            // an instance is executed with the execution mode and order of its parent (docs/semantics.md §9)
+            const parent = context.parent;
+            this.shared = context.shared as SharedRuntime;
+            this.prefix = `${parent.prefix}${referableName(context.instance)}.`;
+            this.executionMode = parent.executionMode;
+            this.executionOrder = parent.executionOrder;
+            this.cyclePeriod = parent.cyclePeriod;
+            if (this.prefix.split('.').length > MAX_INSTANCE_DEPTH) {
+                throw new SimulationError(`Submachine instances are nested too deeply ('${this.prefix}...'); do the state machines import each other?`, context.instance);
+            }
+        } else {
+            this.shared = { now: 0, timerSequence: 0, stepNumber: 0, internalQueue: [] };
+            this.prefix = '';
+            const annotation = (name: string) => machine.annotations.find(a => a.name === name);
+            this.executionMode = annotation('EventDriven') && !annotation('CycleBased') ? 'event' : 'cycle';
+            this.executionOrder = annotation('ChildFirstExecution') ? 'child-first' : 'parent-first';
+            const period = annotation('CycleBased')?.arguments[0];
+            this.cyclePeriod = period ? Number(this.evaluator.evaluate(period)) : 200;
+            if (!(this.cyclePeriod > 0)) {
+                throw new SimulationError(`Invalid cycle period ${this.cyclePeriod}`, period);
+            }
+        }
+        for (const instance of this.index.instances()) {
+            const submachine = instanceMachine(instance);
+            if (!submachine) {
+                continue;
+            }
+            const state = this.index.states.find(s => s.submachine?.ref === instance);
+            const child = new StatechartInterpreter(submachine, options, { parent: this, instance, state, shared: this.shared });
+            this.instances.set(instance, child);
+            if (state && !this.bindings.has(state)) {
+                this.bindings.set(state, child);
+            }
         }
         this.resetData();
+    }
+
+    private get now(): number {
+        return this.shared.now;
+    }
+
+    private set now(value: number) {
+        this.shared.now = value;
+    }
+
+    /** The interpreter of the top-level state machine (itself if this is not an instance). */
+    private get root(): StatechartInterpreter {
+        return this.context ? this.context.parent.root : this;
     }
 
     // -----------------------------------------------------------------------------------------
@@ -193,24 +284,14 @@ export class StatechartInterpreter {
         if (this.running) {
             throw new SimulationError(`State machine '${this.machine.name}' is already entered`);
         }
+        this.assertRoot('enter');
         this.hostCall(() => {
-            this.resetData();
-            this.active.clear();
-            this.history.clear();
-            this.timers.clear();
-            this.collected.clear();
-            this.internalQueue.length = 0;
+            this.resetRuntime();
+            this.shared.internalQueue.length = 0;
             this.running = true;
             this.enterTime = this.now;
             this.nextCycle = this.now + this.cyclePeriod * NS_PER_MS;
-            for (const variable of this.index.variables()) {
-                if (variable.initialValue) {
-                    const value = this.evaluator.evaluate(variable.initialValue);
-                    const type = declaredType(variable.type) ?? typeOfValue(value);
-                    this.variableTypes.set(variable, type);
-                    this.values.set(variable, convert(value, type, `Initial value of '${variable.name}'`, variable)!);
-                }
-            }
+            this.initializeVariables();
             this.beginStep();
             this.runBuiltinReactions(this.machine, 'entry');
             for (const trigger of this.index.timeTriggers(this.machine)) {
@@ -226,6 +307,7 @@ export class StatechartInterpreter {
 
     /** Exits all active states (innermost first) and stops the state machine. */
     exit(): void {
+        this.assertRoot('exit');
         this.assertRunning();
         this.hostCall(() => {
             this.beginStep();
@@ -246,7 +328,30 @@ export class StatechartInterpreter {
      * (`Closed.Active.Playing`) or a unique suffix of it (`Playing`).
      */
     isActive(state: string | ast.State): boolean {
-        return this.isStateActive(typeof state === 'string' ? this.resolveState(state) : state);
+        if (typeof state !== 'string') {
+            return this.isStateActive(state);
+        }
+        const instance = this.instanceOfName(state);
+        if (instance && !this.index.findState(state)) {
+            return instance.interpreter.instanceActive && instance.interpreter.isActive(instance.rest);
+        }
+        return this.isStateActive(this.resolveState(state));
+    }
+
+    /**
+     * The display name of a state given by its (partially) qualified name, as used in
+     * {@link activeStates}: `Closed.Active.Playing`, `motor.Running` for states of submachine instances.
+     */
+    stateDisplayName(name: string): string {
+        const state = this.index.findState(name);
+        if (state) {
+            return this.prefix + this.index.stateName(state);
+        }
+        const instance = this.instanceOfName(name);
+        if (instance) {
+            return instance.interpreter.stateDisplayName(instance.rest);
+        }
+        throw new SimulationError(`Unknown or ambiguous state '${name}' in state machine '${this.machine.name}'`);
     }
 
     /**
@@ -255,7 +360,11 @@ export class StatechartInterpreter {
      * internal events) is performed immediately.
      */
     raise(eventName: string, value?: unknown): void {
+        this.assertRoot('raise');
         const event = this.index.findEvent(eventName);
+        if (!event && this.instanceOfName(eventName)) {
+            throw new SimulationError(`Event '${eventName}' belongs to a submachine instance; its in events are raised by the state machine, not by the host`);
+        }
         if (!event) {
             throw new SimulationError(`Unknown event '${eventName}' in state machine '${this.machine.name}'`);
         }
@@ -295,6 +404,7 @@ export class StatechartInterpreter {
      * events are present). Event driven: performs a step without events.
      */
     runCycle(): void {
+        this.assertRoot('runCycle');
         this.assertRunning();
         this.hostCall(() => {
             if (this.executionMode === 'cycle') {
@@ -319,13 +429,13 @@ export class StatechartInterpreter {
         }
         this.hostCall(() => {
             for (;;) {
-                const timer = this.nextTimer(end);
-                if (!timer) {
+                const next = this.nextTimer(end);
+                if (!next) {
                     break;
                 }
-                this.now = timer.due;
-                this.expire(timer);
-                this.processEvent(undefined, timer.trigger);
+                this.now = next.timer.due;
+                next.interpreter.expire(next.timer);
+                this.processEvent(undefined, next.timer.trigger, next.interpreter);
                 this.drainQueues();
             }
             this.now = end;
@@ -357,18 +467,51 @@ export class StatechartInterpreter {
         });
     }
 
-    /** Current value of a variable or constant (`x` or `Iface.x`). */
+    /** Current value of a variable or constant (`x`, `Iface.x`, `motor.speed` for a variable of an instance). */
     getVariable(name: string): HostValue | undefined {
+        const instance = this.index.findVariable(name) ? undefined : this.instanceOfName(name);
+        if (instance) {
+            return instance.interpreter.getVariable(instance.rest);
+        }
         return toHost(this.values.get(this.resolveVariable(name)));
     }
 
-    /** Sets a variable (`x` or `Iface.x`). Constants and `readonly` variables cannot be set by the host. */
+    /**
+     * Sets a variable (`x`, `Iface.x`, `motor.speed` for a variable of an instance). Constants and
+     * `readonly` variables cannot be set by the host.
+     */
     setVariable(name: string, value: unknown): void {
+        const instance = this.index.findVariable(name) ? undefined : this.instanceOfName(name);
+        if (instance) {
+            instance.interpreter.setVariable(instance.rest, value);
+            return;
+        }
         const variable = this.resolveVariable(name);
         if (variable.const || variable.readonly) {
             throw new SimulationError(`'${name}' is ${variable.const ? 'a constant' : 'read-only'} and cannot be set by the host`, variable);
         }
         this.values.set(variable, fromHost(value, this.variableTypes.get(variable), `Value of '${name}'`, variable)!);
+    }
+
+    /**
+     * The runtime value of a variable or constant (`x`, `Iface.x`, `motor.speed`), e.g. to show enum
+     * values by name or the members of a struct value ({@link formatValue}).
+     */
+    getValue(name: string): Value | undefined {
+        const instance = this.index.findVariable(name) ? undefined : this.instanceOfName(name);
+        if (instance) {
+            return instance.interpreter.getValue(instance.rest);
+        }
+        return this.values.get(this.resolveVariable(name));
+    }
+
+    /** The runtime type of a variable or constant (`undefined` if it is not known). */
+    getVariableType(name: string): RuntimeType | undefined {
+        const instance = this.index.findVariable(name) ? undefined : this.instanceOfName(name);
+        if (instance) {
+            return instance.interpreter.getVariableType(instance.rest);
+        }
+        return this.variableTypes.get(this.resolveVariable(name));
     }
 
     /** Snapshot of all variables and constants by declared name (`x`, `Iface.x`). */
@@ -377,28 +520,75 @@ export class StatechartInterpreter {
         for (const variable of this.index.variables()) {
             result[this.index.declarationName(variable)] = toHost(this.values.get(variable))!;
         }
+        // variables of the submachine instances: `motor.speed`
+        for (const [instance, interpreter] of this.instances) {
+            for (const [name, value] of Object.entries(interpreter.variables)) {
+                result[`${this.index.declarationName(instance)}.${name}`] = value;
+            }
+        }
         return result;
     }
 
-    /** Value of the last occurrence of an event (as `valueof(e)` in the model). */
+    /** Value of the last occurrence of an event (as `valueof(e)` in the model; `motor.failed` for an event of an instance). */
     getEventValue(name: string): HostValue | undefined {
         const event = this.index.findEvent(name);
+        const instance = event ? undefined : this.instanceOfName(name);
+        if (instance) {
+            return instance.interpreter.getEventValue(instance.rest);
+        }
         if (!event) {
             throw new SimulationError(`Unknown event '${name}' in state machine '${this.machine.name}'`);
         }
         return toHost(this.eventValues.get(event));
     }
 
-    /** Fully qualified names of all active states in document order (parents before children). */
+    /**
+     * Fully qualified names of all active states in document order (parents before children). The
+     * active states of a submachine instance follow the state it is bound to, prefixed with the name of
+     * the instance: `Moving`, `motor.Running` (docs/semantics.md §9).
+     */
     get activeStates(): string[] {
-        return this.activeStateNodes().map(s => this.index.stateName(s));
+        return this.activeStateNodes().flatMap(s => [this.prefix + this.index.stateName(s), ...this.instanceOf(s)?.activeStates ?? []]);
     }
 
-    /** Fully qualified names of the active states without active sub states. */
+    /**
+     * Fully qualified names of the active states without active sub states. A state bound to an active
+     * submachine instance is not a leaf; the leaves of the instance are listed instead (`motor.Running`).
+     */
     get activeLeafStates(): string[] {
-        return this.activeStateNodes()
-            .filter(s => !this.index.regionsOf(s).some(r => ast.isState(this.active.get(r))))
-            .map(s => this.index.stateName(s));
+        return this.activeStateNodes().flatMap(s => {
+            const instance = this.instanceOf(s);
+            const instanceLeaves = instance?.activeLeafStates ?? [];
+            if (instanceLeaves.length > 0) {
+                return instanceLeaves;
+            }
+            return this.index.regionsOf(s).some(r => ast.isState(this.active.get(r))) ? [] : [this.prefix + this.index.stateName(s)];
+        });
+    }
+
+    /**
+     * The active submachine instances: the state they are bound to, the instance variable and the
+     * interpreter of the instance (for its states, variables and nested instances).
+     */
+    activeInstances(): Array<{ state: ast.State, instance: ast.VariableDeclaration, name: string, interpreter: StatechartInterpreter }> {
+        const result: Array<{ state: ast.State, instance: ast.VariableDeclaration, name: string, interpreter: StatechartInterpreter }> = [];
+        for (const [instance, interpreter] of this.instances) {
+            const state = interpreter.context?.state;
+            if (state && interpreter.instanceActive) {
+                result.push({ state, instance, name: this.index.declarationName(instance), interpreter });
+            }
+        }
+        return result;
+    }
+
+    /** The interpreters of the submachine instances by instance name (`motor`), also inactive ones. */
+    get instanceInterpreters(): ReadonlyMap<string, StatechartInterpreter> {
+        return new Map([...this.instances].map(([instance, interpreter]) => [this.index.declarationName(instance), interpreter]));
+    }
+
+    /** Whether this interpreter executes a submachine instance that is currently entered. */
+    get isInstanceActive(): boolean {
+        return this.instanceActive;
     }
 
     /** All active states in document order. */
@@ -443,6 +633,12 @@ export class StatechartInterpreter {
         }
     }
 
+    private assertRoot(operation: string): void {
+        if (this.context) {
+            throw new SimulationError(`'${operation}' cannot be called for the submachine instance '${this.prefix.slice(0, -1)}'; it is executed by its parent`);
+        }
+    }
+
     private assertRunning(): void {
         if (!this.running) {
             throw new SimulationError(`State machine '${this.machine.name}' is not entered; call enter() first`);
@@ -458,23 +654,29 @@ export class StatechartInterpreter {
             this.present.add(event);
         }
         this.collected.clear();
-        for (const timer of this.expiredTimers()) {
-            this.presentTimers.add(timer.trigger);
-            this.expire(timer);
+        // expired timers of the machine and of all instances are present in this cycle
+        for (const interpreter of this.allInterpreters()) {
+            for (const timer of interpreter.expiredTimers()) {
+                interpreter.presentTimers.add(timer.trigger);
+                interpreter.expire(timer);
+            }
         }
         this.step();
     }
 
-    /** Event driven: a step with the given event or time event (or none) present. */
-    private processEvent(event: ast.EventDeclaration | undefined, timer?: ast.TimeTrigger): void {
-        if (this.isFinal() || !this.running) {
+    /**
+     * Event driven: a step with the given event or time event (or none) present in `target` (the
+     * machine or one of its instances; an event for an instance that is not active is discarded).
+     */
+    private processEvent(event: ast.EventDeclaration | undefined, timer?: ast.TimeTrigger, target: StatechartInterpreter = this): void {
+        if (this.isFinal() || !this.running || (target !== this && !target.instanceActive)) {
             return;
         }
         if (event) {
-            this.present.add(event);
+            target.present.add(event);
         }
         if (timer) {
-            this.presentTimers.add(timer);
+            target.presentTimers.add(timer);
         }
         this.step();
     }
@@ -483,24 +685,24 @@ export class StatechartInterpreter {
     private drainQueues(): void {
         let steps = 0;
         for (;;) {
-            const event = this.internalQueue.shift() ?? this.hostQueue.shift();
-            if (!event) {
+            const internal = this.shared.internalQueue.shift();
+            const host = internal ? undefined : this.hostQueue.shift();
+            if (!internal && !host) {
                 return;
             }
+            const event = internal ? internal.event : host;
             if (++steps > this.maxMicrosteps) {
-                throw new SimulationError(`More than ${this.maxMicrosteps} queued event steps; the state machine seems to loop (last event '${event.name}')`, event);
+                throw new SimulationError(`More than ${this.maxMicrosteps} queued event steps; the state machine seems to loop (last event '${event?.name ?? 'out event of an instance'}')`, event);
             }
-            this.processEvent(event);
+            this.processEvent(event, undefined, internal?.target ?? this);
         }
     }
 
     private step(): void {
+        this.shared.stepNumber++;
         this.beginStep();
         this.inStep = true;
-        const events = [...this.present].map(e => this.index.declarationName(e));
-        for (const trigger of this.presentTimers) {
-            events.push(`${nodeText(trigger)}@${this.ownerOfTrigger(trigger)}`);
-        }
+        const events = this.presentEventNames();
         this.emit({ kind: 'step', time: this.time, events });
         try {
             this.runLocalReactions(this.machine);
@@ -510,15 +712,194 @@ export class StatechartInterpreter {
             }
         } finally {
             this.inStep = false;
+            this.endStep();
+        }
+    }
+
+    /** Names of the events and time events present in this step (instances: the events of their next step). */
+    private presentEventNames(): string[] {
+        const events: string[] = [];
+        for (const interpreter of this.allInterpreters()) {
+            const pending = interpreter === this || this.executionMode === 'event' ? interpreter.present : new Set([...interpreter.present, ...interpreter.collected]);
+            events.push(...[...pending].map(e => interpreter.prefix + interpreter.index.declarationName(e)));
+            for (const trigger of interpreter.presentTimers) {
+                events.push(`${nodeText(trigger)}@${interpreter.prefix}${interpreter.ownerOfTrigger(trigger)}`);
+            }
+        }
+        return events;
+    }
+
+    /**
+     * End of a step of the top-level machine: events are cleared, events raised on instances that are
+     * not active are discarded, out events of instances raised before this step are no longer visible.
+     */
+    private endStep(): void {
+        const step = this.shared.stepNumber;
+        for (const interpreter of this.allInterpreters()) {
+            interpreter.present.clear();
+            interpreter.presentTimers.clear();
+            if (interpreter !== this && !interpreter.instanceActive) {
+                interpreter.collected.clear();
+            }
+            interpreter.consumeOccurrences(step);
+        }
+    }
+
+    private beginStep(): void {
+        for (const interpreter of this.allInterpreters()) {
+            interpreter.enteredInStep.clear();
+            interpreter.exitedInStep.clear();
+            interpreter.microsteps = 0;
+        }
+    }
+
+    /** This interpreter and the interpreters of all (nested) instances. */
+    private allInterpreters(): StatechartInterpreter[] {
+        const result: StatechartInterpreter[] = [this];
+        for (const instance of this.instances.values()) {
+            result.push(...instance.allInterpreters());
+        }
+        return result;
+    }
+
+    /** Out events of this instance raised before step `step` are no longer visible to the parent. */
+    private consumeOccurrences(step: number): void {
+        for (const [event, occurrence] of this.outOccurrences) {
+            if (occurrence.step < step) {
+                this.outOccurrences.delete(event);
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Submachine instances (docs/semantics.md §9)
+
+    /** The instance bound to a state, if any. */
+    private instanceOf(state: ast.State): StatechartInterpreter | undefined {
+        return this.bindings.get(state);
+    }
+
+    /** Splits `motor.On` into the interpreter of the instance `motor` and the rest of the name. */
+    private instanceOfName(name: string): { interpreter: StatechartInterpreter, rest: string } | undefined {
+        let result: { interpreter: StatechartInterpreter, rest: string, length: number } | undefined;
+        for (const [instance, interpreter] of this.instances) {
+            const prefix = this.index.declarationName(instance);
+            if (name.startsWith(`${prefix}.`) && (!result || prefix.length > result.length)) {
+                result = { interpreter, rest: name.slice(prefix.length + 1), length: prefix.length };
+            }
+        }
+        return result && { interpreter: result.interpreter, rest: result.rest };
+    }
+
+    /**
+     * The interpreter that owns a declaration or state referenced by `node`: this one for own
+     * declarations, the interpreter of the instance for members of instances (`motor.speed`).
+     */
+    private owner(target: AstNode, node: AstNode | undefined): StatechartInterpreter {
+        if (AstUtils.findRootNode(target) === this.machine) {
+            return this;
+        }
+        const instance = node ? this.index.instanceOf(node) : undefined;
+        const interpreter = instance ? this.instances.get(instance) : undefined;
+        if (!interpreter) {
+            throw new SimulationError(`Cannot determine the submachine instance of '${nodeText(node) || (target as { name?: string }).name}'`, node);
+        }
+        return interpreter;
+    }
+
+    /**
+     * Enters the instance (after the entry reactions of its state): the entry reactions of its state
+     * machine, its timers, then its top-level region through the entry point or by default.
+     */
+    private enterInstance(entryPoint: string | undefined): void {
+        this.instanceActive = true;
+        this.running = true;
+        this.runBuiltinReactions(this.machine, 'entry');
+        for (const trigger of this.index.timeTriggers(this.machine)) {
+            this.startTimer(trigger, this.machine);
+        }
+        const entry = entryPoint ? this.index.entryPointIn(this.machine, entryPoint) : undefined;
+        if (entryPoint && !entry) {
+            throw new SimulationError(`State machine '${this.machine.name}' has no entry point '${entryPoint}'`, this.context?.state);
+        }
+        if (entry) {
+            this.takeEntryPoint(entry);
+        } else {
+            this.enterRegionDefault(this.machine);
+        }
+    }
+
+    /** Exits the instance (before the exit reactions of its state): its active states, then the exit reactions of its machine. */
+    private exitInstance(): void {
+        if (!this.instanceActive) {
+            return;
+        }
+        this.exitRegion(this.machine);
+        this.runBuiltinReactions(this.machine, 'exit');
+        this.timers.clear();
+        this.instanceActive = false;
+        this.running = false;
+        this.collected.clear();
+        this.present.clear();
+        this.presentTimers.clear();
+    }
+
+    /**
+     * Processes the instance as the sub region of its state (docs/semantics.md §9): the events raised
+     * on it become present, then its own reactions and its active states are processed. Returns
+     * whether a transition was taken in the instance.
+     */
+    private instanceStep(): boolean {
+        if (!this.instanceActive) {
+            return false;
+        }
+        if (this.executionMode === 'cycle') {
+            for (const event of this.collected) {
+                this.present.add(event);
+            }
+            this.collected.clear();
+        }
+        if (this.isFinal()) {
+            this.present.clear();
+            this.presentTimers.clear();
+            return false;
+        }
+        this.inStep = true;
+        try {
+            this.runLocalReactions(this.machine);
+            const top = this.active.get(this.machine);
+            if (top && ast.isState(top) && !this.enteredInStep.has(top)) {
+                return this.react(top);
+            }
+            return false;
+        } finally {
+            this.inStep = false;
             this.present.clear();
             this.presentTimers.clear();
         }
     }
 
-    private beginStep(): void {
-        this.enteredInStep.clear();
-        this.exitedInStep.clear();
-        this.microsteps = 0;
+    /** An event raised on the instance by its parent (`raise motor.start`). */
+    private receive(event: ast.EventDeclaration, value: Value | undefined): void {
+        if (value !== undefined) {
+            this.eventValues.set(event, value);
+        }
+        const name = this.prefix + this.index.declarationName(event);
+        this.emit({ kind: 'raise', event: name, direction: 'in', value: toHost(value), text: formatCall(name, value === undefined ? [] : [value]) }, false);
+        if (this.executionMode === 'cycle') {
+            this.collected.add(event);
+        } else {
+            this.shared.internalQueue.push({ target: this, event });
+        }
+    }
+
+    /** The instance reached the exit node `name` of its state machine: its state is left by its `# name>` transition. */
+    private instanceExitReached(state: ast.State, name: string, node: AstNode): void {
+        const transition = this.index.exitTransitions(state, name).find(t => this.guard(t.spec?.guard));
+        if (!transition) {
+            throw new SimulationError(`Exit node '${name}' was reached but state '${state.name}' has no enabled transition '# ${name}>'`, node);
+        }
+        this.takeTransition(transition, state);
     }
 
     /** Processes an active state (docs/semantics.md §4); returns whether a transition was taken in its subtree. */
@@ -542,6 +923,11 @@ export class StatechartInterpreter {
     }
 
     private reactRegions(state: ast.State): boolean {
+        const instance = this.instanceOf(state);
+        if (instance) {
+            // the instance is processed like the (only) sub region of its state
+            return instance.instanceStep() || this.exitedInStep.has(state);
+        }
         let taken = false;
         for (const region of this.index.regionsOf(state)) {
             const vertex = this.active.get(region);
@@ -597,7 +983,7 @@ export class StatechartInterpreter {
         const matches = triggers.length === 0 || triggers.some(trigger => {
             if (ast.isEventTrigger(trigger)) {
                 const event = trigger.event.ref;
-                return event !== undefined && this.present.has(event);
+                return event !== undefined && this.isEventPresent(event, trigger);
             }
             if (ast.isTimeTrigger(trigger)) {
                 return this.presentTimers.has(trigger);
@@ -608,7 +994,7 @@ export class StatechartInterpreter {
     }
 
     private executeReaction(reaction: ast.LocalReaction, state: ast.State | ast.StateMachine): void {
-        const name = ast.isState(state) ? this.index.stateName(state) : state.name;
+        const name = ast.isState(state) ? this.index.stateName(state) : this.context ? '' : state.name;
         this.emit({ kind: 'reaction', node: reaction, state: name, label: nodeText(reaction) });
         this.evaluator.execute(reaction.effect);
     }
@@ -639,7 +1025,7 @@ export class StatechartInterpreter {
         this.exitRegion(scope);
         this.traceTransition(transition);
         this.evaluator.execute(transition.spec?.effect);
-        this.enterInRegion(scope, [{ vertex: target, entryPoint: transition.entryPoint }]);
+        this.enterInRegion(scope, [{ vertex: target, entryPoint: entryPointOf(transition) }]);
     }
 
     private traceTransition(transition: ast.Transition): void {
@@ -714,13 +1100,20 @@ export class StatechartInterpreter {
         if (isFinalState(vertex)) {
             this.enterFinal(vertex);
         } else if (ast.isState(vertex)) {
-            this.enterStateCore(vertex);
-            const entry = target.entryPoint ? this.index.findPseudo(vertex, 'entry', target.entryPoint) : undefined;
-            if (target.entryPoint && !entry) {
-                throw new SimulationError(`State '${vertex.name}' has no entry point '${target.entryPoint}'`, vertex);
+            const entryPoint = target.entryPoint;
+            if (this.instanceOf(vertex)) {
+                // the entry point is an entry point of the instance's state machine
+                this.enterStateCore(vertex, entryPoint);
+                return;
             }
+            this.enterStateCore(vertex);
+            if (entryPoint && !this.index.findPseudo(vertex, 'entry', entryPoint)) {
+                throw new SimulationError(`State '${vertex.name}' has no entry point '${entryPoint}'`, vertex);
+            }
+            // every region with an entry point of this name is entered through it, the others by default
             for (const region of this.index.regionsOf(vertex)) {
-                if (entry && this.index.regionOf(entry) === region) {
+                const entry = entryPoint ? this.index.entryPointIn(region, entryPoint) : undefined;
+                if (entry) {
                     this.takeEntryPoint(entry);
                 } else {
                     this.enterRegionDefault(region);
@@ -740,8 +1133,11 @@ export class StatechartInterpreter {
         this.emit({ kind: 'final', state: this.index.vertexName(final), region: final.region });
     }
 
-    /** Marks a state active, executes its entry reactions and starts its timers. */
-    private enterStateCore(state: ast.State): void {
+    /**
+     * Marks a state active, executes its entry reactions and starts its timers; then enters the
+     * submachine instance bound to the state (through `entryPoint`, if given).
+     */
+    private enterStateCore(state: ast.State, entryPoint?: string): void {
         this.active.set(this.index.regionOf(state), state);
         this.enteredInStep.add(state);
         this.emit({ kind: 'enter', state: this.index.stateName(state), node: state });
@@ -749,6 +1145,7 @@ export class StatechartInterpreter {
         for (const trigger of this.index.timeTriggers(state)) {
             this.startTimer(trigger, state);
         }
+        this.instanceOf(state)?.enterInstance(entryPoint);
     }
 
     /** Enters a region by its initial transition (docs/semantics.md §8.3). */
@@ -765,7 +1162,7 @@ export class StatechartInterpreter {
         this.traceTransition(initial);
         this.evaluator.execute(initial.spec?.effect);
         const scope = this.index.childIn(region, target) ? region : this.index.commonRegion([region, this.index.regionOf(target)]);
-        this.enterInRegion(scope, [{ vertex: target, entryPoint: initial.entryPoint }]);
+        this.enterInRegion(scope, [{ vertex: target, entryPoint: entryPointOf(initial) }]);
     }
 
     private enterPseudoState(pseudo: ast.PseudoState): void {
@@ -815,7 +1212,17 @@ export class StatechartInterpreter {
 
     /** Exit node `X`: the owning composite state is left by its `# X>` transition. */
     private takeExitNode(exitNode: ast.PseudoState): void {
-        const owner = this.index.ownerState(this.index.regionOf(exitNode));
+        const region = this.index.regionOf(exitNode);
+        if (region === this.machine) {
+            // exit node of the state machine itself: an instance leaves its state, a state machine becomes final
+            if (this.context?.state) {
+                this.context.parent.instanceExitReached(this.context.state, exitNode.name, exitNode);
+            } else {
+                this.enterFinal(this.index.finalState(this.machine));
+            }
+            return;
+        }
+        const owner = this.index.ownerState(region);
         const transition = owner
             ? this.index.exitTransitions(owner, exitNode.name).find(t => this.guard(t.spec?.guard))
             : undefined;
@@ -836,7 +1243,7 @@ export class StatechartInterpreter {
             return;
         }
         this.countMicrostep(sync);
-        const targets = outgoing.map(t => ({ vertex: this.index.targetOf(t), entryPoint: t.entryPoint }));
+        const targets = outgoing.map(t => ({ vertex: this.index.targetOf(t), entryPoint: entryPointOf(t) }));
         const scope = this.index.scopeRegion([sync, ...targets.map(t => t.vertex)]);
         this.exitRegion(scope);
         for (const transition of outgoing) {
@@ -904,6 +1311,7 @@ export class StatechartInterpreter {
                 this.history.set(region, sub);
             }
         }
+        this.instanceOf(vertex)?.exitInstance();
         this.runBuiltinReactions(vertex, 'exit');
         for (const trigger of this.index.timeTriggers(vertex)) {
             this.timers.delete(trigger);
@@ -935,7 +1343,7 @@ export class StatechartInterpreter {
             state,
             due: this.now + Math.max(0, duration),
             period: trigger.kind === 'every' ? duration : undefined,
-            sequence: this.timerSequence++
+            sequence: this.shared.timerSequence++
         });
     }
 
@@ -944,8 +1352,11 @@ export class StatechartInterpreter {
         return [...this.timers.values()].filter(t => t.due <= this.now).sort(compareTimers);
     }
 
-    private nextTimer(until: number): Timer | undefined {
-        return [...this.timers.values()].filter(t => t.due <= until).sort(compareTimers)[0];
+    /** The next timer (of the machine or one of its instances) expiring until `until`, and its interpreter. */
+    private nextTimer(until: number): { timer: Timer, interpreter: StatechartInterpreter } | undefined {
+        const candidates = this.allInterpreters().flatMap(interpreter => [...interpreter.timers.values()]
+            .filter(t => t.due <= until).map(timer => ({ timer, interpreter })));
+        return candidates.sort((a, b) => compareTimers(a.timer, b.timer))[0];
     }
 
     /** Removes a fired `after` timer, reschedules an `every` timer after the current time. */
@@ -990,28 +1401,103 @@ export class StatechartInterpreter {
         }
     }
 
+    /** Resets the configuration, history, timers, events and data (also of all instances) before `enter()`. */
+    private resetRuntime(): void {
+        for (const interpreter of this.allInterpreters()) {
+            interpreter.resetData();
+            interpreter.active.clear();
+            interpreter.history.clear();
+            interpreter.timers.clear();
+            interpreter.collected.clear();
+            interpreter.present.clear();
+            interpreter.presentTimers.clear();
+            interpreter.outOccurrences.clear();
+            if (interpreter !== this) {
+                interpreter.instanceActive = false;
+                interpreter.running = false;
+            }
+        }
+    }
+
+    /**
+     * Initializes the variables with initial values in declaration order; the variables of an instance
+     * are initialized where the instance is declared. Instances keep their data when they are exited
+     * and entered again (docs/semantics.md §9).
+     */
+    private initializeVariables(): void {
+        for (const declaration of this.index.declarationsInOrder()) {
+            const instance = ast.isVariableDeclaration(declaration) ? this.instances.get(declaration) : undefined;
+            if (instance) {
+                instance.initializeVariables();
+                continue;
+            }
+            if (!ast.isVariableDeclaration(declaration) || !declaration.initialValue || this.index.isInstance(declaration)) {
+                continue;
+            }
+            const value = this.evaluator.evaluate(declaration.initialValue);
+            const type = declaredType(declaration.type) ?? runtimeTypeOfValue(value);
+            this.variableTypes.set(declaration, type);
+            this.values.set(declaration, convert(value, type, `Initial value of '${declaration.name}'`, declaration)!);
+        }
+    }
+
+    /**
+     * Whether an event is present. An out event of an instance is visible to the parent from the moment
+     * it is raised until the end of the next step, but every trigger (or expression) of the parent sees
+     * it only once: in the next step, it is not visible to those that tested it in the step it was
+     * raised in (docs/semantics.md §9).
+     */
+    private isEventPresent(event: ast.EventDeclaration, node: AstNode | undefined): boolean {
+        const owner = this.owner(event, node);
+        if (owner === this) {
+            return this.present.has(event);
+        }
+        const occurrence = owner.outOccurrences.get(event);
+        if (!occurrence || !node) {
+            return false;
+        }
+        if (occurrence.step === this.shared.stepNumber) {
+            occurrence.seen.add(node);
+            return true;
+        }
+        return !occurrence.seen.has(node);
+    }
+
     private createContext(): EvaluationContext {
         return {
-            getVariable: variable => this.values.get(variable) ?? 0n,
-            assignVariable: (variable, value, node) => {
+            getVariable: (variable, node) => this.owner(variable, node).values.get(variable) ?? 0n,
+            assignVariable: (variable, value, node, reference) => {
                 if (variable.const) {
                     throw new SimulationError(`Cannot assign to constant '${variable.name}'`, node);
                 }
-                const converted = convert(value, this.variableTypes.get(variable), `Assignment to '${variable.name}'`, node)!;
-                this.values.set(variable, converted);
+                const owner = this.owner(variable, reference ?? node);
+                const converted = convert(value, owner.variableTypes.get(variable), `Assignment to '${variable.name}'`, node)!;
+                owner.values.set(variable, converted);
                 return converted;
             },
-            isEventPresent: event => this.present.has(event),
-            eventValue: event => this.eventValues.get(event),
-            isActive: vertex => ast.isState(vertex) && this.isStateActive(vertex),
+            isEventPresent: (event, node) => this.isEventPresent(event, node),
+            eventValue: (event, node) => this.owner(event, node).eventValues.get(event),
+            isActive: (vertex, node) => {
+                const owner = this.owner(vertex, node);
+                return ast.isState(vertex) && (owner === this || owner.instanceActive) && owner.isStateActive(vertex);
+            },
             callOperation: (operation, args, node) => this.callOperation(operation, args, node),
-            raiseEvent: (event, value) => this.raiseFromMachine(event, value)
+            raiseEvent: (event, value, node) => {
+                const owner = this.owner(event, node);
+                if (owner === this) {
+                    this.raiseFromMachine(event, value);
+                } else {
+                    owner.receive(event, value);
+                }
+            }
         };
     }
 
     private callOperation(operation: ast.OperationDeclaration, args: Value[], node: AstNode): Value | undefined {
-        const name = this.index.declarationName(operation);
-        const implementation = this.operations[name] ?? this.operations[operation.name];
+        const name = this.prefix + this.index.declarationName(operation);
+        // operations of instances are implemented by the host under their full name (`motor.setPwm`)
+        const operations = this.root.operations;
+        const implementation = operations[name] ?? (this.context ? undefined : operations[operation.name]);
         const returnType = declaredType(operation.returnType) ?? (operation.returnType ? undefined : 'void');
         const hostArgs = args.map(a => toHost(a)!);
         let result: Value | undefined;
@@ -1031,21 +1517,27 @@ export class StatechartInterpreter {
     }
 
     private raiseFromMachine(event: ast.EventDeclaration, value: Value | undefined): void {
-        const name = this.index.declarationName(event);
+        const name = this.prefix + this.index.declarationName(event);
         const direction = this.index.eventDirection(event);
         if (value !== undefined) {
             this.eventValues.set(event, value);
         }
         const text = formatCall(name, value === undefined ? [] : [value]);
-        this.emit({ kind: 'raise', event: name, direction, value: toHost(value), text });
-        if (direction === 'out') {
+        this.emit({ kind: 'raise', event: name, direction, value: toHost(value), text }, false);
+        if (direction === 'out' && this.context) {
+            // an out event of an instance is observed by its parent (docs/semantics.md §9)
+            this.outOccurrences.set(event, { step: this.shared.stepNumber, seen: new Set() });
+            if (this.executionMode === 'event' && !this.shared.internalQueue.some(e => e.event === undefined)) {
+                this.shared.internalQueue.push({ target: this.root });
+            }
+        } else if (direction === 'out') {
             const outEvent: OutEvent = value === undefined ? { name, text } : { name, value: toHost(value), text };
             this.lastOutEvents.push(outEvent);
             this.options.onOutEvent?.(outEvent);
         } else if (this.executionMode === 'cycle') {
             (this.inStep ? this.present : this.collected).add(event);
         } else {
-            this.internalQueue.push(event);
+            this.shared.internalQueue.push({ target: this, event });
         }
     }
 
@@ -1063,6 +1555,9 @@ export class StatechartInterpreter {
 
     private resolveVariable(name: string): ast.VariableDeclaration {
         const variable = this.index.findVariable(name);
+        if (variable && this.index.isInstance(variable)) {
+            throw new SimulationError(`'${name}' is a submachine instance, not a variable`, variable);
+        }
         if (!variable) {
             throw new SimulationError(`Unknown variable '${name}' in state machine '${this.machine.name}'`);
         }
@@ -1090,9 +1585,32 @@ export class StatechartInterpreter {
         return value;
     }
 
-    private emit(entry: TraceEntry): void {
+    /** Adds an entry to the trace (of the top-level machine); names of instances are prefixed (`motor.On`) unless `prefix` is false. */
+    private emit(entry: TraceEntry, prefix = true): void {
+        if (this.context) {
+            this.root.emit(prefix ? prefixEntry(entry, this.prefix) : entry);
+            return;
+        }
         this.lastTrace.push(entry);
         this.options.onTrace?.(entry);
+    }
+}
+
+/** A trace entry of a submachine instance with its names prefixed by the instance name (`motor.On`). */
+function prefixEntry(entry: TraceEntry, prefix: string): TraceEntry {
+    switch (entry.kind) {
+        case 'enter':
+        case 'exit':
+        case 'final':
+        case 'reaction':
+            // '' denotes the state machine of the instance itself (its own reactions)
+            return { ...entry, state: entry.state === '' ? prefix.slice(0, -1) : prefix + entry.state };
+        case 'transition':
+            return { ...entry, source: prefix + entry.source, target: prefix + entry.target };
+        case 'call':
+            return entry;
+        default:
+            return entry;
     }
 }
 

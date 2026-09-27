@@ -3,11 +3,14 @@ import type { LangiumSharedServices } from 'langium/lsp';
 import type { Diagnostic } from 'vscode-languageserver-types';
 import * as ast from '../generated/ast.js';
 import { createHsmServices } from '../hsm-module.js';
+import { loadImports, type FileReader, type HsmModelLoaderOptions } from '../hsm-document.js';
+import { cppHeaderStore } from '../cpp-headers.js';
+import { importKind } from '../imports.js';
 import { runTests, type TestResult, type TestRunOptions } from './runner.js';
 
-/** A file of a test workspace: an `.hsm` model or an `.hsmtest` test file. */
+/** A file of a test workspace: an `.hsm` model, an `.hsmtest` test file or a C/C++ header imported by a model. */
 export interface WorkspaceFile {
-    /** URI of the document; the extension selects the language (`.hsm` or `.hsmtest`). */
+    /** URI of the document; the extension selects the language (`.hsm` or `.hsmtest`) or a header (`.h`, `.hpp`, ...). */
     readonly uri: string;
     readonly text: string;
 }
@@ -28,14 +31,29 @@ export interface LoadedDocument {
 export class HsmTestWorkspace {
 
     readonly services: { shared: LangiumSharedServices };
+    private readonly readFile: FileReader;
 
-    constructor(services?: { shared: LangiumSharedServices }) {
+    /** `options.readFile` reads imported `.hsm` files that are not among the loaded files (default: the file system provider). */
+    constructor(services?: { shared: LangiumSharedServices }, options: HsmModelLoaderOptions = {}) {
         this.services = services ?? createHsmServices();
+        const fileSystem = this.services.shared.workspace.FileSystemProvider;
+        this.readFile = options.readFile ?? (async uri => {
+            try {
+                return await fileSystem.readFile(uri);
+            } catch {
+                return undefined;
+            }
+        });
     }
 
     async load(files: readonly WorkspaceFile[]): Promise<LoadedDocument[]> {
         const workspace = this.services.shared.workspace;
-        const documents = files.map(file => {
+        // C/C++ headers imported by the models are not documents (see cpp-headers.ts)
+        const store = cppHeaderStore(this.services.shared);
+        for (const file of files.filter(f => importKind(f.uri) === 'header')) {
+            store.setText(URI.parse(file.uri), file.text);
+        }
+        const documents = files.filter(f => importKind(f.uri) !== 'header').map(file => {
             const uri = URI.parse(file.uri);
             if (workspace.LangiumDocuments.hasDocument(uri)) {
                 workspace.LangiumDocuments.deleteDocument(uri);
@@ -44,7 +62,9 @@ export class HsmTestWorkspace {
             workspace.LangiumDocuments.addDocument(document);
             return document;
         });
-        await workspace.DocumentBuilder.build(documents, { validation: true });
+        // imported state machines that are not among the files (loaded transitively, see imports.ts)
+        const imported = await loadImports(this.services.shared, documents, {}, this.readFile);
+        await workspace.DocumentBuilder.build([...documents, ...imported], { validation: true });
         return documents.map(document => {
             const diagnostics = document.diagnostics ?? [];
             return {

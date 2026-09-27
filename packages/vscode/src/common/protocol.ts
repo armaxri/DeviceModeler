@@ -1,3 +1,5 @@
+import type { CppHeaderSettings } from 'hsm-language';
+
 /**
  * Messages between the extension and the diagram webview. The webview holds a copy of the document
  * text, parses and lays it out and computes the text edits of diagram operations; the extension owns
@@ -32,8 +34,11 @@ export type StatusSeverity = 'info' | 'warning' | 'error';
 
 /** Messages from the extension to the webview. */
 export type ToWebview =
-    /** The document text (on open and after every change, debounced). */
-    | { type: 'text', text: string, version: number, fileName: string, uri: string }
+    /**
+     * The document text (on open and after every change, debounced) and the texts of the `.hsm` files
+     * it imports (transitively) by URI, so that the webview can resolve the imports.
+     */
+    | { type: 'text', text: string, version: number, fileName: string, uri: string, files?: Record<string, string>, headers?: CppHeaderSettings }
     | { type: 'settings', settings: WebviewSettings }
     /** The text cursor moved (select the element at the offset). */
     | { type: 'cursor', offset: number }
@@ -59,4 +64,7 @@ export type FromWebview =
     | { type: 'updateSetting', key: 'direction' | 'routing' | 'priorities' | 'showProperties', value: string | boolean }
     /** Runs a command of the extension (toolbar buttons). */
     | { type: 'command', command: 'exportSvg' | 'exportPlantUml' | 'generateCpp' }
-    | { type: 'simulation', running: boolean };
+    | { type: 'simulation', running: boolean }
+    /** Opens a file and its diagram (double-click on a submachine state). */
+    | { type: 'openFile', uri: string };
+

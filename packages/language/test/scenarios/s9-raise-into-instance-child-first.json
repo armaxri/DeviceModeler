@@ -1,0 +1,51 @@
+{
+    "name": "s9-raise-into-instance-child-first",
+    "description": "Child first: the instance is processed before the local reactions of its state, so an event raised on it by a local reaction is processed in the next cycle.",
+    "text": [
+        "statemachine Door {",
+        "    import \"motor.hsm\"",
+        "    @ChildFirstExecution",
+        "    interface:",
+        "        in event open",
+        "        in event go",
+        "    internal:",
+        "        var motor : Motor",
+        "    [*] -> Closed",
+        "    state Closed",
+        "    state Moving : motor {",
+        "        go / raise motor.start",
+        "    }",
+        "    Closed -> Moving : open",
+        "}"
+    ],
+    "files": {
+        "motor.hsm": [
+            "statemachine Motor {",
+            "    @ChildFirstExecution",
+            "    interface:",
+            "        in event start",
+            "        in event stop",
+            "        out event stopped",
+            "        var speed : integer = 0",
+            "        operation log(msg : string) : void",
+            "    entry / log(\"motor entry\")",
+            "    exit / log(\"motor exit\")",
+            "    [*] -> Off",
+            "    state Off",
+            "    state On",
+            "    Off -> On : start / speed = 1",
+            "    On -> Off : stop / speed = 0; raise stopped",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"raise": "open"},
+        {"runCycle": true},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["motor.Off"]}},
+        {"runCycle": true},
+        {"expect": {"configuration": ["motor.On"]}}
+    ]
+}

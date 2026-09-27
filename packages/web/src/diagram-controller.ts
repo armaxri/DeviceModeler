@@ -6,7 +6,7 @@ import {
     EditError, ModelEditor, allVertices, applyEdits, definitionRange, isEventDeclaration, isInterfaceScope, isOperationDeclaration,
     isScopeContainer, isValidIdentifier, isPseudoState, isRegion, isState, isStateMachine, isTransition, isVertex, layoutStateMachine,
     qualifiedName, scopeOf, siblingVertices, transitionLabel, finalNodeId, DEFINITION_ID, MACHINE_ID,
-    nodeText as nodeTextOf, type DeletionTarget, type DiagramNode, type DiagramNodeKind, type EdgeRouting, type EditResult, type LayoutDirection, type LayoutResult,
+    nodeText as nodeTextOf, type DeletionTarget, type DiagramNode, type DiagramNodeKind, type DiagramSubmachine, type EdgeRouting, type EditResult, type LayoutDirection, type LayoutResult,
     type NewVertexKind, type ParsedModel, type ScopeContainer, type TextEdit, type Transition, type TransitionSource, type TransitionTarget, type Vertex
 } from 'hsm-language';
 import { describeSyntaxProblem, type HsmModelService } from './model-service.js';
@@ -107,6 +107,11 @@ export interface DiagramHost {
     redo(): void;
     /** The simulation mode was entered or left (e.g. to make the text read-only and to disable toolbar buttons). */
     simulationStateChanged?(running: boolean): void;
+    /**
+     * Opens the state machine of a submachine state (double-click on the state). Returns false if
+     * it is not available (the state is renamed instead).
+     */
+    openStateMachine?(submachine: DiagramSubmachine): boolean;
     setStatus(message: string, severity?: StatusSeverity): void;
 }
 
@@ -347,7 +352,8 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             return;
         }
         banner.hidden = true;
-        if (!forceLayout && this.state?.parsed.text === text) {
+        // (the same parse result: neither the text nor the imported files changed)
+        if (!forceLayout && this.state?.parsed === parsed) {
             return;
         }
         let layout: LayoutResult;
@@ -418,7 +424,8 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             pendingSource: this.pendingSource,
             activeStates: flags?.active,
             recentTransitions: flags?.recent,
-            breakpoints: flags?.breakpoints
+            breakpoints: flags?.breakpoints,
+            instanceTexts: flags?.instanceTexts
         });
         if (!this.rendered) {
             this.rendered = true;
@@ -858,6 +865,8 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             });
         } else if (kind === 'definition') {
             this.editInText(id);
+        } else if (this.state?.nodes.get(id)?.submachine && this.host.openStateMachine?.(this.state.nodes.get(id)!.submachine!)) {
+            // a submachine state: its state machine was opened
         } else if (kind !== 'initial' && kind !== 'final') {
             this.startRename(id);
         }
@@ -1135,7 +1144,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
      * transitions and breakpoints, mapped to diagram ids via `layout.ids`. The layout itself is not
      * recomputed. Schedules a re-render when the highlight of a taken transition expires.
      */
-    private simulationFlags(): { active: Set<string>, recent: Set<string>, breakpoints: Set<string>, key: string } | undefined {
+    private simulationFlags(): { active: Set<string>, recent: Set<string>, breakpoints: Set<string>, instanceTexts: Map<string, string>, key: string } | undefined {
         const session = this.simulationSession;
         const state = this.state;
         if (!session || !state) {
@@ -1197,8 +1206,19 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
                 breakpoints.add(id);
             }
         }
-        const key = [[...active].sort().join(','), [...recent].sort().join(','), [...breakpoints].sort().join(',')].join('|');
-        return { active, recent, breakpoints, key };
+        // submachine states: the active states of their instance (`motor: Ramping`)
+        const instanceTexts = new Map<string, string>();
+        for (const { state: bound, name, interpreter } of sim?.isRunning ? sim.activeInstances() : []) {
+            const id = ids.get(bound);
+            if (id) {
+                const prefix = `${name}.`;
+                const leaves = sim.activeLeafStates.filter(s => s.startsWith(prefix)).map(s => s.slice(prefix.length));
+                instanceTexts.set(id, `${name}: ${leaves.length > 0 ? leaves.join(', ') : interpreter.isFinal() ? '[*]' : '–'}`);
+            }
+        }
+        const key = [[...active].sort().join(','), [...recent].sort().join(','), [...breakpoints].sort().join(','),
+            [...instanceTexts].map(([id, text]) => `${id}=${text}`).sort().join(',')].join('|');
+        return { active, recent, breakpoints, instanceTexts, key };
     }
 
     toggleBreakpoint(node: AstNode): void {

@@ -1,0 +1,46 @@
+{
+    "name": "s9-out-event-parent-first",
+    "description": "Parent first: the transitions of a state are checked before its instance runs, so they see an out event of the instance in the next cycle.",
+    "text": [
+        "statemachine Door {",
+        "    import \"motor.hsm\"",
+        "    @CycleBased(100)",
+        "    interface:",
+        "        in event open",
+        "    internal:",
+        "        var motor : Motor",
+        "    [*] -> Closed",
+        "    state Closed",
+        "    state Moving : motor",
+        "    Closed -> Moving : open / raise motor.start",
+        "    Moving -> Closed : motor.stopped",
+        "}"
+    ],
+    "files": {
+        "motor.hsm": [
+            "statemachine Motor {",
+            "    @CycleBased(100)",
+            "    interface:",
+            "        in event start",
+            "        out event stopped",
+            "    [*] -> Off",
+            "    state Off",
+            "    state On {",
+            "        after 1 s / raise stopped",
+            "    }",
+            "    Off -> On : start",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"raise": "open"},
+        {"runCycle": 2},
+        {"expect": {"configuration": ["motor.On"]}},
+        {"advance": 1000},
+        {"runCycle": true},
+        {"expect": {"configuration": ["motor.On"]}},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Closed"]}}
+    ]
+}

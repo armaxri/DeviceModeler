@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { NodeFileSystem } from 'langium/node';
 import { createHsmServices } from '../hsm-module.js';
+import { cliHeaderSettings, installNodeHeaderSupport } from '../node/cpp-headers-node.js';
 import { checkCoverageThresholds, CoverageCollector, parseCoverageThresholds, type CoverageThresholds } from './coverage.js';
 import {
     COVERAGE_FORMATS, toCobertura, toCoverageHtml, toCoverageJson, toCoverageText, toLcov, type CoverageDiagramRenderer, type CoverageFormat
@@ -13,6 +14,10 @@ import { renderSvg, type HighlightKind } from '../render/svg.js';
 import { HsmTestWorkspace, type WorkspaceFile } from './test-workspace.js';
 
 export interface TestCommandOptions {
+    /** `-I`, `-D`, `--data-model`: settings of imported C/C++ headers. */
+    include?: string[];
+    define?: string[];
+    dataModel?: string;
     /** Additional `.hsm` files or directories containing `.hsm` files. */
     machine?: string[];
     /** Path of a JUnit XML report. */
@@ -84,7 +89,9 @@ export async function runTestCommand(files: string[], options: TestCommandOption
         inputs.push({ uri, text: await fs.readFile(file, 'utf-8') });
     }
 
-    const workspace = new HsmTestWorkspace(createHsmServices(NodeFileSystem));
+    const services = createHsmServices(NodeFileSystem);
+    installNodeHeaderSupport(services.shared, { settings: cliHeaderSettings(options) });
+    const workspace = new HsmTestWorkspace(services);
     const documents = await workspace.load(inputs);
     const display = (uri: string | undefined) => (uri && displayNames.get(uri)) ?? uri ?? '?';
     let problems = 0;

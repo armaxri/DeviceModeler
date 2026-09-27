@@ -1,8 +1,11 @@
 import { AstUtils, type AstNode } from 'langium';
 import * as ast from '../../generated/ast.js';
 import { qualifiedName } from '../../hsm-scope.js';
+import { importKind, instanceVariables } from '../../imports.js';
+import { storageOfTypeReference } from '../../cpp-storage.js';
+import type { CppResolvedType } from '../../cpp-header/model.js';
 import { typeOfVariable, type HsmType } from '../../hsm-typesystem.js';
-import { nodeText, transitionLabel } from '../../model-utils.js';
+import { entryPointOf, nodeText, transitionLabel } from '../../model-utils.js';
 import { StatechartInterpreter, type ExecutionMode, type ExecutionOrder } from '../../simulation/interpreter.js';
 import { isFinalState, ModelIndex, type RegionNode, type TargetVertex } from '../../simulation/model-index.js';
 import { CBlock, cInteger, commentText, indent, stripParens, UniqueNames } from './code.js';
@@ -28,12 +31,35 @@ export class GeneratorError extends Error {
     }
 }
 
+/** Message of the generator diagnostic for models with submachine instances (docs/semantics.md §9). */
+export const SUBMACHINES_NOT_SUPPORTED = 'Submachine instances are not supported by the C/C++ generator yet';
+
+/** Message of the C generator diagnostic for models using C/C++ header imports (docs/cpp-integration.md). */
+export const CPP_TYPES_NOT_SUPPORTED = 'C++ header types are not supported by the C generator';
+
+/**
+ * The first use of C/C++ header imports or C++ types in a state machine (a header import, a type
+ * reference resolved as C++ type, a C++ constant or enumerator), `undefined` if there is none.
+ */
+export function cppTypeUsage(machine: ast.StateMachine): AstNode | undefined {
+    const header = machine.imports.flatMap(i => i.paths).find(p => p.path && importKind(p.path) === 'header');
+    if (header) {
+        return header;
+    }
+    for (const node of AstUtils.streamAst(machine)) {
+        if (ast.isCppReference(node) || (ast.isTypeReference(node) && storageOfTypeReference(node) !== undefined)) {
+            return node;
+        }
+    }
+    return undefined;
+}
+
 /** Nanoseconds per time unit. */
 export const NS_PER_UNIT: Record<string, bigint> = { s: 1000000000n, ms: 1000000n, us: 1000n, ns: 1n };
 
 /** Kinds of runtime errors of the generated code (not every target has all of them). */
 export type ErrorKind = 'division_by_zero' | 'shift_out_of_range' | 'invalid_conversion' | 'no_enabled_transition'
-    | 'no_initial_transition' | 'invalid_time' | 'loop' | 'queue_overflow' | 'string_overflow';
+    | 'no_initial_transition' | 'invalid_time' | 'loop' | 'queue_overflow' | 'string_overflow' | 'index_out_of_bounds';
 
 export interface EnterTarget {
     vertex: TargetVertex;
@@ -107,6 +133,10 @@ export abstract class StatechartGenerator implements ExpressionContext {
     private functionOrder = 0;
 
     constructor(protected readonly machine: ast.StateMachine, maxMicrosteps: number | undefined, naming: NamingOptions) {
+        const instance = instanceVariables(machine)[0];
+        if (instance) {
+            throw new GeneratorError(`${SUBMACHINES_NOT_SUPPORTED} ('${instance.name}'); simulate the model or use state machines without instances.`, instance);
+        }
         this.index = new ModelIndex(machine);
         const interpreter = new StatechartInterpreter(machine);
         this.mode = interpreter.executionMode;
@@ -317,6 +347,15 @@ export abstract class StatechartGenerator implements ExpressionContext {
         throw new GeneratorError(message, node);
     }
 
+    /** No conversions to C++ storage types (only the C++ generator supports C++ types). */
+    storageCast(_storage: CppResolvedType | undefined, value: Code): string {
+        return value.text;
+    }
+
+    checkedIndex(_index: string, _length: number, node: AstNode): string {
+        return this.unsupported('Arrays of C++ types are not supported by this generator', node);
+    }
+
     // -----------------------------------------------------------------------------------------
     // Functions (generated on demand, so that there are no unused functions)
 
@@ -481,7 +520,7 @@ export abstract class StatechartGenerator implements ExpressionContext {
             this.expressions.effect(initial.spec?.effect, body);
             const inside = this.index.childIn(region, target) !== undefined;
             const scope = inside ? region : this.index.commonRegion([region, this.index.regionOf(target)]);
-            this.enterInRegion(scope, [{ vertex: target, entryPoint: initial.entryPoint }], body, !inside);
+            this.enterInRegion(scope, [{ vertex: target, entryPoint: entryPointOf(initial) }], body, !inside);
         });
     }
 
@@ -572,13 +611,14 @@ export abstract class StatechartGenerator implements ExpressionContext {
                 block.add(`${this.call(this.enterStateDefault(vertex))};`);
                 return;
             }
-            const entry = this.index.findPseudo(vertex, 'entry', target.entryPoint);
-            if (!entry) {
+            if (!this.index.findPseudo(vertex, 'entry', target.entryPoint)) {
                 throw new GeneratorError(`State '${vertex.name}' has no entry point '${target.entryPoint}'`, vertex);
             }
             block.add(`${this.call(this.enterState(vertex))};`);
+            // every region with an entry point of this name is entered through it, the others by default
             for (const region of this.index.regionsOf(vertex)) {
-                if (this.index.regionOf(entry) === region) {
+                const entry = this.index.entryPointIn(region, target.entryPoint);
+                if (entry) {
                     block.add(`${this.call(this.entryPoint(entry))};`);
                 } else {
                     block.add(`${this.call(this.regionEnter(region))};`);
@@ -706,7 +746,7 @@ export abstract class StatechartGenerator implements ExpressionContext {
                 return;
             }
             body.add(`if (!${this.call(this.microstep())}) {`, '    return;', '}');
-            const targets = outgoing.map(t => ({ vertex: this.index.targetOf(t), entryPoint: t.entryPoint }));
+            const targets = outgoing.map(t => ({ vertex: this.index.targetOf(t), entryPoint: entryPointOf(t) }));
             const scope = this.index.scopeRegion([sync, ...targets.map(t => t.vertex)]);
             this.exitScope(scope, body);
             for (const transition of outgoing) {
@@ -779,7 +819,7 @@ export abstract class StatechartGenerator implements ExpressionContext {
             body.add(`if (!${this.call(this.microstep())}) {`, '    return;', '}');
             this.exitScope(scope, body);
             this.expressions.effect(transition.spec?.effect, body);
-            this.enterInRegion(scope, [{ vertex: target, entryPoint: transition.entryPoint }], body, false);
+            this.enterInRegion(scope, [{ vertex: target, entryPoint: entryPointOf(transition) }], body, false);
         });
     }
 

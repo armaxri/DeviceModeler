@@ -1,0 +1,57 @@
+{
+    "name": "s10-cpp-enum-class",
+    "description": "Values of an imported enum class: default value (the enumerator with value 0), assignment, == / != with enumerators, enum typed event values and valueof, canonical text motor::Mode::Fast.",
+    "text": [
+        "statemachine M {",
+        "    import \"motor.h\"",
+        "    interface:",
+        "        in event select : motor::Mode",
+        "        out event changed : motor::Mode",
+        "        var mode : motor::Mode",
+        "        var fast : boolean",
+        "    [*] -> Idle",
+        "    state Idle",
+        "    state Running",
+        "    Idle -> Running : select [valueof(select) != motor::Mode::Off] / mode = valueof(select); fast = mode == motor::Mode::Fast; raise changed : mode",
+        "    Running -> Idle : select [valueof(select) == motor::Mode::Off] / mode = motor::Mode::Off; raise changed : mode",
+        "}"
+    ],
+    "files": {
+        "motor.h": [
+            "#ifndef MOTOR_H",
+            "#define MOTOR_H",
+            "#include <cstdint>",
+            "",
+            "namespace motor {",
+            "",
+            "/// Operating mode.",
+            "enum class Mode : std::uint8_t { Off, Slow, Fast = 10 };",
+            "",
+            "/// A position in mm.",
+            "struct Position {",
+            "    std::int32_t x = 0;",
+            "    std::int32_t y = 0;",
+            "};",
+            "",
+            "constexpr std::int32_t kMaxSpeed = 3000;",
+            "constexpr Position kHome{10, 20};",
+            "",
+            "}  // namespace motor",
+            "",
+            "#endif"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"expect": {"configuration": ["Idle"], "variables": {"mode": "motor::Mode::Off", "fast": false}}},
+        {"raise": "select", "value": "motor::Mode::Off"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Idle"], "outEvents": []}},
+        {"raise": "select", "value": "motor::Mode::Fast"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Running"], "variables": {"mode": "motor::Mode::Fast", "fast": true}, "outEvents": ["changed(motor::Mode::Fast)"]}},
+        {"raise": "select", "value": "motor::Mode::Off"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Idle"], "variables": {"mode": "motor::Mode::Off"}, "outEvents": ["changed(motor::Mode::Off)"]}}
+    ]
+}

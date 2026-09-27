@@ -1,9 +1,13 @@
-import type { AstNode } from 'langium';
+import { AstUtils, type AstNode } from 'langium';
 import {
-    StatechartInterpreter, declaredType, formatTraceEntry, isInterfaceScope, isOperationDeclaration, isState, isTransition,
-    type EventDeclaration, type HostValue, type OperationDeclaration, type State, type StateMachine, type TraceEntry, type Transition,
-    type TypeName, type VariableDeclaration
+    StatechartInterpreter, declaredType, formatTraceEntry, instanceMachine, instanceVariables, isInstance, isInterfaceScope, isOperationDeclaration, isState, isTransition,
+    referableName,
+    type EventDeclaration, type HostValue, type OperationDeclaration, type RuntimeType, type State, type StateMachine, type TraceEntry, type Transition,
+    type VariableDeclaration
 } from 'hsm-language';
+import { defaultHostValue } from '../ui/value-editor.js';
+
+export { defaultHostValue };
 
 /** One line of the simulation log (trace entries of the interpreter). */
 export interface LogEntry {
@@ -34,7 +38,7 @@ export interface CallRecord {
 export interface OperationMock {
     readonly name: string;
     readonly declaration: OperationDeclaration;
-    readonly returnType: TypeName;
+    readonly returnType: RuntimeType;
     value: HostValue | undefined;
     calls: number;
 }
@@ -42,7 +46,7 @@ export interface OperationMock {
 export interface EventInfo {
     readonly name: string;
     readonly declaration: EventDeclaration;
-    readonly type: TypeName;
+    readonly type: RuntimeType;
     /** Interface name (`''` for the unnamed interface). */
     readonly group: string;
 }
@@ -128,7 +132,7 @@ export class SimulationSession {
                 group: isInterfaceScope(d.scope) && d.scope.name ? d.scope.name : ''
             }));
         this.variables = declarations
-            .filter(d => d.declaration.$type === 'VariableDeclaration')
+            .filter(d => d.declaration.$type === 'VariableDeclaration' && !isInstance(d.declaration))
             .map(d => {
                 const variable = d.declaration as VariableDeclaration;
                 return { name: qualified(d), declaration: variable, group: groupOf(d.scope), editable: !variable.const && !variable.readonly };
@@ -140,6 +144,27 @@ export class SimulationSession {
                 const returnType = declaredType(operation.returnType) ?? 'void';
                 return { name: qualified(d), declaration: operation, returnType, value: defaultHostValue(returnType), calls: 0 };
             });
+        // variables and operations of the submachine instances (`motor.speed`, `motor.setPwm`), also nested ones
+        const addInstances = (owner: StateMachine, prefix: string, depth: number) => {
+            for (const instance of depth < 8 ? instanceVariables(owner) : []) {
+                const submachine = instanceMachine(instance)!;
+                const name = `${prefix}${referableName(instance)}`;
+                for (const scope of submachine.scopes) {
+                    for (const declaration of scope.declarations) {
+                        const member = `${name}.${qualified({ scope, declaration })}`;
+                        if (declaration.$type === 'VariableDeclaration' && !isInstance(declaration)) {
+                            const variable = declaration as VariableDeclaration;
+                            this.variables.push({ name: member, declaration: variable, group: `instance ${name} : ${submachine.name}`, editable: !variable.const && !variable.readonly });
+                        } else if (isOperationDeclaration(declaration)) {
+                            const returnType = declaredType(declaration.returnType) ?? 'void';
+                            this.operations.push({ name: member, declaration, returnType, value: defaultHostValue(returnType), calls: 0 });
+                        }
+                    }
+                }
+                addInstances(submachine, `${name}.`, depth + 1);
+            }
+        };
+        addInstances(machine, '', 0);
         this.restart();
     }
 
@@ -312,7 +337,8 @@ export class SimulationSession {
         const values = this.sim.variables;
         const now = performance.now();
         for (const [name, value] of Object.entries(values)) {
-            if (this.lastValues && this.lastValues[name] !== value) {
+            // (values of C++ structs and arrays are objects: compared by their JSON text)
+            if (this.lastValues && this.lastValues[name] !== value && JSON.stringify(this.lastValues[name]) !== JSON.stringify(value)) {
                 this.changedVariables.set(name, now);
             }
         }
@@ -328,7 +354,9 @@ export class SimulationSession {
     }
 
     private fail(error: unknown): void {
-        const node = error instanceof Error && 'node' in error ? (error as { node?: AstNode }).node : undefined;
+        const errorNode = error instanceof Error && 'node' in error ? (error as { node?: AstNode }).node : undefined;
+        // (elements of submachine instances are defined in other files)
+        const node = errorNode && AstUtils.findRootNode(errorNode) === this.machine ? errorNode : undefined;
         this.error = { message: error instanceof Error ? error.message : String(error), node };
         this.addLog({ kind: 'info', text: `error: ${this.error.message}`, node });
         if (this.playing) {
@@ -337,7 +365,9 @@ export class SimulationSession {
     }
 
     private traced(entry: TraceEntry): void {
-        const node = traceNode(entry);
+        // elements of submachine instances are defined in other files: they cannot be shown in the text
+        const traced = traceNode(entry);
+        const node = traced && AstUtils.findRootNode(traced) === this.machine ? traced : undefined;
         const last = this.log[this.log.length - 1];
         if (entry.kind === 'step' && last?.kind === 'step' && !last.text.includes('[')) {
             // idle cycles without events and without effect are collapsed into the latest one
@@ -387,20 +417,6 @@ function traceNode(entry: TraceEntry): AstNode | undefined {
         case 'transition':
         case 'reaction':
             return entry.node;
-        default:
-            return undefined;
-    }
-}
-
-export function defaultHostValue(type: TypeName): HostValue | undefined {
-    switch (type) {
-        case 'integer':
-        case 'real':
-            return 0;
-        case 'boolean':
-            return false;
-        case 'string':
-            return '';
         default:
             return undefined;
     }

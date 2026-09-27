@@ -1,0 +1,39 @@
+{
+    "name": "s9-time-events",
+    "description": "Time events of an instance use the virtual clock of the state machine; its timers are started when its states are entered and are present in the next cycle after they expired.",
+    "text": [
+        "statemachine Door {",
+        "    import \"motor.hsm\"",
+        "    @CycleBased(100)",
+        "    interface:",
+        "        in event open",
+        "    internal:",
+        "        var motor : Motor",
+        "    [*] -> Closed",
+        "    state Closed",
+        "    state Moving : motor",
+        "    Closed -> Moving : open",
+        "}"
+    ],
+    "files": {
+        "motor.hsm": [
+            "statemachine Motor {",
+            "    @CycleBased(100)",
+            "    [*] -> Off",
+            "    state Off",
+            "    state On",
+            "    Off -> On : after 500 ms",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"raise": "open"},
+        {"runFor": 100},
+        {"expect": {"configuration": ["motor.Off"]}},
+        {"runFor": 400},
+        {"expect": {"configuration": ["motor.Off"]}},
+        {"runFor": 100},
+        {"expect": {"configuration": ["motor.On"]}}
+    ]
+}

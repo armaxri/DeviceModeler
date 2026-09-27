@@ -5,8 +5,9 @@ import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { generateC, generateScenarioHarness, type CGeneratorResult } from '../src/generator/c/index.js';
-import { scenarioText, validateScenario } from '../src/simulation/index.js';
-import { errors, parse } from './helpers.js';
+import { scenarioFiles as filesOfScenario, scenarioText, validateScenario } from '../src/simulation/index.js';
+import { CPP_TYPE_SCENARIOS, errors, parse, SUBMACHINE_SCENARIOS } from './helpers.js';
+import { CPP_TYPES_NOT_SUPPORTED, SUBMACHINES_NOT_SUPPORTED } from '../src/generator/common/statechart-generator.js';
 
 /**
  * Conformance of the C code generator: every scenario of `test/scenarios` is compiled into a C test
@@ -35,7 +36,10 @@ const EXTRA_FLAGS = (process.env.HSM_CFLAGS ?? '').split(/\s+/).filter(flag => f
  * (`s2-unknown-event` runs: raising an unknown event is rejected when the harness is generated,
  * in C it would be a compile time error.)
  */
-const SKIP: Record<string, string> = {};
+const SKIP: Record<string, string> = Object.fromEntries([
+    ...SUBMACHINE_SCENARIOS.map(file => [file, 'submachine instances are not supported by the C generator yet (docs/semantics.md §9)']),
+    ...CPP_TYPE_SCENARIOS.map(file => [file, 'C++ header types are not supported by the C generator (docs/cpp-integration.md)'])
+]);
 
 const scenarioDirectory = path.resolve(__dirname, 'scenarios');
 const scenarioFiles = fs.readdirSync(scenarioDirectory).filter(f => f.endsWith('.json')).sort();
@@ -172,5 +176,37 @@ describe('C code generator', () => {
         const result = generateC(parsed.model);
         expect(result.files).toEqual([]);
         expect(result.diagnostics.map(d => d.message)).toEqual([expect.stringContaining("'M_event_x' is not unique")]);
+    });
+});
+
+describe('C code generator: submachine instances and C++ header types', () => {
+    test('the skipped scenarios are exactly the scenarios with submachine instances or C/C++ header imports', () => {
+        const withFiles = scenarioFiles.filter(file => {
+            const scenario = validateScenario(JSON.parse(fs.readFileSync(path.join(scenarioDirectory, file), 'utf-8')), file);
+            return scenario.files !== undefined;
+        });
+        expect(Object.keys(SKIP).sort()).toEqual(withFiles.sort());
+        const withHeaders = withFiles.filter(file => {
+            const scenario = validateScenario(JSON.parse(fs.readFileSync(path.join(scenarioDirectory, file), 'utf-8')), file);
+            return Object.keys(scenario.files!).some(name => /\.(h|hpp)$/.test(name));
+        });
+        expect([...CPP_TYPE_SCENARIOS].sort()).toEqual(withHeaders.sort());
+    });
+
+    for (const file of Object.keys(SKIP)) {
+        test(`${file}: diagnostic instead of code`, async () => {
+            const scenario = validateScenario(JSON.parse(fs.readFileSync(path.join(scenarioDirectory, file), 'utf-8')), file);
+            const parsed = await parse(scenarioText(scenario)!, filesOfScenario(scenario));
+            expect(errors(parsed)).toEqual([]);
+            const result = generateC(parsed.model);
+            expect(result.files).toEqual([]);
+            expect(result.diagnostics.map(d => d.message).join()).toContain(CPP_TYPE_SCENARIOS.includes(file) ? CPP_TYPES_NOT_SUPPORTED : SUBMACHINES_NOT_SUPPORTED);
+        });
+    }
+
+    test('<cstdint> types need the C++ generator, too', async () => {
+        const parsed = await parse('statemachine M {\n    interface:\n        var x : uint8_t\n    [*] -> A\n    state A\n}');
+        expect(errors(parsed)).toEqual([]);
+        expect(generateC(parsed.model).diagnostics.map(d => d.message).join()).toContain(CPP_TYPES_NOT_SUPPORTED);
     });
 });

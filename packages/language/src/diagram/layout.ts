@@ -1,8 +1,9 @@
 import type { AstNode } from 'langium';
 import type { ELK as ElkApi, ElkExtendedEdge, ElkNode, LayoutOptions } from 'elkjs/lib/elk-api.js';
 import * as ast from '../generated/ast.js';
+import { referableName, submachineOf } from '../imports.js';
 import {
-    definitionLines, hasDefinitionSection, nodeText, outgoingTransitions, scopeOf, transitionLabel, transitionPriority, type ScopeContainer
+    allTransitions, definitionLines, entryPointOf, hasDefinitionSection, nodeText, outgoingTransitions, scopeOf, transitionLabel, transitionPriority, type ScopeContainer
 } from '../model-utils.js';
 import { qualifiedName } from '../hsm-scope.js';
 import type {
@@ -34,6 +35,10 @@ export const DiagramMetrics = {
     } as Record<string, number>,
     /** Thickness of the bar of a synchronization. */
     syncThickness: 7,
+    /** Space reserved in the name compartment of a submachine state for the submachine icon. */
+    submachineIconWidth: 22,
+    /** Radius of the entry points / exit nodes of a submachine instance drawn on the border of its state. */
+    submachinePointRadius: 5,
     /** Default maximum length of text lines (longer lines are wrapped or shortened). */
     maxLineLength: 60
 };
@@ -324,7 +329,7 @@ class DiagramBuilder {
     }
 
     private createVertex(vertex: ast.Vertex, parentId: string, parentElk: ElkNode): DiagramNode {
-        const id = this.uniqueId(vertex.name ? qualifiedName(vertex) : '#unnamed');
+        const id = this.uniqueId(vertex.name ? vertexBaseId(vertex) : '#unnamed');
         if (ast.isPseudoState(vertex)) {
             const node = this.pseudoNode(id, vertex.kind as DiagramNodeKind, DiagramMetrics.pseudoSize[vertex.kind] ?? 20);
             node.name = vertex.name;
@@ -353,8 +358,12 @@ class DiagramBuilder {
     private createState(state: ast.State, id: string, parentId: string, parentElk: ElkNode): DiagramNode {
         const m = DiagramMetrics;
         const measure = this.options.measure;
-        const { lines: body, titles } = this.wrapLines(stateBodyLines(state));
-        const nameWidth = measure(state.name ?? '', 'name').width;
+        const submachine = submachineOf(state);
+        const instanceLine = submachine ? `instance ${referableName(submachine.instance)}` : undefined;
+        const { lines: body, titles } = this.wrapLines(instanceLine ? [...stateBodyLines(state), instanceLine] : stateBodyLines(state));
+        // a submachine state shows the state machine of its instance: `Moving : Motor`
+        const nameWidth = measure(submachine ? `${state.name ?? ''} : ${submachine.machine.name}` : state.name ?? '', 'name').width
+            + (submachine ? DiagramMetrics.submachineIconWidth : 0);
         const bodyWidth = Math.max(0, ...body.map(line => measure(line, 'body').width));
         const width = Math.max(nameWidth + 2 * m.stateHorizontalPadding, bodyWidth + 2 * m.bodyPadding + 4, m.stateMinWidth);
         const bodyHeight = body.length > 0 ? body.length * m.lineHeight.body + 2 * m.bodyPadding : m.emptyBodyHeight;
@@ -370,6 +379,15 @@ class DiagramBuilder {
             headerHeight: m.headerHeight,
             children: []
         };
+        if (submachine) {
+            node.submachine = {
+                instance: referableName(submachine.instance),
+                machine: submachine.machine.name,
+                uri: submachine.machine.$document?.uri.toString(),
+                line: body.length - 1,
+                points: this.submachinePoints(state)
+            };
+        }
         const elkNode: ElkNode = { id, width: node.width, height: node.height };
         this.register(node, elkNode, parentId, parentElk, state);
         if (composite) {
@@ -400,6 +418,26 @@ class DiagramBuilder {
             node.children.push(...this.createScopeContent(state, id, elkNode));
         }
         return node;
+    }
+
+    /** The entry points (`# >E`) and exit nodes (`# X>`) of a submachine state used by transitions, in text order. */
+    private submachinePoints(state: ast.State): Array<{ kind: 'entry' | 'exit', name: string }> {
+        const points: Array<{ kind: 'entry' | 'exit', name: string }> = [];
+        const add = (kind: 'entry' | 'exit', name: string) => {
+            if (!points.some(p => p.kind === kind && p.name === name)) {
+                points.push({ kind, name });
+            }
+        };
+        for (const transition of allTransitions(this.machine)) {
+            const entry = entryPointOf(transition);
+            if (entry && transition.target?.ref === state) {
+                add('entry', entry);
+            }
+            if (transition.source?.ref === state) {
+                transition.exitPoints.forEach(name => add('exit', name));
+            }
+        }
+        return points;
     }
 
     private createRegion(region: ast.Region, stateId: string, index: number, parentElk: ElkNode): DiagramNode {
@@ -692,4 +730,47 @@ export function containerForElement(element: AstNode | undefined): ScopeContaine
         return scopeOf(element);
     }
     return undefined;
+}
+
+/**
+ * Base of the diagram id of a vertex: its qualified name. Entry points and exit nodes with the same name
+ * in several orthogonal regions of a state (`Outer.failure`) include the region to stay distinguishable
+ * (`Outer.r1.failure`, `Outer.region2.failure` for unnamed regions).
+ */
+function vertexBaseId(vertex: ast.Vertex): string {
+    const name = qualifiedName(vertex);
+    const region = vertex.$container;
+    if (!ast.isPseudoState(vertex) || (vertex.kind !== 'entry' && vertex.kind !== 'exit') || !ast.isRegion(region)) {
+        return name;
+    }
+    const owner = region.$container;
+    const shared = owner.regions.some(r => r !== region
+        && r.vertices.some(v => ast.isPseudoState(v) && v.kind === vertex.kind && v.name === vertex.name));
+    if (!shared) {
+        return name;
+    }
+    const regionName = region.name ?? `region${owner.regions.indexOf(region) + 1}`;
+    return `${qualifiedName(owner)}.${regionName}.${vertex.name}`;
+}
+
+/**
+ * Positions (relative to the state) of the entry points and exit nodes of a submachine state drawn on
+ * its border: entry points on the top (layout direction down) or left border, exit nodes on the
+ * bottom or right border, evenly spaced.
+ */
+export function submachinePointPositions(node: DiagramNode, direction: LayoutDirection): Array<{ kind: 'entry' | 'exit', name: string, x: number, y: number }> {
+    const points = node.submachine?.points ?? [];
+    const result: Array<{ kind: 'entry' | 'exit', name: string, x: number, y: number }> = [];
+    for (const kind of ['entry', 'exit'] as const) {
+        const ofKind = points.filter(p => p.kind === kind);
+        ofKind.forEach((point, i) => {
+            const fraction = (i + 1) / (ofKind.length + 1);
+            if (direction === 'DOWN') {
+                result.push({ ...point, x: node.width * fraction, y: kind === 'entry' ? 0 : node.height });
+            } else {
+                result.push({ ...point, x: kind === 'entry' ? 0 : node.width, y: (node.headerHeight ?? DiagramMetrics.headerHeight) + (node.height - (node.headerHeight ?? DiagramMetrics.headerHeight)) * fraction });
+            }
+        });
+    }
+    return result;
 }

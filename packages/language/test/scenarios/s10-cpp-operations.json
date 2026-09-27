@@ -1,0 +1,68 @@
+{
+    "name": "s10-cpp-operations",
+    "description": "Operations with parameters and return values of C++ enum and struct types: the host gets and returns plain values (enumerator names, objects); calls are written with the canonical text of the values.",
+    "text": [
+        "statemachine M {",
+        "    import \"motor.h\"",
+        "    interface:",
+        "        in event go",
+        "        var pos : motor::Position",
+        "        var mode : motor::Mode",
+        "        operation measure() : motor::Position",
+        "        operation select(current : motor::Mode, target : motor::Position) : motor::Mode",
+        "    [*] -> A",
+        "    state A",
+        "    A -> A : go / pos = measure(); mode = select(mode, pos); pos.x = measure().y",
+        "}"
+    ],
+    "files": {
+        "motor.h": [
+            "#ifndef MOTOR_H",
+            "#define MOTOR_H",
+            "#include <cstdint>",
+            "",
+            "namespace motor {",
+            "",
+            "/// Operating mode.",
+            "enum class Mode : std::uint8_t { Off, Slow, Fast = 10 };",
+            "",
+            "/// A position in mm.",
+            "struct Position {",
+            "    std::int32_t x = 0;",
+            "    std::int32_t y = 0;",
+            "};",
+            "",
+            "constexpr std::int32_t kMaxSpeed = 3000;",
+            "constexpr Position kHome{10, 20};",
+            "",
+            "}  // namespace motor",
+            "",
+            "#endif"
+        ]
+    },
+    "operations": {
+        "measure": [
+            {
+                "x": 1,
+                "y": 2
+            },
+            {
+                "x": 3,
+                "y": 4
+            }
+        ],
+        "select": [
+            "motor::Mode::Fast",
+            "motor::Mode::Slow"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"variables": {"pos": {"x": 4, "y": 2}, "mode": "motor::Mode::Fast"}, "calls": ["measure()", "select(motor::Mode::Off, {x: 1, y: 2})", "measure()"]}},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"variables": {"pos": {"x": 4, "y": 4}, "mode": "motor::Mode::Slow"}, "calls": ["measure()", "select(motor::Mode::Fast, {x: 3, y: 4})", "measure()"]}}
+    ]
+}

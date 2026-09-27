@@ -1,7 +1,7 @@
 import { AstUtils, type AstNode } from 'langium';
 import * as ast from '../generated/ast.js';
 import { qualifiedName } from '../hsm-scope.js';
-import { eventDirection, typeName, typeOfEvent, typeOfParameter, typeOfVariable, returnTypeOf } from '../hsm-typesystem.js';
+import { eventDirection, typeName, typeOfAlias, typeOfEvent, typeOfParameter, typeOfVariable, returnTypeOf } from '../hsm-typesystem.js';
 import { nodeText, outgoingTransitions, scopeOf, transitionPriority, type ScopeContainer } from '../model-utils.js';
 import { docComment } from './doc-comments.js';
 
@@ -48,6 +48,17 @@ export interface ScopeDoc {
     events: EventDoc[];
     variables: VariableDoc[];
     operations: OperationDoc[];
+    /** Type aliases (`alias Name : type`). */
+    typeAliases: TypeAliasDoc[];
+}
+
+export interface TypeAliasDoc {
+    name: string;
+    /** The aliased type as written (`integer`, `OtherAlias`). */
+    type: string;
+    /** The resolved built-in type. */
+    baseType: string;
+    documentation?: string;
 }
 
 export interface VertexDoc {
@@ -78,9 +89,9 @@ export interface TransitionDoc {
     triggers: string[];
     guard?: string;
     effect?: string;
-    /** `>E` (entry point of the target) or `X>` (exit node of the source). */
-    entryPoint?: string;
-    exitPoint?: string;
+    /** `>E` (entry point of the target; only the first one is used) and `X>` (exit nodes of the source). */
+    entryPoints: string[];
+    exitPoints: string[];
     /** Priority among the outgoing transitions of the source (if there are several). */
     priority?: number;
     documentation?: string;
@@ -151,7 +162,8 @@ function describeScope(scope: ast.Scope): ScopeDoc {
         documentation: docComment(scope),
         events: [],
         variables: [],
-        operations: []
+        operations: [],
+        typeAliases: []
     };
     for (const declaration of scope.declarations) {
         const documentation = docComment(declaration);
@@ -166,6 +178,8 @@ function describeScope(scope: ast.Scope): ScopeDoc {
                 initialValue: declaration.initialValue ? nodeText(declaration.initialValue) : undefined,
                 documentation
             });
+        } else if (ast.isTypeAliasDeclaration(declaration)) {
+            result.typeAliases.push({ name: declaration.name, type: declaration.type?.name ?? '', baseType: typeName(typeOfAlias(declaration)), documentation });
         } else {
             const parameters = declaration.parameters.map(p => ({ name: p.name, type: typeName(typeOfParameter(p)), varArgs: p.varArgs }));
             const returnType = typeName(returnTypeOf(declaration));
@@ -255,8 +269,8 @@ function describeTransition(transition: ast.Transition): TransitionDoc {
         triggers: spec?.triggers.map(t => nodeText(t)) ?? [],
         guard: spec?.guard ? nodeText(spec.guard) : undefined,
         effect: spec?.effect ? nodeText(spec.effect) : undefined,
-        entryPoint: transition.entryPoint,
-        exitPoint: transition.exitPoint,
+        entryPoints: [...transition.entryPoints],
+        exitPoints: [...transition.exitPoints],
         priority,
         documentation: docComment(transition)
     };
@@ -389,7 +403,13 @@ function writeDoc(doc: StateMachineDoc, w: DocWriter, options: ModelDocOptions):
                     w.code(o.signature.replace(/ : [^:]*$/, '')), w.code(o.returnType), description(w, o.documentation)
                 ]));
             }
-            if (scope.events.length + scope.variables.length + scope.operations.length === 0) {
+            if (scope.typeAliases.length > 0) {
+                w.paragraph(w.strong('Type aliases'));
+                w.table(['Alias', 'Type', 'Description'], scope.typeAliases.map(a => [
+                    w.code(a.name), w.code(a.type === a.baseType ? a.type : `${a.type} (${a.baseType})`), description(w, a.documentation)
+                ]));
+            }
+            if (scope.events.length + scope.variables.length + scope.operations.length + scope.typeAliases.length === 0) {
                 w.paragraph(w.text('(no declarations)'));
             }
         }
@@ -415,8 +435,8 @@ function writeDoc(doc: StateMachineDoc, w: DocWriter, options: ModelDocOptions):
     if (doc.transitions.length > 0) {
         w.heading(2, w.text('Transitions'));
         w.table(['Source', 'Target', 'Trigger', 'Guard', 'Effect', 'Priority', 'Description'], doc.transitions.map(t => [
-            t.source === '[*]' ? `${w.code('[*]')} ${w.text(`(initial, ${t.scope})`)}` : w.code(t.source) + (t.exitPoint ? ` ${w.text('via exit')} ${w.code(t.exitPoint)}` : ''),
-            t.target === '[*]' ? `${w.code('[*]')} ${w.text(`(final, ${t.scope})`)}` : w.code(t.target) + (t.entryPoint ? ` ${w.text('via entry')} ${w.code(t.entryPoint)}` : ''),
+            t.source === '[*]' ? `${w.code('[*]')} ${w.text(`(initial, ${t.scope})`)}` : w.code(t.source) + (t.exitPoints.length > 0 ? ` ${w.text('via exit')} ${t.exitPoints.map(x => w.code(x)).join(w.text(' / '))}` : ''),
+            t.target === '[*]' ? `${w.code('[*]')} ${w.text(`(final, ${t.scope})`)}` : w.code(t.target) + (t.entryPoints.length > 0 ? ` ${w.text('via entry')} ${w.code(t.entryPoints[0])}` : ''),
             t.triggers.map(tr => w.code(tr)).join(', '),
             t.guard ? w.code(t.guard) : '',
             t.effect ? w.code(t.effect) : '',

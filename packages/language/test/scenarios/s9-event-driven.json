@@ -1,0 +1,50 @@
+{
+    "name": "s9-event-driven",
+    "description": "Event driven: events raised on an instance and out events of an instance are queued like internal events; each is processed in a step of its own.",
+    "text": [
+        "statemachine Door {",
+        "    import \"motor.hsm\"",
+        "    @EventDriven",
+        "    interface:",
+        "        in event open",
+        "        in event halt",
+        "        operation log(msg : string) : void",
+        "    internal:",
+        "        var motor : Motor",
+        "    [*] -> Closed",
+        "    state Closed",
+        "    state Moving : motor {",
+        "        halt / raise motor.stop",
+        "    }",
+        "    Closed -> Moving : open / raise motor.start",
+        "    Moving -> Closed : motor.stopped / log(\"stopped\")",
+        "}"
+    ],
+    "files": {
+        "motor.hsm": [
+            "statemachine Motor {",
+            "    @EventDriven",
+            "    interface:",
+            "        in event start",
+            "        in event stop",
+            "        out event stopped",
+            "        var speed : integer = 0",
+            "        operation log(msg : string) : void",
+            "    entry / log(\"motor entry\")",
+            "    exit / log(\"motor exit\")",
+            "    [*] -> Off",
+            "    state Off",
+            "    state On",
+            "    Off -> On : start / speed = 1",
+            "    On -> Off : stop / speed = 0; raise stopped",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"raise": "open"},
+        {"expect": {"configuration": ["motor.On"], "calls": ["motor.log(\"motor entry\")"]}},
+        {"raise": "halt"},
+        {"expect": {"configuration": ["Closed"], "calls": ["motor.log(\"motor exit\")", "log(\"stopped\")"]}}
+    ]
+}

@@ -272,6 +272,36 @@
           "default": "17",
           "description": "C++ standard of the generated code."
         },
+        "hsm.headers.includePaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Include directories for imported C/C++ headers (`import \"motor_types.h\"`), searched after the directory of the model; relative to the workspace folder (`${workspaceFolder}` is supported). They are added to the `includePaths` of the `headers` block of the nearest `hsm.gen.json`."
+        },
+        "hsm.headers.defines": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number"
+            ]
+          },
+          "default": {},
+          "markdownDescription": "Predefined macros for the analysis of imported C/C++ headers (like `-D`): `\"NAME\": \"value\"` (`\"\"` for a macro without value). They override the `defines` of `hsm.gen.json`."
+        },
+        "hsm.headers.dataModel": {
+          "type": "string",
+          "enum": [
+            "",
+            "lp64",
+            "llp64",
+            "ilp32"
+          ],
+          "default": "",
+          "markdownDescription": "Data model of the target for imported C/C++ headers (widths of `long` and `size_t`): `lp64` (Linux / macOS 64-bit, the default), `llp64` (Windows 64-bit), `ilp32` (32-bit targets like ARM Cortex-M). Empty: the `dataModel` of `hsm.gen.json` or LP64."
+        },
         "hsm.trace.server": {
           "type": "string",
           "enum": [

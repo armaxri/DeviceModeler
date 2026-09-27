@@ -1,0 +1,40 @@
+{
+    "name": "s10-cpp-enum-unscoped-and-casts",
+    "description": "Unscoped enums convert to integer like in C++ (arithmetic, bitwise operators, comparison with integers); casts integer -> enum and enum -> integer; an enum value without enumerator is written motor::Mode(7).",
+    "text": [
+        "statemachine M {",
+        "    import \"flags.h\"",
+        "    interface:",
+        "        in event fail : integer",
+        "        var flags : integer",
+        "        var level : io::Level",
+        "        var raw : integer",
+        "    [*] -> A",
+        "    state A",
+        "    A -> A : fail / flags = flags | io::kOverCurrent | valueof(fail); level = (flags & 3) as io::Level; raw = level as integer + io::kStall",
+        "}"
+    ],
+    "files": {
+        "flags.h": [
+            "#pragma once",
+            "namespace io {",
+            "enum ErrorFlags : unsigned { kNone = 0, kOverCurrent = 1u << 0, kOverTemperature = 1u << 1, kStall = 1u << 2 };",
+            "enum class Level : int { Low = 1, High = 3 };",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"flags": 0, "level": 0, "raw": 0}}},
+        {"raise": "fail", "value": 2},
+        {"runCycle": true},
+        {"expect": {"variables": {"flags": 3, "level": "io::Level::High", "raw": 7}}},
+        {"raise": "fail", "value": 8},
+        {"runCycle": true},
+        {"expect": {"variables": {"flags": 11, "level": "io::Level::High", "raw": 7}}},
+        {"set": {"flags": 0, "level": "Low"}},
+        {"raise": "fail", "value": 16},
+        {"runCycle": true},
+        {"expect": {"variables": {"flags": 17, "level": "io::Level::Low", "raw": 5}}}
+    ]
+}

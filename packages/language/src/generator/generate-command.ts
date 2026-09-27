@@ -3,6 +3,12 @@ import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { NodeFileSystem } from 'langium/node';
 import { HsmModelLoader } from '../hsm-document.js';
+import { URI } from 'langium';
+import { cppHeaderStore } from '../cpp-headers.js';
+import { resolvedImports } from '../imports.js';
+import type { StateMachine } from '../generated/ast.js';
+import type { CppHeaderSettings } from '../cpp-headers.js';
+import { cliHeaderSettings, headerSettingsFromConfig, installNodeHeaderSupport } from '../node/cpp-headers-node.js';
 import { createHsmServices } from '../hsm-module.js';
 import {
     GENERATOR_CONFIG_FILE, GENERATOR_TARGETS, generateTarget, globToRegExp, isGlob, parseGeneratorConfig, targetConfigForModel,
@@ -123,6 +129,8 @@ export interface GenerationRequest {
     overrides?: CppTargetConfig & CTargetConfig;
     /** `write`: writes the files; `check`: only compares them with the files on disk. */
     mode: 'write' | 'check';
+    /** Settings of imported C/C++ headers from the command line (`-I`, `-D`, `--data-model`), in addition to the `headers` block of the configuration. */
+    headers?: CppHeaderSettings;
 }
 
 export type OutputStatus = 'written' | 'unchanged' | 'up-to-date' | 'stale' | 'missing';
@@ -140,6 +148,8 @@ export interface GenerationResult {
     outputs: GeneratedOutput[];
     /** The models (absolute paths). */
     models: string[];
+    /** The files the models import (state machines and C/C++ headers with the headers they include; absolute paths). */
+    imports: string[];
     diagnostics: GenerateDiagnostic[];
 }
 
@@ -170,11 +180,27 @@ export async function runGeneration(request: GenerationRequest): Promise<Generat
         }
     }
 
-    const loader = new HsmModelLoader(createHsmServices(NodeFileSystem));
+    const services = createHsmServices(NodeFileSystem);
+    // imported C/C++ headers: the `headers` block of the configuration applies to all its models
+    const finder = installNodeHeaderSupport(services.shared, { settings: request.headers });
+    if (config.headers) {
+        const settings = headerSettingsFromConfig(config.headers, baseDir);
+        cppHeaderStore(services.shared).settingsProvider = () => settings;
+    } else {
+        void finder;
+    }
+    const loader = new HsmModelLoader(services);
     const contents = new Map<string, { content: string, target: GeneratorTarget, model: string }>();
+    const imports = new Set<string>();
     for (const [model, entries] of models) {
         const text = await fs.readFile(model, 'utf-8');
         const parsed = await loader.load(text, pathToFileURL(model).toString());
+        for (const imported of parsed.imported) {
+            imports.add(URI.parse(imported.uri).fsPath);
+        }
+        for (const resolved of resolvedImports(parsed.model)) {
+            resolved.header?.headers.forEach(header => imports.add(header.uri.fsPath));
+        }
         let errors = 0;
         for (const d of parsed.diagnostics) {
             if (d.severity === 1 || d.severity === 2) {
@@ -196,7 +222,8 @@ export async function runGeneration(request: GenerationRequest): Promise<Generat
             const outDir = request.outDir !== undefined
                 ? path.resolve(request.outDir)
                 : options.outDir !== undefined ? path.resolve(baseDir, options.outDir) : path.dirname(model);
-            const result = generateTarget(parsed.model, target, options);
+            const includePaths = (cppHeaderStore(services.shared).settingsFor(parsed.document.uri).includePaths ?? []).map(p => URI.parse(p).fsPath);
+            const result = generateTarget(parsed.model, target, options, { headerInclude: header => headerInclude(parsed.model, header, model, outDir, includePaths) });
             for (const d of result.diagnostics) {
                 diagnostics.push({ severity: d.severity, message: `${target}: ${d.message}`, file: model, line: d.line });
             }
@@ -235,7 +262,25 @@ export async function runGeneration(request: GenerationRequest): Promise<Generat
         }
         outputs.push({ file, target: generated.target, model: generated.model, status });
     }
-    return { outputs, models: [...models.keys()], diagnostics };
+    return { outputs, models: [...models.keys()], imports: [...imports].sort(), diagnostics };
+}
+
+/**
+ * The `#include` path of an imported header in the generated code: the import path as written if the
+ * header was found in an include directory or the output directory is the directory of the model,
+ * otherwise the path of the header relative to the output directory.
+ */
+function headerInclude(machine: StateMachine, header: { path: string, uri?: string }, model: string, outDir: string, includePaths: string[]): string | undefined {
+    const resolved = resolvedImports(machine).find(i => i.kind === 'header' && i.path === header.path);
+    const found = resolved?.header?.found ? resolved.uri : undefined;
+    if (!found || found.scheme !== 'file' || path.resolve(outDir) === path.dirname(model)) {
+        return undefined;
+    }
+    // reachable through an include directory (which the build passes to the compiler, too)
+    if (includePaths.some(dir => path.resolve(dir, header.path) === path.resolve(found.fsPath))) {
+        return undefined;
+    }
+    return path.relative(outDir, found.fsPath).split(path.sep).join('/');
 }
 
 function definedValues<T extends object>(values: T | undefined): Partial<T> {
@@ -252,6 +297,12 @@ async function readIfExists(file: string): Promise<string | undefined> {
 
 export interface GenerateCommandOptions {
     config?: string;
+    /** `-I`: include directories for imported C/C++ headers. */
+    include?: string[];
+    /** `-D`: predefined macros for imported C/C++ headers. */
+    define?: string[];
+    /** `--data-model`: lp64, llp64 or ilp32. */
+    dataModel?: string;
     out?: string;
     namespace?: string;
     className?: string;
@@ -323,7 +374,8 @@ export async function runGenerateCommand(target: string | undefined, files: stri
             std: options.std === undefined ? undefined : options.std === '11' ? 11 : 17,
             prefix: options.prefix
         },
-        mode: options.check || options.listOutputs || options.listInputs ? 'check' : 'write'
+        mode: options.check || options.listOutputs || options.listInputs ? 'check' : 'write',
+        headers: cliHeaderSettings(options)
     });
     printDiagnostics([...configDiagnostics, ...result.diagnostics]);
     const hasErrors = result.diagnostics.some(d => d.severity === 'error');
@@ -332,7 +384,7 @@ export async function runGenerateCommand(target: string | undefined, files: stri
     }
     if (options.listOutputs || options.listInputs) {
         if (options.listInputs) {
-            for (const input of [...(configFile ? [configFile] : []), ...result.models, ...licenseFiles(config)]) {
+            for (const input of [...(configFile ? [configFile] : []), ...result.models, ...result.imports, ...licenseFiles(config)]) {
                 console.log(input.replace(/\\/g, '/'));
             }
         }

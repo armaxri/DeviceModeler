@@ -38,7 +38,10 @@ export function registerTestValidationChecks(services: HsmTestServices): void {
         BinaryExpression: validator.checkBinary,
         UnaryExpression: validator.checkUnary,
         ConditionalExpression: validator.checkConditional,
-        CastExpression: validator.checkCast
+        CastExpression: validator.checkCast,
+        CppReference: validator.checkCppReference,
+        MemberAccessExpression: validator.checkMemberAccess,
+        IndexExpression: validator.checkIndex
     };
     registry.register(checks, validator);
 }

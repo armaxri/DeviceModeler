@@ -1,0 +1,37 @@
+// A gate with a motor instance (submachine), see docs/semantics.md §9.
+//   hsm simulate examples/door-with-motor/gate.hsm
+//   hsm test examples/door-with-motor/gate.hsmtest
+/** Opens on request; the motor instance runs while the gate is moving. */
+statemachine Gate {
+    import "motor.hsm"
+
+    interface:
+        in event open
+        in event openFast
+        in event close
+        in event jam
+        out event alarm
+        var faults : integer = 0
+        var lastSpeed : integer = 0
+
+    internal:
+        var motor : Motor
+
+    [*] -> Closed
+
+    state Closed
+    /** The motor instance runs while Moving is active. */
+    state Moving : motor {
+        jam / raise motor.fault
+    }
+    state Opened
+    state Error
+
+    Closed -> Moving : open / raise motor.start
+    Closed -> Moving : openFast / motor.maxSpeed = 1 # >Run
+    Moving -> Opened : [active(motor.Running)] / lastSpeed = motor.speed
+    Moving -> Closed : close
+    Moving -> Error : / faults += 1; lastSpeed = valueof(motor.failed); raise alarm # Failed>
+    Opened -> Closed : close
+    Error -> Closed : close
+}

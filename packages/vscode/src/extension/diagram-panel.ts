@@ -3,6 +3,12 @@ import * as path from 'node:path';
 import type { FromWebview, OffsetEdit, TextRange, ToWebview, WebviewSettings } from '../common/protocol.js';
 import { canApplyEdit, toRangeEdits } from './logic/edits.js';
 import { effectiveTheme, webviewHtml } from './logic/webview.js';
+import { collectImportedFiles } from './logic/imports.js';
+import type { CppHeaderSettings } from 'hsm-language';
+// Node-only part of the language package (not exported from its index because the web app bundles the index)
+import {
+    HeaderConfigFinder, headerSettingsForModel, headerSettingsFromSection, type HeaderSettingsSection
+} from '../../../language/src/node/cpp-headers-node.js';
 
 export const DIAGRAM_VIEW_TYPE = 'hsm.diagram';
 
@@ -56,7 +62,16 @@ export class DiagramManager implements vscode.Disposable {
                     }
                 }
             }),
-            vscode.workspace.onDidChangeTextDocument(event => this.panels.get(event.document.uri.toString())?.documentChanged(event.document)),
+            vscode.workspace.onDidChangeTextDocument(event => {
+                const uri = event.document.uri.toString();
+                this.panels.get(uri)?.documentChanged(event.document);
+                // diagrams of models importing the changed file
+                for (const panel of this.panels.values()) {
+                    if (panel.imports(uri)) {
+                        panel.importsChanged();
+                    }
+                }
+            }),
             vscode.window.onDidChangeTextEditorSelection(event => {
                 const kind = event.kind;
                 if (kind === vscode.TextEditorSelectionChangeKind.Keyboard || kind === vscode.TextEditorSelectionChangeKind.Mouse) {
@@ -168,6 +183,9 @@ export class DiagramPanel {
     private cursorTimer?: ReturnType<typeof setTimeout>;
     private applyingEdit = false;
     private ready = false;
+    /** URIs of the files imported by the model (sent to the webview with the text). */
+    private importedUris = new Set<string>();
+    private sendSequence = 0;
     private readonly readyWaiters: Array<() => void> = [];
 
     constructor(private readonly manager: DiagramManager, readonly panel: vscode.WebviewPanel, private document: vscode.TextDocument) {
@@ -231,6 +249,17 @@ export class DiagramPanel {
         this.textTimer = setTimeout(() => this.sendText(), TEXT_DEBOUNCE_MS);
     }
 
+    /** Whether the model imports the file (directly or indirectly). */
+    imports(uri: string): boolean {
+        return this.importedUris.has(uri);
+    }
+
+    /** An imported file changed: the webview gets its new text. */
+    importsChanged(): void {
+        clearTimeout(this.textTimer);
+        this.textTimer = setTimeout(() => this.sendText(), TEXT_DEBOUNCE_MS);
+    }
+
     cursorMoved(offset: number): void {
         clearTimeout(this.cursorTimer);
         this.cursorTimer = setTimeout(() => this.post({ type: 'cursor', offset }), CURSOR_DEBOUNCE_MS);
@@ -238,12 +267,26 @@ export class DiagramPanel {
 
     private sendText(): void {
         clearTimeout(this.textTimer);
-        this.post({
-            type: 'text',
-            text: this.document.getText(),
-            version: this.document.version,
-            fileName: path.basename(this.document.uri.path),
-            uri: this.document.uri.toString()
+        const sequence = ++this.sendSequence;
+        const document = this.document;
+        const text = document.getText();
+        const version = document.version;
+        // the texts of the imported state machines (open documents with their unsaved changes, else the files)
+        const headers = headerSettingsFor(document.uri);
+        collectImportedFiles(document.uri.toString(), text, readText, 100, headers).catch(() => ({})).then(files => {
+            if (sequence !== this.sendSequence) {
+                return;
+            }
+            this.importedUris = new Set(Object.keys(files));
+            this.post({
+                type: 'text',
+                text,
+                version,
+                fileName: path.basename(document.uri.path),
+                uri: document.uri.toString(),
+                files,
+                headers
+            });
         });
     }
 
@@ -294,6 +337,13 @@ export class DiagramPanel {
                 break;
             case 'simulation':
                 break;
+            case 'openFile': {
+                // double-click on a submachine state: the file of its state machine and its diagram
+                const uri = vscode.Uri.parse(message.uri);
+                await vscode.window.showTextDocument(uri, { viewColumn: this.textColumn(), preserveFocus: true });
+                await this.manager.open(uri);
+                break;
+            }
         }
     }
 
@@ -377,6 +427,40 @@ export class DiagramPanel {
         const style = webview.asWebviewUri(vscode.Uri.joinPath(base, 'webview.css'));
         const nonce = createNonce();
         return webviewHtml({ cspSource: webview.cspSource, nonce, script: script.toString(), style: style.toString() });
+    }
+}
+
+/** The text of a file: the open document (with unsaved changes) or the file on disk; `undefined` if it cannot be read. */
+const headerConfigs = new HeaderConfigFinder();
+
+/**
+ * The settings of imported C/C++ headers for a model, like the language server uses them: the
+ * `headers` block of the nearest `hsm.gen.json` and the settings `hsm.headers.*`.
+ */
+export function headerSettingsFor(uri: vscode.Uri): CppHeaderSettings {
+    if (uri.scheme !== 'file') {
+        return {};
+    }
+    headerConfigs.clear();
+    return headerSettingsForModel(uri.fsPath, headerConfigs, vscodeHeaderSettings(uri));
+}
+
+/** The VS Code settings `hsm.headers.*` for a resource (without the settings of `hsm.gen.json`). */
+export function vscodeHeaderSettings(uri: vscode.Uri | undefined): CppHeaderSettings {
+    const folder = uri ? vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const section = vscode.workspace.getConfiguration('hsm', uri).get<HeaderSettingsSection>('headers');
+    return headerSettingsFromSection(section, folder);
+}
+
+export async function readText(uri: string): Promise<string | undefined> {
+    const open = vscode.workspace.textDocuments.find(document => document.uri.toString() === uri);
+    if (open) {
+        return open.getText();
+    }
+    try {
+        return new TextDecoder().decode(await vscode.workspace.fs.readFile(vscode.Uri.parse(uri)));
+    } catch {
+        return undefined;
     }
 }
 

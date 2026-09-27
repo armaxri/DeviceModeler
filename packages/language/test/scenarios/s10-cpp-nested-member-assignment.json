@@ -1,0 +1,43 @@
+{
+    "name": "s10-cpp-nested-member-assignment",
+    "description": "Assignments to nested members change only that member of the variable; struct values are copied on assignment (no aliasing).",
+    "text": [
+        "statemachine M {",
+        "    import \"config.h\"",
+        "    interface:",
+        "        in event tune : integer",
+        "        var cfg : app::Config",
+        "        var saved : app::Config",
+        "    [*] -> A",
+        "    state A",
+        "    A -> A : tune / saved = cfg; cfg.timing.periodMs = valueof(tune); cfg.timing.retries -= 1; cfg.name = \"tuned\"",
+        "}"
+    ],
+    "files": {
+        "config.h": [
+            "#pragma once",
+            "#include <cstdint>",
+            "#include <string>",
+            "namespace app {",
+            "struct Timing {",
+            "    std::uint32_t periodMs = 100;",
+            "    std::uint8_t retries = 3;",
+            "};",
+            "struct Config {",
+            "    Timing timing;",
+            "    std::string name = \"default\";",
+            "};",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"cfg": {"timing": {"periodMs": 100, "retries": 3}, "name": "default"}}}},
+        {"raise": "tune", "value": 250},
+        {"runCycle": true},
+        {"expect": {"variables": {"cfg": {"timing": {"periodMs": 250, "retries": 2}, "name": "tuned"}, "saved": {"timing": {"periodMs": 100, "retries": 3}, "name": "default"}}}},
+        {"raise": "tune", "value": 50},
+        {"runCycle": true},
+        {"expect": {"variables": {"cfg": {"timing": {"periodMs": 50, "retries": 1}}, "saved": {"timing": {"periodMs": 250, "retries": 2}, "name": "tuned"}}}}
+    ]
+}

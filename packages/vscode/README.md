@@ -19,6 +19,13 @@ the Test Explorer and the import of itemis CREATE models.
   another one to nest it, properties panel. Every diagram operation is applied to the document as a
   normal text edit: undo (`Ctrl+Z` in the diagram or the text editor), the dirty marker, saving and
   git work as usual. The simulation of the web app is available in the diagram (**▶ Simulate**).
+- **C/C++ header imports** (`import "motor_types.h"`, see the main README): models use the enums, structs,
+  aliases and constants of headers. Headers are read from disk and re-read when they change (the models
+  importing them are validated again); hover shows declarations with their documentation comments, go to
+  definition opens the header, completion after `ns::` and `var.`. Include paths, defines and the data
+  model come from the `headers` block of the nearest `hsm.gen.json` and the settings
+  `hsm.headers.includePaths`, `hsm.headers.defines` and `hsm.headers.dataModel` (also used by the diagram,
+  its simulation – enum drop-downs and struct editors – and the Test Explorer).
 - **Themes**: with `hsm.diagram.theme` = `auto` (default) the diagram follows the color theme of VS
   Code: light themes use `hsm.diagram.lightTheme` (default *PlantUML classic*), dark and high contrast
   themes the dark diagram theme.

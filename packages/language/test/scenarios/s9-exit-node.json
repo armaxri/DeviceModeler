@@ -1,0 +1,44 @@
+{
+    "name": "s9-exit-node",
+    "description": "When the instance reaches an exit node X of its state machine, it is exited and its state is left by the transition with '# X>' (after the exit reactions of the instance and of the state).",
+    "text": [
+        "statemachine Door {",
+        "    import \"motor.hsm\"",
+        "    interface:",
+        "        in event open",
+        "        operation log(msg : string) : void",
+        "    internal:",
+        "        var motor : Motor",
+        "    [*] -> Closed",
+        "    state Closed",
+        "    state Moving : motor {",
+        "        exit / log(\"Moving exit\")",
+        "    }",
+        "    state Finished",
+        "    Closed -> Moving : open / raise motor.start",
+        "    Moving -> Finished : / log(\"finished\") # Done>",
+        "}"
+    ],
+    "files": {
+        "motor.hsm": [
+            "statemachine Motor {",
+            "    interface:",
+            "        in event start",
+            "        operation log(msg : string) : void",
+            "    exit / log(\"motor exit\")",
+            "    exit Done",
+            "    [*] -> Off",
+            "    state Off",
+            "    Off -> Done : start / log(\"done\")",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"raise": "open"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["motor.Off"]}},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Finished"], "inactive": ["Moving"], "calls": ["motor.log(\"done\")", "motor.log(\"motor exit\")", "log(\"Moving exit\")", "log(\"finished\")"]}}
+    ]
+}

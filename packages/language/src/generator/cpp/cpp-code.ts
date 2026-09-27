@@ -1,4 +1,7 @@
-import type { HsmType } from '../../hsm-typesystem.js';
+import * as ast from '../../generated/ast.js';
+import { baseTypeReference, type HsmType } from '../../hsm-typesystem.js';
+import { cppTypeOfReference, isCppType } from '../../cpp-types.js';
+import type { CppResolvedType } from '../../cpp-header/model.js';
 
 /** C++ keywords and alternative tokens (and a few names that should not be redefined). */
 export const CPP_KEYWORDS: ReadonlySet<string> = new Set([
@@ -17,8 +20,11 @@ export const CPP_KEYWORDS: ReadonlySet<string> = new Set([
 /** Names generated members must not use: the C++ keywords and the names of parameters and members of the generated code. */
 export const CPP_RESERVED_NAMES: ReadonlySet<string> = new Set([...CPP_KEYWORDS, 'value', 'machine', 'owner', 'callback', 'operationCallback']);
 
-/** C++ type of a value type. */
+/** C++ type of a value type (C++ enum / struct / array types: their qualified name). */
 export function cppType(type: HsmType): string {
+    if (isCppType(type)) {
+        return type.cppName;
+    }
     switch (type) {
         case 'real': return 'sc::real';
         case 'boolean': return 'sc::boolean';
@@ -28,13 +34,38 @@ export function cppType(type: HsmType): string {
     }
 }
 
-/** Type of a parameter of a generated function (strings by const reference). */
-export function cppParameterType(type: HsmType): string {
-    return type === 'string' ? 'const sc::string&' : cppType(type);
+/** Type of a parameter of a generated function (strings, structs and arrays by const reference). */
+export function cppParameterType(type: HsmType, spelling = cppType(type)): string {
+    return type === 'string' || (isCppType(type) && type.kind !== 'enum') ? `const ${spelling}&` : spelling;
+}
+
+/** Names of `<cstdint>` / `<cstddef>` typedefs, which are written with `std::` in generated code. */
+const STD_TYPEDEF = /^(u?int(_least|_fast)?(8|16|32|64)_t|u?intmax_t|u?intptr_t|size_t|ptrdiff_t)$/;
+
+/** The spelling of a C++ type in generated code (`uint8_t` -> `std::uint8_t`). */
+export function cppSpelling(type: CppResolvedType): string {
+    return STD_TYPEDEF.test(type.cppName) ? `std::${type.cppName}` : type.cppName;
+}
+
+/**
+ * The C++ type of a declaration with the given type reference: the name of an imported C++ type as
+ * written in the model (`motor::Rpm`, `::Color`; through HSM aliases), `std::uint8_t` for `<cstdint>`
+ * typedefs, otherwise the type of the HSM type ({@link cppType}).
+ */
+export function cppDeclaredType(reference: ast.TypeReference | undefined, type: HsmType): string {
+    const base = baseTypeReference(reference);
+    const cpp = base ? cppTypeOfReference(base) : undefined;
+    if (base && cpp && !cpp.mapping.error) {
+        return cpp.declaration ? base.name.replace(/\s+/g, '') : cppSpelling(cpp.resolved);
+    }
+    return cppType(type);
 }
 
 /** C++ literal of the default value of a type. */
 export function cppDefault(type: HsmType): string {
+    if (isCppType(type)) {
+        return `${type.cppName}{}`;
+    }
     switch (type) {
         case 'real': return '0.0';
         case 'boolean': return 'false';
@@ -80,7 +111,8 @@ enum class ErrorKind {
     NoEnabledTransition, // choice, entry point or exit node without enabled transition
     NoInitialTransition, // composite state entered by default without initial transition
     InvalidTime,         // period of an 'every' time event is not positive
-    Loop                 // too many transitions in one step or too many queued event steps
+    Loop,                // too many transitions in one step or too many queued event steps
+    IndexOutOfBounds     // element access outside of the bounds of an array
 };
 
 /**

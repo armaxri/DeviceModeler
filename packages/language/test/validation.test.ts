@@ -73,3 +73,88 @@ describe('validation', () => {
         expect(warnings(parsed)).toContain(`State 'B' is never entered: it has no incoming transition.`);
     });
 });
+
+describe('entry / exit specifications', () => {
+    const MODEL = (transitions: string, extra = '') => `statemachine M {
+        interface:
+            in event go
+            in event stop
+        [*] -> Idle
+        state Idle
+        state P {
+            region R1 {
+                [*] -> A
+                entry E
+                exit X
+                state A
+                state B
+                E -> B
+                A -> X : go
+            }
+            region R2 {
+                [*] -> C
+                entry E
+                entry F
+                exit X
+                exit Y
+                state C
+                state D
+                E -> D
+                F -> D
+                C -> X : go
+                C -> Y : stop
+            }
+            ${extra}
+        }
+        ${transitions}
+    }`;
+
+    test('entry points and exit nodes may share a name across orthogonal regions', async () => {
+        const parsed = await parse(MODEL('Idle -> P : go # >E\n P -> Idle # X> Y>'));
+        expect(errors(parsed)).toEqual([]);
+        expect(warnings(parsed)).toEqual([]);
+    });
+
+    test('several entry points: only the first one is used', async () => {
+        const parsed = await parse(MODEL('Idle -> P : go # >E >F\n P -> Idle # X>'));
+        expect(errors(parsed)).toEqual([]);
+        expect(warnings(parsed)).toEqual([`Only the first entry point ('E') is used; remove the others (like itemis CREATE).`]);
+    });
+
+    test('unknown and duplicate entry points / exit nodes', async () => {
+        const parsed = await parse(MODEL('Idle -> P : go # >G\n P -> Idle # X> Z> X>'));
+        expect(errors(parsed)).toContain(`'P' has no entry point 'G'.`);
+        expect(errors(parsed)).toContain(`'P' has no exit node 'Z'.`);
+        expect(warnings(parsed)).toContain(`Duplicate exit node 'X'.`);
+    });
+
+    test('ambiguous references to shared names outside of their regions', async () => {
+        const message = `'E' is ambiguous: several regions have an entry point with this name. Declare the transition inside the region of the entry point.`;
+        // simple name: not resolved (linking error)
+        const simple = await parse(MODEL('Idle -> P : go # >E\n P -> Idle # X>', 'E -> A'));
+        expect(errors(simple)).toContain(message);
+        // qualified name: resolved to the first entry point, but still ambiguous
+        const qualified = await parse(MODEL('Idle -> P : go # >E\n P -> Idle # X>', 'P.E -> A'));
+        expect(errors(qualified)).toContain(message);
+    });
+
+    test('other vertices must still have unique names', async () => {
+        const parsed = await parse(`statemachine M {
+            [*] -> P
+            state P {
+                region R1 { [*] -> A state A entry E E -> A }
+                region R2 { [*] -> A state A exit E }
+            }
+        }`);
+        const messages = errors(parsed);
+        expect(messages.filter(m => m === `Duplicate name 'A'. Sibling states must have different names.`)).toHaveLength(1);
+        expect(messages.filter(m => m === `Duplicate name 'E'. Sibling states must have different names.`)).toHaveLength(1);
+        const sameRegion = await parse(`statemachine M {
+            [*] -> P
+            state P {
+                region R1 { [*] -> A state A entry E entry E E -> A }
+            }
+        }`);
+        expect(errors(sameRegion)).toContain(`Duplicate name 'E'. Sibling states must have different names.`);
+    });
+});

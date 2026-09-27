@@ -1,5 +1,5 @@
 import type { DiagramEdge, DiagramGraph, DiagramNode, Point } from '../diagram/diagram-model.js';
-import { DiagramMetrics } from '../diagram/layout.js';
+import { DiagramMetrics, submachinePointPositions } from '../diagram/layout.js';
 import { helveticaTextWidth } from '../diagram/text-metrics.js';
 import { DIAGRAM_CSS } from './diagram-styles.js';
 
@@ -170,12 +170,20 @@ class SvgWriter {
                 open(node.composite ? ['state', 'composite'] : ['state']);
                 const header = num(node.headerHeight ?? m.headerHeight);
                 out.push(`<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="${fmt(width)}" height="${fmt(height)}"/>`);
-                out.push(text('state-name', width / 2, baseline(0, header, m.fontSize.name), node.name ?? ''));
+                const submachine = node.submachine;
+                const name = submachine ? `${node.name ?? ''} : ${submachine.machine}` : node.name ?? '';
+                out.push(text('state-name', (width - (submachine ? m.submachineIconWidth : 0)) / 2, baseline(0, header, m.fontSize.name), name));
                 out.push(`<line class="state-separator" x1="0" y1="${fmt(header)}" x2="${fmt(width)}" y2="${fmt(header)}"/>`);
                 (node.body ?? []).forEach((line, i) => {
                     const lineY = baseline(header + m.bodyPadding + i * m.lineHeight.body, m.lineHeight.body, m.fontSize.body);
-                    out.push(text('state-body', m.bodyPadding, lineY, preserveIndent(line), node.bodyTitles?.[i]));
+                    out.push(text(submachine?.line === i ? 'state-body submachine-instance' : 'state-body', m.bodyPadding, lineY, preserveIndent(line), node.bodyTitles?.[i]));
                 });
+                if (submachine) {
+                    out.push(submachineIcon(width - m.submachineIconWidth + 2, header / 2));
+                    for (const point of submachinePointPositions(node, this.direction)) {
+                        out.push(submachinePoint(point, this.direction));
+                    }
+                }
                 node.children.forEach(child => this.node(child, out));
                 break;
             }
@@ -303,6 +311,28 @@ class SvgWriter {
         }
         out.push('</g>');
     }
+}
+
+/** The submachine icon ("rake": two linked states) with its left edge at `x`, vertically centered at `y`. */
+export function submachineIcon(x: number, y: number): string {
+    return `<g class="submachine-icon"><title>Submachine state</title>`
+        + `<rect x="${fmt(x)}" y="${fmt(y - 3)}" width="6" height="6" rx="1.5" ry="1.5"/>`
+        + `<rect x="${fmt(x + 10)}" y="${fmt(y - 3)}" width="6" height="6" rx="1.5" ry="1.5"/>`
+        + `<line x1="${fmt(x + 6)}" y1="${fmt(y)}" x2="${fmt(x + 10)}" y2="${fmt(y)}"/></g>`;
+}
+
+/** An entry point / exit node of a submachine instance on the border of its state, with its name outside the state. */
+export function submachinePoint(point: { kind: 'entry' | 'exit', name: string, x: number, y: number }, direction: 'DOWN' | 'RIGHT'): string {
+    const r = m.submachinePointRadius;
+    const { x, y } = point;
+    const d = r * Math.SQRT1_2;
+    const cross = point.kind === 'exit'
+        ? `<path class="exit-cross" d="M ${fmt(x - d)},${fmt(y - d)} L ${fmt(x + d)},${fmt(y + d)} M ${fmt(x - d)},${fmt(y + d)} L ${fmt(x + d)},${fmt(y - d)}"/>` : '';
+    const label = direction === 'DOWN'
+        ? `<text class="submachine-point-label" x="${fmt(x + r + 2)}" y="${fmt(point.kind === 'entry' ? y - r - 1 : y + r + 10)}">${escapeXml(point.name)}</text>`
+        : `<text class="submachine-point-label" x="${fmt(point.kind === 'entry' ? x - r - 2 : x + r + 2)}" y="${fmt(y - r - 1)}" text-anchor="${point.kind === 'entry' ? 'end' : 'start'}">${escapeXml(point.name)}</text>`;
+    return `<g class="submachine-point ${point.kind}-point"><title>${point.kind === 'entry' ? 'Entry point' : 'Exit node'} ${escapeXml(point.name)} of the submachine</title>`
+        + `<circle class="${point.kind}-shape" cx="${fmt(x)}" cy="${fmt(y)}" r="${fmt(r)}"/>${cross}${label}</g>`;
 }
 
 function text(cls: string | undefined, x: number, y: number, content: string, title?: string): string {

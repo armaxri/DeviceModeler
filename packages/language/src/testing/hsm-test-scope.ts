@@ -3,7 +3,8 @@ import {
     type AstNode, type AstNodeDescription, type LangiumCoreServices, type ReferenceInfo, type Scope
 } from 'langium';
 import * as ast from '../generated/ast.js';
-import { collectVertices, globalSuffixes } from '../hsm-scope.js';
+import { resolvedImports, type ResolvedImport } from '../imports.js';
+import { collectVertices, firstMatchScope, globalSuffixes, instanceMemberNames, instanceStateNames } from '../hsm-scope.js';
 
 /** Built-in names of the test language, available in all expressions of a test class. */
 export const BUILTIN_VARIABLES = ['is_final'] as const;
@@ -62,10 +63,13 @@ export function testedMachine(node: AstNode): ast.StateMachine | undefined {
  *   suffix like `Up`), optionally prefixed with the name of the state machine (`Door.Moving.Up`).
  * - In expressions, local variables and parameters of the enclosing test operation shadow the
  *   built-in variables (`is_final`) which shadow the declarations of the state machine.
+ * - Members of the submachine instances of `M` are referenced like inside `M`: `motor.speed`,
+ *   `valueof(motor.failed)`, `active(motor.Running)`, `mock motor.setPwm returns (...)`; events of
+ *   instances cannot be raised by a test.
  */
 export class HsmTestScopeProvider extends DefaultScopeProvider {
 
-    private readonly declarationScopes = new WeakMap<ast.StateMachine, Map<string, Scope>>();
+    private readonly declarationScopes = new WeakMap<ast.StateMachine, { imports: readonly ResolvedImport[], scopes: Map<string, Scope> }>();
     private readonly vertexScopes = new WeakMap<ast.StateMachine, Scope>();
 
     constructor(services: LangiumCoreServices) {
@@ -86,9 +90,12 @@ export class HsmTestScopeProvider extends DefaultScopeProvider {
             return EMPTY_SCOPE;
         }
         if (ast.isActiveExpression(container)) {
-            return this.vertexScope(machine);
+            return firstMatchScope(this.vertexScope(machine), this.instanceVertexScope(machine));
         }
-        if (ast.isRaiseStatement(container) || ast.isValueOfExpression(container)) {
+        if (ast.isRaiseStatement(container)) {
+            return this.declarationScope(machine, 'raise', ast.isEventDeclaration, false);
+        }
+        if (ast.isValueOfExpression(container)) {
             return this.declarationScope(machine, 'events', ast.isEventDeclaration);
         }
         if (ast.isAssertCalledStatement(container) || ast.isMockStatement(container)) {
@@ -131,12 +138,16 @@ export class HsmTestScopeProvider extends DefaultScopeProvider {
         return { node: declaration, name: declaration.name, type: declaration.$type, documentUri: document.uri, path: '' };
     }
 
-    protected declarationScope(machine: ast.StateMachine, key: string, filter: (declaration: ast.Declaration) => boolean): Scope {
-        let scopes = this.declarationScopes.get(machine);
-        if (!scopes) {
-            scopes = new Map();
-            this.declarationScopes.set(machine, scopes);
+    /** The declarations of the machine and (if `members` is set) of the interfaces of its submachine instances (`motor.speed`). */
+    protected declarationScope(machine: ast.StateMachine, key: string, filter: (declaration: ast.Declaration) => boolean, members = true): Scope {
+        // recomputed when the imports of the machine were resolved again (see imports.ts)
+        const imports = resolvedImports(machine);
+        let cached = this.declarationScopes.get(machine);
+        if (!cached || cached.imports !== imports) {
+            cached = { imports, scopes: new Map() };
+            this.declarationScopes.set(machine, cached);
         }
+        const scopes = cached.scopes;
         let scope = scopes.get(key);
         if (!scope) {
             const descriptions: AstNodeDescription[] = [];
@@ -148,10 +159,25 @@ export class HsmTestScopeProvider extends DefaultScopeProvider {
                     }
                 }
             }
+            if (members) {
+                for (const member of instanceMemberNames(machine)) {
+                    if (filter(member.declaration)) {
+                        descriptions.push(this.descriptions.createDescription(member.declaration, member.name));
+                    }
+                }
+            }
             scope = new MapScope(descriptions);
             scopes.set(key, scope);
         }
         return scope;
+    }
+
+    /** States of the submachine instances: `motor.Running`, `Door.motor.Running`. */
+    protected instanceVertexScope(machine: ast.StateMachine): Scope {
+        return new MapScope(instanceStateNames(machine).flatMap(entry => [
+            this.descriptions.createDescription(entry.vertex, entry.name),
+            this.descriptions.createDescription(entry.vertex, `${machine.name}.${entry.name}`)
+        ]));
     }
 
     /** Qualified names (`Moving.Up`, `Door.Moving.Up`), then unique suffixes (`Up`, `Door.Up`). */

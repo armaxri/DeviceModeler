@@ -1,0 +1,48 @@
+{
+    "name": "s9-operations-of-instance",
+    "description": "Operations of an instance are implemented by the host under the name of the instance (motor.readSensor).",
+    "text": [
+        "statemachine Door {",
+        "    import \"motor.hsm\"",
+        "    interface:",
+        "        in event open",
+        "        in event again",
+        "    internal:",
+        "        var motor : Motor",
+        "    [*] -> Closed",
+        "    state Closed",
+        "    state Moving : motor {",
+        "        again / raise motor.start",
+        "    }",
+        "    Closed -> Moving : open / raise motor.start",
+        "}"
+    ],
+    "files": {
+        "motor.hsm": [
+            "statemachine Motor {",
+            "    interface:",
+            "        in event start",
+            "        operation readSensor() : integer",
+            "    [*] -> Off",
+            "    state Off",
+            "    state On",
+            "    Off -> On : start [readSensor() > 5]",
+            "}"
+        ]
+    },
+    "operations": {
+        "motor.readSensor": [
+            3,
+            7
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"raise": "open"},
+        {"runCycle": 2},
+        {"expect": {"configuration": ["motor.Off"], "calls": ["motor.readSensor()"]}},
+        {"raise": "again"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["motor.On"], "calls": ["motor.readSensor()"]}}
+    ]
+}

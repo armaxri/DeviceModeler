@@ -1,6 +1,12 @@
 import { AstUtils, type AstNode } from 'langium';
 import * as ast from '../../generated/ast.js';
-import { inferType, returnTypeOf, typeOfEvent, typeOfParameter, type HsmType } from '../../hsm-typesystem.js';
+import {
+    inferType, isCastable, memberPathType, returnTypeOf, sameType, typeName as hsmTypeName, typeOfEvent, typeOfParameter, typeOfTypeReference,
+    type HsmType
+} from '../../hsm-typesystem.js';
+import { elementOf, isCppType, isEnumType, isUnscopedEnum, memberOf, referenceMembers, resolveCppValue } from '../../cpp-types.js';
+import { storageOfTarget, storageOfTypeReference } from '../../cpp-storage.js';
+import type { CppResolvedType } from '../../cpp-header/model.js';
 import { CBlock, cInteger, cString, stripParens } from './code.js';
 
 /**
@@ -58,6 +64,13 @@ export interface ExpressionContext {
     concatStrings(left: Code, right: Code): string;
     /** Reports an unsupported construct (throws). */
     unsupported(message: string, node: AstNode): never;
+    /**
+     * Converts a value to the C++ storage type of the place it is stored in (e.g. `static_cast<std::uint8_t>(...)`
+     * for a variable of type `uint8_t`); the value unchanged if no conversion is needed.
+     */
+    storageCast(storage: CppResolvedType | undefined, value: Code): string;
+    /** The index of an element access into an array of `length` elements, checked at run time (`check_index(i, 3)`). */
+    checkedIndex(index: string, length: number, node: AstNode): string;
 }
 
 const VOID: Code = { text: '', type: 'void', constant: true };
@@ -135,7 +148,7 @@ export class ExpressionCompiler {
         if (statement.value) {
             const type = typeOfEvent(event);
             const code = this.value(statement.value, type, block);
-            this.store(this.context.eventValue(event), type, code.text, block);
+            this.store(this.context.eventValue(event), type, this.context.storageCast(storageOfTypeReference(event.type), code), block);
         }
         this.context.raise(event, block);
     }
@@ -157,6 +170,9 @@ export class ExpressionCompiler {
                 return { text: expression.value, type: 'real', constant: true };
             case 'StringLiteral':
                 return { text: cString(expression.value), type: 'string', constant: true };
+            case 'NullLiteral':
+                // `null` denotes the empty string (docs/semantics.md §2)
+                return { text: cString(''), type: 'string', constant: true };
             case 'ParenthesizedExpression':
                 return this.compile(expression.expression, block);
             case 'ValueOfExpression': {
@@ -179,6 +195,29 @@ export class ExpressionCompiler {
             }
             case 'ElementReference':
                 return this.reference(expression, block);
+            case 'CppReference': {
+                const resolved = resolveCppValue(expression);
+                if (resolved.error) {
+                    return this.context.unsupported(resolved.error, expression);
+                }
+                return { text: expression.name.replace(/\s+/g, ''), type: resolved.type!, constant: true };
+            }
+            case 'MemberAccessExpression': {
+                const receiver = this.compile(expression.receiver, block);
+                const member = memberOf(receiver.type, expression.member);
+                if (member.error) {
+                    return this.context.unsupported(member.error, expression);
+                }
+                return { text: `${receiver.text}.${expression.member}`, type: member.type!, constant: receiver.constant };
+            }
+            case 'IndexExpression': {
+                const [receiver, index] = this.operands([{ expression: expression.receiver }, { expression: expression.index, type: 'integer' }], block);
+                const element = elementOf(receiver.type);
+                if (!element) {
+                    return this.context.unsupported(`${hsmTypeName(receiver.type)} has no elements`, expression);
+                }
+                return { text: `${receiver.text}[${this.context.checkedIndex(stripParens(index.text), element.length, expression)}]`, type: element.type, constant: false };
+            }
             case 'UnaryExpression':
                 return this.unary(expression, block);
             case 'BinaryExpression':
@@ -200,7 +239,12 @@ export class ExpressionCompiler {
             return this.context.unsupported(`Unresolved reference '${node.element.$refText}'`, node);
         }
         if (ast.isVariableDeclaration(element) && !node.call) {
-            return { text: this.context.variable(element), type: this.context.variableType(element), constant: false };
+            const members = referenceMembers(node);
+            const type = this.context.variableType(element);
+            if (members.length > 0) {
+                return { text: `${this.context.variable(element)}.${members.join('.')}`, type: memberPathType(type, members), constant: false };
+            }
+            return { text: this.context.variable(element), type, constant: false };
         }
         if (ast.isOperationDeclaration(element)) {
             const call = this.callText(node, element, block);
@@ -246,7 +290,8 @@ export class ExpressionCompiler {
         }
         const values = this.operands(node.arguments.map((argument, i) => ({
             expression: argument.value,
-            type: typeOfParameter(parameters[argumentIndex[i]])
+            type: typeOfParameter(parameters[argumentIndex[i]]),
+            storage: storageOfTypeReference(parameters[argumentIndex[i]].type)
         })), block);
         values.forEach((value, i) => slots[argumentIndex[i]].push(value));
         parameters.forEach((parameter, index) => {
@@ -261,11 +306,12 @@ export class ExpressionCompiler {
      * Compiles operands left to right. If a later operand emits statements (side effects), the values
      * of earlier operands are stored in temporaries first.
      */
-    private operands(items: Array<{ expression: ast.Expression; type?: HsmType }>, block: CBlock): Code[] {
+    private operands(items: Array<{ expression: ast.Expression; type?: HsmType; storage?: CppResolvedType }>, block: CBlock): Code[] {
         const results: Code[] = [];
         const ends: number[] = [];
         for (const item of items) {
-            results.push(item.type ? this.value(item.expression, item.type, block) : this.compile(item.expression, block));
+            const code = item.type ? this.value(item.expression, item.type, block) : this.compile(item.expression, block);
+            results.push(item.storage ? { ...code, text: this.context.storageCast(item.storage, code) } : code);
             ends.push(block.length);
         }
         for (let i = items.length - 2; i >= 0; i--) {
@@ -289,7 +335,7 @@ export class ExpressionCompiler {
     }
 
     private unary(node: ast.UnaryExpression, block: CBlock): Code {
-        const operand = this.compile(node.operand, block);
+        const operand = this.promote(this.compile(node.operand, block));
         switch (node.operator) {
             case '!':
                 return { text: `(!${operand.text})`, type: 'boolean', constant: operand.constant };
@@ -327,8 +373,16 @@ export class ExpressionCompiler {
         return this.applyBinary(operator, left, right, node);
     }
 
+    /** An unscoped enum value as integer operand (C++ integral promotion). */
+    private promote(code: Code): Code {
+        return isUnscopedEnum(code.type) ? { text: `static_cast<sc::integer>(${stripParens(code.text)})`, type: 'integer', constant: code.constant } : code;
+    }
+
     /** A binary operator applied to compiled operands (also used by compound assignments). */
-    private applyBinary(operator: string, left: Code, right: Code, node: AstNode): Code {
+    private applyBinary(operator: string, leftOperand: Code, rightOperand: Code, node: AstNode): Code {
+        const equality = operator === '==' || operator === '!=';
+        const left = equality && isEnumType(leftOperand.type) && isEnumType(rightOperand.type) ? leftOperand : this.promote(leftOperand);
+        const right = equality && isEnumType(leftOperand.type) && isEnumType(rightOperand.type) ? rightOperand : this.promote(rightOperand);
         const constant = left.constant && right.constant;
         const bool = (text: string): Code => ({ text, type: 'boolean', constant });
         switch (operator) {
@@ -390,8 +444,11 @@ export class ExpressionCompiler {
 
     /** Implicit conversion for assignments, arguments and event values (`integer` -> `real`). */
     convert(code: Code, type: HsmType, node: AstNode): Code {
-        if (type === 'error' || code.type === type) {
+        if (type === 'error' || sameType(code.type, type)) {
             return code;
+        }
+        if (isUnscopedEnum(code.type) && (type === 'integer' || type === 'real')) {
+            return this.convert(this.promote(code), type, node);
         }
         if (type === 'real' && code.type === 'integer') {
             return { text: this.toReal(code), type: 'real', constant: code.constant };
@@ -399,7 +456,7 @@ export class ExpressionCompiler {
         if (type === 'void') {
             return code;
         }
-        return this.context.unsupported(`Cannot convert ${code.type} to ${type}`, node);
+        return this.context.unsupported(`Cannot convert ${hsmTypeName(code.type)} to ${hsmTypeName(type)}`, node);
     }
 
     private conditional(node: ast.ConditionalExpression, block: CBlock): Code {
@@ -436,7 +493,24 @@ export class ExpressionCompiler {
 
     private cast(node: ast.CastExpression, block: CBlock): Code {
         const operand = this.compile(node.operand, block);
-        const target = node.type.name as HsmType;
+        const target = typeOfTypeReference(node.type);
+        const storage = storageOfTypeReference(node.type);
+        if (isCppType(target) || isCppType(operand.type)) {
+            if (sameType(operand.type, target)) {
+                return operand;
+            }
+            if (!isCastable(operand.type, target)) {
+                return this.context.unsupported(`Cannot cast ${hsmTypeName(operand.type)} to ${node.type.name}`, node);
+            }
+            const text = isCppType(target) ? `static_cast<${target.cppName}>(${stripParens(operand.text)})` : `static_cast<sc::integer>(${stripParens(operand.text)})`;
+            const code: Code = { text, type: target, constant: operand.constant };
+            return storage?.kind === 'integer' ? { ...code, text: `static_cast<sc::integer>(${this.context.storageCast(storage, code)})` } : code;
+        }
+        if (storage?.kind === 'integer' && (operand.type === 'integer' || operand.type === 'real')) {
+            // `x as uint8_t`: the value converted to the C++ integer type (wrap-around)
+            const integer = operand.type === 'integer' ? operand : this.cast({ ...node, type: { ...node.type, name: 'integer' } } as ast.CastExpression, block);
+            return { text: `static_cast<sc::integer>(${this.context.storageCast(storage, integer)})`, type: 'integer', constant: operand.constant };
+        }
         if (operand.type === target) {
             return operand;
         }
@@ -449,8 +523,32 @@ export class ExpressionCompiler {
         return this.context.unsupported(`Cannot cast ${operand.type} to ${node.type.name}`, node);
     }
 
-    private variableOf(target: ast.Expression, message: string): ast.VariableDeclaration {
+    /**
+     * An assignable place: a variable, or a member / element of a variable (`pos.x`, `a[i]`). Index
+     * expressions are evaluated (into temporaries) before the assigned value, like in the interpreter.
+     */
+    private lvalue(target: ast.Expression, message: string, block: CBlock): { text: string, type: HsmType, storage?: CppResolvedType } {
         const inner = unparenthesize(target);
+        if (ast.isMemberAccessExpression(inner)) {
+            const receiver = this.lvalue(inner.receiver, message, block);
+            const member = memberOf(receiver.type, inner.member);
+            if (member.error) {
+                return this.context.unsupported(member.error, inner);
+            }
+            return { text: `${receiver.text}.${inner.member}`, type: member.type!, storage: member.field!.type };
+        }
+        if (ast.isIndexExpression(inner)) {
+            const receiver = this.lvalue(inner.receiver, message, block);
+            const element = elementOf(receiver.type);
+            if (!element) {
+                return this.context.unsupported(`${hsmTypeName(receiver.type)} has no elements`, inner);
+            }
+            let index = this.value(inner.index, 'integer', block);
+            if (!index.constant) {
+                index = this.temporary('integer', index.text, block);
+            }
+            return { text: `${receiver.text}[${this.context.checkedIndex(stripParens(index.text), element.length, inner)}]`, type: element.type, storage: element.storage };
+        }
         const variable = ast.isElementReference(inner) && !inner.call ? inner.element.ref : undefined;
         if (!variable || !ast.isVariableDeclaration(variable)) {
             return this.context.unsupported(message, target);
@@ -458,27 +556,26 @@ export class ExpressionCompiler {
         if (variable.const) {
             return this.context.unsupported(`Cannot assign to constant '${variable.name}'`, target);
         }
-        return variable;
+        const members = referenceMembers(inner as ast.ElementReference);
+        const type = this.context.variableType(variable);
+        const text = members.length > 0 ? `${this.context.variable(variable)}.${members.join('.')}` : this.context.variable(variable);
+        return { text, type: members.length > 0 ? memberPathType(type, members) : type, storage: storageOfTarget(inner) };
     }
 
     private assignment(node: ast.AssignmentExpression, block: CBlock): Code {
-        const variable = this.variableOf(node.left, 'The left side of an assignment must be a variable');
-        const target = this.context.variable(variable);
-        const type = this.context.variableType(variable);
+        const { text: target, type, storage } = this.lvalue(node.left, 'The left side of an assignment must be a variable', block);
         let value = this.compile(node.value, block);
         if (node.operator !== '=') {
             // the current value is read after the right side has been evaluated
             value = this.applyBinary(node.operator.slice(0, -1), { text: target, type, constant: false }, value, node);
         }
         value = this.convert(value, type, node);
-        this.store(target, type, value.text, block);
+        this.store(target, type, this.context.storageCast(storage, value), block);
         return { text: target, type, constant: false };
     }
 
     private postfix(node: ast.PostfixExpression, block: CBlock, needValue: boolean): Code {
-        const variable = this.variableOf(node.operand, `The operand of '${node.operator}' must be a variable`);
-        const target = this.context.variable(variable);
-        const type = this.context.variableType(variable);
+        const { text: target, type, storage } = this.lvalue(node.operand, `The operand of '${node.operator}' must be a variable`, block);
         if (!isNumeric(type)) {
             return this.context.unsupported(`'${node.operator}' requires a numeric variable`, node);
         }
@@ -486,7 +583,7 @@ export class ExpressionCompiler {
         const current: Code = { text: target, type, constant: false };
         const one: Code = { text: '1', type: 'integer', constant: true };
         const updated = this.arithmetic(node.operator === '++' ? '+' : '-', current, one, node);
-        this.store(target, type, updated.text, block);
+        this.store(target, type, this.context.storageCast(storage, updated), block);
         return before ?? { text: target, type, constant: false };
     }
 }

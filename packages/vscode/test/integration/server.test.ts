@@ -50,6 +50,57 @@ const LAMP_TEST = `testclass LampTest for statemachine Lamp {
 }
 `;
 
+const MOTOR = `statemachine Motor {
+    interface:
+        in event start
+        out event stopped
+    [*] -> Off
+    state Off
+    state On
+    Off -> On : start
+    On -> Off : start / raise stopped
+}
+`;
+
+const GATE = `statemachine Gate {
+    import "parts/motor.hsm"
+    interface:
+        in event open
+    internal:
+        var motor : Motor
+    [*] -> Closed
+    state Closed
+    state Moving : motor
+    Closed -> Moving : open / raise motor.start
+    Moving -> Closed : motor.stopped
+}
+`;
+
+const TYPES_H = `#pragma once
+namespace app {
+/// Operating mode of the valve.
+enum class Mode { Closed, Open };
+struct Limits {
+    int low = 1;   ///< lower limit
+    int high = 9;
+};
+constexpr int kMax = 42;
+}
+`;
+
+const VALVE = `statemachine Valve {
+    import "types.h"
+    import "shared.h"
+    interface:
+        var mode : app::Mode = app::Mode::Open
+        var limits : app::Limits
+        var level : integer = app::kMax + shared::kOffset
+    [*] -> A
+    state A
+    A -> A : always [limits.low < level] / mode = app::Mode::Closed
+}
+`;
+
 let dir: string;
 let server: ChildProcess;
 let connection: MessageConnection;
@@ -93,6 +144,14 @@ beforeAll(async () => {
     await fs.mkdir(path.join(dir, 'tests'));
     await fs.writeFile(path.join(dir, 'models/lamp.hsm'), LAMP);
     await fs.writeFile(path.join(dir, 'tests/lamp.hsmtest'), LAMP_TEST);
+    await fs.mkdir(path.join(dir, 'models/parts'));
+    await fs.writeFile(path.join(dir, 'models/parts/motor.hsm'), MOTOR);
+    await fs.writeFile(path.join(dir, 'models/gate.hsm'), GATE);
+    await fs.writeFile(path.join(dir, 'models/types.h'), TYPES_H);
+    // a header found through the include paths of the headers block of hsm.gen.json
+    await fs.mkdir(path.join(dir, 'include'));
+    await fs.writeFile(path.join(dir, 'include/shared.h'), 'namespace shared { constexpr int kOffset = 1; }\n');
+    await fs.writeFile(path.join(dir, 'hsm.gen.json'), JSON.stringify({ models: ['models/*.hsm'], cpp: {}, headers: { includePaths: ['include'] } }));
     await esbuild.build({ ...bundleOptions('server', { outdir: path.join(dir, 'out') }), logLevel: 'warning', sourcemap: false });
 
     server = spawn(process.execPath, [path.join(dir, 'out/server.cjs'), '--stdio'], { stdio: ['pipe', 'pipe', 'inherit'] });
@@ -217,5 +276,71 @@ describe('HSM language server', () => {
 
         const tokens = await connection.sendRequest<{ data: number[] }>('textDocument/semanticTokens/full', { textDocument: { uri } });
         expect(tokens.data.length).toBeGreaterThan(0);
+    });
+
+    it('resolves imports of other state machines of the workspace and relinks on changes', async () => {
+        open('models/gate.hsm', 'hsm', GATE);
+        const gateUri = uriOf('models/gate.hsm');
+        expect((await diagnosticsFor(gateUri)).filter(d => d.severity === 1)).toEqual([]);
+
+        // go to definition from the type name of the instance to the imported state machine
+        const definition = await connection.sendRequest<Array<{ targetUri?: string, uri?: string }>>('textDocument/definition', {
+            textDocument: { uri: gateUri }, position: position(GATE, 'Motor', 0, 2)
+        });
+        const target = Array.isArray(definition) ? definition[0] : definition;
+        expect(target.targetUri ?? target.uri).toBe(uriOf('models/parts/motor.hsm'));
+
+        // the motor loses its in event: the gate is relinked and reports the unresolved reference
+        const motorUri = uriOf('models/parts/motor.hsm');
+        open('models/parts/motor.hsm', 'hsm', MOTOR);
+        connection.sendNotification('textDocument/didChange', {
+            textDocument: { uri: motorUri, version: 2 }, contentChanges: [{ text: MOTOR.replace(/start/g, 'go') }]
+        });
+        const errors = await diagnosticsFor(gateUri, d => d.some(e => e.severity === 1));
+        expect(errors.some(d => /motor\.start/.test(d.message))).toBe(true);
+        connection.sendNotification('textDocument/didChange', { textDocument: { uri: motorUri, version: 3 }, contentChanges: [{ text: MOTOR }] });
+        await diagnosticsFor(gateUri, d => !d.some(e => e.severity === 1));
+
+        // an import of a file that does not exist
+        open('models/lost.hsm', 'hsm', 'statemachine Lost {\n    import "nowhere.hsm"\n    [*] -> A\n    state A\n}\n');
+        const lost = await diagnosticsFor(uriOf('models/lost.hsm'), d => d.length > 0);
+        expect(lost.some(d => d.severity === 1 && /nowhere\.hsm/.test(d.message))).toBe(true);
+    });
+
+    it('resolves C++ header imports (include paths of hsm.gen.json), hovers and navigates into headers and revalidates when a header changes', async () => {
+        open('models/valve.hsm', 'hsm', VALVE);
+        const valveUri = uriOf('models/valve.hsm');
+        expect((await diagnosticsFor(valveUri)).filter(d => d.severity === 1)).toEqual([]);
+
+        const hover = await connection.sendRequest<{ contents: { value: string } }>('textDocument/hover', {
+            textDocument: { uri: valveUri }, position: position(VALVE, 'app::Mode', 0, 6)
+        });
+        expect(hover.contents.value).toContain('enum class app::Mode');
+        expect(hover.contents.value).toContain('Operating mode of the valve.');
+        const member = await connection.sendRequest<{ contents: { value: string } }>('textDocument/hover', {
+            textDocument: { uri: valveUri }, position: position(VALVE, 'limits.low', 0, 8)
+        });
+        expect(member.contents.value).toContain('lower limit');
+
+        const definition = await connection.sendRequest<Array<{ targetUri: string, targetSelectionRange: { start: { line: number } } }>>('textDocument/definition', {
+            textDocument: { uri: valveUri }, position: position(VALVE, 'app::Limits', 0, 6)
+        });
+        expect(definition[0].targetUri).toBe(uriOf('models/types.h'));
+        expect(definition[0].targetSelectionRange.start.line).toBe(4);
+
+        const completion = await connection.sendRequest<{ items: Array<{ label: string }> } | Array<{ label: string }>>('textDocument/completion', {
+            textDocument: { uri: valveUri }, position: position(VALVE, 'app::Mode::Open', 0, 11)
+        });
+        const items = Array.isArray(completion) ? completion : completion.items;
+        expect(items.map(item => item.label)).toEqual(expect.arrayContaining(['Closed', 'Open']));
+
+        // the header loses the enumerator Open: the model is validated again
+        await fs.writeFile(path.join(dir, 'models/types.h'), TYPES_H.replace('Closed, Open', 'Closed, Opened'));
+        connection.sendNotification('workspace/didChangeWatchedFiles', { changes: [{ uri: uriOf('models/types.h'), type: 2 }] });
+        const errors = await diagnosticsFor(valveUri, d => d.some(e => e.severity === 1));
+        expect(errors.some(d => /app::Mode::Open/.test(d.message))).toBe(true);
+        await fs.writeFile(path.join(dir, 'models/types.h'), TYPES_H);
+        connection.sendNotification('workspace/didChangeWatchedFiles', { changes: [{ uri: uriOf('models/types.h'), type: 2 }] });
+        await diagnosticsFor(valveUri, d => !d.some(e => e.severity === 1));
     });
 });

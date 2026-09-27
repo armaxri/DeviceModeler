@@ -7,6 +7,9 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
 
 ![HSM Modeler](docs/screenshot.png)
 
+Documentation: [execution semantics](docs/semantics.md) · [C++ integration](docs/cpp-integration.md) ·
+[possible improvements](docs/improvements.md) · [roadmap](ROADMAP.md)
+
 ## Features
 
 - **Textual DSL** (Langium): the structure of the state machine (states, regions, transitions) uses a
@@ -24,6 +27,10 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
     history, **synchronization** (`sync`, fork / join), named **entry points** and **exit nodes**
   - vertices are referenced by (partially) qualified names (`Playing`, `Active.Playing`,
     `Closed.Active.Playing`), so the same simple name can be used in different composite states
+  - **imports** of other state machines (submachine instances) and of **C/C++ headers**: models use the
+    enums, structs, type aliases and constants of the application's headers (`var mode : motor::Mode`,
+    `pos.x = motor::kHome.x`), in the simulator, the unit tests and the generated C++ code (see
+    [C/C++ header imports](#cc-header-imports))
 - **Language services** in the browser: syntax highlighting, validation, code completion (events,
   variables, operations, qualified state names), formatting, go to definition, find references and
   rename (Monaco editor).
@@ -260,8 +267,11 @@ statemachine CdPlayer "optional description" {
 
 - **Definition section**: `interface:`, named interfaces
   (`interface Pedestrian:` – their members are referenced as `Pedestrian.request`) and `internal:`
-  with `in event`, `out event`, `event`, `var`, `var readonly`, `const` and `operation` declarations.
-  Types: `integer`, `real`, `boolean`, `string`, `void`. It may start with `namespace a.b` and
+  with `in event`, `out event`, `event`, `var`, `var readonly`, `const`, `operation` and `alias`
+  declarations. Types: `integer`, `real`, `boolean`, `string`, `void` and **type aliases**
+  (`alias Speed : integer`, also aliases of aliases; `Iface.Speed` for aliases of a named interface,
+  the simple name works if it is unambiguous). An alias has exactly the semantics of its base type;
+  the code generators use the base type. It may start with `namespace a.b` and
   annotations: `@CycleBased(period)`, `@EventDriven`, `@ParentFirstExecution`, `@ChildFirstExecution`.
 - **Reactions** (transition labels and local reactions of states) have the form
   `trigger, trigger [guard] / effect`; every part is optional (a local reaction needs the effect).
@@ -271,8 +281,10 @@ statemachine CdPlayer "optional description" {
   `raise event` / `raise event : value`.
 - **Expressions**: `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `<<=`, `>>=`, `&=`, `|=`, `^=`, `? :`, `||`,
   `&&`, `|`, `^`, `&`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `<<`, `>>`, `+`, `-`, `*`, `/`, `%`, `!`,
-  `~`, `as` casts, literals (`true`, `42`, `0x1F`, `1.5`, `"text"`), `valueof(event)` and
-  `active(State)`.
+  `~`, `as` casts, literals (`true`, `42`, `0x1F`, `1.5`, `"text"`, `null`), `valueof(event)` and
+  `active(State)`. `null` can only be assigned to, passed as or compared with a `string` (and `null`);
+  it denotes the empty string (`s == null` is `s == ""`) in the interpreter and in the generated C and
+  C++ code (`std::string` cannot be null).
 - **States** are referenced by (partially) qualified names: `Playing`, `Active.Playing` or
   `Closed.Active.Playing`. A name is resolved in the scope of the transition first and then outwards,
   so sibling states must have different names, but states in different composite states may share a
@@ -281,14 +293,161 @@ statemachine CdPlayer "optional description" {
 - **Orthogonal regions**: `state S { region A { ... } region B { ... } }` (regions may be unnamed).
 - **Entry points and exit nodes** (inside a composite state `C`): `entry E` / `exit X`. A transition
   to `C` ending with `# >E` enters `C` via `E`; when `X` is reached, `C` is left by the transition
-  `C -> ... # X>`.
+  `C -> ... # X>`. As in itemis CREATE, one transition may handle several exit nodes
+  (`C -> Done # X1> X2>`), and entry points / exit nodes in different orthogonal regions of `C` may
+  have the same name: `# >failure` enters every region that has an entry point `failure` through it
+  (the other regions by default), and reaching any exit node `X` takes the `# X>` transition. Of
+  several entry points on one transition (`# >E1 >E2`) only the first one is used (warning, like
+  itemis CREATE).
 - **Synchronization**: `sync S` joins several incoming transitions (from orthogonal regions) and forks
   into several outgoing transitions.
 - **Priorities**: the outgoing transitions of a vertex are checked in the order of the text; the first
   enabled one is taken.
 - The execution semantics are specified in [`docs/semantics.md`](docs/semantics.md). See
   [`examples/`](examples) for more: `door.hsm` shows entry points, exit nodes and fork / join,
-  `traffic-light.hsm` time events and named interfaces, `keyboard.hsm` orthogonal regions.
+  `traffic-light.hsm` time events and named interfaces, `keyboard.hsm` orthogonal regions,
+  [`door-with-motor/`](examples/door-with-motor) imports and submachines, [`cpp-types/`](examples/cpp-types)
+  the types and constants of a C++ header.
+
+### Imports and submachines
+
+A state machine can import other state machines and use them as **submachines**: a variable whose type
+is an imported state machine is an **instance** of it, a state bound to the instance runs it while the
+state is active (the instance is a separate object with its own states and variables – it is not inlined).
+
+```
+// motor.hsm                                      // gate.hsm
+statemachine Motor {                              statemachine Gate {
+    interface:                                        import "motor.hsm"   // relative to this file
+        in event start                                interface:
+        in event stop                                     in event open
+        out event stopped                                 in event fast
+        out event failed : integer                    internal:
+        var speed : integer = 0                           var motor : Motor  // an instance of Motor
+    entry Run   // entry point of the machine         [*] -> Closed
+    exit Failed // exit node of the machine           state Closed
+    [*] -> Off                                        state Moving : motor   // runs while Moving is active
+    Run -> On                                         state Error
+    state Off                                         Closed -> Moving : open / raise motor.start
+    state On                                          Closed -> Moving : fast # >Run   // via entry point Run
+    Off -> On : start / speed = 1                     Moving -> Closed : motor.stopped [motor.speed == 0]
+    On -> Off : stop / raise stopped                  Moving -> Error : # Failed>      // exit node reached
+    On -> Failed : after 5 s / raise failed : 1   }
+}
+```
+
+- **Imports**: `import "path"` (several allowed, also the itemis CREATE form `import: "a.hsm" "b.hsm"`) at
+  the beginning of the state machine body (before or after `namespace`). Paths are resolved relative to the
+  importing file; the name of the imported state machine is a type. Missing files, import cycles, duplicate
+  machine names and imports of the importing machine itself are errors. C/C++ headers (`import "types.h"`,
+  `.hpp`, …) import types and constants, see [C/C++ header imports](#cc-header-imports).
+- **Instances** (`var motor : Motor`, in any scope; no initial value, not `const`) are used only through
+  the **interfaces** of their state machine: `raise motor.start` (its `in` events), `motor.stopped` as
+  trigger or condition and `valueof(motor.failed)` (its `out` events), `motor.speed` (read and assign its
+  interface variables, not constants / `readonly` ones), `motor.Iface.x` for named interfaces and
+  `active(motor.On)` / `active(motor.Running.Fast)` for its states. Its internal scope, its operations and its
+  own instances are not visible. Instances cannot be assigned, compared or passed around.
+- **Binding**: `state Moving : motor` (a simple state – no sub states – may have local reactions). An
+  instance can be bound to one state; an unbound instance is a warning (it never runs). A transition to
+  the state may select an entry point of the instance's machine (`# >Run`); `Moving -> X : # Failed>` is
+  taken when the instance reaches its exit node `Failed`. Entry points and exit nodes may be declared at the
+  top level of a state machine for this purpose.
+- **Execution** ([docs/semantics.md §9](docs/semantics.md)): the instance is entered after the entry
+  reactions of its state and exited before its exit reactions; in each step it is processed like the sub
+  region of its state (parent first: after the state's transitions and local reactions, child first: before
+  them). Events raised on it are processed in its next processing (cycle based) or in a step of their own
+  (event driven); its out events are seen by every reaction of the parent exactly once. It uses the execution
+  mode and order of the parent (a warning if its machine declares others), shares the virtual clock and keeps
+  its variables when it is entered again. States of instances are reported as `motor.On` (`activeStates`,
+  scenarios, traces), their operations are implemented by the host as `motor.setPwm`.
+- **Where imports are resolved**: CLI (`hsm validate/simulate/test/render/doc`) and API (`HsmModelLoader`,
+  `HsmTestWorkspace`) read imported files transitively from disk (or from given texts); the VS Code language
+  server resolves them in the workspace (a change of `motor.hsm` updates the diagnostics of `gate.hsm`, go to
+  definition works on `Motor` and on the import path); the diagram webview gets the imported files from the
+  extension; the web editor resolves imports against a virtual file list (the examples and the opened files;
+  "Open…" accepts several files, the example list also lists the files). Double-clicking a submachine state
+  opens the file of its state machine.
+- The **C and C++ generators do not support submachine instances yet**; they report
+  "Submachine instances are not supported by the C/C++ generator yet".
+
+### C/C++ header imports
+
+A model can import C/C++ headers of the application and use their **types and constants** – enums (also
+`enum class`), structs with data members, `typedef` / `using` aliases, `constexpr` / `const` constants in
+namespaces. Operations stay callbacks (functions and classes with methods of the headers are not used).
+Example: [`examples/cpp-types`](examples/cpp-types) (a header, a model and its unit tests; it is also part of
+the [CMake example](#example)).
+
+```
+// motor_types.h                                   // controller.hsm
+namespace motor {                                  statemachine Controller {
+/// Operating mode.                                    import "motor_types.h"
+enum class Mode : std::uint8_t { Off, Slow, Fast };    interface:
+struct Position {                                          in event moveTo : motor::Position
+    std::int32_t x = 0;                                    in event setMode : motor::Mode
+    std::int32_t y = 0;                                    var mode : motor::Mode = motor::Mode::Off
+};                                                         var target : motor::Position = motor::kHome
+using Rpm = std::uint16_t;                                 var speed : motor::Rpm
+constexpr Rpm kMaxSpeed = 3000;                            var small : uint8_t
+constexpr Position kHome{10, 20};                          operation drive(p : motor::Position) : boolean
+}                                                      [*] -> Idle
+                                                       state Idle
+                                                       state Moving
+                                                       Idle -> Moving : moveTo [valueof(moveTo).x < 500]
+                                                           / target = valueof(moveTo); target.y += 1; speed = motor::kMaxSpeed
+                                                       Moving -> Idle : setMode [valueof(setMode) == motor::Mode::Off]
+                                                   }
+```
+
+- **Names**: C++ names are written with `::`, fully qualified from the global namespace: types
+  (`motor::Mode`, `motor::Rpm`), enumerators (`motor::Mode::Fast`; enumerators of unscoped enums also as
+  `motor::kStall`), constants (`motor::kMaxSpeed`, static members `motor::Limits::kVersion`). Names of the
+  global namespace are written `::Color` in expressions (types also `Color`). The `<cstdint>` / `<cstddef>`
+  typedefs (`uint8_t`, `std::int32_t`, `size_t`, …) are always known; C++ keywords like `int` or `double`
+  are not type names of models (use `integer`, `real` or a typedef).
+- **Types**: integer types are `integer`, whose values are converted to the C++ type when they are stored
+  (a variable, member, event value or parameter of type `uint8_t` wraps around like in C++; constant values
+  out of range are warnings); arithmetic uses 64-bit integers like all HSM integers. `float` / `double` are
+  `real` (`float` rounds to single precision), `bool` is `boolean`, `std::string` is `string`
+  (`const char*` / `std::string_view` constants can be read). **Enums** are types of their own: values are
+  compared with `==` / `!=`; unscoped enum values convert to `integer` (flags: `faults | motor::kJam`);
+  `x as motor::Mode` / `mode as integer` convert. **Structs**: members are read and assigned (`pos.x`,
+  `cfg.timing.periodMs = 5`, `valueof(e).x`, `measure().y`), structs are assigned as a whole, not compared
+  (no `==`). **Arrays** (`std::array<T, N>`, `T[N]` members): elements `a[i]` (checked: an index out of bounds is
+  a runtime error). Unions, pointers, templates (other than `std::array`) and the like are errors where used.
+- **Values**: variables of C++ types are initialized like `T{}` (default member initializers, zero otherwise,
+  the enumerator with value 0). Hosts, scenarios and operation callbacks exchange plain values: enum values as
+  the qualified enumerator name (`"motor::Mode::Fast"`, set also as `"Fast"` or a number), structs as objects
+  (members that are not given keep their default), arrays as arrays. Traces show `motor::Mode::Fast` and
+  `{x: 1, y: 2}`. The simulation panel of the web app and of VS Code edits enum values with a drop-down and the
+  members of structs in expandable editors; the unit test language uses the same names and values
+  (`assert mode == motor::Mode::Fast`, `mock measure returns (motor::kHome)`, `p.x = 3` for a local struct).
+- **Headers** are searched relative to the importing model, then in the **include paths**; the headers they
+  include (`#include "…"` / `<…>` found in the include paths) are analyzed too and their declarations are
+  visible. The settings of the analysis are configured in the `headers` block of `hsm.gen.json` (include
+  paths relative to the file, predefined macros for `#if`, the data model of the target, e.g. 32-bit `long`
+  on microcontrollers):
+
+  ```json
+  { "models": ["models/*.hsm"], "cpp": {},
+    "headers": { "includePaths": ["include"], "defines": { "USE_CAN": "1" }, "dataModel": { "longBits": 32, "pointerBits": 32 } } }
+  ```
+
+  The nearest `hsm.gen.json` / `*.hsm.gen.json` in the directory of a model or a parent directory applies (CLI,
+  language server); `hsm validate|simulate|test|generate|layout|plantuml` add `-I <dir>`, `-D NAME[=VALUE]` and
+  `--data-model lp64|llp64|ilp32`, VS Code the settings `hsm.headers.includePaths` / `hsm.headers.defines` /
+  `hsm.headers.dataModel`, CMake `hsm_generate(… INCLUDE_DIRS … DEFINES …)`. A missing header is an error at
+  the import, errors in the header are reported there with their location (`motor_types.h:12:5: …`);
+  `hsm cpp-header <files>` prints what the analyzer extracts. The supported C++ subset is described in
+  [docs/cpp-integration.md](docs/cpp-integration.md).
+- **Tools**: hover shows the declaration, value and documentation comment of the header, go to definition
+  opens the header (VS Code), completion after `motor::` lists the names of the namespace / enum and after
+  `pos.` the members. The language server re-reads a header when it changes on disk and revalidates the models
+  importing it; the web app accepts headers in *Open…* (they are added to its virtual file list).
+- **Generated C++** `#include`s the headers and uses the types by their names (`motor::Mode mode`,
+  `void raise_moveTo(const motor::Position& value)`, `std::uint8_t get_small() const`), enumerators and
+  constants by name, stores with `static_cast` to the declared type. The **C generator** reports
+  "C++ header types are not supported by the C generator".
 
 ## Unit tests
 
@@ -341,6 +500,11 @@ testclass CdPlayerTest for statemachine CdPlayer {
   time events that expire.
 - **`assert called`** counts the calls since the start of the test (including the set up). Operations of the
   state machine cannot be called in tests; unmocked operations return the default value of their type.
+- **Submachine instances**: members of instances are used like in the state machine – `assert active(motor.On)`,
+  `assert motor.speed == 3`, `motor.maxSpeed = 2`, `assert motor.failed` / `valueof(motor.failed)` (out events
+  of the instance raised by the last call), `mock motor.setPwm returns (...)` and `assert called motor.setPwm`
+  (see [`examples/door-with-motor/gate.hsmtest`](examples/door-with-motor/gate.hsmtest)). Events of
+  instances cannot be raised by a test.
 - The validator checks the references and the types (asserted expressions and conditions are boolean,
   event values, mocked values and arguments match the declarations, units of `proceed`, `@Test` / `@SetUp`
   operations have no parameters).
@@ -515,7 +679,7 @@ packages/
                 Langium language server (src/server), diagram webview reusing packages/web (src/webview)
 examples/       sample state machines, examples/tests: their unit tests, examples/cmake: CMake example
 cmake/          CMake integration (HsmGenerate.cmake: hsm_generate, hsm_add_tests)
-docs/           execution semantics
+docs/           execution semantics, C++ integration, possible improvements, generated example docs
 ```
 
 The text is the single source of truth. On every change it is parsed and validated by the Langium
@@ -542,6 +706,11 @@ host is the VS Code document (see [VS Code extension](#vs-code-extension)).
   computed with `ModelEditor` and applied to the document as `WorkspaceEdit`s, so undo, the dirty
   state and git behave as for typed changes. The diagram follows the VS Code color theme (light:
   PlantUML classic, configurable with `hsm.diagram.lightTheme`; dark: dark theme).
+- **C/C++ header imports**: headers are read from disk (and re-read when they change: the importing models are
+  validated again), hover shows their declarations with documentation, go to definition opens the header,
+  completion after `ns::`. Include paths, defines and the data model come from the `headers` block of the
+  nearest `hsm.gen.json` and the settings `hsm.headers.includePaths` / `hsm.headers.defines` /
+  `hsm.headers.dataModel`; the diagram webview gets the headers from the extension.
 - **HSM: Generate C++** uses a generator configuration (`hsm.gen.json` / `*.hsm.gen.json` that lists
   the model, searched from the model directory up to the workspace folder) with the same generator code
   as `hsm generate`, otherwise the settings `hsm.cpp.outputDirectory`, `hsm.cpp.namespace` and
@@ -576,7 +745,9 @@ generator: one class per state machine in `<Class>.h` / `<Class>.cpp` (`TrafficL
 `sc::StatemachineInterface`, `sc::TimedInterface`, `sc::TimerServiceInterface`, observers and errors).
 Options: `--namespace a::b` (default: the `namespace` of the model, `""` for none), `--class-name`,
 `--std 11` (the code is written for C++17; with `--std 11` it also compiles as C++11 – the only
-difference are nested namespace definitions).
+difference are nested namespace definitions). Models importing C/C++ headers ([C/C++ header
+imports](#cc-header-imports)) get `#include`s of the headers and use their types, enumerators and constants
+by name.
 
 The code implements [`docs/semantics.md`](docs/semantics.md) exactly like the interpreter: every scenario
 of the conformance suite is compiled with g++ (`-std=c++17 -Wall -Wextra -Wpedantic -Werror -Wshadow
@@ -788,6 +959,7 @@ completion and validation in editors (`"$schema"`); unknown properties are error
         "licenseHeaderFile": "LICENSE-HEADER.txt"
     },
     "c": { "outDir": "src-gen/c" },
+    "headers": { "includePaths": ["include"], "defines": { "USE_CAN": "1" } },
     "writeOnlyIfChanged": true
 }
 ```
@@ -803,6 +975,7 @@ completion and validation in editors (`"$schema"`); unknown properties are error
 | `licenseHeader` / `licenseHeaderFile` | text (string or array of lines) or file put at the top of every generated file; wrapped in `/* … */` unless it already starts with `//` or `/*` |
 | `maxMicrosteps` | maximum number of transitions per step (default 1000) |
 | `writeOnlyIfChanged` | default `true`: files whose content did not change are not rewritten, so their modification time is kept and build systems do not recompile them |
+| `headers` | analysis of imported C/C++ headers ([C/C++ header imports](#cc-header-imports)): `includePaths` (relative to the configuration), `defines` (`"NAME": "value"`), `dataModel` (`longBits`, `pointerBits`: 32 or 64, `charSigned`). Also used by the other commands and the language server for the models below the configuration |
 
 Files generated by several models (the runtime header) are written once; two models generating the same
 file with different contents (e.g. the same class name) is an error. Nothing is written if a model has
@@ -814,7 +987,7 @@ hsm generate cpp                   # only the cpp target
 hsm generate --config sm.hsm.gen.json -o build/gen   # another configuration, all outputs into build/gen
 hsm generate --check               # writes nothing, exit 1 if a file is missing or out of date (for CI)
 hsm generate --list-outputs        # writes nothing, prints the absolute paths of the generated files
-hsm generate --list-inputs         # prints the configuration, the models and license header files
+hsm generate --list-inputs         # prints the configuration, the models, imported files (.hsm, C/C++ headers) and license header files
 hsm generate cpp model.hsm -o gen  # without configuration (as before; --config adds its cpp options)
 ```
 
@@ -854,7 +1027,7 @@ hsm_add_tests(TARGET statemachines TESTS tests/traffic-light.hsmtest MODELS mode
 ```
 
 `hsm_generate(TARGET <target> [MODELS <file.hsm>...] [CONFIG <file>] [GENERATOR cpp|c] [OUTPUT_DIR <dir>]
-[NAMESPACE <ns>] [STD 17|11] [PREFIX <prefix>])`:
+[NAMESPACE <ns>] [STD 17|11] [PREFIX <prefix>] [INCLUDE_DIRS <dir>...] [DEFINES <NAME[=VALUE]>...])`:
 
 - generates the code **at build time** into `OUTPUT_DIR` (default
   `${CMAKE_CURRENT_BINARY_DIR}/hsm_generated/<target>`), adds the generated files to the sources of the
@@ -870,9 +1043,13 @@ hsm_add_tests(TARGET statemachines TESTS tests/traffic-light.hsmtest MODELS mode
   changing the configuration file re-runs CMake as well;
 - with `CONFIG`, the models and options of the configuration are used (`MODELS` replaces its models, the
   other arguments override its options); its `outDir` is ignored in favor of `OUTPUT_DIR`. Globs are
-  expanded at configure time: re-run CMake after adding a model file.
+  expanded at configure time: re-run CMake after adding a model file;
+- models importing **C/C++ headers**: the headers (and the headers they include) are dependencies, too.
+  `INCLUDE_DIRS` / `DEFINES` are passed to `hsm` (`-I` / `-D`) and added to the include directories / compile
+  definitions of the target; the generated header includes a header by its import path if it is found in
+  an include directory, otherwise by its path relative to `OUTPUT_DIR`.
 
-`hsm_add_tests(TARGET <name> TESTS <file.hsmtest>... [MODELS <file.hsm>...] [JUNIT_DIR <dir>])` registers
+`hsm_add_tests(TARGET <name> TESTS <file.hsmtest>... [MODELS <file.hsm>...] [JUNIT_DIR <dir>] [INCLUDE_DIRS <dir>...] [DEFINES …])` registers
 a CTest test `<name>.<file stem>` (label `hsm`) per test file that runs `hsm test` with a JUnit report in
 `JUNIT_DIR` (default `${CMAKE_CURRENT_BINARY_DIR}/hsm_test_results`).
 
@@ -882,13 +1059,15 @@ a CTest test `<name>.<file stem>` (label `hsm`) per test file that runs `hsm tes
 (generated with the configuration [`examples/cmake/hsm.gen.json`](examples/cmake/hsm.gen.json): `.hpp` /
 `.cc` files with a license header) as static libraries, an application with a `std::chrono` timer service
 and operation callbacks ([`main.cpp`](examples/cmake/main.cpp)), a C++ test driving both classes with a
-virtual clock and the `.hsmtest` unit tests of both models:
+virtual clock and the `.hsmtest` unit tests of both models. The conveyor of
+[`examples/cpp-types`](examples/cpp-types) imports a C++ header; its generated class uses the header's types
+(tested by [`tests/conveyor_test.cpp`](examples/cmake/tests/conveyor_test.cpp)):
 
 ```bash
 npm ci && npm run build -w packages/language
 cmake -S examples/cmake -B build/cmake-example -G Ninja      # or "Unix Makefiles"
 cmake --build build/cmake-example
-ctest --test-dir build/cmake-example --output-on-failure     # statemachine_tests, models.traffic-light, models.cd-player
+ctest --test-dir build/cmake-example --output-on-failure     # statemachine_tests, conveyor_test, models.*, conveyor.conveyor
 build/cmake-example/traffic_light 30                         # runs the traffic light for 30 s
 ```
 
@@ -906,6 +1085,9 @@ node packages/language/bin/cli.js import TrafficLight.sct -o TrafficLight.hsm   
 
 In the web editor, `Open…` accepts `.sct` files as well; warnings are shown in the status bar. From
 code, use `importSct(xml)` of `hsm-language`, which returns `{ text, warnings }` (no DOM needed).
+Several statecharts are imported together with `hsm import A.sct B.sct` (or several files in `Open…`,
+`importSctFiles(files)`): a **submachine state** that references one of the other statecharts becomes a
+submachine instance – `import "B.hsm"`, `var b : B` in the internal scope and `state S : b`.
 
 The definition section and all reactions are copied as they are (both languages use the same
 syntax); the diagram layout of the `.sct` file is ignored. The structure is mapped as follows:
@@ -923,25 +1105,36 @@ syntax); the diagram layout of the `.sct` file is ignored. The structure is mapp
 | choice (dynamic / static)                       | `choice Choice1` / `junction Junction1`                             |
 | synchronization                                 | `sync Sync1`                                                        |
 | final state                                     | `Source -> [*]` in the region of the final state                    |
-| transition `spec # >entry` / `# exit>`          | `Source -> Target : spec # >entry` / `# exit>`                      |
+| transition `spec # >entry` / `# ex1> ex2>`      | `Source -> Target : spec # >entry` / `# ex1> ex2>`                  |
 | `active(Statechart.main_region.A.r.B)`          | `active(B)` (shortest unambiguous name, regions are not part of it) |
 
 Details and limitations (each of them is reported as a warning):
 
 - State names that are not valid identifiers or clash with keywords are sanitized (`Door Open` →
   `state Door_Open "Door Open"`, `entry` → `entry_`) and made unique among the vertices of the same
-  state (itemis names only need to be unique per region).
+  state (itemis names only need to be unique per region); entry points and exit nodes of different
+  regions keep a shared name (`# >failure` enters all of them, like in itemis CREATE).
 - Transitions are declared in the innermost container of source and target and keep the order of the
   itemis model, i.e. their priority. Multi-line effects get `;` separators, number suffixes (`1.5f`)
   are removed.
-- A transition which handles several exit nodes (`# ex1> ex2>`) is duplicated per exit node; the
-  unnamed (default) exit is handled by the transitions without trigger.
+- A transition which handles several exit nodes (`# ex1> ex2>`) is imported as it is; the unnamed
+  (default) exits are handled by the transitions without trigger (`# Exit1>`).
 - Local reactions of the statechart itself (e.g. `oncycle / x += 1` in the `internal:` scope) are
   placed after the definition section.
 - Several final states of one region are merged into the final state `[*]` of the region.
 - An entry through a named history (`# >hist`) targets the history pseudo state; an unknown entry
-  point name enters by default. Entry points with the same name in several orthogonal regions cannot
-  be expressed: only one of them is used.
-- Not supported (kept as `// TODO import: …` comments): submachine states (referenced statecharts),
-  `@SuperSteps` / `@EventBuffering` and imports. Type aliases and `null` are copied unchanged and
-  reported by the validator.
+  point name enters by default. Of several entry points (`# >e1 >e2`) the known ones are kept (only
+  the first one is used, the validator warns like itemis CREATE).
+- Type aliases (`alias inti : integer`) and `null` are copied unchanged; `event e : void` becomes
+  `event e`.
+- Not supported (kept as `// TODO import: …` comments): submachine states whose statechart is not imported
+  together with them, `@SuperSteps` / `@EventBuffering` and the `import:` statements of itemis CREATE (header
+  files and statechart references of the definition section). The format of submachine references is
+  assumed to be a `referencedStatechart` attribute or element with an `href` (`Motor.sct#…`); every submachine
+  state gets its own instance.
+- Result for the 215 `.sct` files of the itemis CREATE repository: 213 are imported without syntax or
+  linking errors (the other two use outdated syntax or an unqualified member of a named interface, which current
+  itemis CREATE rejects as well); the remaining
+  validation errors are mostly in itemis validation test models that are invalid on purpose, or in
+  features HSM checks more strictly (raising `in` events internally, operations called without
+  parentheses, `out` events as triggers, `%` on reals).

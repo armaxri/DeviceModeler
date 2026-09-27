@@ -1,0 +1,50 @@
+{
+    "name": "s10-cpp-set-and-expect-values",
+    "description": "Hosts set variables of C++ types with plain values (enumerator names, objects with some members: the others keep their default); expectations compare the listed members.",
+    "text": [
+        "statemachine M {",
+        "    import \"motor.h\"",
+        "    interface:",
+        "        var mode : motor::Mode",
+        "        var target : motor::Position",
+        "        var distance : integer",
+        "    [*] -> A",
+        "    state A",
+        "    A -> A : always / distance = target.x - target.y",
+        "}"
+    ],
+    "files": {
+        "motor.h": [
+            "#ifndef MOTOR_H",
+            "#define MOTOR_H",
+            "#include <cstdint>",
+            "",
+            "namespace motor {",
+            "",
+            "/// Operating mode.",
+            "enum class Mode : std::uint8_t { Off, Slow, Fast = 10 };",
+            "",
+            "/// A position in mm.",
+            "struct Position {",
+            "    std::int32_t x = 0;",
+            "    std::int32_t y = 0;",
+            "};",
+            "",
+            "constexpr std::int32_t kMaxSpeed = 3000;",
+            "constexpr Position kHome{10, 20};",
+            "",
+            "}  // namespace motor",
+            "",
+            "#endif"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"set": {"mode": "Slow", "target": {"x": 12}}},
+        {"runCycle": true},
+        {"expect": {"variables": {"mode": "motor::Mode::Slow", "target": {"x": 12, "y": 0}, "distance": 12}}},
+        {"set": {"mode": "motor::Mode::Fast", "target": {"x": 1, "y": 5}}},
+        {"runCycle": true},
+        {"expect": {"variables": {"mode": "motor::Mode::Fast", "target": {"y": 5}, "distance": -4}}}
+    ]
+}

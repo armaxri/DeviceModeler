@@ -1,0 +1,43 @@
+{
+    "name": "s10-cpp-arrays",
+    "description": "Elements of arrays (std::array and C arrays, also as struct members) are read and assigned with a[i]; std::array variables are assigned as a whole.",
+    "text": [
+        "statemachine M {",
+        "    import \"buffers.h\"",
+        "    interface:",
+        "        in event put : integer",
+        "        var buffer : buf::Buffer",
+        "        var backup : buf::Buffer",
+        "        var frame : buf::Frame",
+        "        var index : integer",
+        "        var sum : integer",
+        "    [*] -> A",
+        "    state A",
+        "    A -> A : put / buffer[index] = valueof(put); frame.data[index % 2] = buffer[index] * 2; index++; sum = buffer[0] + buffer[1] + buffer[2] + frame.data[0]; backup = buffer",
+        "}"
+    ],
+    "files": {
+        "buffers.h": [
+            "#pragma once",
+            "#include <array>",
+            "#include <cstdint>",
+            "namespace buf {",
+            "using Buffer = std::array<std::int16_t, 3>;",
+            "struct Frame {",
+            "    std::uint8_t data[2] = {1, 2};",
+            "    std::array<bool, 2> flags{};",
+            "};",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"buffer": [0, 0, 0], "frame": {"data": [1, 2], "flags": [false, false]}}}},
+        {"raise": "put", "value": 5},
+        {"runCycle": true},
+        {"expect": {"variables": {"buffer": [5, 0, 0], "backup": [5, 0, 0], "frame": {"data": [10, 2]}, "index": 1, "sum": 15}}},
+        {"raise": "put", "value": 7},
+        {"runCycle": true},
+        {"expect": {"variables": {"buffer": [5, 7, 0], "frame": {"data": [10, 14]}, "index": 2, "sum": 22}}}
+    ]
+}

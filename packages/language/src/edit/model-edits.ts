@@ -58,8 +58,8 @@ export type DeletionTarget = AstNode | { initialOf: ScopeContainer } | { finalOf
 
 export const HSM_KEYWORDS = new Set([
     'statemachine', 'namespace', 'state', 'region', 'choice', 'junction', 'history', 'deephistory', 'sync', 'entry', 'exit',
-    'interface', 'internal', 'in', 'out', 'event', 'var', 'const', 'readonly', 'operation',
-    'after', 'every', 'always', 'oncycle', 'else', 'default', 'raise', 'valueof', 'active', 'as', 'true', 'false']);
+    'interface', 'internal', 'in', 'out', 'event', 'var', 'const', 'readonly', 'operation', 'alias',
+    'after', 'every', 'always', 'oncycle', 'else', 'default', 'raise', 'valueof', 'active', 'as', 'true', 'false', 'null']);
 
 const ID_REGEX = /^[_a-zA-Z]\w*$/;
 
