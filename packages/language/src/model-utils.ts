@@ -180,18 +180,22 @@ export function transitionPriority(transition: Transition, outgoing?: Transition
 
 /** Whether the state machine has a definition section (namespace, annotations, interfaces, internal scope). */
 export function hasDefinitionSection(machine: StateMachine): boolean {
-    return !!machine.namespace || machine.annotations.length > 0 || machine.scopes.length > 0 || machine.reactions.length > 0;
+    return !!machine.namespace || machine.imports.length > 0 || machine.annotations.length > 0 || machine.scopes.length > 0 || machine.reactions.length > 0;
 }
 
 /**
  * Text lines of the definition section with normalized white space, e.g.
- * `['@CycleBased(100)', 'interface:', '  in event powerOn', ...]`. Declarations are indented
+ * `['import "motor_types.h"', '@CycleBased(100)', 'interface:', '  in event powerOn', ...]`. Declarations are indented
  * by two spaces.
  */
 export function definitionLines(machine: StateMachine): string[] {
     const lines: string[] = [];
     if (machine.namespace) {
         lines.push(`namespace ${machine.namespace}`);
+    }
+    // imported state machines and C/C++ headers
+    for (const node of machine.imports) {
+        lines.push(nodeText(node));
     }
     for (const annotation of machine.annotations) {
         lines.push(nodeText(annotation));
@@ -218,6 +222,7 @@ export function definitionRange(machine: StateMachine): { offset: number, end: n
     const nodes = [
         machine.namespace ? GrammarUtils.findNodeForKeyword(cst, 'namespace') : undefined,
         machine.namespace ? GrammarUtils.findNodeForProperty(cst, 'namespace') : undefined,
+        ...machine.imports.map(i => i.$cstNode),
         ...machine.annotations.map(a => a.$cstNode),
         ...machine.scopes.map(s => s.$cstNode),
         ...machine.reactions.map(r => r.$cstNode)

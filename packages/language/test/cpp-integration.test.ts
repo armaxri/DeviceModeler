@@ -1,10 +1,18 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { NodeFileSystem } from 'langium/node';
 import { describe, expect, test } from 'vitest';
 import { errors, parse, warnings } from './helpers.js';
 import { formatValue, StatechartInterpreter } from '../src/simulation/index.js';
 import { HsmTestWorkspace } from '../src/testing/index.js';
 import { cppCompletionItems, cppDefinition, cppHover } from '../src/lsp/cpp-lsp.js';
+import { cliHeaderSettings, installNodeHeaderSupport } from '../src/node/cpp-headers-node.js';
+import { createHsmServices } from '../src/hsm-module.js';
+import { HsmModelLoader } from '../src/hsm-document.js';
+import { storageOfTypeReference } from '../src/cpp-storage.js';
+import type { VariableDeclaration } from '../src/generated/ast.js';
 
 const MOTOR_TYPES = fs.readFileSync(path.resolve(__dirname, 'cpp-header/motor_types.h'), 'utf-8');
 
@@ -189,5 +197,52 @@ describe('C++ header imports: language server features', () => {
         const parsed = await parse(text.replace('target = measure();', 'target = measure(); target.'), { 'motor_types.h': MOTOR_TYPES });
         const at = parsed.document.textDocument.getText().indexOf('target. ') + 7;
         expect(cppCompletionItems(parsed.document, at)!.map(item => item.label)).toEqual(['x', 'y', 'z']);
+    });
+});
+
+describe('C++ header imports: Node.js hosts', () => {
+    test('headers are read from the file system with the settings of the nearest hsm.gen.json', async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-headers-'));
+        try {
+            fs.mkdirSync(path.join(dir, 'models'));
+            fs.mkdirSync(path.join(dir, 'include/app'), { recursive: true });
+            fs.writeFileSync(path.join(dir, 'include/app/config.h'), '#if WIDE\nusing Count = long;\n#else\nusing Count = short;\n#endif\nnamespace app { constexpr int kLimit = LIMIT; }\n');
+            fs.writeFileSync(path.join(dir, 'hsm.gen.json'), JSON.stringify({
+                models: ['models/*.hsm'], cpp: {}, headers: { includePaths: ['include'], defines: { WIDE: '1', LIMIT: '7' }, dataModel: { longBits: 32 } }
+            }));
+            const model = path.join(dir, 'models/m.hsm');
+            fs.writeFileSync(model, 'statemachine M {\n    import "app/config.h"\n    interface:\n        var c : ::Count = app::kLimit\n    [*] -> A\n    state A\n}\n');
+            const services = createHsmServices(NodeFileSystem);
+            installNodeHeaderSupport(services.shared, { settings: cliHeaderSettings({ define: ['LIMIT=300000'] }) });
+            const loader = new HsmModelLoader(services);
+            const parsed = await loader.load(fs.readFileSync(model, 'utf-8'), pathToFileURL(model).toString());
+            expect(errors(parsed)).toEqual([]);
+            const storage = storageOfTypeReference((parsed.model.scopes[0].declarations[0] as VariableDeclaration).type);
+            // `long` has 32 bits (dataModel of hsm.gen.json), LIMIT of the command line overrides the configuration
+            expect(storage).toMatchObject({ kind: 'integer', bits: 32, signed: true });
+            expect(warnings(parsed)).toEqual([]);
+            const sim = new StatechartInterpreter(parsed.model);
+            sim.enter();
+            expect(sim.getVariable('c')).toBe(300000);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('the example examples/cpp-types: model and unit tests', async () => {
+        const services = createHsmServices(NodeFileSystem);
+        installNodeHeaderSupport(services.shared);
+        const directory = path.resolve(__dirname, '../../../examples/cpp-types');
+        const workspace = new HsmTestWorkspace(services);
+        const documents = await workspace.load(['conveyor.hsm', 'conveyor.hsmtest'].map(name => ({
+            uri: pathToFileURL(path.join(directory, name)).toString(),
+            text: fs.readFileSync(path.join(directory, name), 'utf-8')
+        })));
+        for (const loaded of documents) {
+            expect(loaded.diagnostics.filter(d => d.severity === 1).map(d => d.message), loaded.uri).toEqual([]);
+        }
+        const results = workspace.runDocuments(documents);
+        expect(results.length).toBeGreaterThanOrEqual(5);
+        expect(results.filter(r => r.status !== 'passed').map(r => `${r.name}: ${r.message}`)).toEqual([]);
     });
 });

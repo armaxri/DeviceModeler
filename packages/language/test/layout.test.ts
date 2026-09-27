@@ -62,6 +62,13 @@ describe('diagram content', () => {
             '  var waiting : boolean = false', 'internal:', '  operation switchOn(mask : integer) : void']));
     });
 
+    test('the definition section shows the imports (state machines and C/C++ headers)', async () => {
+        const parsed = await parse('statemachine M {\n    import "types.h"\n    interface:\n        var m : app::Mode\n    [*] -> A\n    state A\n}',
+            { 'types.h': 'namespace app { enum class Mode { A, B }; }' });
+        const { graph } = await layoutStateMachine(parsed.model);
+        expect(graph.children[0].body).toEqual(['import "types.h"', 'interface:', '  var m : app::Mode']);
+    });
+
     test('no definition node without definition section', async () => {
         const parsed = await parse('statemachine M { [*] -> A state A }');
         const { graph } = await layoutStateMachine(parsed.model);
