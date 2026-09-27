@@ -26,3 +26,4 @@ export * from './render/svg.js';
 export * from './doc/doc-comments.js';
 export * from './doc/model-doc.js';
 export * from './doc/hsm-documentation-provider.js';
+export * from './cpp-header/index.js';
