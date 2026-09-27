@@ -203,6 +203,21 @@ export function instanceOfReference(reference: Reference<AstNode>, machine: ast.
     return result;
 }
 
+/** Whether an `.hsm` import of the machine could not be resolved (the file is missing). */
+export function hasUnresolvedImports(machine: ast.StateMachine): boolean {
+    return resolvedImports(machine).some(i => i.kind === 'hsm' && !i.machine);
+}
+
+/**
+ * Whether a variable is probably an instance of a state machine whose import could not be resolved:
+ * its type is not known and the machine has an unresolved import. Errors that follow from this
+ * (unresolved members `motor.start`, ...) are not reported, the unresolved import is.
+ */
+export function isUnresolvedInstance(variable: ast.VariableDeclaration | undefined, isKnownType: (reference: ast.TypeReference) => boolean): boolean {
+    const machine = variable && AstUtils.getContainerOfType(variable, ast.isStateMachine);
+    return !!variable?.type && !!machine && !isKnownType(variable.type) && hasUnresolvedImports(machine);
+}
+
 // ---------------------------------------------------------------------------------------------
 // Resolution
 

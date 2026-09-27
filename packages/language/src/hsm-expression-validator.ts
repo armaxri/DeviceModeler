@@ -9,7 +9,7 @@ import {
     isCastable, isComparable, isCyclicAlias, isError, isNumeric, resolveTypeAlias, resolveTypeName, returnTypeOf,
     typeName, typeOfAlias, typeOfEvent, typeOfParameter, typeOfTypeReference, typeOfVariable, type HsmType
 } from './hsm-typesystem.js';
-import { importedMachines, isInstance, machineType, referencedInstance } from './imports.js';
+import { hasUnresolvedImports, importedMachines, isInstance, isUnresolvedInstance, machineType, referableName, referencedInstance } from './imports.js';
 
 /** Annotations that select the execution semantics (see docs/semantics.md §3 and §4). */
 export const SUPPORTED_ANNOTATIONS = ['CycleBased', 'EventDriven', 'ParentFirstExecution', 'ChildFirstExecution'];
@@ -114,6 +114,10 @@ export class HsmExpressionValidator {
         }
         if (!builtin && !alias) {
             const container = AstUtils.getContainerOfType(reference, ast.isStateMachine);
+            if (container && hasUnresolvedImports(container) && /^[A-Z]/.test(reference.name)) {
+                accept('error', `Unknown type '${reference.name}' (an import could not be resolved; does it define '${reference.name}'?).`, { node: reference, property: 'name' });
+                return;
+            }
             const imported = container ? [...importedMachines(container).keys()] : [];
             const machines = imported.length > 0 ? `, imported state machines (${imported.join(', ')})` : '';
             accept('error', `Unknown type '${reference.name}'. Known types are ${BUILTIN_TYPES.join(', ')}${machines} and type aliases ('alias Name : type').`,
@@ -555,9 +559,19 @@ export class HsmExpressionValidator {
 export class HsmDocumentValidator extends DefaultDocumentValidator {
 
     protected override processLinkingErrors(document: LangiumDocument, diagnostics: Diagnostic[], _options: ValidationOptions): void {
+        const machine = document.parseResult.value;
+        // members of instances of state machines whose import could not be resolved (`motor.start`): the import is reported
+        const unresolvedInstances = new Set(ast.isStateMachine(machine) && hasUnresolvedImports(machine)
+            ? machine.scopes.flatMap(scope => scope.declarations).filter(ast.isVariableDeclaration)
+                .filter(variable => isUnresolvedInstance(variable, isKnownType)).map(referableName)
+            : []);
         for (const reference of document.references) {
             const linkingError = reference.error;
             if (!linkingError || isFreeAnnotationArgument(linkingError.info.container)) {
+                continue;
+            }
+            const refText = linkingError.info.reference.$refText.replace(/\s+/g, '');
+            if ([...unresolvedInstances].some(name => refText.startsWith(`${name}.`))) {
                 continue;
             }
             diagnostics.push(this.toDiagnostic('error', linkingError.message, {
@@ -574,6 +588,11 @@ export class HsmDocumentValidator extends DefaultDocumentValidator {
             }));
         }
     }
+}
+
+/** Whether a type reference denotes a built-in type, a type alias or an imported state machine. */
+export function isKnownType(reference: ast.TypeReference): boolean {
+    return resolveTypeName(reference.name) !== undefined || resolveTypeAlias(reference) !== undefined || machineType(reference) !== undefined;
 }
 
 function isFreeAnnotationArgument(node: AstNode): boolean {

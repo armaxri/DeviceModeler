@@ -3,8 +3,9 @@ import * as ast from './generated/ast.js';
 import type { HsmServices } from './hsm-module.js';
 import { resolveTypeName } from './hsm-typesystem.js';
 import {
-    instanceMachine, instanceVariables, isInstance, referableName, resolvedImports, type HsmImportResolver
+    instanceMachine, instanceVariables, isInstance, isUnresolvedInstance, referableName, resolvedImports, type HsmImportResolver
 } from './imports.js';
+import { isKnownType } from './hsm-expression-validator.js';
 import { isComposite } from './model-utils.js';
 
 export function registerImportValidationChecks(services: HsmServices): void {
@@ -134,6 +135,9 @@ export class HsmImportValidator {
             return; // linking error
         }
         if (!isInstance(instance)) {
+            if (isUnresolvedInstance(instance, isKnownType)) {
+                return; // the unresolved import is reported
+            }
             accept('error', `'${reference.$refText}' is not a submachine instance: its type must be an imported state machine ('var ${instance.name} : Machine').`,
                 { node: state, property: 'submachine' });
             return;

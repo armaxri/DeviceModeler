@@ -352,7 +352,8 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             return;
         }
         banner.hidden = true;
-        if (!forceLayout && this.state?.parsed.text === text) {
+        // (the same parse result: neither the text nor the imported files changed)
+        if (!forceLayout && this.state?.parsed === parsed) {
             return;
         }
         let layout: LayoutResult;

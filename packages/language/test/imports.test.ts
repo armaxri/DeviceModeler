@@ -134,6 +134,17 @@ statemachine Door {
         expect(errors(sameName)).toEqual([`The imported state machine has the same name as this state machine ('B').`]);
     });
 
+    test('a missing imported file is reported once, without follow-up errors of the instance', async () => {
+        const parsed = await loadFiles({ 'door.hsm': door(`
+    Closed -> Done : open / raise motor.start
+    Moving -> Done : motor.stopped [motor.speed > 0 && active(motor.On)]
+`) }, 'door.hsm');
+        expect(errors(parsed)).toEqual([
+            expect.stringMatching(/^Cannot resolve the import 'motor.hsm': the file '.*motor.hsm' was not found.$/),
+            `Unknown type 'Motor' (an import could not be resolved; does it define 'Motor'?).`
+        ]);
+    });
+
     test('files are loaded relative to the importing file (Node file system)', async () => {
         const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-imports-'));
         fs.mkdirSync(path.join(directory, 'parts'));

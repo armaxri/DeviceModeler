@@ -2,7 +2,8 @@ import type { AstNode, ValidationAcceptor, ValidationChecks } from 'langium';
 import * as ast from './generated/ast.js';
 import { regionPointAmbiguityMessage } from './hsm-linker.js';
 import type { HsmServices } from './hsm-module.js';
-import { submachineOf } from './imports.js';
+import { isUnresolvedInstance, submachineOf } from './imports.js';
+import { isKnownType } from './hsm-expression-validator.js';
 import {
     allTransitions, allVertices, containerName, enclosingRegion, finalTransitions, initialTransitions,
     isAncestorOrSelf, isComposite, scopeOf, type ScopeContainer
@@ -252,8 +253,13 @@ export class HsmValidator {
                 accept('error', `Transitions between orthogonal regions are not allowed ('${source.name}' -> '${target.name}').`, { node: transition, property: 'target' });
             }
         }
+        // (a state bound to an instance of a state machine whose import could not be resolved: the import is reported)
+        const unresolved = (vertex: ast.Vertex | undefined) => ast.isState(vertex) && isUnresolvedInstance(vertex.submachine?.ref, isKnownType);
         transition.entryPoints.forEach((name, index) => {
             const entry = target && ast.isState(target) ? findPseudo(target, 'entry', name) : undefined;
+            if (!entry && unresolved(target)) {
+                return;
+            }
             if (!entry) {
                 accept('error', `'${target?.name ?? 'target'}' has no entry point '${name}'.`, { node: transition, property: 'entryPoints', index });
             } else if (index > 0) {
@@ -264,6 +270,9 @@ export class HsmValidator {
         const exits = new Set<string>();
         transition.exitPoints.forEach((name, index) => {
             const exit = source && ast.isState(source) ? findPseudo(source, 'exit', name) : undefined;
+            if (!exit && unresolved(source)) {
+                return;
+            }
             if (!exit) {
                 accept('error', `'${source?.name ?? 'source'}' has no exit node '${name}'.`, { node: transition, property: 'exitPoints', index });
             } else if (exits.has(name)) {
