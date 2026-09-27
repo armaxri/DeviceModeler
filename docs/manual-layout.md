@@ -19,7 +19,9 @@ design, so the experiment can be evaluated (and removed again) easily.
 
 In the web editor the layout is kept per file name in the local storage (`hsm-modeler.layout:<file>`).
 *Save* downloads the model and, if a layout exists, the `.hsm.layout` file; *Open…* accepts both
-files at once (or a `.hsm.layout` alone, which is applied to the current model). The CLI uses the
+files at once (or a `.hsm.layout` alone, which is applied to the current model). The VS Code extension
+reads and writes the `.hsm.layout` file next to the model in the workspace (see
+[VS Code extension](#vs-code-extension)). The CLI uses the
 `.hsm.layout` next to the model (`hsm layout model.hsm`, `--layout <file>`, `--auto`), and
 `hsm import model.sct` writes `model.hsm.layout` from the itemis diagram (`--no-layout` to skip it).
 
@@ -60,7 +62,8 @@ files at once (or a `.hsm.layout` alone, which is applied to the current model).
 
 ### Keeping keys in sync
 
-Diagram operations go through a `TrackingModelEditor` (web app), which records how ids change:
+Diagram operations go through a `TrackingModelEditor` (`packages/web/src/diagram/manual-layout-support.ts`,
+used by the shared `DiagramController`, so web app and VS Code webview behave the same), which records how ids change:
 renaming a vertex renames its key and all keys inside it (sub states, regions, `#initial`, transitions);
 moving a vertex into another state renames the keys to the new qualified name and stores the drop
 position relative to the new parent; deleting removes the keys (regions after a deleted region are
@@ -96,10 +99,18 @@ automatic layout, which is always computed first:
    change in the diagram starts from it, so new elements become pinned once the user touches the
    layout, and shifts / pushes are materialized.
 
-The automatic layout is cached in the web app, so dragging only re-runs the (synchronous, cheap)
-manual step.
+The automatic layout is cached by the diagram controller, so dragging only re-runs the (synchronous,
+cheap) manual step.
 
-## Web editor
+## Diagram editor (web app and VS Code)
+
+The logic lives in the shared `DiagramController` (`packages/web/src/diagram-controller.ts`): layout
+state, *Auto | Manual*, *Auto-arrange*, *Reset*, dragging, re-parenting, resize handles, bend points,
+labels, key tracking and the layout undo history. The host (`DiagramHost`) only persists the layout
+(`layoutChanged`), provides a key of the text state for the undo history (`textStateKey`, default: a
+hash of the text) and reports text changes with `DiagramController.textChanged('edit' | 'undo' | 'redo')`;
+it sets the layout of an opened model with `loadLayout`. The toolbar buttons (`#btn-layout-auto`,
+`#btn-layout-manual`, `#btn-arrange`, `#btn-reset-layout`) are bound by the controller if present.
 
 - Toolbar *Positions: Auto | Manual*. Switching to *Manual* the first time pins the current automatic
   layout, so nothing jumps. *Auto* keeps the manual layout for later; *Reset* discards it;
@@ -114,11 +125,53 @@ manual step.
 - A selected transition shows its bend points: drag them; double-click the line to add one,
   double-click a bend point to remove it; drag the label of a selected transition to move it.
 - Undo: `Ctrl+Z` / `Ctrl+Y` in the diagram (and the toolbar buttons) undo layout changes and text
-  edits in the order they were made. Layout changes are stored with the text's
-  `alternativeVersionId`; a layout change is undone first if the text is still in the state it had
-  then, and layout changes caused by a text edit are undone together with it (also with `Ctrl+Z` in
-  the text editor). The history is not persisted.
+  edits in the order they were made. Layout changes are stored with a key of the text state (web app:
+  the `alternativeVersionId` of the Monaco model; VS Code: a hash of the text); a layout change is
+  undone first if the text is still in the state it had then, and layout changes caused by a text edit
+  are undone together with it (also with `Ctrl+Z` in the text editor). The history is not persisted.
 - The simulation shows the same (manual) layout.
+
+## VS Code extension
+
+The extension of this branch is packaged as `hsm-vscode-0.1.0-manual-layout.vsix` (display name
+*HSM Modeler (manual layout)*). It has the same extension id as the build of the main branch, so only
+one of them can be installed at a time (uninstall the other one first, or install with `--force`).
+
+- **Toolbar and commands:** the diagram webview shows *Positions: Auto | Manual*, *Auto-arrange* and
+  *Reset* like the web app; the same actions are commands (**HSM: Diagram Positions: Manual
+  (experimental)**, **HSM: Diagram Positions: Automatic**, **HSM: Auto-arrange Diagram (keep as manual
+  layout)**, **HSM: Reset Manual Diagram Layout**) in the command palette and in the *…* menu of the
+  diagram panel.
+- **File handling** (`src/extension/logic/layout-file.ts`, `LayoutFileSync`): when the diagram is
+  opened, the extension reads `<model>.hsm.layout` and sends it to the webview before the first text,
+  so the first diagram already uses it. Layout changes in the webview are sent to the extension
+  (serialized, with the mode) and written after 300 ms without further changes: a layout in the manual
+  mode is always written; in the automatic mode only if the file exists already (the manual layout is
+  kept for later), so merely opening or looking at a diagram never creates a file; *Reset* deletes the
+  file. Unchanged content is not rewritten. A file system watcher reports changes by other tools (git
+  checkout, another editor, the CLI); they are applied to the diagram unless they are our own writes.
+  When a model is renamed or moved in VS Code, a pending change is written first and the layout file is
+  moved along (not if the layout file was renamed in the same operation or the target exists).
+  Untitled models keep their layout in the webview only.
+- **Undo:** the text belongs to the VS Code document – diagram edits are `WorkspaceEdit`s, undone with
+  VS Code's undo (in the text editor, or `Ctrl+Z` in the diagram, which runs VS Code's *Undo* on the
+  document). Layout-only changes are kept in the undo history of the webview: `Ctrl+Z` / `Ctrl+Y` with
+  the diagram focused undo them if the text has not been changed since, otherwise the text is undone.
+  The extension sends text changes caused by *Undo* / *Redo* immediately and marked as such
+  (`TextDocumentChangeReason`), so layout changes of diagram edits (renamed / moved / deleted keys,
+  the drop position of a re-parented state) follow the text – also when the undo is triggered in the
+  text editor. Layout changes do not make the model dirty; the layout file is written independently of
+  saving the model.
+- **Import and export:** **HSM: Import itemis CREATE Model** writes `<model>.hsm.layout` with the
+  arrangement of the itemis diagram next to the imported model (an old layout file is removed if the
+  `.sct` file has no diagram). **HSM: Export Diagram as SVG** applies a manual layout (mode `manual`).
+
+Limitations in VS Code: the layout file is written even if the model has unsaved changes (keys of
+renamed states then refer to the unsaved text; *Revert File* does not revert the layout); a hash of
+the text identifies text states for the layout undo, so a layout change can become undoable again when
+the text returns to exactly the same content in another way; no tests in a real VS Code instance (the
+webview bundle was checked in Chromium with a mocked VS Code API, the panel's file handling with a
+`vscode` mock).
 
 ## Import from itemis CREATE
 

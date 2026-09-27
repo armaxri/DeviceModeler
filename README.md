@@ -460,6 +460,8 @@ layout is active. Design, format and trade-offs: [docs/manual-layout.md](docs/ma
 - The positions are stored next to the model in `<model>.hsm.layout` (JSON, keyed by qualified names),
   the `.hsm` text stays free of layout information. The web editor keeps the layout per file in the
   browser; *Save* downloads the model and its `.hsm.layout`, *Open…* accepts both files together.
+  The VS Code extension of this branch reads and writes the `.hsm.layout` file next to the model in
+  the workspace (see [VS Code extension](#vs-code-extension)).
 - Switching to *Manual* starts from the current automatic layout. *Auto-arrange* re-runs the automatic
   layout and keeps it as manual layout, *Reset* discards the manual layout, *Auto* shows the automatic
   layout but keeps the manual one for later.
@@ -583,17 +585,37 @@ host is the VS Code document (see [VS Code extension](#vs-code-extension)).
   covered states / transitions / reactions and guard decisions in the coverage view.
 - **HSM: Import itemis CREATE Model (.sct)**, **HSM: Export Diagram as SVG** (`renderSvg`),
   **HSM: Export as PlantUML**.
+- 🧪 **Manual layout** (only on the branch `claude/manual-layout`): *Positions: Auto | Manual*,
+  *Auto-arrange* and *Reset* in the toolbar of the diagram (also as commands **HSM: Diagram Positions:
+  Manual / Automatic**, **HSM: Auto-arrange Diagram**, **HSM: Reset Manual Diagram Layout**). The layout
+  is the sidecar file `<model>.hsm.layout` in the workspace: read when the diagram is opened, written
+  (debounced) when the layout is changed in the diagram – only in the manual mode or if the file exists
+  already, so opening a diagram never creates files –, deleted by *Reset*, reloaded when another tool
+  (e.g. git) changes it, and moved along when the model is renamed in VS Code. The `.sct` import writes
+  the arrangement of the itemis diagram as `.hsm.layout`, and the SVG export applies a manual layout.
+  **Undo:** text changes belong to the VS Code document (`Ctrl+Z` in the text editor or in the diagram,
+  the dirty marker, *Save*), layout-only changes (move, resize, bend points, labels, Auto / Manual,
+  Auto-arrange, Reset) are undone with `Ctrl+Z` / `Ctrl+Y` **in the diagram**, in the order in which they
+  were made relative to the text edits. Layout changes caused by diagram edits (rename, move into
+  another state, delete) are undone together with their text edit – also with `Ctrl+Z` in the text
+  editor. The layout file is written directly, independent of saving the model.
 
 ```bash
-npm run package:vscode    # builds and packages packages/vscode/hsm-vscode-0.1.0.vsix
-code --install-extension packages/vscode/hsm-vscode-0.1.0.vsix
+npm run package:vscode    # builds and packages packages/vscode/hsm-vscode-<version>.vsix
+code --install-extension packages/vscode/hsm-vscode-0.1.0-manual-layout.vsix   # main branch: hsm-vscode-0.1.0.vsix
 ```
+
+On the branch `claude/manual-layout` the package is `hsm-vscode-0.1.0-manual-layout.vsix` with the
+display name *HSM Modeler (manual layout)*, so the two builds can be told apart. Both have the same
+extension id (`hsm-modeler.hsm-vscode`): only one of them can be installed at a time. To switch, uninstall
+the other one first (`code --uninstall-extension hsm-modeler.hsm-vscode`) or install with `--force`.
+Layout files written by the manual layout build are simply ignored by the build of the main branch.
 
 Three bundles: `dist/extension.cjs` (extension host, esbuild), `dist/server.cjs` (language server,
 esbuild) and `dist/webview/` (Vite, the diagram controller, views and styles of `packages/web` – no
 code is duplicated). The tests (`npm test -w packages/vscode`) cover the edit conversion, the generator
-configuration resolution, test discovery / execution / coverage mapping and a language server round
-trip over stdio (initialize, diagnostics, cross-file linking, hover, definition, references, rename,
+configuration resolution, test discovery / execution / coverage mapping, the layout file handling of
+the manual layout (with a minimal `vscode` mock) and a language server round trip over stdio (initialize, diagnostics, cross-file linking, hover, definition, references, rename,
 formatting, symbols, folding, completion, semantic tokens). There are no tests in a real VS Code
 instance yet (`@vscode/test-electron` needs to download VS Code, which was not possible in the build
 environment).

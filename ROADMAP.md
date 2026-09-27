@@ -116,13 +116,20 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
   the web app as webview with selection sync and diagram edits applied as `WorkspaceEdit`s, theme
   following VS Code, Generate C++ (`hsm.gen.json` or settings), tests and model coverage in the Test
   Explorer, `.sct` import, SVG / PlantUML export, `.vsix` packaging
-  - limitations: no hand-arranged layout; the extension generates only the `cpp` target; no end-to-end
+  - limitations: no hand-arranged layout on the main branch (see below); the extension generates only the `cpp` target; no end-to-end
     tests in a real VS Code instance (`@vscode/test-electron` could not download VS Code) – the language
     server is tested over stdio, the webview bundle in Chromium with a mocked VS Code API
 - 💭 Multi-file projects and workspaces in the web editor
 - 🧪 Manual layout adjustments: experimental on the branch `claude/manual-layout` – stored in a sidecar
   file `<model>.hsm.layout` instead of the model; move / resize states, bend points, label offsets,
   auto-arrange / reset, undo shared with the text ([docs/manual-layout.md](docs/manual-layout.md))
+  - 🧪 in the VS Code extension of the branch (`hsm-vscode-0.1.0-manual-layout.vsix`, *HSM Modeler
+    (manual layout)*): the webview uses the shared diagram controller; the extension reads / writes /
+    watches the `.hsm.layout` file next to the model, moves it along on renames, the `.sct` import
+    writes it and the SVG export applies it; layout-only changes are undone in the diagram, layout
+    changes of diagram edits together with the text (VS Code undo)
+  - 📋 open: layout file not tied to saving the model (written immediately, also for unsaved models);
+    renames typed in the text (or via *Rename Symbol*) do not update the keys
 - ✅ Model coverage of unit tests (`hsm test --coverage`): states, transitions, local reactions and guard
   decisions with per-test attribution; text, JSON, LCOV, Cobertura and HTML reports, thresholds for CI;
   `CoverageCollector` attachable to any interpreter
