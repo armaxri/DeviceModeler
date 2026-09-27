@@ -113,11 +113,18 @@ export const window = {
         return Promise.resolve(undefined);
     },
     showWarningMessage: () => Promise.resolve(undefined),
+    showInformationMessage: (message: string) => {
+        infos.push(message);
+        return Promise.resolve(undefined);
+    },
+    showTextDocument: async () => undefined,
     setStatusBarMessage: () => undefined
 };
 
 /** Error messages shown by the code under test. */
 export const errors: string[] = [];
+/** Information messages shown by the code under test. */
+export const infos: string[] = [];
 
 export const commands = {
     executeCommand: async () => undefined

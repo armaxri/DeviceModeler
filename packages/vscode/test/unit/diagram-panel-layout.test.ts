@@ -162,6 +162,25 @@ describe('DiagramPanel: manual layout file', () => {
         h.panel.disposeResources();
     });
 
+    it('HSM: Import itemis CREATE model writes the itemis arrangement as <model>.hsm.layout, SVG export applies it', async () => {
+        const sct = path.join(dir, 'Choice.sct');
+        await fs.copyFile(path.resolve(__dirname, '../../../language/test/importer/fixtures/Choice.sct'), sct);
+        const { importSctFile, renderModelSvg } = await import('../../src/extension/commands.js');
+        const output = { warn: () => undefined, info: () => undefined, error: () => undefined, show: () => undefined };
+        const target = await importSctFile(Uri.file(sct) as unknown as vscode.Uri, output as unknown as vscode.LogOutputChannel);
+        expect(target?.path).toBe(path.join(dir, 'Choice.hsm'));
+        const layout = JSON.parse(await fs.readFile(path.join(dir, 'Choice.hsm.layout'), 'utf-8'));
+        expect(layout.mode).toBe('manual');
+        expect(Object.keys(layout.nodes)).toEqual(expect.arrayContaining(['A', 'B', 'C', 'Choice1']));
+        const text = await fs.readFile(path.join(dir, 'Choice.hsm'), 'utf-8');
+        const document = { uri: Uri.file(path.join(dir, 'Choice.hsm')), getText: () => text };
+        const manual = await renderModelSvg(document as unknown as vscode.TextDocument);
+        await fs.rm(path.join(dir, 'Choice.hsm.layout'));
+        const auto = await renderModelSvg(document as unknown as vscode.TextDocument);
+        expect(manual).toContain('<svg');
+        expect(manual).not.toBe(auto);
+    });
+
     it('keeps the layout of untitled documents in the webview only', async () => {
         const h = createPanel(Uri.parse('untitled:/Untitled-1'));
         const before = watchers.length;
