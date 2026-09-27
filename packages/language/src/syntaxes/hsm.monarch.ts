@@ -1,7 +1,7 @@
 // Monarch syntax highlighting for the hsm language.
 export default {
     keywords: [
-        'statemachine','deephistory','interface','namespace','operation','internal','junction','readonly','default','history','oncycle','valueof','active','always','choice','region','after','alias','const','entry','event','every','false','raise','state','else','exit','null','sync','true','out','var','as','in'
+        'statemachine','deephistory','interface','namespace','operation','internal','junction','readonly','default','history','oncycle','valueof','active','always','choice','import','region','after','alias','const','entry','event','every','false','raise','state','else','exit','null','sync','true','out','var','as','in'
     ],
     operators: [
         '...','<<=','>>=','--','-=','->','!=','*=','/=','&&','&=','%=','^=','++','+=','<<','<=','==','>=','>>','|=','||','-',',',';',':','!','?','.','@','*','/','&','#','%','^','+','<','=','>','|','~'

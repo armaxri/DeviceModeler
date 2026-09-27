@@ -2,6 +2,7 @@ import type { AstNode, ValidationAcceptor, ValidationChecks } from 'langium';
 import * as ast from './generated/ast.js';
 import { regionPointAmbiguityMessage } from './hsm-linker.js';
 import type { HsmServices } from './hsm-module.js';
+import { submachineOf } from './imports.js';
 import {
     allTransitions, allVertices, containerName, enclosingRegion, finalTransitions, initialTransitions,
     isAncestorOrSelf, isComposite, scopeOf, type ScopeContainer
@@ -173,9 +174,7 @@ export class HsmValidator {
                 break;
             }
             case 'entry':
-                if (ast.isStateMachine(container)) {
-                    accept('warning', 'Named entry points should be placed inside a composite state.', { node: pseudo, property: 'kind' });
-                }
+                // entry points of the state machine itself are used when it is a submachine (`# >E`)
                 if (outgoing.length !== 1) {
                     accept('error', `Entry point '${pseudo.name}' needs exactly one outgoing transition.`, { node: pseudo, property: 'name' });
                 }
@@ -189,9 +188,8 @@ export class HsmValidator {
                 }
                 break;
             case 'exit':
-                if (ast.isStateMachine(container)) {
-                    accept('error', 'Exit nodes must be placed inside a composite state.', { node: pseudo, property: 'kind' });
-                }
+                // exit nodes of the state machine itself are used when it is a submachine (`# X>`);
+                // a state machine running on its own becomes final when it reaches one
                 if (outgoing.length > 0) {
                     accept('error', `Exit node '${pseudo.name}' cannot have outgoing transitions. Use '# ${pseudo.name}>' on a transition leaving the composite state.`, { node: outgoing[0], property: 'source' });
                 }
@@ -348,9 +346,12 @@ export function findPseudo(state: ast.State, kind: 'entry' | 'exit', name: strin
     return findPseudos(state, kind, name)[0];
 }
 
-/** All entry points / exit nodes with the given name of a composite state (one per region at most). */
+/**
+ * All entry points / exit nodes with the given name of a composite state (one per region at most).
+ * For a submachine state: the entry points / exit nodes of the top level of the instance's state machine.
+ */
 export function findPseudos(state: ast.State, kind: 'entry' | 'exit', name: string): ast.PseudoState[] {
-    const candidates = [...state.vertices, ...state.regions.flatMap(r => r.vertices)];
+    const candidates = [...state.vertices, ...state.regions.flatMap(r => r.vertices), ...submachineOf(state)?.machine.vertices ?? []];
     return candidates.filter((v): v is ast.PseudoState => ast.isPseudoState(v) && v.kind === kind && v.name === name);
 }
 

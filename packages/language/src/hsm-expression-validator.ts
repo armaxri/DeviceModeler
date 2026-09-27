@@ -9,6 +9,7 @@ import {
     isCastable, isComparable, isCyclicAlias, isError, isNumeric, resolveTypeAlias, resolveTypeName, returnTypeOf,
     typeName, typeOfAlias, typeOfEvent, typeOfParameter, typeOfTypeReference, typeOfVariable, type HsmType
 } from './hsm-typesystem.js';
+import { importedMachines, isInstance, machineType, referencedInstance } from './imports.js';
 
 /** Annotations that select the execution semantics (see docs/semantics.md §3 and §4). */
 export const SUPPORTED_ANNOTATIONS = ['CycleBased', 'EventDriven', 'ParentFirstExecution', 'ChildFirstExecution'];
@@ -103,8 +104,19 @@ export class HsmExpressionValidator {
     checkTypeReference(reference: ast.TypeReference, accept: ValidationAcceptor): void {
         const builtin = resolveTypeName(reference.name);
         const alias = builtin ? undefined : resolveTypeAlias(reference);
+        const machine = builtin || alias ? undefined : machineType(reference);
+        if (machine) {
+            if (!ast.isVariableDeclaration(reference.$container) || reference.$containerProperty !== 'type') {
+                accept('error', `The state machine type '${reference.name}' can only be used as the type of a variable (a submachine instance).`,
+                    { node: reference, property: 'name' });
+            }
+            return;
+        }
         if (!builtin && !alias) {
-            accept('error', `Unknown type '${reference.name}'. Known types are ${BUILTIN_TYPES.join(', ')} and type aliases ('alias Name : type').`,
+            const container = AstUtils.getContainerOfType(reference, ast.isStateMachine);
+            const imported = container ? [...importedMachines(container).keys()] : [];
+            const machines = imported.length > 0 ? `, imported state machines (${imported.join(', ')})` : '';
+            accept('error', `Unknown type '${reference.name}'. Known types are ${BUILTIN_TYPES.join(', ')}${machines} and type aliases ('alias Name : type').`,
                 { node: reference, property: 'name' });
             return;
         }
@@ -130,6 +142,15 @@ export class HsmExpressionValidator {
     }
 
     checkVariable(variable: ast.VariableDeclaration, accept: ValidationAcceptor): void {
+        if (isInstance(variable)) {
+            if (variable.const) {
+                accept('error', `The submachine instance '${variable.name}' cannot be a constant; declare it with 'var'.`, { node: variable, property: 'name' });
+            }
+            if (variable.initialValue) {
+                accept('error', `The submachine instance '${variable.name}' cannot have an initial value.`, { node: variable, property: 'initialValue' });
+            }
+            return;
+        }
         if (!variable.initialValue) {
             if (variable.const) {
                 accept('error', `Constant '${variable.name}' must have an initial value.`, { node: variable, property: 'name' });
@@ -212,6 +233,13 @@ export class HsmExpressionValidator {
 
     checkEventTrigger(trigger: ast.EventTrigger, accept: ValidationAcceptor): void {
         const event = trigger.event.ref;
+        if (event && referencedInstance(trigger)) {
+            if (eventDirection(event) !== 'out') {
+                accept('error', `The event '${trigger.event.$refText}' cannot be used as a trigger: only the out events of a submachine instance can be observed.`,
+                    { node: trigger, property: 'event' });
+            }
+            return;
+        }
         if (event && eventDirection(event) === 'out') {
             accept('error', `The out event '${trigger.event.$refText}' cannot be used as a trigger: out events are raised by the state machine.`,
                 { node: trigger, property: 'event' });
@@ -240,7 +268,11 @@ export class HsmExpressionValidator {
             return;
         }
         const name = statement.event.$refText;
-        if (eventDirection(event) === 'in') {
+        if (referencedInstance(statement)) {
+            if (eventDirection(event) !== 'in') {
+                accept('error', `Cannot raise '${name}': only the in events of a submachine instance can be raised.`, { node: statement, property: 'event' });
+            }
+        } else if (eventDirection(event) === 'in') {
             accept('error', `Cannot raise '${name}': in events can only be raised by the environment.`, { node: statement, property: 'event' });
         }
         const eventType = typeOfEvent(event);
@@ -268,6 +300,8 @@ export class HsmExpressionValidator {
         const event = expression.event.ref;
         if (event && !event.type) {
             accept('error', `Event '${expression.event.$refText}' has no type: valueof() requires an event with a value.`, { node: expression, property: 'event' });
+        } else if (event && referencedInstance(expression) && eventDirection(event) !== 'out') {
+            accept('error', `valueof() can only be applied to the out events of a submachine instance.`, { node: expression, property: 'event' });
         }
     }
 
@@ -279,6 +313,10 @@ export class HsmExpressionValidator {
             return;
         }
         if (ast.isVariableDeclaration(element)) {
+            if (isInstance(element)) {
+                accept('error', `Cannot modify the submachine instance '${operand.element.$refText}'.`, { node: operand, property: 'element' });
+                return;
+            }
             if (element.const || element.readonly) {
                 accept('error', `Cannot modify the ${element.const ? 'constant' : 'readonly variable'} '${operand.element.$refText}'.`, { node: operand, property: 'element' });
             }
@@ -304,6 +342,10 @@ export class HsmExpressionValidator {
             return;
         }
         const name = left.element.$refText;
+        if (isInstance(element)) {
+            accept('error', `Cannot assign to the submachine instance '${name}': instances cannot be assigned.`, { node: left, property: 'element' });
+            return;
+        }
         if (element.const) {
             accept('error', `Cannot assign a value to the constant '${name}'.`, { node: left, property: 'element' });
         } else if (element.readonly) {
@@ -433,10 +475,16 @@ export class HsmExpressionValidator {
         if (ast.isEventDeclaration(element)) {
             if (reference.call) {
                 accept('error', `'${name}' is an event and cannot be called.`, { node: reference, property: 'call' });
+            } else if (referencedInstance(reference) && eventDirection(element) !== 'out') {
+                accept('error', `The in event '${name}' of a submachine instance cannot be used as a condition: only its out events can be observed.`, { node: reference, property: 'element' });
             }
             return;
         }
         if (!ast.isOperationDeclaration(element)) {
+            return;
+        }
+        if (referencedInstance(reference)) {
+            accept('error', `The operation '${name}' of a submachine instance cannot be called: operations are implemented by the host of the instance.`, { node: reference, property: 'element' });
             return;
         }
         if (!reference.call) {

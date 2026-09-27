@@ -1,5 +1,6 @@
 import { AstUtils, type AstNode } from 'langium';
 import * as ast from './generated/ast.js';
+import { machineType } from './imports.js';
 
 /**
  * Type system of the HSM language (the statechart language of itemis CREATE).
@@ -10,8 +11,11 @@ import * as ast from './generated/ast.js';
  * `null` is the type of the literal `null` (itemis CREATE); it can only be assigned to and compared
  * with `string` (and `null`), where it denotes the empty string.
  * Type aliases (`alias Name : type`) are resolved to their base type, they are not types of their own.
+ * `instance` is the type of a submachine instance (a variable whose type is an imported state machine,
+ * see imports.ts): instances cannot be assigned, compared or used in operations; only their members
+ * (`motor.speed`, `motor.start`) are used.
  */
-export type HsmType = 'integer' | 'real' | 'boolean' | 'string' | 'void' | 'null' | 'error';
+export type HsmType = 'integer' | 'real' | 'boolean' | 'string' | 'void' | 'null' | 'instance' | 'error';
 
 /** The types that can be referenced by name in a model. */
 export const BUILTIN_TYPES: readonly HsmType[] = ['integer', 'real', 'boolean', 'string', 'void'];
@@ -28,8 +32,9 @@ export function resolveTypeName(name: string | undefined): HsmType | undefined {
 }
 
 /**
- * The type denoted by a type reference: a built-in type or a type alias (resolved to its base type).
- * Unknown type names, missing references and cyclic aliases yield `error`.
+ * The type denoted by a type reference: a built-in type, a type alias (resolved to its base type) or
+ * an imported state machine (`instance`). Unknown type names, missing references and cyclic aliases
+ * yield `error`.
  */
 export function typeOfTypeReference(reference: ast.TypeReference | undefined): HsmType {
     if (!reference) {
@@ -40,7 +45,10 @@ export function typeOfTypeReference(reference: ast.TypeReference | undefined): H
         return builtin;
     }
     const alias = resolveTypeAlias(reference);
-    return alias ? typeOfAlias(alias) : 'error';
+    if (alias) {
+        return typeOfAlias(alias);
+    }
+    return machineType(reference) ? 'instance' : 'error';
 }
 
 /** The base type of a type alias (`error` for cyclic or unresolvable aliases). */
@@ -137,6 +145,9 @@ export function isAssignable(target: HsmType, source: HsmType): boolean {
     if (target === 'error' || source === 'error') {
         return true;
     }
+    if (target === 'instance' || source === 'instance') {
+        return false;
+    }
     return target === source || (target === 'real' && source === 'integer') || (target === 'string' && source === 'null');
 }
 
@@ -144,6 +155,9 @@ export function isAssignable(target: HsmType, source: HsmType): boolean {
 export function commonType(a: HsmType, b: HsmType): HsmType | undefined {
     if (a === 'error' || b === 'error') {
         return 'error';
+    }
+    if (a === 'instance' || b === 'instance') {
+        return undefined;
     }
     if (a === b) {
         return a;
@@ -164,6 +178,9 @@ export function isComparable(a: HsmType, b: HsmType): boolean {
 
 /** Whether a value of type `source` can be cast to `target` with `as`. */
 export function isCastable(source: HsmType, target: HsmType): boolean {
+    if (source === 'instance' || target === 'instance') {
+        return isError(source) || isError(target);
+    }
     return isError(source) || isError(target) || source === target || (isNumeric(source) && isNumeric(target))
         || (source === 'null' && target === 'string');
 }
@@ -386,5 +403,5 @@ export function defaultValue(type: HsmType): number | boolean | string | undefin
 
 /** Human readable name of a type for diagnostics. */
 export function typeName(type: HsmType): string {
-    return type === 'error' ? 'unknown' : type;
+    return type === 'error' ? 'unknown' : type === 'instance' ? 'state machine instance' : type;
 }

@@ -1,12 +1,31 @@
-import { AstUtils, DefaultLinker, type AstNodeDescription, type LinkingError, type ReferenceInfo } from 'langium';
+import {
+    AstUtils, Cancellation, DefaultDocumentBuilder, DefaultLinker,
+    type AstNodeDescription, type LangiumDocument, type LinkingError, type ReferenceInfo
+} from 'langium';
+import type { LangiumSharedServices } from 'langium/lsp';
 import * as ast from './generated/ast.js';
+import type { HsmServices } from './hsm-module.js';
 import { referenceName, vertexCandidates } from './hsm-scope.js';
+import { resolvedImports } from './imports.js';
 
 /**
  * Linker of the HSM language. Improves the error message of vertex references that cannot be
  * resolved because the name denotes several vertices (e.g. `X` for `A.X` and `B.X`).
  */
 export class HsmLinker extends DefaultLinker {
+
+    constructor(protected readonly services: HsmServices) {
+        super(services);
+    }
+
+    /** Resolves the imports of the state machine (see imports.ts) before its references are linked. */
+    override async link(document: LangiumDocument, cancelToken = Cancellation.CancellationToken.None): Promise<void> {
+        const root = document.parseResult.value;
+        if (ast.isStateMachine(root)) {
+            this.services.references.ImportResolver.update(root);
+        }
+        await super.link(document, cancelToken);
+    }
 
     protected override createLinkingError(refInfo: ReferenceInfo, targetDescription?: AstNodeDescription): LinkingError {
         const error = super.createLinkingError(refInfo, targetDescription);
@@ -48,4 +67,24 @@ export function ambiguityMessage(name: string, qualifiedNames: string[]): string
     const quoted = [...new Set(qualifiedNames)].map(n => `'${n}'`);
     const list = quoted.length > 1 ? `${quoted.slice(0, -1).join(', ')} or ${quoted[quoted.length - 1]}` : quoted.join('');
     return `'${name}' is ambiguous, use a qualified name like ${list}.`;
+}
+
+/**
+ * Document builder of the HSM languages: a document is also relinked if a file it imports changed
+ * (or if it has an import that could not be resolved, a new file may resolve it).
+ */
+export class HsmDocumentBuilder extends DefaultDocumentBuilder {
+
+    constructor(services: LangiumSharedServices) {
+        super(services);
+    }
+
+    protected override shouldRelink(document: LangiumDocument, changedUris: Set<string>): boolean {
+        if (super.shouldRelink(document, changedUris)) {
+            return true;
+        }
+        const root = document.parseResult.value;
+        return ast.isStateMachine(root) && resolvedImports(root).some(i => i.kind === 'hsm'
+            && (!i.machine || (i.uri !== undefined && changedUris.has(i.uri.toString()))));
+    }
 }

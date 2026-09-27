@@ -32,11 +32,25 @@ grammar Hsm
 
 entry StateMachine:
     'statemachine' name=ID (description=STRING)? '{'
-        ('namespace' namespace=QualifiedName)?
+        imports+=Import*
+        ('namespace' namespace=QualifiedName imports+=Import*)?
         annotations+=Annotation*
         scopes+=Scope*
         (vertices+=Vertex | transitions+=Transition | reactions+=LocalReaction)*
     '}';
+
+// ---------------------------------------------------------------------------------------------
+// Imports
+
+// `import "motor.hsm"` imports the state machine of another file (its name becomes a type, variables
+// of that type are submachine instances). Several paths and the itemis CREATE form `import: "a" "b"`
+// are accepted. Paths are resolved relative to the importing file (see imports.ts); C/C++ headers
+// (`.h`, `.hpp`, ...) are accepted syntactically but not resolved yet.
+Import:
+    'import' (colon?=':')? paths+=ImportPath+;
+
+ImportPath:
+    path=STRING;
 
 // ---------------------------------------------------------------------------------------------
 // Definition section
@@ -72,8 +86,9 @@ Parameter:
 TypeAliasDeclaration:
     'alias' name=ID ':' type=TypeReference;
 
-// Types are referenced by name: the built-in types (integer, real, boolean, string, void) and type
-// aliases (`Name` or `Interface.Name` for aliases of a named interface), see hsm-typesystem.ts.
+// Types are referenced by name: the built-in types (integer, real, boolean, string, void), type
+// aliases (`Name` or `Interface.Name` for aliases of a named interface) and imported state machines
+// (a variable of such a type is a submachine instance), see hsm-typesystem.ts.
 TypeReference:
     name=QualifiedName;
 
@@ -83,8 +98,10 @@ TypeReference:
 Vertex:
     State | PseudoState;
 
+// `state Moving : motor` binds the submachine instance `motor` (a variable whose type is an imported
+// state machine) to the state: the instance runs while the state is active.
 State:
-    'state' name=ID (description=STRING)? ('{'
+    'state' name=ID (':' submachine=[VariableDeclaration:QualifiedName])? (description=STRING)? ('{'
         (reactions+=LocalReaction | vertices+=Vertex | transitions+=Transition | regions+=Region)*
     '}')?;
 

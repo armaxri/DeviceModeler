@@ -82,6 +82,7 @@ export namespace Hsm {
         | "exit"
         | "false"
         | "history"
+        | "import"
         | "in"
         | "interface"
         | "internal"
@@ -127,6 +128,8 @@ export namespace Hsm {
         Expression: Expression
         ExpressionStatement: ExpressionStatement
         HexLiteral: HexLiteral
+        Import: Import
+        ImportPath: ImportPath
         IntLiteral: IntLiteral
         InterfaceScope: InterfaceScope
         InternalScope: InternalScope
@@ -275,6 +278,8 @@ export namespace HsmTest {
         ExpressionStatement: ExpressionStatement
         HexLiteral: HexLiteral
         IfStatement: IfStatement
+        Import: Import
+        ImportPath: ImportPath
         IntLiteral: IntLiteral
         InterfaceScope: InterfaceScope
         InternalScope: InternalScope
@@ -730,6 +735,38 @@ export function isIfStatement(item: unknown): item is IfStatement {
     return reflection.isInstance(item, IfStatement.$type);
 }
 
+export interface Import extends langium.AstNode {
+    readonly $container: StateMachine;
+    readonly $type: 'Import';
+    colon: boolean;
+    paths: Array<ImportPath>;
+}
+
+export const Import = {
+    $type: 'Import',
+    colon: 'colon',
+    paths: 'paths'
+} as const;
+
+export function isImport(item: unknown): item is Import {
+    return reflection.isInstance(item, Import.$type);
+}
+
+export interface ImportPath extends langium.AstNode {
+    readonly $container: Import;
+    readonly $type: 'ImportPath';
+    path: string;
+}
+
+export const ImportPath = {
+    $type: 'ImportPath',
+    path: 'path'
+} as const;
+
+export function isImportPath(item: unknown): item is ImportPath {
+    return reflection.isInstance(item, ImportPath.$type);
+}
+
 export interface InterfaceScope extends langium.AstNode {
     readonly $container: StateMachine;
     readonly $type: 'InterfaceScope';
@@ -1075,6 +1112,7 @@ export interface State extends langium.AstNode {
     name: string;
     reactions: Array<LocalReaction>;
     regions: Array<Region>;
+    submachine?: langium.Reference<VariableDeclaration>;
     transitions: Array<Transition>;
     vertices: Array<Vertex>;
 }
@@ -1085,6 +1123,7 @@ export const State = {
     name: 'name',
     reactions: 'reactions',
     regions: 'regions',
+    submachine: 'submachine',
     transitions: 'transitions',
     vertices: 'vertices'
 } as const;
@@ -1097,6 +1136,7 @@ export interface StateMachine extends langium.AstNode {
     readonly $type: 'StateMachine';
     annotations: Array<Annotation>;
     description?: string;
+    imports: Array<Import>;
     name: string;
     namespace?: QualifiedName;
     reactions: Array<LocalReaction>;
@@ -1109,6 +1149,7 @@ export const StateMachine = {
     $type: 'StateMachine',
     annotations: 'annotations',
     description: 'description',
+    imports: 'imports',
     name: 'name',
     namespace: 'namespace',
     reactions: 'reactions',
@@ -1674,6 +1715,30 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: [TestStatement.$type]
         },
+        Import: {
+            name: Import.$type,
+            properties: {
+                colon: {
+                    name: Import.colon,
+                    defaultValue: false,
+                    optional: true
+                },
+                paths: {
+                    name: Import.paths,
+                    defaultValue: []
+                }
+            },
+            superTypes: []
+        },
+        ImportPath: {
+            name: ImportPath.$type,
+            properties: {
+                path: {
+                    name: ImportPath.path
+                }
+            },
+            superTypes: []
+        },
         IntLiteral: {
             name: IntLiteral.$type,
             properties: {
@@ -1954,6 +2019,11 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
                     defaultValue: [],
                     optional: true
                 },
+                submachine: {
+                    name: State.submachine,
+                    referenceType: VariableDeclaration.$type,
+                    optional: true
+                },
                 transitions: {
                     name: State.transitions,
                     defaultValue: [],
@@ -1977,6 +2047,11 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
                 },
                 description: {
                     name: StateMachine.description,
+                    optional: true
+                },
+                imports: {
+                    name: StateMachine.imports,
+                    defaultValue: [],
                     optional: true
                 },
                 name: {

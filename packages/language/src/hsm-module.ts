@@ -1,20 +1,26 @@
 import { EmptyFileSystem, inject, type Module } from 'langium';
 import {
     createDefaultModule, createDefaultSharedModule,
-    type DefaultSharedModuleContext, type LangiumServices, type LangiumSharedServices, type PartialLangiumServices
+    type DefaultSharedModuleContext, type LangiumServices, type LangiumSharedServices, type PartialLangiumServices, type PartialLangiumSharedServices
 } from 'langium/lsp';
 import { HsmGeneratedModule, HsmGeneratedSharedModule, HsmTestGeneratedModule } from './generated/module.js';
 import { HsmDocumentValidator, HsmExpressionValidator } from './hsm-expression-validator.js';
 import { HsmFormatter } from './hsm-formatter.js';
 import { HsmDocumentationProvider } from './doc/hsm-documentation-provider.js';
-import { HsmLinker } from './hsm-linker.js';
+import { HsmDocumentBuilder, HsmLinker } from './hsm-linker.js';
+import { HsmImportResolver } from './imports.js';
+import { HsmImportValidator, registerImportValidationChecks } from './hsm-import-validator.js';
 import { HsmScopeProvider } from './hsm-scope.js';
 import { HsmValidator, registerValidationChecks } from './hsm-validator.js';
 import { HsmTestModule, type HsmTestServices } from './testing/hsm-test-module.js';
 import { registerTestValidationChecks } from './testing/hsm-test-validator.js';
 
 export type HsmAddedServices = {
+    references: {
+        ImportResolver: HsmImportResolver
+    },
     validation: {
+        HsmImportValidator: HsmImportValidator,
         HsmValidator: HsmValidator,
         HsmExpressionValidator: HsmExpressionValidator
     }
@@ -25,9 +31,11 @@ export type HsmServices = LangiumServices & HsmAddedServices;
 export const HsmModule: Module<HsmServices, PartialLangiumServices & HsmAddedServices> = {
     references: {
         ScopeProvider: (services) => new HsmScopeProvider(services),
-        Linker: (services) => new HsmLinker(services)
+        Linker: (services) => new HsmLinker(services),
+        ImportResolver: (services) => new HsmImportResolver(services)
     },
     validation: {
+        HsmImportValidator: (services) => new HsmImportValidator(services),
         DocumentValidator: (services) => new HsmDocumentValidator(services),
         HsmValidator: () => new HsmValidator(),
         HsmExpressionValidator: () => new HsmExpressionValidator()
@@ -37,6 +45,13 @@ export const HsmModule: Module<HsmServices, PartialLangiumServices & HsmAddedSer
     },
     documentation: {
         DocumentationProvider: (services) => new HsmDocumentationProvider(services)
+    }
+};
+
+/** Shared services: the document builder relinks documents whose imported files changed. */
+export const HsmSharedModule: Module<LangiumSharedServices, PartialLangiumSharedServices> = {
+    workspace: {
+        DocumentBuilder: (services) => new HsmDocumentBuilder(services)
     }
 };
 
@@ -59,7 +74,8 @@ export function createHsmServices(context: DefaultSharedModuleContext = EmptyFil
 } {
     const shared = inject(
         createDefaultSharedModule(context),
-        HsmGeneratedSharedModule
+        HsmGeneratedSharedModule,
+        HsmSharedModule
     );
     const Hsm = inject(
         createDefaultModule({ shared }),
@@ -76,6 +92,7 @@ export function createHsmServices(context: DefaultSharedModuleContext = EmptyFil
     shared.ServiceRegistry.register(Hsm);
     shared.ServiceRegistry.register(HsmTest);
     registerValidationChecks(Hsm);
+    registerImportValidationChecks(Hsm);
     registerTestValidationChecks(HsmTest);
     if (!context.connection) {
         // No language server: the configuration service would otherwise wait for the client forever.
