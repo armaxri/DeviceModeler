@@ -55,7 +55,8 @@ export class HsmScopeProvider extends DefaultScopeProvider {
             if (!scopes) {
                 return EMPTY_SCOPE;
             }
-            return scopes.elements ??= this.declarationScope(scopes.machine, () => true);
+            // type aliases are not values
+            return scopes.elements ??= this.declarationScope(scopes.machine, declaration => !ast.isTypeAliasDeclaration(declaration));
         }
         return super.getScope(context);
     }

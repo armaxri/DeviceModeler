@@ -54,7 +54,7 @@ InternalScope:
     {infer InternalScope} 'internal' ':' declarations+=Declaration*;
 
 Declaration:
-    EventDeclaration | VariableDeclaration | OperationDeclaration;
+    EventDeclaration | VariableDeclaration | OperationDeclaration | TypeAliasDeclaration;
 
 EventDeclaration:
     (direction=('in' | 'out'))? 'event' name=ID (':' type=TypeReference)?;
@@ -68,9 +68,14 @@ OperationDeclaration:
 Parameter:
     name=ID (varArgs?='...')? ':' type=TypeReference;
 
-// Types are referenced by name (integer, real, boolean, string, void) so that further types can be added later.
+// `alias Name : type` (itemis CREATE): another name for a type; aliases may refer to other aliases.
+TypeAliasDeclaration:
+    'alias' name=ID ':' type=TypeReference;
+
+// Types are referenced by name: the built-in types (integer, real, boolean, string, void) and type
+// aliases (`Name` or `Interface.Name` for aliases of a named interface), see hsm-typesystem.ts.
 TypeReference:
-    name=ID;
+    name=QualifiedName;
 
 // ---------------------------------------------------------------------------------------------
 // States
@@ -103,11 +108,12 @@ LocalReaction:
 // `[*]` as source denotes the initial pseudo state (default entry) of the enclosing scope,
 // `[*]` as target denotes the final state of the enclosing scope.
 // `# >E` selects the entry point E of the target state, `# X>` fires when the exit node X
-// of the source state is reached.
+// of the source state is reached. As in itemis CREATE, one transition may handle several exit
+// nodes (`# X1> X2>`); of several entry points (`# >E1 >E2`) only the first one is used.
 Transition:
     (initial?='[*]' | source=[Vertex:QualifiedName]) '->' (final?='[*]' | target=[Vertex:QualifiedName])
     (':' spec=ReactionSpec)?
-    ('#' (('>' entryPoint=ID) | (exitPoint=ID '>')))?;
+    ('#' (('>' entryPoints+=ID) | (exitPoints+=ID '>'))+)?;
 
 // ---------------------------------------------------------------------------------------------
 // Reactions: triggers [guard] / effect
@@ -226,7 +232,7 @@ Argument:
     (parameter=ID '=')? value=ConditionalExpression;
 
 Literal:
-    BoolLiteral | IntLiteral | RealLiteral | HexLiteral | StringLiteral;
+    BoolLiteral | IntLiteral | RealLiteral | HexLiteral | StringLiteral | NullLiteral;
 
 BoolLiteral:
     value=('true' | 'false');
@@ -242,6 +248,10 @@ HexLiteral:
 
 StringLiteral:
     value=STRING;
+
+// `null`: only compatible with `string` (it denotes the empty string, see docs/semantics.md §2)
+NullLiteral:
+    {infer NullLiteral} 'null';
 
 QualifiedName returns string:
     ID ('.' ID)*;

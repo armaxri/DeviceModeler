@@ -6,8 +6,8 @@ import type { Diagnostic } from 'vscode-languageserver-types';
 import * as ast from './generated/ast.js';
 import {
     BUILTIN_TYPES, binaryResultType, commonType, compoundOperator, eventDirection, inferType, isAssignable,
-    isCastable, isComparable, isError, isNumeric, resolveTypeName, returnTypeOf, typeName, typeOfEvent,
-    typeOfParameter, typeOfTypeReference, typeOfVariable, type HsmType
+    isCastable, isComparable, isCyclicAlias, isError, isNumeric, resolveTypeAlias, resolveTypeName, returnTypeOf,
+    typeName, typeOfAlias, typeOfEvent, typeOfParameter, typeOfTypeReference, typeOfVariable, type HsmType
 } from './hsm-typesystem.js';
 
 /** Annotations that select the execution semantics (see docs/semantics.md §3 and §4). */
@@ -101,11 +101,31 @@ export class HsmExpressionValidator {
     }
 
     checkTypeReference(reference: ast.TypeReference, accept: ValidationAcceptor): void {
-        const type = resolveTypeName(reference.name);
-        if (!type) {
-            accept('error', `Unknown type '${reference.name}'. Known types are ${BUILTIN_TYPES.join(', ')}.`, { node: reference, property: 'name' });
-        } else if (type === 'void' && !(ast.isOperationDeclaration(reference.$container) && reference.$containerProperty === 'returnType')) {
+        const builtin = resolveTypeName(reference.name);
+        const alias = builtin ? undefined : resolveTypeAlias(reference);
+        if (!builtin && !alias) {
+            accept('error', `Unknown type '${reference.name}'. Known types are ${BUILTIN_TYPES.join(', ')} and type aliases ('alias Name : type').`,
+                { node: reference, property: 'name' });
+            return;
+        }
+        if (alias && isCyclicAlias(alias)) {
+            // reported at the alias
+            return;
+        }
+        const type = builtin ?? (alias ? typeOfAlias(alias) : 'error');
+        const allowed = (ast.isOperationDeclaration(reference.$container) && reference.$containerProperty === 'returnType')
+            || ast.isTypeAliasDeclaration(reference.$container);
+        if (type === 'void' && !allowed) {
             accept('error', `The type 'void' can only be used as the return type of an operation.`, { node: reference, property: 'name' });
+        }
+    }
+
+    checkTypeAlias(alias: ast.TypeAliasDeclaration, accept: ValidationAcceptor): void {
+        if (resolveTypeName(alias.name)) {
+            accept('error', `The built-in type '${alias.name}' cannot be redefined.`, { node: alias, property: 'name' });
+        }
+        if (isCyclicAlias(alias)) {
+            accept('error', `The type alias '${alias.name}' refers to itself.`, { node: alias, property: 'type' });
         }
     }
 
@@ -119,6 +139,9 @@ export class HsmExpressionValidator {
             return;
         }
         if (!variable.type) {
+            if (inferType(variable.initialValue) === 'null') {
+                accept('error', `The type of '${variable.name}' cannot be inferred from 'null'. Declare its type.`, { node: variable, property: 'initialValue' });
+            }
             return;
         }
         const declared = typeOfTypeReference(variable.type);
@@ -153,13 +176,21 @@ export class HsmExpressionValidator {
                     used.add(target.ref);
                 }
             }
+            // type aliases are referenced by name (not by a cross-reference)
+            if (ast.isTypeReference(node)) {
+                const alias = resolveTypeAlias(node);
+                if (alias && alias !== node.$container) {
+                    used.add(alias);
+                }
+            }
         }
         for (const scope of machine.scopes) {
             for (const declaration of scope.declarations) {
                 if (!used.has(declaration)) {
                     const kind = ast.isEventDeclaration(declaration) ? 'Event'
                         : ast.isOperationDeclaration(declaration) ? 'Operation'
-                            : declaration.const ? 'Constant' : 'Variable';
+                            : ast.isTypeAliasDeclaration(declaration) ? 'Type alias'
+                                : declaration.const ? 'Constant' : 'Variable';
                     accept('info', `${kind} '${declaration.name}' is never used.`, { node: declaration, property: 'name' });
                 }
             }

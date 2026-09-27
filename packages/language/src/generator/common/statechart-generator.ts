@@ -2,7 +2,7 @@ import { AstUtils, type AstNode } from 'langium';
 import * as ast from '../../generated/ast.js';
 import { qualifiedName } from '../../hsm-scope.js';
 import { typeOfVariable, type HsmType } from '../../hsm-typesystem.js';
-import { nodeText, transitionLabel } from '../../model-utils.js';
+import { entryPointOf, nodeText, transitionLabel } from '../../model-utils.js';
 import { StatechartInterpreter, type ExecutionMode, type ExecutionOrder } from '../../simulation/interpreter.js';
 import { isFinalState, ModelIndex, type RegionNode, type TargetVertex } from '../../simulation/model-index.js';
 import { CBlock, cInteger, commentText, indent, stripParens, UniqueNames } from './code.js';
@@ -481,7 +481,7 @@ export abstract class StatechartGenerator implements ExpressionContext {
             this.expressions.effect(initial.spec?.effect, body);
             const inside = this.index.childIn(region, target) !== undefined;
             const scope = inside ? region : this.index.commonRegion([region, this.index.regionOf(target)]);
-            this.enterInRegion(scope, [{ vertex: target, entryPoint: initial.entryPoint }], body, !inside);
+            this.enterInRegion(scope, [{ vertex: target, entryPoint: entryPointOf(initial) }], body, !inside);
         });
     }
 
@@ -572,13 +572,14 @@ export abstract class StatechartGenerator implements ExpressionContext {
                 block.add(`${this.call(this.enterStateDefault(vertex))};`);
                 return;
             }
-            const entry = this.index.findPseudo(vertex, 'entry', target.entryPoint);
-            if (!entry) {
+            if (!this.index.findPseudo(vertex, 'entry', target.entryPoint)) {
                 throw new GeneratorError(`State '${vertex.name}' has no entry point '${target.entryPoint}'`, vertex);
             }
             block.add(`${this.call(this.enterState(vertex))};`);
+            // every region with an entry point of this name is entered through it, the others by default
             for (const region of this.index.regionsOf(vertex)) {
-                if (this.index.regionOf(entry) === region) {
+                const entry = this.index.entryPointIn(region, target.entryPoint);
+                if (entry) {
                     block.add(`${this.call(this.entryPoint(entry))};`);
                 } else {
                     block.add(`${this.call(this.regionEnter(region))};`);
@@ -706,7 +707,7 @@ export abstract class StatechartGenerator implements ExpressionContext {
                 return;
             }
             body.add(`if (!${this.call(this.microstep())}) {`, '    return;', '}');
-            const targets = outgoing.map(t => ({ vertex: this.index.targetOf(t), entryPoint: t.entryPoint }));
+            const targets = outgoing.map(t => ({ vertex: this.index.targetOf(t), entryPoint: entryPointOf(t) }));
             const scope = this.index.scopeRegion([sync, ...targets.map(t => t.vertex)]);
             this.exitScope(scope, body);
             for (const transition of outgoing) {
@@ -779,7 +780,7 @@ export abstract class StatechartGenerator implements ExpressionContext {
             body.add(`if (!${this.call(this.microstep())}) {`, '    return;', '}');
             this.exitScope(scope, body);
             this.expressions.effect(transition.spec?.effect, body);
-            this.enterInRegion(scope, [{ vertex: target, entryPoint: transition.entryPoint }], body, false);
+            this.enterInRegion(scope, [{ vertex: target, entryPoint: entryPointOf(transition) }], body, false);
         });
     }
 

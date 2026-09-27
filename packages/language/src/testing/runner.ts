@@ -449,7 +449,7 @@ const MS_PER_UNIT: Record<string, number> = { s: 1000, ms: 1, us: 1e-3, ns: 1e-6
 
 function machineVariableType(variable: ast.VariableDeclaration, value: HostValue | undefined): TypeName {
     const type = typeOfVariable(variable);
-    if (type !== 'error') {
+    if (type !== 'error' && type !== 'null') {
         return type;
     }
     return typeof value === 'number' ? (Number.isInteger(value) ? 'integer' : 'real') : typeof value === 'boolean' ? 'boolean' : 'string';

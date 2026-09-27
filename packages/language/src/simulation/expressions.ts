@@ -86,6 +86,9 @@ export class ExpressionEvaluator {
                 return parseFloat((expression as ast.RealLiteral).value);
             case 'StringLiteral':
                 return (expression as ast.StringLiteral).value;
+            case 'NullLiteral':
+                // `null` denotes the empty string (docs/semantics.md §2)
+                return '';
             case 'ParenthesizedExpression':
                 return this.evaluateOrVoid((expression as ast.ParenthesizedExpression).expression);
             case 'ValueOfExpression': {

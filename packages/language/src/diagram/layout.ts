@@ -324,7 +324,7 @@ class DiagramBuilder {
     }
 
     private createVertex(vertex: ast.Vertex, parentId: string, parentElk: ElkNode): DiagramNode {
-        const id = this.uniqueId(vertex.name ? qualifiedName(vertex) : '#unnamed');
+        const id = this.uniqueId(vertex.name ? vertexBaseId(vertex) : '#unnamed');
         if (ast.isPseudoState(vertex)) {
             const node = this.pseudoNode(id, vertex.kind as DiagramNodeKind, DiagramMetrics.pseudoSize[vertex.kind] ?? 20);
             node.name = vertex.name;
@@ -692,4 +692,25 @@ export function containerForElement(element: AstNode | undefined): ScopeContaine
         return scopeOf(element);
     }
     return undefined;
+}
+
+/**
+ * Base of the diagram id of a vertex: its qualified name. Entry points and exit nodes with the same name
+ * in several orthogonal regions of a state (`Outer.failure`) include the region to stay distinguishable
+ * (`Outer.r1.failure`, `Outer.region2.failure` for unnamed regions).
+ */
+function vertexBaseId(vertex: ast.Vertex): string {
+    const name = qualifiedName(vertex);
+    const region = vertex.$container;
+    if (!ast.isPseudoState(vertex) || (vertex.kind !== 'entry' && vertex.kind !== 'exit') || !ast.isRegion(region)) {
+        return name;
+    }
+    const owner = region.$container;
+    const shared = owner.regions.some(r => r !== region
+        && r.vertices.some(v => ast.isPseudoState(v) && v.kind === vertex.kind && v.name === vertex.name));
+    if (!shared) {
+        return name;
+    }
+    const regionName = region.name ?? `region${owner.regions.indexOf(region) + 1}`;
+    return `${qualifiedName(owner)}.${regionName}.${vertex.name}`;
 }

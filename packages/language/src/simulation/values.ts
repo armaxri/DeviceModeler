@@ -1,5 +1,6 @@
 import type { AstNode } from 'langium';
 import type { TypeReference } from '../generated/ast.js';
+import { typeOfTypeReference } from '../hsm-typesystem.js';
 import { SimulationError } from './errors.js';
 
 /**
@@ -19,9 +20,10 @@ export type TypeName = 'integer' | 'real' | 'boolean' | 'string' | 'void';
 
 const TYPE_NAMES: readonly string[] = ['integer', 'real', 'boolean', 'string', 'void'];
 
-/** The built-in type named by a type reference (`undefined` for a missing or unknown type). */
+/** The built-in type named by a type reference, type aliases resolved (`undefined` for a missing or unknown type). */
 export function declaredType(ref: TypeReference | undefined): TypeName | undefined {
-    return ref && TYPE_NAMES.includes(ref.name) ? ref.name as TypeName : undefined;
+    const type = ref ? typeOfTypeReference(ref) : undefined;
+    return type && TYPE_NAMES.includes(type) ? type as TypeName : undefined;
 }
 
 /** Default value of a type: `0`, `0.0`, `false`, `""`; `undefined` for `void`. Untyped: integer `0`. */

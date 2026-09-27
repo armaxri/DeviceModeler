@@ -68,6 +68,7 @@ export namespace Hsm {
         | "^="
         | "active"
         | "after"
+        | "alias"
         | "always"
         | "as"
         | "choice"
@@ -86,6 +87,7 @@ export namespace Hsm {
         | "internal"
         | "junction"
         | "namespace"
+        | "null"
         | "oncycle"
         | "operation"
         | "out"
@@ -130,6 +132,7 @@ export namespace Hsm {
         InternalScope: InternalScope
         Literal: Literal
         LocalReaction: LocalReaction
+        NullLiteral: NullLiteral
         OperationDeclaration: OperationDeclaration
         Parameter: Parameter
         ParenthesizedExpression: ParenthesizedExpression
@@ -147,6 +150,7 @@ export namespace Hsm {
         TimeTrigger: TimeTrigger
         Transition: Transition
         Trigger: Trigger
+        TypeAliasDeclaration: TypeAliasDeclaration
         TypeReference: TypeReference
         UnaryExpression: UnaryExpression
         ValueOfExpression: ValueOfExpression
@@ -223,6 +227,7 @@ export namespace HsmTest {
         | "if"
         | "message"
         | "mock"
+        | "null"
         | "operation"
         | "proceed"
         | "raise"
@@ -277,6 +282,7 @@ export namespace HsmTest {
         LocalReaction: LocalReaction
         LocalVariableStatement: LocalVariableStatement
         MockStatement: MockStatement
+        NullLiteral: NullLiteral
         OperationCallStatement: OperationCallStatement
         OperationDeclaration: OperationDeclaration
         Parameter: Parameter
@@ -300,6 +306,7 @@ export namespace HsmTest {
         TimeTrigger: TimeTrigger
         Transition: Transition
         Trigger: Trigger
+        TypeAliasDeclaration: TypeAliasDeclaration
         TypeReference: TypeReference
         UnaryExpression: UnaryExpression
         ValueOfExpression: ValueOfExpression
@@ -558,7 +565,7 @@ export function isConditionalExpression(item: unknown): item is ConditionalExpre
     return reflection.isInstance(item, ConditionalExpression.$type);
 }
 
-export type Declaration = EventDeclaration | OperationDeclaration | VariableDeclaration;
+export type Declaration = EventDeclaration | OperationDeclaration | TypeAliasDeclaration | VariableDeclaration;
 
 export const Declaration = {
     $type: 'Declaration'
@@ -770,7 +777,7 @@ export function isIntLiteral(item: unknown): item is IntLiteral {
     return reflection.isInstance(item, IntLiteral.$type);
 }
 
-export type Literal = BoolLiteral | HexLiteral | IntLiteral | RealLiteral | StringLiteral;
+export type Literal = BoolLiteral | HexLiteral | IntLiteral | NullLiteral | RealLiteral | StringLiteral;
 
 export const Literal = {
     $type: 'Literal'
@@ -833,6 +840,19 @@ export const MockStatement = {
 
 export function isMockStatement(item: unknown): item is MockStatement {
     return reflection.isInstance(item, MockStatement.$type);
+}
+
+export interface NullLiteral extends langium.AstNode {
+    readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | LocalReaction | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
+    readonly $type: 'NullLiteral';
+}
+
+export const NullLiteral = {
+    $type: 'NullLiteral'
+} as const;
+
+export function isNullLiteral(item: unknown): item is NullLiteral {
+    return reflection.isInstance(item, NullLiteral.$type);
 }
 
 export interface OperationCallStatement extends langium.AstNode {
@@ -1212,8 +1232,8 @@ export function isTimeTrigger(item: unknown): item is TimeTrigger {
 export interface Transition extends langium.AstNode {
     readonly $container: Region | State | StateMachine;
     readonly $type: 'Transition';
-    entryPoint?: string;
-    exitPoint?: string;
+    entryPoints: Array<string>;
+    exitPoints: Array<string>;
     final: boolean;
     initial: boolean;
     source?: langium.Reference<Vertex>;
@@ -1223,8 +1243,8 @@ export interface Transition extends langium.AstNode {
 
 export const Transition = {
     $type: 'Transition',
-    entryPoint: 'entryPoint',
-    exitPoint: 'exitPoint',
+    entryPoints: 'entryPoints',
+    exitPoints: 'exitPoints',
     final: 'final',
     initial: 'initial',
     source: 'source',
@@ -1246,10 +1266,27 @@ export function isTrigger(item: unknown): item is Trigger {
     return reflection.isInstance(item, Trigger.$type);
 }
 
-export interface TypeReference extends langium.AstNode {
-    readonly $container: CastExpression | EventDeclaration | OperationDeclaration | Parameter | VariableDeclaration;
-    readonly $type: 'TypeReference';
+export interface TypeAliasDeclaration extends langium.AstNode {
+    readonly $container: InterfaceScope | InternalScope;
+    readonly $type: 'TypeAliasDeclaration';
     name: string;
+    type: TypeReference;
+}
+
+export const TypeAliasDeclaration = {
+    $type: 'TypeAliasDeclaration',
+    name: 'name',
+    type: 'type'
+} as const;
+
+export function isTypeAliasDeclaration(item: unknown): item is TypeAliasDeclaration {
+    return reflection.isInstance(item, TypeAliasDeclaration.$type);
+}
+
+export interface TypeReference extends langium.AstNode {
+    readonly $container: CastExpression | EventDeclaration | OperationDeclaration | Parameter | TypeAliasDeclaration | VariableDeclaration;
+    readonly $type: 'TypeReference';
+    name: QualifiedName;
 }
 
 export const TypeReference = {
@@ -1728,6 +1765,12 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: [TestStatement.$type]
         },
+        NullLiteral: {
+            name: NullLiteral.$type,
+            properties: {
+            },
+            superTypes: [Literal.$type]
+        },
         OperationCallStatement: {
             name: OperationCallStatement.$type,
             properties: {
@@ -2056,12 +2099,14 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
         Transition: {
             name: Transition.$type,
             properties: {
-                entryPoint: {
-                    name: Transition.entryPoint,
+                entryPoints: {
+                    name: Transition.entryPoints,
+                    defaultValue: [],
                     optional: true
                 },
-                exitPoint: {
-                    name: Transition.exitPoint,
+                exitPoints: {
+                    name: Transition.exitPoints,
+                    defaultValue: [],
                     optional: true
                 },
                 final: {
@@ -2096,6 +2141,18 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
             properties: {
             },
             superTypes: []
+        },
+        TypeAliasDeclaration: {
+            name: TypeAliasDeclaration.$type,
+            properties: {
+                name: {
+                    name: TypeAliasDeclaration.name
+                },
+                type: {
+                    name: TypeAliasDeclaration.type
+                }
+            },
+            superTypes: [Declaration.$type]
         },
         TypeReference: {
             name: TypeReference.$type,

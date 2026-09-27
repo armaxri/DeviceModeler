@@ -1,4 +1,4 @@
-import type { AstNode } from 'langium';
+import { AstUtils, type AstNode } from 'langium';
 import * as ast from './generated/ast.js';
 
 /**
@@ -7,8 +7,11 @@ import * as ast from './generated/ast.js';
  * Types are identified by their name. `error` is an internal type which is used for expressions
  * whose type cannot be determined (unresolved references, invalid operands, unknown type names).
  * It is compatible with every type, so an error is reported only once and does not cascade.
+ * `null` is the type of the literal `null` (itemis CREATE); it can only be assigned to and compared
+ * with `string` (and `null`), where it denotes the empty string.
+ * Type aliases (`alias Name : type`) are resolved to their base type, they are not types of their own.
  */
-export type HsmType = 'integer' | 'real' | 'boolean' | 'string' | 'void' | 'error';
+export type HsmType = 'integer' | 'real' | 'boolean' | 'string' | 'void' | 'null' | 'error';
 
 /** The types that can be referenced by name in a model. */
 export const BUILTIN_TYPES: readonly HsmType[] = ['integer', 'real', 'boolean', 'string', 'void'];
@@ -24,9 +27,97 @@ export function resolveTypeName(name: string | undefined): HsmType | undefined {
     return name !== undefined && (BUILTIN_TYPES as readonly string[]).includes(name) ? name as HsmType : undefined;
 }
 
-/** The type denoted by a type reference; unknown type names (and missing references) yield `error`. */
+/**
+ * The type denoted by a type reference: a built-in type or a type alias (resolved to its base type).
+ * Unknown type names, missing references and cyclic aliases yield `error`.
+ */
 export function typeOfTypeReference(reference: ast.TypeReference | undefined): HsmType {
-    return resolveTypeName(reference?.name) ?? 'error';
+    if (!reference) {
+        return 'error';
+    }
+    const builtin = resolveTypeName(reference.name);
+    if (builtin) {
+        return builtin;
+    }
+    const alias = resolveTypeAlias(reference);
+    return alias ? typeOfAlias(alias) : 'error';
+}
+
+/** The base type of a type alias (`error` for cyclic or unresolvable aliases). */
+export function typeOfAlias(alias: ast.TypeAliasDeclaration): HsmType {
+    const visited = new Set<ast.TypeAliasDeclaration>();
+    let current: ast.TypeAliasDeclaration | undefined = alias;
+    while (current) {
+        if (visited.has(current)) {
+            return 'error';
+        }
+        visited.add(current);
+        const builtin = resolveTypeName(current.type?.name);
+        if (builtin) {
+            return builtin;
+        }
+        current = current.type ? resolveTypeAlias(current.type) : undefined;
+    }
+    return 'error';
+}
+
+/** Whether the alias refers (directly or through other aliases) to itself. */
+export function isCyclicAlias(alias: ast.TypeAliasDeclaration): boolean {
+    const visited = new Set<ast.TypeAliasDeclaration>();
+    let current: ast.TypeAliasDeclaration | undefined = alias;
+    while (current) {
+        if (visited.has(current)) {
+            return current === alias;
+        }
+        visited.add(current);
+        current = current.type && !resolveTypeName(current.type.name) ? resolveTypeAlias(current.type) : undefined;
+    }
+    return false;
+}
+
+/**
+ * The type alias a type reference refers to: `Name` for aliases of the unnamed interface, the internal
+ * scope and (if the name is unique) named interfaces, `Interface.Name` for aliases of a named interface.
+ */
+export function resolveTypeAlias(reference: ast.TypeReference): ast.TypeAliasDeclaration | undefined {
+    const machine = AstUtils.getContainerOfType(reference, ast.isStateMachine);
+    return machine ? typeAliases(machine).get(reference.name) : undefined;
+}
+
+const aliasCache = new WeakMap<ast.StateMachine, Map<string, ast.TypeAliasDeclaration>>();
+
+/** The type aliases of a state machine by their referable names (first declaration wins). */
+export function typeAliases(machine: ast.StateMachine): Map<string, ast.TypeAliasDeclaration> {
+    let aliases = aliasCache.get(machine);
+    if (aliases) {
+        return aliases;
+    }
+    aliases = new Map();
+    const simpleNames = new Map<string, ast.TypeAliasDeclaration[]>();
+    for (const scope of machine.scopes) {
+        for (const declaration of scope.declarations) {
+            if (!ast.isTypeAliasDeclaration(declaration) || !declaration.name) {
+                continue;
+            }
+            if (ast.isInterfaceScope(scope) && scope.name) {
+                const qualified = `${scope.name}.${declaration.name}`;
+                if (!aliases.has(qualified)) {
+                    aliases.set(qualified, declaration);
+                }
+                simpleNames.set(declaration.name, [...simpleNames.get(declaration.name) ?? [], declaration]);
+            } else if (!aliases.has(declaration.name)) {
+                aliases.set(declaration.name, declaration);
+            }
+        }
+    }
+    // aliases of named interfaces may also be used by their simple name if it is unambiguous
+    for (const [name, candidates] of simpleNames) {
+        if (!aliases.has(name) && candidates.length === 1) {
+            aliases.set(name, candidates[0]);
+        }
+    }
+    aliasCache.set(machine, aliases);
+    return aliases;
 }
 
 export function isNumeric(type: HsmType): boolean {
@@ -46,7 +137,7 @@ export function isAssignable(target: HsmType, source: HsmType): boolean {
     if (target === 'error' || source === 'error') {
         return true;
     }
-    return target === source || (target === 'real' && source === 'integer');
+    return target === source || (target === 'real' && source === 'integer') || (target === 'string' && source === 'null');
 }
 
 /** The common type of two types (used for the branches of `?:`), `undefined` if they are incompatible. */
@@ -60,6 +151,9 @@ export function commonType(a: HsmType, b: HsmType): HsmType | undefined {
     if (isNumeric(a) && isNumeric(b)) {
         return 'real';
     }
+    if ((a === 'string' && b === 'null') || (a === 'null' && b === 'string')) {
+        return 'string';
+    }
     return undefined;
 }
 
@@ -70,7 +164,8 @@ export function isComparable(a: HsmType, b: HsmType): boolean {
 
 /** Whether a value of type `source` can be cast to `target` with `as`. */
 export function isCastable(source: HsmType, target: HsmType): boolean {
-    return isError(source) || isError(target) || source === target || (isNumeric(source) && isNumeric(target));
+    return isError(source) || isError(target) || source === target || (isNumeric(source) && isNumeric(target))
+        || (source === 'null' && target === 'string');
 }
 
 /**
@@ -169,6 +264,9 @@ export function typeOfDeclaration(declaration: ast.Declaration): HsmType {
     if (ast.isOperationDeclaration(declaration)) {
         return returnTypeOf(declaration);
     }
+    if (ast.isTypeAliasDeclaration(declaration)) {
+        return typeOfAlias(declaration);
+    }
     return typeOfEvent(declaration);
 }
 
@@ -202,6 +300,8 @@ function infer(expression: ast.Expression | undefined, visiting: Set<AstNode>): 
             return 'real';
         case 'StringLiteral':
             return 'string';
+        case 'NullLiteral':
+            return 'null';
         case 'ParenthesizedExpression':
             return infer(expression.expression, visiting);
         case 'ActiveExpression':
@@ -262,7 +362,8 @@ function declarationType(variable: ast.VariableDeclaration, visiting: Set<AstNod
     visiting.add(variable);
     try {
         const type = infer(variable.initialValue, visiting);
-        return type === 'void' ? 'error' : type;
+        // the type of a variable cannot be inferred from `null` (reported by the validator)
+        return type === 'void' || type === 'null' ? 'error' : type;
     } finally {
         visiting.delete(variable);
     }

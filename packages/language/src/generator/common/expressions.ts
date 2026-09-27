@@ -1,6 +1,6 @@
 import { AstUtils, type AstNode } from 'langium';
 import * as ast from '../../generated/ast.js';
-import { inferType, returnTypeOf, typeOfEvent, typeOfParameter, type HsmType } from '../../hsm-typesystem.js';
+import { inferType, returnTypeOf, typeOfEvent, typeOfParameter, typeOfTypeReference, type HsmType } from '../../hsm-typesystem.js';
 import { CBlock, cInteger, cString, stripParens } from './code.js';
 
 /**
@@ -157,6 +157,9 @@ export class ExpressionCompiler {
                 return { text: expression.value, type: 'real', constant: true };
             case 'StringLiteral':
                 return { text: cString(expression.value), type: 'string', constant: true };
+            case 'NullLiteral':
+                // `null` denotes the empty string (docs/semantics.md §2)
+                return { text: cString(''), type: 'string', constant: true };
             case 'ParenthesizedExpression':
                 return this.compile(expression.expression, block);
             case 'ValueOfExpression': {
@@ -436,7 +439,7 @@ export class ExpressionCompiler {
 
     private cast(node: ast.CastExpression, block: CBlock): Code {
         const operand = this.compile(node.operand, block);
-        const target = node.type.name as HsmType;
+        const target = typeOfTypeReference(node.type);
         if (operand.type === target) {
             return operand;
         }

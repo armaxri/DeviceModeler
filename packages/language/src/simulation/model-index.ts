@@ -73,7 +73,7 @@ export class ModelIndex {
             const source = transition.source?.ref;
             const target = transition.target?.ref;
             if (source) {
-                if (transition.exitPoint && ast.isState(source)) {
+                if (transition.exitPoints.length > 0 && ast.isState(source)) {
                     push(this.exitMap, source, transition);
                 } else {
                     push(this.outgoingMap, source, transition);
@@ -82,7 +82,7 @@ export class ModelIndex {
             if (target) {
                 push(this.incomingMap, target, transition);
             }
-            if (source && ast.isState(source) && !transition.exitPoint) {
+            if (source && ast.isState(source) && transition.exitPoints.length === 0) {
                 for (const trigger of transition.spec?.triggers ?? []) {
                     if (ast.isTimeTrigger(trigger)) {
                         push(this.timeTriggerMap, source, trigger);
@@ -134,9 +134,9 @@ export class ModelIndex {
         return this.incomingMap.get(vertex) ?? [];
     }
 
-    /** Transitions `state -> ... # X>` leaving the given state through its exit node `X`. */
+    /** Transitions `state -> ... # X>` (also `# X> Y>`) leaving the given state through its exit node `X`. */
     exitTransitions(state: ast.State, exitNode: string): ast.Transition[] {
-        return (this.exitMap.get(state) ?? []).filter(t => t.exitPoint === exitNode);
+        return (this.exitMap.get(state) ?? []).filter(t => t.exitPoints.includes(exitNode));
     }
 
     /** Time triggers of the local reactions and outgoing transitions of a state (or of the reactions of the state machine). */
@@ -295,6 +295,14 @@ export class ModelIndex {
     findPseudo(state: ast.State, kind: 'entry' | 'exit', name: string): ast.PseudoState | undefined {
         const candidates = [...state.vertices, ...state.regions.flatMap(r => r.vertices)];
         return candidates.find((v): v is ast.PseudoState => ast.isPseudoState(v) && v.kind === kind && v.name === name);
+    }
+
+    /**
+     * The entry point named `name` of a region (a direct vertex of the region), if any. Entering a state
+     * through `# >E` enters every region with an entry point `E` through it (docs/semantics.md §7).
+     */
+    entryPointIn(region: RegionNode, name: string): ast.PseudoState | undefined {
+        return region.vertices.find((v): v is ast.PseudoState => ast.isPseudoState(v) && v.kind === 'entry' && v.name === name);
     }
 }
 

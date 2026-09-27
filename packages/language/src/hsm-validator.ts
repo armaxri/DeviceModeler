@@ -25,6 +25,7 @@ export function registerValidationChecks(services: HsmServices): void {
         InterfaceScope: expressions.checkInterfaceScope,
         InternalScope: expressions.checkInternalScope,
         TypeReference: expressions.checkTypeReference,
+        TypeAliasDeclaration: expressions.checkTypeAlias,
         VariableDeclaration: expressions.checkVariable,
         OperationDeclaration: expressions.checkOperation,
         ReactionSpec: expressions.checkGuard,
@@ -47,18 +48,25 @@ export function registerValidationChecks(services: HsmServices): void {
 
 export class HsmValidator {
 
-    /** Names of vertices must be unique within their container (siblings), regions are transparent. */
+    /**
+     * Names of vertices must be unique within their container (siblings), regions are transparent.
+     * Exception (as in itemis CREATE): entry points and exit nodes with the same name may be placed in
+     * different orthogonal regions of a state; `# >E` then enters every region through its entry point `E`.
+     */
     checkUniqueNames(machine: ast.StateMachine, accept: ValidationAcceptor): void {
-        const byParent = new Map<AstNode, Map<string, ast.Vertex>>();
+        const byParent = new Map<AstNode, Map<string, ast.Vertex[]>>();
         for (const vertex of allVertices(machine)) {
             const parent = ast.isRegion(vertex.$container) ? vertex.$container.$container : vertex.$container;
-            const seen = byParent.get(parent) ?? new Map<string, ast.Vertex>();
+            const seen = byParent.get(parent) ?? new Map<string, ast.Vertex[]>();
             byParent.set(parent, seen);
-            if (seen.has(vertex.name)) {
+            const others = seen.get(vertex.name) ?? [];
+            const allowed = others.every(other => isRegionPoint(vertex) && isRegionPoint(other)
+                && other.kind === vertex.kind && other.$container !== vertex.$container);
+            if (!allowed) {
                 accept('error', `Duplicate name '${vertex.name}'. Sibling states must have different names.`,
                     { node: vertex, property: 'name' });
             } else {
-                seen.set(vertex.name, vertex);
+                seen.set(vertex.name, [...others, vertex]);
             }
         }
         const declarations = new Map<string, ast.Declaration>();
@@ -224,7 +232,7 @@ export class HsmValidator {
         if (source && ast.isPseudoState(source) && (source.kind === 'history' || source.kind === 'deephistory') && target && !isAncestorOrSelf(source.$container, target)) {
             accept('warning', 'The default transition of a history pseudo state should stay within its composite state.', { node: transition, property: 'target' });
         }
-        if (source && ast.isState(source) && !hasTrigger(transition) && !hasGuard(transition) && !transition.exitPoint) {
+        if (source && ast.isState(source) && !hasTrigger(transition) && !hasGuard(transition) && transition.exitPoints.length === 0) {
             accept('warning', `Missing trigger: this transition is never taken. Use 'always' or 'oncycle' to take it in every step.`,
                 { node: transition, property: transition.spec ? 'spec' : 'target' });
         }
@@ -245,17 +253,34 @@ export class HsmValidator {
                 accept('error', `Transitions between orthogonal regions are not allowed ('${source.name}' -> '${target.name}').`, { node: transition, property: 'target' });
             }
         }
-        if (transition.entryPoint) {
-            const entry = target && ast.isState(target) ? findPseudo(target, 'entry', transition.entryPoint) : undefined;
+        transition.entryPoints.forEach((name, index) => {
+            const entry = target && ast.isState(target) ? findPseudo(target, 'entry', name) : undefined;
             if (!entry) {
-                accept('error', `'${target?.name ?? 'target'}' has no entry point '${transition.entryPoint}'.`, { node: transition, property: 'entryPoint' });
+                accept('error', `'${target?.name ?? 'target'}' has no entry point '${name}'.`, { node: transition, property: 'entryPoints', index });
+            } else if (index > 0) {
+                accept('warning', `Only the first entry point ('${transition.entryPoints[0]}') is used; remove the others (like itemis CREATE).`,
+                    { node: transition, property: 'entryPoints', index });
             }
-        }
-        if (transition.exitPoint) {
-            const exit = source && ast.isState(source) ? findPseudo(source, 'exit', transition.exitPoint) : undefined;
+        });
+        const exits = new Set<string>();
+        transition.exitPoints.forEach((name, index) => {
+            const exit = source && ast.isState(source) ? findPseudo(source, 'exit', name) : undefined;
             if (!exit) {
-                accept('error', `'${source?.name ?? 'source'}' has no exit node '${transition.exitPoint}'.`, { node: transition, property: 'exitPoint' });
+                accept('error', `'${source?.name ?? 'source'}' has no exit node '${name}'.`, { node: transition, property: 'exitPoints', index });
+            } else if (exits.has(name)) {
+                accept('warning', `Duplicate exit node '${name}'.`, { node: transition, property: 'exitPoints', index });
             }
+            exits.add(name);
+        });
+        if (source && isRegionPoint(source) && ast.isRegion(source.$container) && !isInside(transition, source.$container)
+            && findPseudos(source.$container.$container, source.kind as 'entry' | 'exit', source.name).length > 1) {
+            accept('error', `'${source.name}' is ambiguous: several regions have ${source.kind === 'entry' ? 'an entry point' : 'an exit node'} with this name. Declare the transition inside the region of the ${source.kind === 'entry' ? 'entry point' : 'exit node'}.`,
+                { node: transition, property: 'source' });
+        }
+        if (target && isRegionPoint(target) && ast.isRegion(target.$container) && !isInside(transition, target.$container)
+            && findPseudos(target.$container.$container, target.kind as 'entry' | 'exit', target.name).length > 1) {
+            accept('error', `'${target.name}' is ambiguous: several regions have ${target.kind === 'entry' ? 'an entry point' : 'an exit node'} with this name. Declare the transition inside the region of the ${target.kind === 'entry' ? 'entry point' : 'exit node'}.`,
+                { node: transition, property: 'target' });
         }
     }
 
@@ -317,10 +342,29 @@ function isDefaultTrigger(trigger: ast.Trigger): trigger is ast.BuiltinTrigger {
     return ast.isBuiltinTrigger(trigger) && (trigger.kind === 'else' || trigger.kind === 'default');
 }
 
-/** Named entry point / exit node of a composite state (also inside its regions). */
+/** Named entry point / exit node of a composite state (also inside its regions; the first one if there are several). */
 export function findPseudo(state: ast.State, kind: 'entry' | 'exit', name: string): ast.PseudoState | undefined {
+    return findPseudos(state, kind, name)[0];
+}
+
+/** All entry points / exit nodes with the given name of a composite state (one per region at most). */
+export function findPseudos(state: ast.State, kind: 'entry' | 'exit', name: string): ast.PseudoState[] {
     const candidates = [...state.vertices, ...state.regions.flatMap(r => r.vertices)];
-    return candidates.find((v): v is ast.PseudoState => ast.isPseudoState(v) && v.kind === kind && v.name === name);
+    return candidates.filter((v): v is ast.PseudoState => ast.isPseudoState(v) && v.kind === kind && v.name === name);
+}
+
+/** Entry points and exit nodes: they may have the same name in different regions of a state. */
+function isRegionPoint(vertex: ast.Vertex): vertex is ast.PseudoState {
+    return ast.isPseudoState(vertex) && (vertex.kind === 'entry' || vertex.kind === 'exit');
+}
+
+function isInside(node: AstNode, container: AstNode): boolean {
+    for (let current: AstNode | undefined = node; current; current = current.$container) {
+        if (current === container) {
+            return true;
+        }
+    }
+    return false;
 }
 
 function capitalize(text: string): string {

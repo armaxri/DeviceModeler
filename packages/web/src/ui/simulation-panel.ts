@@ -1,5 +1,5 @@
 import type { AstNode } from 'langium';
-import type { HostValue, TypeName } from 'hsm-language';
+import { declaredType, type HostValue, type TypeName } from 'hsm-language';
 import { h } from './dom.js';
 import { defaultHostValue, type LogEntry, type OperationMock, type SimulationSession } from '../simulation/session.js';
 
@@ -194,7 +194,7 @@ export class SimulationPanel {
                 group = variable.group;
                 rows.push(h('tr', { class: 'sim-group-row' }, h('td', { colspan: '2' }, group)));
             }
-            const declared = variable.declaration.type?.name as TypeName | undefined;
+            const declared = declaredType(variable.declaration.type);
             const type: TypeName | 'number' = declared && declared !== 'void' ? declared : typeof values[variable.name] === 'number' ? 'number' : (typeof values[variable.name] as TypeName);
             const cell = h('td', { class: 'sim-value' });
             let input: HTMLInputElement | undefined;

@@ -268,7 +268,8 @@ function transitionPanel(transition: import('hsm-language').Transition, info: Se
     const outgoing = source && !transition.initial ? outgoingTransitions(source) : [];
     const priority = transitionPriority(transition, outgoing);
     const kind = transition.initial ? 'Initial transition' : transition.final ? 'Transition to the final state' : 'Transition';
-    const entryExit = transition.entryPoint ? ` · via entry point ${transition.entryPoint}` : transition.exitPoint ? ` · taken at exit node ${transition.exitPoint}` : '';
+    const entryExit = transition.entryPoints.length > 0 ? ` · via entry point ${transition.entryPoints[0]}`
+        : transition.exitPoints.length > 0 ? ` · taken at exit node ${transition.exitPoints.join(' / ')}` : '';
     return [
         h('h2', {}, `${sourceName} → ${targetName}`),
         h('div', { class: 'kind' }, `${kind}${priority !== undefined ? ` · priority ${priority} of ${outgoing.length}` : ''}${entryExit}`),

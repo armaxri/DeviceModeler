@@ -1,6 +1,6 @@
 import type { AstNode } from 'langium';
 import * as ast from '../generated/ast.js';
-import { transitionLabel, nodeText } from '../model-utils.js';
+import { entryPointOf, transitionLabel, nodeText } from '../model-utils.js';
 import type { EventDirection } from '../hsm-typesystem.js';
 import { SimulationError } from './errors.js';
 import { ExpressionEvaluator, type EvaluationContext } from './expressions.js';
@@ -639,7 +639,7 @@ export class StatechartInterpreter {
         this.exitRegion(scope);
         this.traceTransition(transition);
         this.evaluator.execute(transition.spec?.effect);
-        this.enterInRegion(scope, [{ vertex: target, entryPoint: transition.entryPoint }]);
+        this.enterInRegion(scope, [{ vertex: target, entryPoint: entryPointOf(transition) }]);
     }
 
     private traceTransition(transition: ast.Transition): void {
@@ -715,12 +715,14 @@ export class StatechartInterpreter {
             this.enterFinal(vertex);
         } else if (ast.isState(vertex)) {
             this.enterStateCore(vertex);
-            const entry = target.entryPoint ? this.index.findPseudo(vertex, 'entry', target.entryPoint) : undefined;
-            if (target.entryPoint && !entry) {
-                throw new SimulationError(`State '${vertex.name}' has no entry point '${target.entryPoint}'`, vertex);
+            const entryPoint = target.entryPoint;
+            if (entryPoint && !this.index.findPseudo(vertex, 'entry', entryPoint)) {
+                throw new SimulationError(`State '${vertex.name}' has no entry point '${entryPoint}'`, vertex);
             }
+            // every region with an entry point of this name is entered through it, the others by default
             for (const region of this.index.regionsOf(vertex)) {
-                if (entry && this.index.regionOf(entry) === region) {
+                const entry = entryPoint ? this.index.entryPointIn(region, entryPoint) : undefined;
+                if (entry) {
                     this.takeEntryPoint(entry);
                 } else {
                     this.enterRegionDefault(region);
@@ -765,7 +767,7 @@ export class StatechartInterpreter {
         this.traceTransition(initial);
         this.evaluator.execute(initial.spec?.effect);
         const scope = this.index.childIn(region, target) ? region : this.index.commonRegion([region, this.index.regionOf(target)]);
-        this.enterInRegion(scope, [{ vertex: target, entryPoint: initial.entryPoint }]);
+        this.enterInRegion(scope, [{ vertex: target, entryPoint: entryPointOf(initial) }]);
     }
 
     private enterPseudoState(pseudo: ast.PseudoState): void {
@@ -836,7 +838,7 @@ export class StatechartInterpreter {
             return;
         }
         this.countMicrostep(sync);
-        const targets = outgoing.map(t => ({ vertex: this.index.targetOf(t), entryPoint: t.entryPoint }));
+        const targets = outgoing.map(t => ({ vertex: this.index.targetOf(t), entryPoint: entryPointOf(t) }));
         const scope = this.index.scopeRegion([sync, ...targets.map(t => t.vertex)]);
         this.exitRegion(scope);
         for (const transition of outgoing) {

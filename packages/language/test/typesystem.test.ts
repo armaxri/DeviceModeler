@@ -200,7 +200,7 @@ describe('declarations', () => {
 
     test('unknown type in casts', async () => {
         const parsed = await guard('(1 as long) == 1');
-        expect(errors(parsed)).toEqual([`Unknown type 'long'. Known types are integer, real, boolean, string, void.`]);
+        expect(errors(parsed)).toEqual([`Unknown type 'long'. Known types are integer, real, boolean, string, void and type aliases ('alias Name : type').`]);
     });
 
     test('duplicate parameters and varargs', async () => {
@@ -722,5 +722,113 @@ describe('itemis compatibility extensions', () => {
         }`);
         expect(warnings(parsed)).toContain(`Missing trigger: this transition is never taken. Use 'always' or 'oncycle' to take it in every step.`);
         expect(warnings(parsed).filter(w => w.startsWith('Missing trigger'))).toHaveLength(1);
+    });
+});
+
+describe('null', () => {
+    test('null is compatible with strings only', () => {
+        expect(isAssignable('string', 'null')).toBe(true);
+        expect(isAssignable('integer', 'null')).toBe(false);
+        expect(isAssignable('boolean', 'null')).toBe(false);
+        expect(commonType('string', 'null')).toBe('string');
+        expect(commonType('null', 'null')).toBe('null');
+        expect(commonType('integer', 'null')).toBeUndefined();
+        expect(binaryResultType('==', 'null', 'null')).toBe('boolean');
+        expect(binaryResultType('!=', 'string', 'null')).toBe('boolean');
+        expect(binaryResultType('==', 'integer', 'null')).toBeUndefined();
+        expect(binaryResultType('+', 'string', 'null')).toBeUndefined();
+        expect(isCastable('null', 'string')).toBe(true);
+    });
+
+    test('valid uses of null', async () => {
+        const parsed = await body('s = null; raise os : null; s = b ? null : "x"', DEFS);
+        expect(errors(parsed)).toEqual([]);
+        const guarded = await guard('null == null && s != null && null == s');
+        expect(errors(guarded)).toEqual([]);
+        expect(inferType(expressionOf(await guard('null == null')))).toBe('boolean');
+        const initialized = await machine({ definitions: 'var t : string = null' });
+        expect(errors(initialized)).toEqual([]);
+    });
+
+    test('invalid uses of null', async () => {
+        const assigned = await body('i = null');
+        expect(errors(assigned)).toEqual([`Type mismatch: a value of type null cannot be assigned to 'i' of type integer.`]);
+        const compared = await guard('i == null');
+        expect(errors(compared)).toEqual([`Cannot compare a value of type integer with a value of type null.`]);
+        const untyped = await machine({ definitions: 'var t = null' });
+        expect(errors(untyped)).toContain(`The type of 't' cannot be inferred from 'null'. Declare its type.`);
+        const arithmetic = await guard('null + null == null');
+        expect(errors(arithmetic).length).toBeGreaterThan(0);
+    });
+});
+
+describe('type aliases', () => {
+    const ALIASES = `
+        alias inti : integer
+        alias word : string
+        alias count : inti
+        var myVar : inti = 1
+        var myString : word
+        var n : count = 3
+        out event ev : word
+        operation op(p : inti) : count
+    `;
+
+    test('aliases resolve to their base types', async () => {
+        const parsed = await machine({ definitions: ALIASES, body: 'go / myVar = op(n) + 1; myString = "a"; raise ev : myString' });
+        expect(errors(parsed)).toEqual([]);
+        const declarations = parsed.model.scopes.flatMap(s => s.declarations);
+        const byName = (name: string) => declarations.find(d => d.name === name)!;
+        expect(typeOfDeclaration(byName('myVar'))).toBe('integer');
+        expect(typeOfDeclaration(byName('myString'))).toBe('string');
+        expect(typeOfDeclaration(byName('n'))).toBe('integer');
+        expect(typeOfDeclaration(byName('ev'))).toBe('string');
+        expect(typeOfDeclaration(byName('count'))).toBe('integer');
+        expect(infos(parsed).filter(i => i.startsWith('Type alias'))).toEqual([]);
+    });
+
+    test('type checks use the base type', async () => {
+        const parsed = await machine({ definitions: ALIASES, body: 'go / myVar = "x"' });
+        expect(errors(parsed)).toEqual([`Type mismatch: a value of type string cannot be assigned to 'myVar' of type integer.`]);
+        const cast = await machine({ definitions: ALIASES, body: 'go / myVar = 2.5 as inti' });
+        expect(errors(cast)).toEqual([]);
+    });
+
+    test('aliases of named interfaces', async () => {
+        const parsed = await parse(`statemachine M {
+            interface T:
+                alias Id : integer
+            interface:
+                var a : T.Id
+                var b : Id
+            [*] -> A
+            state A
+        }`);
+        expect(errors(parsed)).toEqual([]);
+    });
+
+    test('cycles, unknown types, built-in names and unused aliases', async () => {
+        const parsed = await machine({ definitions: `
+            alias A : B
+            alias B : A
+            alias integer : real
+            alias U : integer
+            alias V : void
+            var x : A
+            var y : V
+            var z : Unknown
+        ` });
+        const messages = errors(parsed);
+        expect(messages).toContain(`The type alias 'A' refers to itself.`);
+        expect(messages).toContain(`The type alias 'B' refers to itself.`);
+        expect(messages).toContain(`The built-in type 'integer' cannot be redefined.`);
+        expect(messages).toContain(`The type 'void' can only be used as the return type of an operation.`);
+        expect(messages).toContain(`Unknown type 'Unknown'. Known types are integer, real, boolean, string, void and type aliases ('alias Name : type').`);
+        expect(infos(parsed)).toContain(`Type alias 'U' is never used.`);
+    });
+
+    test('aliases are not values', async () => {
+        const parsed = await body('i = inti', ALIASES + DEFS);
+        expect(errors(parsed)).toContain(`Could not resolve reference to Declaration named 'inti'.`);
     });
 });
