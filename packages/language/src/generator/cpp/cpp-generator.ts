@@ -13,7 +13,7 @@ import {
 import {
     CPP_KEYWORDS, CPP_RESERVED_NAMES, cppDeclaredType, cppDefault, cppParameterType, cppSpelling, cppType, lineComment, RUNTIME_HEADER, RUNTIME_HEADER_CONTENT
 } from './cpp-code.js';
-import { storageOfTypeReference } from '../../cpp-storage.js';
+import { integerRange, storageOfTypeReference } from '../../cpp-storage.js';
 import { resolvedImports } from '../../imports.js';
 import type { CppResolvedType } from '../../cpp-header/model.js';
 
@@ -372,7 +372,10 @@ class CppGenerator extends StatechartGenerator {
     }
 
     override storageCast(storage: CppResolvedType | undefined, value: Code): string {
-        if (storage?.kind === 'integer' && !(storage.bits === 64 && storage.signed) && !(value.constant && /^\d+$/.test(value.text))) {
+        // (literals that fit the type need no cast)
+        const literal = value.constant && /^\d+$/.test(value.text) ? BigInt(value.text) : undefined;
+        const fits = storage?.kind === 'integer' && literal !== undefined && literal <= integerRange(storage)[1];
+        if (storage?.kind === 'integer' && !(storage.bits === 64 && storage.signed) && !fits) {
             return `static_cast<${cppSpelling(storage)}>(${stripParens(value.text)})`;
         }
         if (storage?.kind === 'real' && storage.bits === 32 && !value.constant) {

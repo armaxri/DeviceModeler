@@ -1,12 +1,13 @@
 {
     "name": "s10-cpp-integer-widths",
-    "description": "Values assigned to variables and members of C++ integer types wrap around to the width of the type (like the conversion in C++); arithmetic is performed with 64-bit integers.",
+    "description": "Values assigned to variables and members of C++ integer types wrap around to the width of the type (like the conversion in C++, also constants out of range, which the validator warns about); arithmetic is performed with 64-bit integers.",
     "text": [
         "statemachine M {",
         "    import \"widths.h\"",
         "    interface:",
         "        in event add : integer",
         "        var u8 : uint8_t = 250",
+        "        var wrapped : uint8_t = 300",
         "        var i8 : std::int8_t = 120",
         "        var u16 : w::Count",
         "        var wide : integer",
@@ -31,7 +32,7 @@
     },
     "steps": [
         {"enter": true},
-        {"expect": {"variables": {"u8": 250, "i8": 120, "u16": 0}}},
+        {"expect": {"variables": {"u8": 250, "wrapped": 44, "i8": 120, "u16": 0}}},
         {"raise": "add", "value": 10},
         {"runCycle": true},
         {"expect": {"variables": {"u8": 4, "i8": -126, "u16": 65526, "wide": 1004, "packet": {"checksum": 12, "length": 4294967295}}}},
