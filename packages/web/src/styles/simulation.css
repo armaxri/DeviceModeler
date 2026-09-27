@@ -369,3 +369,43 @@ body.ui-dark #properties .sim-chip {
 body.ui-dark #properties .sim-log li.sim-trace-transition { color: #ffa94d; }
 body.ui-dark #properties .sim-log li.sim-trace-enter { color: #4ade80; }
 body.ui-dark #properties .sim-log li.sim-trace-exit { color: #8b949e; }
+
+/* values of C++ structs and arrays: the canonical text, expandable to one editor per member */
+#properties .sim-struct > summary {
+    cursor: pointer;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    color: var(--ui-muted);
+    overflow-wrap: anywhere;
+}
+
+#properties .sim-struct[open] > summary {
+    margin-bottom: 2px;
+}
+
+#properties .sim-struct-table {
+    width: 100%;
+    border-collapse: collapse;
+    border-left: 2px solid var(--ui-border);
+}
+
+#properties .sim-struct-table td {
+    padding: 1px 0 1px 6px;
+    vertical-align: middle;
+}
+
+#properties .sim-struct-table .sim-name {
+    width: 1%;
+    white-space: nowrap;
+    font-size: 11px;
+    color: var(--ui-muted);
+}
+
+#properties .sim-event-row:has(> .sim-struct) {
+    flex-direction: column;
+    gap: 2px;
+}
+
+#properties select.sim-enum {
+    width: 100%;
+}
