@@ -384,13 +384,14 @@ testclass T for statemachine Choice {
 describe('hsm test --coverage', () => {
     const examples = path.resolve(__dirname, '../../../examples');
 
-    async function run(args: Parameters<typeof runTestCommand>[1]): Promise<{ code: number, output: string, dir: string }> {
+    async function run(args: Parameters<typeof runTestCommand>[1], testFiles?: string[]): Promise<{ code: number, output: string, dir: string }> {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-coverage-'));
         const output: string[] = [];
         const log = vi.spyOn(console, 'log').mockImplementation((...parts: unknown[]) => { output.push(parts.join(' ')); });
         const error = vi.spyOn(console, 'error').mockImplementation((...parts: unknown[]) => { output.push(parts.join(' ')); });
         try {
-            const files = fs.readdirSync(path.join(examples, 'tests')).filter(f => f.endsWith('.hsmtest')).map(f => path.join(examples, 'tests', f));
+            const files = testFiles ?? fs.readdirSync(path.join(examples, 'tests')).filter(f => f.endsWith('.hsmtest'))
+                .map(f => path.join(examples, 'tests', f));
             const code = await runTestCommand(files, { coverageDir: dir, ...args });
             return { code, output: output.join('\n'), dir };
         } finally {
@@ -412,8 +413,7 @@ describe('hsm test --coverage', () => {
         // states, transitions, reactions, guard decisions
         expect(summary).toEqual({
             CdPlayer: '7/7 13/13 4/4 4/4',
-            // Moving.Down (entry point Closing is never used) and the initial states of Service (only entered by the fork) are unreachable
-            Door: '6/9 11/18 1/1 0/0',
+            Door: '9/9 20/20 1/1 0/0',
             Keyboard: '7/7 10/10 4/4 0/0',
             TrafficLight: '7/7 11/11 7/7 2/2'
         });
@@ -421,9 +421,13 @@ describe('hsm test --coverage', () => {
     });
 
     test('thresholds which are not met fail the run', async () => {
-        const failing = await run({ coverageFormat: 'text', coverageThreshold: 'states=100' });
+        // a test which only enters the door covers 1 of its 9 states
+        const partial = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-partial-'));
+        fs.copyFileSync(path.join(examples, 'door.hsm'), path.join(partial, 'door.hsm'));
+        fs.writeFileSync(path.join(partial, 'enter.hsmtest'), 'testclass EnterOnly for statemachine Door {\n    @Test\n    operation enters() {\n        enter\n        assert active(Closed)\n    }\n}\n');
+        const failing = await run({ coverageFormat: 'text', coverageThreshold: 'states=100' }, [path.join(partial, 'enter.hsmtest')]);
         expect(failing.code).toBe(1);
-        expect(failing.output).toContain('Coverage threshold not met: states coverage 90% (27/30) is below the threshold of 100%');
+        expect(failing.output).toContain('Coverage threshold not met: states coverage 11.11% (1/9) is below the threshold of 100%');
         const passing = await run({ coverageFormat: 'json', coverageThreshold: 'reactions=100,guards=100' });
         expect(passing.code).toBe(0);
         const invalid = await run({ coverageFormat: 'pdf' });
