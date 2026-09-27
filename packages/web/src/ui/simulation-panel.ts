@@ -1,7 +1,8 @@
 import type { AstNode } from 'langium';
-import { declaredType, type HostValue, type TypeName } from 'hsm-language';
+import { declaredType, runtimeTypeOfValue, type HostValue } from 'hsm-language';
 import { h } from './dom.js';
-import { defaultHostValue, type LogEntry, type OperationMock, type SimulationSession } from '../simulation/session.js';
+import { type LogEntry, type OperationMock, type SimulationSession } from '../simulation/session.js';
+import { defaultHostValue, formatHostValue, typeLabel, valueEditor, type EditorType, type ValueEditor } from './value-editor.js';
 
 /** Operations of the application used by the simulation panel. */
 export interface SimulationPanelHost {
@@ -35,7 +36,7 @@ export class SimulationPanel {
     private readonly playButton = h('button', { class: 'sim-play', title: 'Run in real time (Esc pauses)' });
     private readonly cycleButton: HTMLButtonElement;
     private readonly activeList = h('div', { class: 'sim-active' });
-    private readonly variableCells = new Map<string, { row: HTMLElement, value: HTMLElement, input?: HTMLInputElement, type: TypeName | 'number' }>();
+    private readonly variableCells = new Map<string, { row: HTMLElement, value: HTMLElement, editor?: ValueEditor, type: EditorType | undefined }>();
     private readonly eventButtons = new Map<string, HTMLElement>();
     private readonly operationCounters = new Map<OperationMock, HTMLElement>();
     private readonly outList = h('ol', { class: 'sim-log sim-records' });
@@ -144,10 +145,10 @@ export class SimulationPanel {
         }
         const groups = new Map<string, HTMLElement[]>();
         for (const event of events) {
-            let input: HTMLInputElement | undefined;
+            let input: ValueEditor | undefined;
             if (event.type !== 'void') {
-                input = valueInput(event.type, defaultHostValue(event.type));
-                input.title = `Value (${event.type})`;
+                input = valueEditor(event.type, defaultHostValue(event.type));
+                input.element.title = `Value (${typeLabel(event.type)})`;
             }
             const button = h('button', {
                 class: 'sim-event',
@@ -155,18 +156,16 @@ export class SimulationPanel {
                 onClick: () => {
                     let value: HostValue | undefined;
                     if (input) {
-                        value = readValue(input, event.type);
+                        value = input.read();
                         if (value === undefined) {
-                            input.classList.add('invalid');
                             return;
                         }
-                        input.classList.remove('invalid');
                     }
                     this.session.raise(event.name, value);
                 }
             }, event.name);
             this.eventButtons.set(event.name, button);
-            const row = h('div', { class: 'sim-event-row' }, button, input);
+            const row = h('div', { class: 'sim-event-row' }, button, input?.element);
             const list = groups.get(event.group) ?? [];
             list.push(row);
             groups.set(event.group, list);
@@ -195,37 +194,26 @@ export class SimulationPanel {
                 rows.push(h('tr', { class: 'sim-group-row' }, h('td', { colspan: '2' }, group)));
             }
             const declared = declaredType(variable.declaration.type);
-            const type: TypeName | 'number' = declared && declared !== 'void' ? declared : typeof values[variable.name] === 'number' ? 'number' : (typeof values[variable.name] as TypeName);
+            const runtime = this.session.sim.getVariableType?.(variable.name) ?? runtimeTypeOfValue(this.session.sim.getValue?.(variable.name));
+            const type: EditorType | undefined = declared && declared !== 'void' ? declared : runtime ?? (typeof values[variable.name] === 'number' ? 'number' : undefined);
             const cell = h('td', { class: 'sim-value' });
-            let input: HTMLInputElement | undefined;
+            let editor: ValueEditor | undefined;
             if (variable.editable) {
-                input = valueInput(type, values[variable.name]);
-                const apply = () => {
-                    const value = readValue(input!, type);
-                    if (value === undefined) {
-                        input!.classList.add('invalid');
-                        return;
+                editor = valueEditor(type, values[variable.name]);
+                editor.onChange = () => {
+                    const value = editor!.read();
+                    if (value !== undefined) {
+                        this.session.setVariable(variable.name, value);
                     }
-                    input!.classList.remove('invalid');
-                    this.session.setVariable(variable.name, value);
                 };
-                input.addEventListener('change', apply);
-                input.addEventListener('keydown', event => {
-                    if (event.key === 'Enter') {
-                        input!.blur();
-                    } else if (event.key === 'Escape') {
-                        input!.classList.remove('invalid');
-                        setInputValue(input!, this.session.sim.variables[variable.name]);
-                        input!.blur();
-                    }
-                });
-                cell.append(input);
+                editor.onReset = () => editor!.set(this.session.sim.variables[variable.name]);
+                cell.append(editor.element);
             }
             const prefix = variable.declaration.const ? 'const ' : variable.declaration.readonly ? 'readonly ' : '';
             const row = h('tr', {},
-                h('td', { class: 'sim-name', title: `${prefix}${variable.name}${declared ? ` : ${declared}` : ''}` }, variable.name), cell);
+                h('td', { class: 'sim-name', title: `${prefix}${variable.name}${type ? ` : ${typeLabel(type)}` : ''}` }, variable.name), cell);
             rows.push(row);
-            this.variableCells.set(variable.name, { row, value: cell, input, type });
+            this.variableCells.set(variable.name, { row, value: cell, editor, type });
         }
         return section('Variables', h('table', { class: 'sim-table' }, h('tbody', {}, ...rows)));
     }
@@ -240,21 +228,18 @@ export class SimulationPanel {
             this.operationCounters.set(operation, counter);
             let result: HTMLElement = h('span', { class: 'hint' }, 'void');
             if (operation.returnType !== 'void') {
-                const input = valueInput(operation.returnType, operation.value);
-                input.title = `Result returned by ${operation.name}() (${operation.returnType})`;
-                input.addEventListener('change', () => {
-                    const value = readValue(input, operation.returnType);
-                    if (value === undefined) {
-                        input.classList.add('invalid');
-                        return;
+                const editor = valueEditor(operation.returnType, operation.value);
+                editor.element.title = `Result returned by ${operation.name}() (${typeLabel(operation.returnType)})`;
+                editor.onChange = () => {
+                    const value = editor.read();
+                    if (value !== undefined) {
+                        this.session.setOperationResult(operation, value);
                     }
-                    input.classList.remove('invalid');
-                    this.session.setOperationResult(operation, value);
-                });
-                result = input;
+                };
+                result = editor.element;
             }
             const params = operation.declaration.parameters.map(p => p.name).join(', ');
-            return h('tr', {}, h('td', { class: 'sim-name', title: `${operation.name}(${params}) : ${operation.returnType}` }, `${operation.name}()`),
+            return h('tr', {}, h('td', { class: 'sim-name', title: `${operation.name}(${params}) : ${typeLabel(operation.returnType)}` }, `${operation.name}()`),
                 h('td', { class: 'sim-value' }, result), counter);
         });
         return section('Operations', h('table', { class: 'sim-table' },
@@ -299,13 +284,12 @@ export class SimulationPanel {
         const now = performance.now();
         for (const [name, cell] of this.variableCells) {
             const value = values[name];
-            if (cell.input) {
-                if (document.activeElement !== cell.input) {
-                    setInputValue(cell.input, value);
-                    cell.input.classList.remove('invalid');
+            if (cell.editor) {
+                if (!cell.editor.editing) {
+                    cell.editor.set(value);
                 }
             } else {
-                cell.value.textContent = formatValue(value);
+                cell.value.textContent = formatHostValue(cell.type, value);
             }
             const changed = session.changedVariables.get(name);
             if (changed !== undefined && now - changed < FLASH_MS && this.flashed.get(name) !== changed) {
@@ -370,50 +354,6 @@ export class SimulationPanel {
 
 function section(title: string, content: HTMLElement | HTMLElement[], hint?: string): HTMLElement {
     return h('details', { class: 'sim-section', open: true }, h('summary', { title: hint }, title), content);
-}
-
-function valueInput(type: TypeName | 'number', value: HostValue | undefined): HTMLInputElement {
-    const input = type === 'boolean' ? h('input', { type: 'checkbox' })
-        : type === 'string' ? h('input', { type: 'text', spellcheck: 'false' })
-            : h('input', { type: 'number', step: type === 'integer' ? '1' : 'any' });
-    input.classList.add('sim-input');
-    setInputValue(input, value);
-    return input;
-}
-
-function setInputValue(input: HTMLInputElement, value: HostValue | undefined): void {
-    if (input.type === 'checkbox') {
-        input.checked = value === true;
-    } else {
-        input.value = value === undefined ? '' : String(value);
-    }
-}
-
-/** Reads a typed value from an input; `undefined` if the text is not a valid value of the type. */
-function readValue(input: HTMLInputElement, type: TypeName | 'number'): HostValue | undefined {
-    if (input.type === 'checkbox') {
-        return input.checked;
-    }
-    const text = input.value.trim();
-    switch (type) {
-        case 'integer': {
-            const value = Number(text);
-            return text !== '' && Number.isInteger(value) ? value : undefined;
-        }
-        case 'real':
-        case 'number': {
-            const value = Number(text);
-            return text !== '' && Number.isFinite(value) ? value : undefined;
-        }
-        case 'string':
-            return input.value;
-        default:
-            return undefined;
-    }
-}
-
-function formatValue(value: HostValue | undefined): string {
-    return typeof value === 'string' ? JSON.stringify(value) : value === undefined ? '–' : String(value);
 }
 
 /** `850 ms`, `12.35 s`. */

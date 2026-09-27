@@ -1,14 +1,19 @@
-import { AstUtils, CstUtils, GrammarUtils, isReference, type AstNode, type LangiumDocument, type MaybePromise, type Module } from 'langium';
+import { AstUtils, CstUtils, GrammarUtils, isReference, URI, type AstNode, type LangiumDocument, type MaybePromise, type Module } from 'langium';
 import {
     AbstractSemanticTokenProvider, DefaultDefinitionProvider, MultilineCommentHoverProvider,
     type LangiumServices, type PartialLangiumServices, type SemanticTokenAcceptor
 } from 'langium/lsp';
-import { LocationLink, SemanticTokenModifiers, SemanticTokenTypes, type DefinitionParams } from 'vscode-languageserver';
+import { LocationLink, SemanticTokenModifiers, SemanticTokenTypes, type DefinitionParams, type Hover, type HoverParams } from 'vscode-languageserver';
 import {
-    createHsmServices, isEventDeclaration, isImportPath, isInterfaceScope, isOperationDeclaration, isPseudoState, isState, isStateMachine,
-    isTypeReference, isVariableDeclaration, machineType, nodeText, qualifiedName, resolvedImports, type HsmServiceExtensions, type StateMachine
+    cppDefinition, cppHover, cppHeaderStore, cppTypeOfReference, createHsmServices, importKind, isCppReference, isEventDeclaration, isImportPath,
+    isInterfaceScope, isOperationDeclaration, isPseudoState, isState, isStateMachine, isTypeReference, isVariableDeclaration, machineType, nodeText,
+    qualifiedName, resolveCppValue, resolvedImports, type HsmServiceExtensions, type StateMachine
 } from 'hsm-language';
-import type { DefaultSharedModuleContext } from 'langium/lsp';
+import type { DefaultSharedModuleContext, LangiumSharedServices } from 'langium/lsp';
+// Node-only part of the language package (not exported from its index because the web app bundles the index)
+import {
+    headerSettingsFromSection, installNodeHeaderSupport, type HeaderConfigFinder, type HeaderSettingsSection
+} from '../../../language/src/node/cpp-headers-node.js';
 
 interface TokenKind {
     type: string;
@@ -52,6 +57,14 @@ export function tokenKind(node: AstNode | undefined): TokenKind | undefined {
 export class HsmSemanticTokenProvider extends AbstractSemanticTokenProvider {
 
     protected override highlightElement(node: AstNode, acceptor: SemanticTokenAcceptor): void {
+        // C++ names of imported headers: types, enumerators and constants
+        if (isTypeReference(node) && node.$cstNode && cppTypeOfReference(node)) {
+            acceptor({ cst: node.$cstNode, type: SemanticTokenTypes.type });
+        } else if (isCppReference(node) && node.$cstNode) {
+            const resolved = resolveCppValue(node);
+            const enumerator = resolved.info?.declaration.kind === 'enumerator';
+            acceptor({ cst: node.$cstNode, type: enumerator ? SemanticTokenTypes.enumMember : SemanticTokenTypes.variable, modifier: enumerator ? [] : [SemanticTokenModifiers.readonly] });
+        }
         const own = tokenKind(node);
         if (own && node.$cstNode && GrammarUtils.findNodeForProperty(node.$cstNode, 'name')) {
             acceptor({ node, property: 'name' as never, type: own.type, modifier: [SemanticTokenModifiers.declaration, ...own.modifier ?? []] });
@@ -73,6 +86,15 @@ export class HsmSemanticTokenProvider extends AbstractSemanticTokenProvider {
  * `state Operating.Red`) followed by its documentation comment.
  */
 export class HsmHoverProvider extends MultilineCommentHoverProvider {
+
+    /** C++ names, struct members and header imports: the declaration of the header (see `cpp-lsp.ts`). */
+    override async getHoverContent(document: LangiumDocument, params: HoverParams): Promise<Hover | undefined> {
+        const cpp = cppHover(document, document.textDocument.offsetAt(params.position));
+        if (cpp) {
+            return { contents: { kind: 'markdown', value: cpp } };
+        }
+        return super.getHoverContent(document, params);
+    }
 
     protected override getAstNodeHoverContent(node: AstNode): MaybePromise<string | undefined> {
         const signature = hoverSignature(node);
@@ -112,6 +134,11 @@ export function hoverSignature(node: AstNode): string | undefined {
 export class HsmDefinitionProvider extends DefaultDefinitionProvider {
 
     override getDefinition(document: LangiumDocument, params: DefinitionParams): MaybePromise<LocationLink[] | undefined> {
+        // C++ names and header imports: into the header
+        const cpp = cppDefinition(document, document.textDocument.offsetAt(params.position));
+        if (cpp) {
+            return [LocationLink.create(cpp.uri, cpp.range, cpp.selection, cpp.origin)];
+        }
         const root = document.parseResult.value.$cstNode;
         const leaf = root ? CstUtils.findLeafNodeAtOffset(root, document.textDocument.offsetAt(params.position)) : undefined;
         const node = leaf?.astNode;
@@ -145,4 +172,47 @@ export const HsmLspModule: Module<LangiumServices, PartialLangiumServices> = {
 export function createHsmLanguageServerServices(context: DefaultSharedModuleContext) {
     const extensions: HsmServiceExtensions = { hsm: HsmLspModule, hsmTest: HsmLspModule };
     return createHsmServices(context, extensions);
+}
+
+/**
+ * Imported C/C++ headers in the language server: headers are read from the file system (changed files
+ * are re-read: file watcher events), the settings come from the `headers` block of the nearest
+ * `hsm.gen.json` and from the VS Code settings `hsm.headers.*` (include paths relative to the first
+ * workspace folder, `${workspaceFolder}`). Documents importing a changed header are validated again.
+ */
+export function installHeaderSupport(shared: LangiumSharedServices): HeaderConfigFinder {
+    const finder = installNodeHeaderSupport(shared);
+    const store = cppHeaderStore(shared);
+    let workspaceFolder: string | undefined;
+    shared.lsp.LanguageServer.onInitialize(params => {
+        const folder = params.workspaceFolders?.[0]?.uri ?? params.rootUri ?? undefined;
+        workspaceFolder = folder ? URI.parse(folder).fsPath : undefined;
+    });
+    const rebuild = () => {
+        void shared.workspace.WorkspaceLock.write(token => shared.workspace.DocumentBuilder.update([], [], token));
+    };
+    const applySettings = async () => {
+        const section = await shared.workspace.ConfigurationProvider.getConfiguration('hsm', 'headers') as HeaderSettingsSection | undefined;
+        store.updateSettings(headerSettingsFromSection(section, workspaceFolder));
+        rebuild();
+    };
+    shared.workspace.ConfigurationProvider.onConfigurationSectionUpdate(update => {
+        if (update.section === 'hsm') {
+            void applySettings();
+        }
+    });
+    void shared.workspace.ConfigurationProvider.ready.then(applySettings);
+    // header and configuration files changed on disk (the document builder ignores them, but relinks the importing documents)
+    shared.lsp.DocumentUpdateHandler.onWatchedFilesChange(params => {
+        const uris = params.changes.map(change => URI.parse(change.uri));
+        const headers = uris.filter(uri => importKind(uri.path) === 'header');
+        if (headers.length > 0) {
+            store.invalidate(headers);
+        }
+        if (uris.some(uri => /(^|\/)([^/]+\.)?hsm\.gen\.json$/.test(uri.path))) {
+            finder.clear();
+            store.updateSettings(store.settings);
+        }
+    });
+    return finder;
 }

@@ -145,6 +145,45 @@ export function dataModelNamed(name: string | undefined): Partial<CppDataModel> 
     }
 }
 
+/** The VS Code settings `hsm.headers.*`. */
+export interface HeaderSettingsSection {
+    includePaths?: string[];
+    defines?: Record<string, string | number>;
+    dataModel?: string;
+}
+
+/** The header settings of the VS Code settings `hsm.headers.*`: include paths relative to the workspace folder (`${workspaceFolder}` supported). */
+export function headerSettingsFromSection(section: HeaderSettingsSection | undefined, workspaceFolder: string | undefined): CppHeaderSettings {
+    const base = workspaceFolder ?? process.cwd();
+    let dataModel: Partial<CppDataModel> | undefined;
+    try {
+        dataModel = dataModelNamed(section?.dataModel || undefined);
+    } catch {
+        dataModel = undefined;
+    }
+    return normalizeSettings({
+        includePaths: (section?.includePaths ?? []).map(dir => dir.split('${workspaceFolder}').join(base)),
+        defines: Object.fromEntries(Object.entries(section?.defines ?? {}).map(([name, value]) => [name, String(value)])),
+        dataModel
+    }, base);
+}
+
+/**
+ * The effective header settings for a model: the `headers` block of the nearest configuration file
+ * combined with global settings (like `CppHeaderStore.settingsFor`).
+ */
+export function headerSettingsForModel(modelPath: string, finder: HeaderConfigFinder, global: CppHeaderSettings = {}): CppHeaderSettings {
+    const own = finder.find(path.dirname(path.resolve(modelPath)))?.settings;
+    if (!own) {
+        return global;
+    }
+    return {
+        includePaths: [...own.includePaths ?? [], ...global.includePaths ?? []],
+        defines: { ...own.defines, ...global.defines },
+        dataModel: { ...own.dataModel, ...global.dataModel }
+    };
+}
+
 /** The settings of the CLI options `-I`, `-D`, `--data-model`. */
 export function cliHeaderSettings(options: { include?: string[], define?: string[], dataModel?: string }): CppHeaderSettings {
     return normalizeSettings({

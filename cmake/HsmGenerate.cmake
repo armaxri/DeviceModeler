@@ -14,7 +14,11 @@
 #              [OUTPUT_DIR <dir>]           default: ${CMAKE_CURRENT_BINARY_DIR}/hsm_generated/<target>
 #              [NAMESPACE <ns>]             cpp: namespace (a::b), "" for the global namespace
 #              [STD 17|11]                  cpp: C++ standard of the generated code (also required from the target)
-#              [PREFIX <prefix>])           c: prefix of the generated functions and files
+#              [PREFIX <prefix>]            c: prefix of the generated functions and files
+#              [INCLUDE_DIRS <dir>...]      include directories of imported C/C++ headers (hsm -I; also added
+#                                           to the include directories of <target>)
+#              [DEFINES <NAME[=VALUE]>...]) macros for the analysis of imported headers (hsm -D; also added
+#                                           to the compile definitions of <target>)
 #
 #   Generates the code at build time: the generated files are determined at configure time
 #   (hsm generate --list-outputs) and added to the sources of <target>; OUTPUT_DIR is added to its
@@ -27,8 +31,13 @@
 #   With CONFIG, the outDir of the configuration is ignored (OUTPUT_DIR is used) and the models of the
 #   configuration are used unless MODELS is given; globs in the configuration are expanded at configure
 #   time (re-run CMake after adding a model).
+#   Models importing C/C++ headers (import "motor_types.h", docs/cpp-integration.md) are regenerated when
+#   an imported header (or a header it includes) changes. The generated header includes them by the
+#   import path if they are found in an include directory (INCLUDE_DIRS or the headers block of CONFIG,
+#   which the target needs as include directory, too), else by their path relative to OUTPUT_DIR.
 #
-# hsm_add_tests(TARGET <name> TESTS <file.hsmtest>... [MODELS <file.hsm>...] [JUNIT_DIR <dir>])
+# hsm_add_tests(TARGET <name> TESTS <file.hsmtest>... [MODELS <file.hsm>...] [JUNIT_DIR <dir>]
+#               [INCLUDE_DIRS <dir>...] [DEFINES <NAME[=VALUE]>...])
 #
 #   Registers one CTest test per .hsmtest file (named <name>.<file stem>, label "hsm") running
 #   `hsm test <file> --machine <models> --junit <JUNIT_DIR>/<file stem>.xml`
@@ -121,7 +130,7 @@ function(_hsm_query out)
 endfunction()
 
 function(hsm_generate)
-    cmake_parse_arguments(PARSE_ARGV 0 HSM "" "TARGET;CONFIG;GENERATOR;OUTPUT_DIR;NAMESPACE;STD;PREFIX" "MODELS")
+    cmake_parse_arguments(PARSE_ARGV 0 HSM "" "TARGET;CONFIG;GENERATOR;OUTPUT_DIR;NAMESPACE;STD;PREFIX" "MODELS;INCLUDE_DIRS;DEFINES")
     if(HSM_UNPARSED_ARGUMENTS)
         message(FATAL_ERROR "hsm_generate: unknown arguments ${HSM_UNPARSED_ARGUMENTS}")
     endif()
@@ -187,6 +196,15 @@ function(hsm_generate)
     if(HSM_PREFIX)
         list(APPEND args --prefix "${HSM_PREFIX}")
     endif()
+    set(include_dirs "")
+    foreach(dir IN LISTS HSM_INCLUDE_DIRS)
+        get_filename_component(dir "${dir}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+        list(APPEND include_dirs "${dir}")
+        list(APPEND args --include "${dir}")
+    endforeach()
+    foreach(define IN LISTS HSM_DEFINES)
+        list(APPEND args --define "${define}")
+    endforeach()
 
     # configure time: inputs and outputs
     _hsm_query(inputs ${args} --list-inputs)
@@ -232,7 +250,10 @@ function(hsm_generate)
         set(scope PUBLIC)
     endif()
     target_sources(${HSM_TARGET} PRIVATE ${outputs})
-    target_include_directories(${HSM_TARGET} ${scope} "${HSM_OUTPUT_DIR}")
+    target_include_directories(${HSM_TARGET} ${scope} "${HSM_OUTPUT_DIR}" ${include_dirs})
+    if(HSM_DEFINES)
+        target_compile_definitions(${HSM_TARGET} ${scope} ${HSM_DEFINES})
+    endif()
     if(HSM_GENERATOR STREQUAL "cpp" OR NOT HSM_GENERATOR)
         if(HSM_STD)
             target_compile_features(${HSM_TARGET} ${scope} cxx_std_${HSM_STD})
@@ -244,7 +265,7 @@ function(hsm_generate)
 endfunction()
 
 function(hsm_add_tests)
-    cmake_parse_arguments(PARSE_ARGV 0 HSM "" "TARGET;JUNIT_DIR" "TESTS;MODELS")
+    cmake_parse_arguments(PARSE_ARGV 0 HSM "" "TARGET;JUNIT_DIR" "TESTS;MODELS;INCLUDE_DIRS;DEFINES")
     if(HSM_UNPARSED_ARGUMENTS)
         message(FATAL_ERROR "hsm_add_tests: unknown arguments ${HSM_UNPARSED_ARGUMENTS}")
     endif()
@@ -270,6 +291,13 @@ function(hsm_add_tests)
             list(APPEND command --machine ${machines})
         endif()
         list(APPEND command --junit "${HSM_JUNIT_DIR}/${stem}.xml")
+        foreach(dir IN LISTS HSM_INCLUDE_DIRS)
+            get_filename_component(dir "${dir}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+            list(APPEND command --include "${dir}")
+        endforeach()
+        foreach(define IN LISTS HSM_DEFINES)
+            list(APPEND command --define "${define}")
+        endforeach()
         add_test(NAME ${HSM_TARGET}.${stem} COMMAND ${command} WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
         set_tests_properties(${HSM_TARGET}.${stem} PROPERTIES LABELS hsm)
     endforeach()

@@ -2,9 +2,12 @@ import { AstUtils, type AstNode } from 'langium';
 import {
     StatechartInterpreter, declaredType, formatTraceEntry, instanceMachine, instanceVariables, isInstance, isInterfaceScope, isOperationDeclaration, isState, isTransition,
     referableName,
-    type EventDeclaration, type HostValue, type OperationDeclaration, type State, type StateMachine, type TraceEntry, type Transition,
-    type TypeName, type VariableDeclaration
+    type EventDeclaration, type HostValue, type OperationDeclaration, type RuntimeType, type State, type StateMachine, type TraceEntry, type Transition,
+    type VariableDeclaration
 } from 'hsm-language';
+import { defaultHostValue } from '../ui/value-editor.js';
+
+export { defaultHostValue };
 
 /** One line of the simulation log (trace entries of the interpreter). */
 export interface LogEntry {
@@ -35,7 +38,7 @@ export interface CallRecord {
 export interface OperationMock {
     readonly name: string;
     readonly declaration: OperationDeclaration;
-    readonly returnType: TypeName;
+    readonly returnType: RuntimeType;
     value: HostValue | undefined;
     calls: number;
 }
@@ -43,7 +46,7 @@ export interface OperationMock {
 export interface EventInfo {
     readonly name: string;
     readonly declaration: EventDeclaration;
-    readonly type: TypeName;
+    readonly type: RuntimeType;
     /** Interface name (`''` for the unnamed interface). */
     readonly group: string;
 }
@@ -334,7 +337,8 @@ export class SimulationSession {
         const values = this.sim.variables;
         const now = performance.now();
         for (const [name, value] of Object.entries(values)) {
-            if (this.lastValues && this.lastValues[name] !== value) {
+            // (values of C++ structs and arrays are objects: compared by their JSON text)
+            if (this.lastValues && this.lastValues[name] !== value && JSON.stringify(this.lastValues[name]) !== JSON.stringify(value)) {
                 this.changedVariables.set(name, now);
             }
         }
@@ -413,20 +417,6 @@ function traceNode(entry: TraceEntry): AstNode | undefined {
         case 'transition':
         case 'reaction':
             return entry.node;
-        default:
-            return undefined;
-    }
-}
-
-export function defaultHostValue(type: TypeName): HostValue | undefined {
-    switch (type) {
-        case 'integer':
-        case 'real':
-            return 0;
-        case 'boolean':
-            return false;
-        case 'string':
-            return '';
         default:
             return undefined;
     }

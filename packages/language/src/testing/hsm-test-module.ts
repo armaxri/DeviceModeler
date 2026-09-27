@@ -2,6 +2,7 @@ import type { Module } from 'langium';
 import type { LangiumServices, PartialLangiumServices } from 'langium/lsp';
 import { HsmTestScopeProvider } from './hsm-test-scope.js';
 import { HsmTestLinker } from '../hsm-linker.js';
+import { HsmCompletionProvider } from '../lsp/cpp-lsp.js';
 import { HsmTestValidator } from './hsm-test-validator.js';
 
 export type HsmTestAddedServices = {
@@ -20,5 +21,8 @@ export const HsmTestModule: Module<HsmTestServices, PartialLangiumServices & Hsm
     },
     validation: {
         HsmTestValidator: () => new HsmTestValidator()
+    },
+    lsp: {
+        CompletionProvider: (services) => new HsmCompletionProvider(services)
     }
 };

@@ -4,6 +4,7 @@ import { describe, expect, test } from 'vitest';
 import { errors, parse, warnings } from './helpers.js';
 import { formatValue, StatechartInterpreter } from '../src/simulation/index.js';
 import { HsmTestWorkspace } from '../src/testing/index.js';
+import { cppCompletionItems, cppDefinition, cppHover } from '../src/lsp/cpp-lsp.js';
 
 const MOTOR_TYPES = fs.readFileSync(path.resolve(__dirname, 'cpp-header/motor_types.h'), 'utf-8');
 
@@ -135,5 +136,58 @@ describe('C++ header imports: interpreter and test language', () => {
         }
         const results = workspace.runDocuments(documents);
         expect(results.map(r => [r.name, r.status, r.message])).toEqual([['moves', 'passed', undefined]]);
+    });
+});
+
+describe('C++ header imports: language server features', () => {
+    async function controller() {
+        const parsed = await parse(CONTROLLER, { 'motor_types.h': MOTOR_TYPES });
+        expect(errors(parsed)).toEqual([]);
+        return parsed.document;
+    }
+
+    /** The offset of the `occurrence`-th match of `text` plus `delta`. */
+    function offsetOf(document: Awaited<ReturnType<typeof controller>>, text: string, delta = 0, occurrence = 0): number {
+        const content = document.textDocument.getText();
+        let offset = -1;
+        for (let i = 0; i <= occurrence; i++) {
+            offset = content.indexOf(text, offset + 1);
+        }
+        expect(offset).toBeGreaterThanOrEqual(0);
+        return offset + delta;
+    }
+
+    test('hover shows the declaration, value and documentation of the header', async () => {
+        const document = await controller();
+        expect(cppHover(document, offsetOf(document, 'motor::Mode::Off', 13))).toContain('motor::Mode::Off = 0');
+        const mode = cppHover(document, offsetOf(document, 'motor::Mode = motor::kDefaultMode', 8))!;
+        expect(mode).toContain('enum class motor::Mode');
+        expect(mode).toContain('Operating mode of the motor.');
+        expect(cppHover(document, offsetOf(document, 'motor::kMaxSpeed', 8))).toContain('constexpr std::int32_t motor::kMaxSpeed = 6000');
+        expect(cppHover(document, offsetOf(document, 'valueof(moveTo).x', 16))).toContain('x coordinate');
+        expect(cppHover(document, offsetOf(document, 'motor::Mode', 2))).toContain('namespace motor');
+        expect(cppHover(document, offsetOf(document, '"motor_types.h"', 2))).toContain('C/C++ header');
+    });
+
+    test('go to definition leads into the header', async () => {
+        const document = await controller();
+        const location = cppDefinition(document, offsetOf(document, 'motor::Position', 9))!;
+        expect(location.uri).toMatch(/motor_types\.h$/);
+        const line = MOTOR_TYPES.split('\n')[location.selection.start.line];
+        expect(line).toContain('struct Position');
+    });
+
+    test('completion of C++ names and struct members', async () => {
+        const document = await controller();
+        const names = cppCompletionItems(document, offsetOf(document, 'motor::kMaxSpeed', 7))!.map(item => item.label);
+        expect(names).toEqual(expect.arrayContaining(['Mode', 'Position', 'kMaxSpeed', 'kParkPosition', 'detail']));
+        const enumerators = cppCompletionItems(document, offsetOf(document, 'motor::Mode::Off', 13))!.map(item => item.label);
+        expect(enumerators).toEqual(['Off', 'Slow', 'Fast', 'Boost']);
+        const members = cppCompletionItems(document, offsetOf(document, 'valueof(moveTo).x', 16));
+        expect(members).toBeUndefined(); // `valueof(e).` is completed by the default provider
+        const text = document.textDocument.getText();
+        const parsed = await parse(text.replace('target = measure();', 'target = measure(); target.'), { 'motor_types.h': MOTOR_TYPES });
+        const at = parsed.document.textDocument.getText().indexOf('target. ') + 7;
+        expect(cppCompletionItems(parsed.document, at)!.map(item => item.label)).toEqual(['x', 'y', 'z']);
     });
 });

@@ -4,6 +4,11 @@ import type { FromWebview, OffsetEdit, TextRange, ToWebview, WebviewSettings } f
 import { canApplyEdit, toRangeEdits } from './logic/edits.js';
 import { effectiveTheme, webviewHtml } from './logic/webview.js';
 import { collectImportedFiles } from './logic/imports.js';
+import type { CppHeaderSettings } from 'hsm-language';
+// Node-only part of the language package (not exported from its index because the web app bundles the index)
+import {
+    HeaderConfigFinder, headerSettingsForModel, headerSettingsFromSection, type HeaderSettingsSection
+} from '../../../language/src/node/cpp-headers-node.js';
 
 export const DIAGRAM_VIEW_TYPE = 'hsm.diagram';
 
@@ -267,7 +272,8 @@ export class DiagramPanel {
         const text = document.getText();
         const version = document.version;
         // the texts of the imported state machines (open documents with their unsaved changes, else the files)
-        collectImportedFiles(document.uri.toString(), text, readText).catch(() => ({})).then(files => {
+        const headers = headerSettingsFor(document.uri);
+        collectImportedFiles(document.uri.toString(), text, readText, 100, headers).catch(() => ({})).then(files => {
             if (sequence !== this.sendSequence) {
                 return;
             }
@@ -278,7 +284,8 @@ export class DiagramPanel {
                 version,
                 fileName: path.basename(document.uri.path),
                 uri: document.uri.toString(),
-                files
+                files,
+                headers
             });
         });
     }
@@ -424,6 +431,22 @@ export class DiagramPanel {
 }
 
 /** The text of a file: the open document (with unsaved changes) or the file on disk; `undefined` if it cannot be read. */
+const headerConfigs = new HeaderConfigFinder();
+
+/**
+ * The settings of imported C/C++ headers for a model, like the language server uses them: the
+ * `headers` block of the nearest `hsm.gen.json` and the settings `hsm.headers.*`.
+ */
+export function headerSettingsFor(uri: vscode.Uri): CppHeaderSettings {
+    if (uri.scheme !== 'file') {
+        return {};
+    }
+    headerConfigs.clear();
+    const folder = vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
+    const section = vscode.workspace.getConfiguration('hsm', uri).get<HeaderSettingsSection>('headers');
+    return headerSettingsForModel(uri.fsPath, headerConfigs, headerSettingsFromSection(section, folder));
+}
+
 export async function readText(uri: string): Promise<string | undefined> {
     const open = vscode.workspace.textDocuments.find(document => document.uri.toString() === uri);
     if (open) {

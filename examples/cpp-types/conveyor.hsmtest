@@ -1,0 +1,81 @@
+// Unit tests of the conveyor (hsm test examples/cpp-types/conveyor.hsmtest): asserts and values use
+// the types and constants of conveyor_types.h.
+testclass ConveyorTest for statemachine Conveyor {
+
+    @SetUp
+    operation init() {
+        enter
+    }
+
+    @Test
+    operation startsWithNormalSpeed() {
+        assert mode == conveyor::Mode::Stopped
+        raise start
+        proceed 1 cycle
+        assert active(Operating.Running)
+        assert mode == conveyor::Mode::Normal
+        assert called setSpeed with (400)
+    }
+
+    @Test
+    operation fragilePackagesAreTransportedSlowly() {
+        raise start
+        proceed 1 cycle
+        var p : conveyor::Package
+        p.id = 4711
+        p.weightGrams = 800
+        p.fragile = true
+        raise packageDetected : p
+        proceed 1 cycle
+        assert active(Careful)
+        assert mode == conveyor::Mode::Slow
+        assert last.id == 4711 && count == 1
+        assert called setSpeed with (settings.slowSpeed)
+        proceed 3 s
+        assert active(Running)
+    }
+
+    @Test
+    operation heavyPackagesAreRejected() {
+        raise start
+        proceed 1 cycle
+        var p : conveyor::Package
+        p.weightGrams = 25000
+        raise packageDetected : p
+        proceed 1 cycle
+        assert rejected
+        assert valueof(rejected).weightGrams == 25000
+        assert count == 0
+    }
+
+    @Test
+    operation aJamIsClearedByRunningBackwards() {
+        raise start
+        proceed 1 cycle
+        raise fault : conveyor::kJam
+        proceed 1 cycle
+        assert active(Clearing)
+        assert mode == conveyor::Mode::Reverse
+        assert called setSpeed with (conveyor::kReverseSpeed)
+        assert (faults & conveyor::kJam) != 0
+        proceed 2 s
+        assert active(Running)
+        assert faults == 0
+    }
+
+    @Test
+    operation anEmergencyStopNeedsAReset() {
+        raise start
+        proceed 1 cycle
+        raise fault : conveyor::kEmergencyStop
+        proceed 1 cycle
+        assert active(Faulted)
+        raise reset
+        proceed 1 cycle
+        assert active(Faulted) message "the emergency stop is still active"
+        faults = 0
+        raise reset
+        proceed 1 cycle
+        assert active(Idle)
+    }
+}

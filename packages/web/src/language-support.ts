@@ -1,5 +1,5 @@
 import { monaco } from './monaco.js';
-import { HsmMonarchSyntax } from 'hsm-language';
+import { cppHover, HsmMonarchSyntax } from 'hsm-language';
 import { HsmModelService } from './model-service.js';
 import type { Diagnostic, Range, TextEdit } from 'vscode-languageserver-types';
 
@@ -55,7 +55,7 @@ export class HsmLanguageSupport extends HsmModelService {
         const services = this.loader.services.Hsm;
 
         monaco.languages.registerCompletionItemProvider(LANGUAGE_ID, {
-            triggerCharacters: ['>', ' ', '/', '.', '('],
+            triggerCharacters: ['>', ' ', '/', '.', '(', ':'],
             provideCompletionItems: async (model, position) => {
                 const document = await this.document(model);
                 const list = await services.lsp.CompletionProvider?.getCompletion(document, {
@@ -80,6 +80,22 @@ export class HsmLanguageSupport extends HsmModelService {
                         };
                     })
                 };
+            }
+        });
+
+        monaco.languages.registerHoverProvider(LANGUAGE_ID, {
+            provideHover: async (model, position) => {
+                const document = await this.document(model);
+                const offset = model.getOffsetAt(position);
+                // C++ names of imported headers: declaration, value and documentation of the header
+                const cpp = cppHover(document, offset);
+                const hover = cpp ? { contents: { kind: 'markdown', value: cpp } } : await services.lsp.HoverProvider?.getHoverContent(document, {
+                    textDocument: { uri: document.uri.toString() },
+                    position: { line: position.lineNumber - 1, character: position.column - 1 }
+                });
+                const contents = hover?.contents;
+                const value = typeof contents === 'string' ? contents : contents && 'value' in contents ? contents.value : undefined;
+                return value ? { contents: [{ value }] } : undefined;
             }
         });
 

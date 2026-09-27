@@ -52,7 +52,7 @@ describe.skipIf(!HAS_CMAKE)(`CMake integration (${GENERATOR})`, () => {
         dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cmake-'));
         build = path.join(dir, 'build');
         fs.cpSync(path.join(repoDir, 'cmake'), path.join(dir, 'cmake'), { recursive: true });
-        for (const entry of ['cmake', 'tests', 'traffic-light.hsm', 'cd-player.hsm']) {
+        for (const entry of ['cmake', 'tests', 'traffic-light.hsm', 'cd-player.hsm', 'cpp-types']) {
             fs.cpSync(path.join(repoDir, 'examples', entry), path.join(dir, 'examples', entry), { recursive: true });
         }
         fs.rmSync(path.join(dir, 'examples/cmake/generated'), { recursive: true, force: true });
@@ -76,7 +76,7 @@ describe.skipIf(!HAS_CMAKE)(`CMake integration (${GENERATOR})`, () => {
 
         const ctest = run('ctest', ['--output-on-failure'], build);
         expect(ctest.status, ctest.output).toBe(0);
-        expect(ctest.output).toContain('100% tests passed, 0 tests failed out of 3');
+        expect(ctest.output).toContain('100% tests passed, 0 tests failed out of 5');
         expect(fs.readFileSync(path.join(build, 'hsm_test_results/traffic-light.xml'), 'utf-8')).toContain('<testsuite');
 
         // a comment: the code is regenerated but nothing is recompiled
@@ -102,5 +102,14 @@ describe.skipIf(!HAS_CMAKE)(`CMake integration (${GENERATOR})`, () => {
         expect(noop.status, noop.output).toBe(0);
         expect(noop.output).not.toContain('Generating');
         expect(noop.output).not.toContain('Building CXX');
+
+        // an imported C++ header: the model importing it is regenerated (the generated code is unchanged)
+        editModel('cpp-types/conveyor_types.h', 'constexpr Speed kReverseSpeed = -100;', 'constexpr Speed kReverseSpeed = -120;');
+        const header = cmakeBuild();
+        expect(header.status, header.output).toBe(0);
+        expect(header.output).toContain('Generating state machine code for conveyor_sm');
+        expect(header.output).not.toContain('code for traffic_light_sm');
+        const conveyor = run(path.join(build, 'conveyor_test'), []);
+        expect(conveyor.status, conveyor.output).toBe(0);
     }, 300_000);
 });

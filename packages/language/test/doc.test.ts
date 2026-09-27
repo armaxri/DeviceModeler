@@ -194,10 +194,10 @@ describe('CLI render and doc', () => {
 
     test('expands directories and glob patterns', async () => {
         const all = (await expandFiles([EXAMPLES_DIR])).map(f => path.basename(f));
-        // door-with-motor/: the submachine example (two files)
-        expect(all).toEqual(['cd-player.hsm', 'gate.hsm', 'motor.hsm', 'door.hsm', 'keyboard.hsm', 'traffic-light.hsm']);
+        // cpp-types/: the example importing a C++ header, door-with-motor/: the submachine example (two files)
+        expect(all).toEqual(['cd-player.hsm', 'conveyor.hsm', 'gate.hsm', 'motor.hsm', 'door.hsm', 'keyboard.hsm', 'traffic-light.hsm']);
         expect((await expandFiles([path.join(EXAMPLES_DIR, 'k*.hsm')])).map(f => path.basename(f))).toEqual(['keyboard.hsm']);
-        expect(await expandFiles([path.join(EXAMPLES_DIR, '**/*.hsm')])).toHaveLength(6);
+        expect(await expandFiles([path.join(EXAMPLES_DIR, '**/*.hsm')])).toHaveLength(7);
         expect(await expandFiles([path.join(EXAMPLES_DIR, '*.nothing')])).toEqual([]);
     });
 
@@ -205,7 +205,7 @@ describe('CLI render and doc', () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cli-render-'));
         const log = logger();
         expect(await runRenderCommand([EXAMPLES_DIR], { out: dir, theme: 'dark', direction: 'right', routing: 'orthogonal' }, log)).toBe(0);
-        expect(fs.readdirSync(dir).sort()).toEqual(['cd-player.svg', 'door.svg', 'gate.svg', 'keyboard.svg', 'motor.svg', 'traffic-light.svg']);
+        expect(fs.readdirSync(dir).sort()).toEqual(['cd-player.svg', 'conveyor.svg', 'door.svg', 'gate.svg', 'keyboard.svg', 'motor.svg', 'traffic-light.svg']);
         const svg = fs.readFileSync(path.join(dir, 'door.svg'), 'utf-8');
         expect(parseXml(svg).attributes.class).toContain('theme-dark');
         const single = path.join(dir, 'sub', 'door-classic.svg');
@@ -236,7 +236,7 @@ describe('CLI render and doc', () => {
         expect(page).toContain('cycle based, period `100 ms`');
         const html = path.join(dir, 'html');
         expect(await runDocCommand([EXAMPLES_DIR], { out: html, format: 'html', title: 'Examples' }, log)).toBe(0);
-        expect(fs.readdirSync(html).sort()).toEqual(['CdPlayer.html', 'Door.html', 'Gate.html', 'Keyboard.html', 'Motor.html', 'TrafficLight.html', 'index.html']);
+        expect(fs.readdirSync(html).sort()).toEqual(['CdPlayer.html', 'Conveyor.html', 'Door.html', 'Gate.html', 'Keyboard.html', 'Motor.html', 'TrafficLight.html', 'index.html']);
         const door = fs.readFileSync(path.join(html, 'Door.html'), 'utf-8');
         expect(door).toContain('<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic hsm-export"');
         expect(door).toContain('Automatic door with obstacle detection');

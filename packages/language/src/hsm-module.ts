@@ -6,6 +6,7 @@ import {
 import { HsmGeneratedModule, HsmGeneratedSharedModule, HsmTestGeneratedModule } from './generated/module.js';
 import { HsmDocumentValidator, HsmExpressionValidator } from './hsm-expression-validator.js';
 import { HsmFormatter } from './hsm-formatter.js';
+import { HsmCompletionProvider } from './lsp/cpp-lsp.js';
 import { HsmDocumentationProvider } from './doc/hsm-documentation-provider.js';
 import { HsmDocumentBuilder, HsmLinker } from './hsm-linker.js';
 import { HsmImportResolver } from './imports.js';
@@ -41,7 +42,8 @@ export const HsmModule: Module<HsmServices, PartialLangiumServices & HsmAddedSer
         HsmExpressionValidator: () => new HsmExpressionValidator()
     },
     lsp: {
-        Formatter: () => new HsmFormatter()
+        Formatter: () => new HsmFormatter(),
+        CompletionProvider: (services) => new HsmCompletionProvider(services)
     },
     documentation: {
         DocumentationProvider: (services) => new HsmDocumentationProvider(services)

@@ -222,7 +222,8 @@ export async function runGeneration(request: GenerationRequest): Promise<Generat
             const outDir = request.outDir !== undefined
                 ? path.resolve(request.outDir)
                 : options.outDir !== undefined ? path.resolve(baseDir, options.outDir) : path.dirname(model);
-            const result = generateTarget(parsed.model, target, options, { headerInclude: header => headerInclude(parsed.model, header, model, outDir) });
+            const includePaths = (cppHeaderStore(services.shared).settingsFor(parsed.document.uri).includePaths ?? []).map(p => URI.parse(p).fsPath);
+            const result = generateTarget(parsed.model, target, options, { headerInclude: header => headerInclude(parsed.model, header, model, outDir, includePaths) });
             for (const d of result.diagnostics) {
                 diagnostics.push({ severity: d.severity, message: `${target}: ${d.message}`, file: model, line: d.line });
             }
@@ -269,14 +270,17 @@ export async function runGeneration(request: GenerationRequest): Promise<Generat
  * header was found in an include directory or the output directory is the directory of the model,
  * otherwise the path of the header relative to the output directory.
  */
-function headerInclude(machine: StateMachine, header: { path: string, uri?: string }, model: string, outDir: string): string | undefined {
+function headerInclude(machine: StateMachine, header: { path: string, uri?: string }, model: string, outDir: string, includePaths: string[]): string | undefined {
     const resolved = resolvedImports(machine).find(i => i.kind === 'header' && i.path === header.path);
     const found = resolved?.header?.found ? resolved.uri : undefined;
     if (!found || found.scheme !== 'file' || path.resolve(outDir) === path.dirname(model)) {
         return undefined;
     }
-    const relativeToModel = resolved?.header?.searched[0]?.toString() === found.toString();
-    return relativeToModel ? path.relative(outDir, found.fsPath).split(path.sep).join('/') : undefined;
+    // reachable through an include directory (which the build passes to the compiler, too)
+    if (includePaths.some(dir => path.resolve(dir, header.path) === path.resolve(found.fsPath))) {
+        return undefined;
+    }
+    return path.relative(outDir, found.fsPath).split(path.sep).join('/');
 }
 
 function definedValues<T extends object>(values: T | undefined): Partial<T> {

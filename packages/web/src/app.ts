@@ -6,7 +6,7 @@ import { createWorkerElk } from './diagram/elk.js';
 import { byId, download, h } from './ui/dom.js';
 import { plantUmlServerUrl } from './ui/plantuml.js';
 import type { SimulationSession } from './simulation/session.js';
-import { EMPTY_MODEL, EXAMPLES } from './examples.js';
+import { EMPTY_MODEL, EXAMPLE_HEADERS, EXAMPLES } from './examples.js';
 
 export type { Tool } from './diagram-controller.js';
 
@@ -158,7 +158,23 @@ export class HsmApp implements DiagramHost {
         const fileInput = byId<HTMLInputElement>('file-input');
         byId('btn-open').addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', async () => {
-            const selected = [...fileInput.files ?? []];
+            const all = [...fileInput.files ?? []];
+            // C/C++ headers: added to the virtual workspace (models import them), not edited
+            const headers = all.filter(f => isHeaderFile(f.name));
+            for (const header of headers) {
+                this.files.set(header.name, await header.text());
+            }
+            const selected = all.filter(f => !isHeaderFile(f.name));
+            if (headers.length > 0) {
+                this.saveFiles();
+                if (selected.length === 0) {
+                    this.updateWorkspace();
+                    this.diagram.update(true);
+                    this.setStatus(`Added ${headers.map(f => f.name).join(', ')}: models import ${headers.length === 1 ? 'it' : 'them'} with import "${headers[0].name}".`);
+                    fileInput.value = '';
+                    return;
+                }
+            }
             const models = selected.filter(f => !/\.sct$/i.test(f.name));
             const statecharts = selected.filter(f => /\.sct$/i.test(f.name));
             if (statecharts.length > 1) {
@@ -340,6 +356,9 @@ export class HsmApp implements DiagramHost {
         for (const example of EXAMPLES) {
             files[FILE_BASE + example.fileName] = example.text;
         }
+        for (const [name, text] of Object.entries(EXAMPLE_HEADERS)) {
+            files[FILE_BASE + name] = text;
+        }
         for (const [name, text] of this.files) {
             files[FILE_BASE + name] = text;
         }
@@ -373,6 +392,10 @@ export class HsmApp implements DiagramHost {
 
     /** Opens a file of the virtual workspace or an example by file name; false if it is not available. */
     private openFile(fileName: string): boolean {
+        if (isHeaderFile(fileName)) {
+            this.setStatus(`${fileName} is a C/C++ header: models import it with import "${fileName}" (hover a C++ name to see its declaration).`);
+            return true;
+        }
         const text = this.files.get(fileName) ?? EXAMPLES.find(e => e.fileName === fileName)?.text;
         if (text === undefined) {
             return false;
@@ -556,4 +579,9 @@ export class HsmApp implements DiagramHost {
             element.textContent = '';
         }, 6000);
     }
+}
+
+/** Whether a file name is a C/C++ header (imported by models, not edited). */
+function isHeaderFile(fileName: string): boolean {
+    return /\.(h|hh|hpp|hxx|h\+\+|inl)$/i.test(fileName);
 }

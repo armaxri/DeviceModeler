@@ -1,4 +1,4 @@
-import { HsmModelLoader, type ParsedModel } from 'hsm-language';
+import { cppHeaderStore, HsmModelLoader, importKind, type CppHeaderSettings, type ParsedModel } from 'hsm-language';
 
 export interface SyntaxProblem {
     message: string;
@@ -55,11 +55,26 @@ export class HsmModelService {
 
     /**
      * Sets the URI of the edited document (imports are resolved relative to it) and the texts of the
-     * other files it may import, by URI (or by path relative to the document).
+     * other files it may import, by URI (or by path relative to the document): state machines (`.hsm`)
+     * and C/C++ headers (`.h`, `.hpp`, ...; `headers`: include paths and defines of their analysis).
      */
-    setWorkspace(documentUri: string, files: Record<string, string>): void {
+    setWorkspace(documentUri: string, files: Record<string, string>, headers: CppHeaderSettings = {}): void {
         this.documentUri = documentUri;
         this.files = { ...files };
+        const store = cppHeaderStore(this.loader.services.shared);
+        for (const uri of store.uris) {
+            if (!(uri in files)) {
+                store.delete(uri);
+            }
+        }
+        for (const [uri, text] of Object.entries(files)) {
+            if (importKind(uri) === 'header' && /^[a-zA-Z][\w+.-]*:/.test(uri)) {
+                store.setText(uri, text);
+            }
+        }
+        if (JSON.stringify(headers) !== JSON.stringify(store.settings)) {
+            store.updateSettings(headers);
+        }
         this.workspaceVersion++;
     }
 

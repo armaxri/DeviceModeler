@@ -125,11 +125,11 @@ export class WebviewHost implements DiagramHost {
                 this.vscode.setState({ uri: message.uri });
                 // imports are resolved against the files sent by the extension
                 const files = message.files ?? {};
-                const key = JSON.stringify([message.uri, files]);
+                const key = JSON.stringify([message.uri, files, message.headers ?? {}]);
                 const filesChanged = key !== this.filesKey;
                 if (filesChanged) {
                     this.filesKey = key;
-                    this.controller.language.setWorkspace(message.uri, files);
+                    this.controller.language.setWorkspace(message.uri, files, message.headers);
                 }
                 this.textChanged(message.text, message.version, message.fileName, filesChanged);
                 break;
