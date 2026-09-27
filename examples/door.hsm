@@ -9,6 +9,8 @@ statemachine Door {
         in event obstacle
         in event motorStopped
         in event serviceDone
+        in event maintenance
+        in event lower
         out event alarm
         var cycles : integer = 0
 
@@ -50,6 +52,8 @@ statemachine Door {
     sync Join
 
     Closed -> Moving : open # >Opening
+    Closed -> Service : maintenance
+    Service -> Moving : lower # >Closing
     Moving.Up -> Closed : motorStopped
     Moving.Down -> Closed : motorStopped
     Moving -> Fork : / raise alarm # Blocked>
