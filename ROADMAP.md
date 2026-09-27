@@ -29,7 +29,12 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
   different composite states
 - ✅ Type system and full validation of expressions and declarations (types, operators,
   assignments, calls, raise/valueof, triggers, annotations, ambiguous names)
-- 📋 Imports of other statecharts / header files
+- ✅ Imports of other state machines (`import "motor.hsm"`, also `import: "a.hsm" "b.hsm"`): resolved
+  relative to the importing file, loaded transitively (CLI, tests, language server, VS Code webview, a
+  virtual file list in the web editor); missing files, cycles and duplicate names are reported
+- 📋 **Next: C++ header imports** (`import "motor_types.h"` is accepted, reported as "not supported yet";
+  the analyzer exists, see [docs/cpp-integration.md](docs/cpp-integration.md) and the import resolution API
+  there)
 
 ## Phase 2 – Structure parity ✅
 
@@ -38,7 +43,16 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 - ✅ Definition section shown as a box in the diagram (with an "Add declaration" form)
 - ✅ Transition priorities shown in the diagram (toggle in the toolbar)
 - 📋 Reorder priorities from the diagram
-- 📋 Submachines (a state that references another statechart)
+- ✅ Submachines: instances of imported state machines (`var motor : Motor`) bound to states
+  (`state Moving : motor`), accessed through their interfaces (`raise motor.start`, `motor.stopped`,
+  `motor.speed`, `active(motor.On)`), entered through entry points (`# >Run`), left through exit nodes
+  (`# Failed>`); semantics in [docs/semantics.md §9](docs/semantics.md), 19 conformance scenarios,
+  interpreter, validation, unit tests (`assert active(motor.On)`, `mock motor.op`), diagram (`Moving : Motor`,
+  submachine icon, entry / exit points on the border, active states of the instance in the simulation,
+  double-click opens the state machine), web editor and VS Code
+  - 📋 C / C++ generator support (the generators report "submachine instances are not supported yet")
+  - 💭 expanding a submachine state in the diagram (read-only view of the states of the instance);
+    instances of the same machine in several states; completion transitions of instances
 - 💭 State names with spaces (currently mapped to identifiers and the original name kept as the
   description)
 
@@ -55,6 +69,9 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
   (`# >E1 >E2`, only the first one is used like in itemis CREATE)
 - ✅ Entry points / exit nodes with the same name in several orthogonal regions (`# >failure` enters
   every region through its `failure` entry point)
+- ✅ Submachine states of statecharts imported together (`hsm import A.sct B.sct`, several files in
+  "Open…") become submachine instances (the reference format is assumed to be `referencedStatechart`
+  with an `href`; itemis `import:` statements of the definition section are commented out)
 - 📋 Remaining differences found in the upstream models: raising `in` events inside the machine,
   operations called without parentheses, `out` events as triggers, `%` on reals
 - 📋 Import test suite based on real-world models from users
@@ -123,7 +140,9 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
   - limitations: no hand-arranged layout; the extension generates only the `cpp` target; no end-to-end
     tests in a real VS Code instance (`@vscode/test-electron` could not download VS Code) – the language
     server is tested over stdio, the webview bundle in Chromium with a mocked VS Code API
-- 💭 Multi-file projects and workspaces in the web editor
+- 🚧 Multi-file projects in the web editor: a virtual file list (examples, opened and edited files) against
+  which imports are resolved; several files can be opened at once; 💭 real workspaces (folders, saving
+  several files)
 - 💭 Manual layout adjustments stored in the model
 - ✅ Model coverage of unit tests (`hsm test --coverage`): states, transitions, local reactions and guard
   decisions with per-test attribution; text, JSON, LCOV, Cobertura and HTML reports, thresholds for CI;

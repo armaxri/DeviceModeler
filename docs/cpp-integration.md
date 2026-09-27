@@ -267,3 +267,32 @@ Casts: `x as motor::Mode` (integer -> enum) for unscoped and scoped enums.
   exactly the wrap-around the simulator implements.
 - The C generator can support imported C headers the same way (enums, structs, typedefs), but not
   namespaces or `enum class`.
+
+### 4.6 Import resolution (implemented for `.hsm`, extension point for headers)
+
+`import "…"` is implemented (`packages/language/src/imports.ts`, grammar rules `Import` / `ImportPath`):
+`import "a.hsm" "b.h"` and `import: "a.hsm"` are accepted at the beginning of the state machine body
+(before or after `namespace`). What exists and how headers plug in:
+
+- `importKind(path)`: `'hsm'`, `'header'` (`.h`, `.hh`, `.hpp`, `.hxx`, `.h++`, `.inl`) or `'unsupported'`
+  (error). Header imports are currently reported as info "C/C++ header imports are not supported yet".
+- `resolveImportUri(documentUri, path)`: the path relative to the importing document (absolute paths kept).
+  Include directories of the generator configuration are not considered yet.
+- `HsmImportResolver` (service `references.ImportResolver`): `update(machine)` is called by `HsmLinker.link`
+  **before** a document is linked; it resolves all import paths (`resolve(machine)` → `ResolvedImport[]`:
+  `{ node, path, kind, uri, machine?, header? }`) and stores them in a registry keyed by the `StateMachine`
+  node. The pure functions `resolvedImports(machine)`, `importedMachines(machine)`, `machineType(typeRef)`
+  read that registry, so the type system, the scope provider and the interpreter need no services.
+  **Headers**: override `HsmImportResolver.resolveHeader(node, path, uri)` and return the analyzed header in
+  `ResolvedImport.header` (e.g. a `CppTypeIndex` built from the header text); `typeOfTypeReference` /
+  `HsmScopeProvider` can then look up `CppName`s through `resolvedImports(machine)`.
+- **Loading texts**: resolution is synchronous and only uses documents of the Langium workspace. `.hsm`
+  files are loaded beforehand: `HsmModelLoader.load(text, uri, { files })` and `HsmTestWorkspace` load
+  imported files transitively (`loadImports`: given texts, then `readFile` – the `FileSystemProvider` in
+  Node.js –, then previously loaded documents); the language server has all workspace files. Header texts
+  must be provided the same way (they are not Langium documents): e.g. extend `loadImports` to read
+  `kind === 'header'` paths into a header cache that `resolveHeader` uses, and send them to the VS Code
+  webview like the imported `.hsm` files (`collectImportedFiles` in `packages/vscode/src/extension/logic/imports.ts`,
+  `files` of the `text` message, `HsmModelService.setWorkspace`).
+- **Updates**: `HsmDocumentBuilder.shouldRelink` relinks a document when an imported file changed or an
+  import is unresolved; a header watcher would add the header URIs to the changed URIs.

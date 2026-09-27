@@ -298,7 +298,70 @@ statemachine CdPlayer "optional description" {
   enabled one is taken.
 - The execution semantics are specified in [`docs/semantics.md`](docs/semantics.md). See
   [`examples/`](examples) for more: `door.hsm` shows entry points, exit nodes and fork / join,
-  `traffic-light.hsm` time events and named interfaces, `keyboard.hsm` orthogonal regions.
+  `traffic-light.hsm` time events and named interfaces, `keyboard.hsm` orthogonal regions,
+  [`door-with-motor/`](examples/door-with-motor) imports and submachines.
+
+### Imports and submachines
+
+A state machine can import other state machines and use them as **submachines**: a variable whose type
+is an imported state machine is an **instance** of it, a state bound to the instance runs it while the
+state is active (the instance is a separate object with its own states and variables – it is not inlined).
+
+```
+// motor.hsm                                      // gate.hsm
+statemachine Motor {                              statemachine Gate {
+    interface:                                        import "motor.hsm"   // relative to this file
+        in event start                                interface:
+        in event stop                                     in event open
+        out event stopped                                 in event fast
+        out event failed : integer                    internal:
+        var speed : integer = 0                           var motor : Motor  // an instance of Motor
+    entry Run   // entry point of the machine         [*] -> Closed
+    exit Failed // exit node of the machine           state Closed
+    [*] -> Off                                        state Moving : motor   // runs while Moving is active
+    Run -> On                                         state Error
+    state Off                                         Closed -> Moving : open / raise motor.start
+    state On                                          Closed -> Moving : fast # >Run   // via entry point Run
+    Off -> On : start / speed = 1                     Moving -> Closed : motor.stopped [motor.speed == 0]
+    On -> Off : stop / raise stopped                  Moving -> Error : # Failed>      // exit node reached
+    On -> Failed : after 5 s / raise failed : 1   }
+}
+```
+
+- **Imports**: `import "path"` (several allowed, also the itemis CREATE form `import: "a.hsm" "b.hsm"`) at
+  the beginning of the state machine body (before or after `namespace`). Paths are resolved relative to the
+  importing file; the name of the imported state machine is a type. Missing files, import cycles, duplicate
+  machine names and imports of the importing machine itself are errors. C/C++ headers (`import "types.h"`,
+  `.hpp`, …) are accepted but not supported yet (info diagnostic; they are the next step, see
+  [docs/cpp-integration.md](docs/cpp-integration.md)).
+- **Instances** (`var motor : Motor`, in any scope; no initial value, not `const`) are used only through
+  the **interfaces** of their state machine: `raise motor.start` (its `in` events), `motor.stopped` as
+  trigger or condition and `valueof(motor.failed)` (its `out` events), `motor.speed` (read and assign its
+  interface variables, not constants / `readonly` ones), `motor.Iface.x` for named interfaces and
+  `active(motor.On)` / `active(motor.Running.Fast)` for its states. Its internal scope, its operations and its
+  own instances are not visible. Instances cannot be assigned, compared or passed around.
+- **Binding**: `state Moving : motor` (a simple state – no sub states – may have local reactions). An
+  instance can be bound to one state; an unbound instance is a warning (it never runs). A transition to
+  the state may select an entry point of the instance's machine (`# >Run`); `Moving -> X : # Failed>` is
+  taken when the instance reaches its exit node `Failed`. Entry points and exit nodes may be declared at the
+  top level of a state machine for this purpose.
+- **Execution** ([docs/semantics.md §9](docs/semantics.md)): the instance is entered after the entry
+  reactions of its state and exited before its exit reactions; in each step it is processed like the sub
+  region of its state (parent first: after the state's transitions and local reactions, child first: before
+  them). Events raised on it are processed in its next processing (cycle based) or in a step of their own
+  (event driven); its out events are seen by every reaction of the parent exactly once. It uses the execution
+  mode and order of the parent (a warning if its machine declares others), shares the virtual clock and keeps
+  its variables when it is entered again. States of instances are reported as `motor.On` (`activeStates`,
+  scenarios, traces), their operations are implemented by the host as `motor.setPwm`.
+- **Where imports are resolved**: CLI (`hsm validate/simulate/test/render/doc`) and API (`HsmModelLoader`,
+  `HsmTestWorkspace`) read imported files transitively from disk (or from given texts); the VS Code language
+  server resolves them in the workspace (a change of `motor.hsm` updates the diagnostics of `gate.hsm`, go to
+  definition works on `Motor` and on the import path); the diagram webview gets the imported files from the
+  extension; the web editor resolves imports against a virtual file list (the examples and the opened files;
+  "Open…" accepts several files, the example list also lists the files). Double-clicking a submachine state
+  opens the file of its state machine.
+- The **C and C++ generators do not support submachine instances yet**; they report
+  "Submachine instances are not supported by the C/C++ generator yet".
 
 ## Unit tests
 
@@ -351,6 +414,11 @@ testclass CdPlayerTest for statemachine CdPlayer {
   time events that expire.
 - **`assert called`** counts the calls since the start of the test (including the set up). Operations of the
   state machine cannot be called in tests; unmocked operations return the default value of their type.
+- **Submachine instances**: members of instances are used like in the state machine – `assert active(motor.On)`,
+  `assert motor.speed == 3`, `motor.maxSpeed = 2`, `assert motor.failed` / `valueof(motor.failed)` (out events
+  of the instance raised by the last call), `mock motor.setPwm returns (...)` and `assert called motor.setPwm`
+  (see [`examples/door-with-motor/gate.hsmtest`](examples/door-with-motor/gate.hsmtest)). Events of
+  instances cannot be raised by a test.
 - The validator checks the references and the types (asserted expressions and conditions are boolean,
   event values, mocked values and arguments match the declarations, units of `proceed`, `@Test` / `@SetUp`
   operations have no parameters).
@@ -916,6 +984,9 @@ node packages/language/bin/cli.js import TrafficLight.sct -o TrafficLight.hsm   
 
 In the web editor, `Open…` accepts `.sct` files as well; warnings are shown in the status bar. From
 code, use `importSct(xml)` of `hsm-language`, which returns `{ text, warnings }` (no DOM needed).
+Several statecharts are imported together with `hsm import A.sct B.sct` (or several files in `Open…`,
+`importSctFiles(files)`): a **submachine state** that references one of the other statecharts becomes a
+submachine instance – `import "B.hsm"`, `var b : B` in the internal scope and `state S : b`.
 
 The definition section and all reactions are copied as they are (both languages use the same
 syntax); the diagram layout of the `.sct` file is ignored. The structure is mapped as follows:
@@ -955,8 +1026,11 @@ Details and limitations (each of them is reported as a warning):
   the first one is used, the validator warns like itemis CREATE).
 - Type aliases (`alias inti : integer`) and `null` are copied unchanged; `event e : void` becomes
   `event e`.
-- Not supported (kept as `// TODO import: …` comments): submachine states (referenced statecharts),
-  `@SuperSteps` / `@EventBuffering` and imports.
+- Not supported (kept as `// TODO import: …` comments): submachine states whose statechart is not imported
+  together with them, `@SuperSteps` / `@EventBuffering` and the `import:` statements of itemis CREATE (header
+  files and statechart references of the definition section). The format of submachine references is
+  assumed to be a `referencedStatechart` attribute or element with an `href` (`Motor.sct#…`); every submachine
+  state gets its own instance.
 - Result for the 215 `.sct` files of the itemis CREATE repository: 213 are imported without syntax or
   linking errors (the other two use outdated syntax or an unqualified member of a named interface, which current
   itemis CREATE rejects as well); the remaining

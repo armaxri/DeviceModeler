@@ -231,3 +231,112 @@ Entering the state machine (`enter()`): initialize variables, execute the `entry
 state machine and start the timers of its reactions, then enter the top-level region by default.
 `exit()` exits all active states (innermost first), then executes the `exit` reactions of the
 state machine.
+
+## 9. Submachine instances
+
+A state machine may import other state machines (`import "motor.hsm"`, resolved relative to the
+importing file). A variable whose type is an imported state machine (`var motor : Motor`) is a
+**submachine instance**; a state bound to it (`state Moving : motor`) runs the instance while it is
+active. The instance is a separate object – its state machine is not inlined: it has its own active
+configuration, history, variables, event values and timers. Two instances of the same state machine are
+independent.
+
+**Structure and scoping** (checked by the validator)
+
+- An instance can be bound to at most one state; the bound state is a simple state (no sub states or
+  regions, local reactions are allowed). An instance that is not bound never runs (warning).
+- The parent uses the instance only through the **interfaces** of its state machine: it raises its `in`
+  events (`raise motor.start`), observes its `out` events (`motor.stopped` as trigger or condition,
+  `valueof(motor.failed)`), reads its interface variables and constants and assigns its interface
+  variables (not constants or `readonly` variables), and tests its states (`active(motor.On)`). The
+  internal scope, the operations and the instances of the instance's machine are not visible. Raising an
+  out event of an instance or observing one of its in events is an error. Instances cannot be assigned,
+  compared or used as values.
+- Entry points (`entry E`) and exit nodes (`exit X`) declared at the top level of a state machine are its
+  entry points / exit nodes as a submachine (`# >E`, `# X>` on transitions of the parent).
+- The instance is executed with the execution mode and order of the top-level state machine; a
+  different `@CycleBased` / `@EventDriven` / `@ParentFirstExecution` / `@ChildFirstExecution` of the
+  instance's machine is ignored (warning).
+
+**Data**: the variables of the instance are initialized when the top-level state machine is entered
+(`enter()`, in declaration order; the variables of an instance are initialized where the instance is
+declared). They **keep their values** when the instance is exited and entered again, as do its event
+values and the history of its regions (entering the instance again re-enters its states, it does not
+reset its data). **Deviation:** in the multi-state-machine models of itemis CREATE the parent controls the
+lifecycle of an instance explicitly (`motor.enter()`, `motor.exit()`); HSM binds it to the state.
+
+**Entering and exiting** (extends §5 and §8)
+
+- Entering the bound state `S`: the entry reactions of `S` are executed and its timers started, then the
+  instance is **entered**: the `entry` reactions of its state machine are executed, the timers of the
+  machine's own reactions are started, and its top-level region is entered through the entry point `E` if
+  the transition that entered `S` selects one (`# >E`), otherwise by default (initial transition). `S`
+  entered through a history pseudo state of the parent enters the instance by default as well.
+- Exiting `S`: the instance is **exited** first – its active states are exited (innermost first, history of
+  its sub regions recorded), then the `exit` reactions of its state machine are executed and its timers
+  cancelled; then the exit reactions of `S` are executed and its timers cancelled.
+- When the instance reaches an **exit node** `X` of its state machine, it has already exited the source of
+  the transition to `X`; `S` is then left by the first transition `S -> T : ... # X>` (also `# X> Y>`) of the
+  parent whose guard holds (priority order, triggers ignored, like §7), which exits the instance and `S`.
+  Without such a transition the runtime reports an error. A state machine that is not an instance becomes
+  final when it reaches one of its top-level exit nodes.
+- When the instance reaches its **final state**, it stays there (no further processing, no completion
+  transition – as in itemis CREATE there are no completion events) until `S` is exited. The parent can
+  observe it through out events or variables of the instance.
+
+**Steps** (extends §4): the instance is processed like the only **sub region** of `S`. When `S` is
+processed (`react(S)`) and was not entered in the current step:
+
+- **Parent first**: the transitions of `S` are checked; if none is taken, the local reactions of `S` are
+  executed, then the instance is processed.
+- **Child first**: the instance is processed first; if it took a transition (or left `S` through an exit
+  node), the transitions and local reactions of `S` are not checked in this step (like for sub regions);
+  otherwise the transitions of `S` are checked, then its local reactions.
+- Processing the instance: the events raised on it become present (see below), then the local reactions of
+  its state machine are executed and its top-level active state is processed with the rules of §4 (states of
+  the instance entered in this step are not processed again). At the end of the processing, its events are
+  cleared.
+
+**Events raised on the instance** (`raise motor.start`):
+
+- Cycle based: the event is stored with the instance and becomes present at the beginning of the **next
+  processing of the instance** – later in the same run cycle if the instance is processed after the raise
+  (e.g. raised by a local reaction of `S` with parent first, by an earlier region, or by the transition
+  entering `S`: the instance is not processed in the step it was entered, so it processes the event in the
+  next cycle), otherwise in the next cycle. All stored events are present at once. Events stored for an
+  instance that is not active at the end of the parent's step are discarded (also when the instance is exited).
+- Event driven: the event is appended to the internal queue of the top-level machine (§3); when it is its
+  turn, a step is performed in which only this event is present, in the instance (no event of the parent
+  is present in this step). If the instance is not active any more, the event is discarded.
+- Internal events of the instance and `in` events raised by the instance itself follow §3 within the
+  instance (cycle based: present for the rest of its processing, otherwise at its next processing; event
+  driven: queued in the internal queue of the top-level machine).
+
+**Out events of the instance** (`motor.stopped`):
+
+- They are not reported to the host as out events of the parent (they appear in the trace as
+  `raise out motor.stopped`).
+- An occurrence is visible to the parent from the moment it is raised until the end of the **next** step,
+  but every trigger (and every event used as a condition) of the parent **sees it only once**: in the step it
+  is raised in, it is visible to the reactions that are evaluated after the raise; in the next step, only to
+  the reactions that did not evaluate it in the first step. Hence reactions processed after the instance see
+  it in the same step, the others (e.g. the transitions of `S` with parent first) in the next step. Raising the
+  same out event again replaces the occurrence.
+- Event driven: raising an out event of an instance also queues a step without events (in the internal queue),
+  in which the reactions that were processed before the instance see it.
+
+**Time events**: the instance uses the virtual clock of the top-level machine. Cycle based: at the
+beginning of a run cycle all expired timers of the machine and of all its instances are present (each in its
+own machine). Event driven: each expiring timer of an instance triggers a step at its expiry time in which
+only this time event is present in the instance.
+
+**Names**: the states of an instance are reported by the interpreter as `motor.On` (the referable name of
+the instance, then the qualified name of the state; nested instances `motor.gear.Idle`), directly after the
+bound state in `activeStates`; the bound state is not a leaf of `activeLeafStates` while the instance has
+active states. Traces, scenarios (`active`, `configuration`, `variables: { "motor.speed": 1 }`) and the unit
+test language use these names. Operations of an instance are implemented by the host under the name
+`motor.setPwm` (scenarios: `operations: { "motor.setPwm": [...] }`). The host cannot raise events of an
+instance (they are raised by the state machine).
+
+The conformance scenarios `s9-*` of `packages/language/test/scenarios` cover these rules (the C and C++
+generators do not support submachine instances yet and skip them).

@@ -34,7 +34,8 @@ uses plain JSON values and no JS specifics.
 | `description` | The rule or behavior the scenario checks. |
 | `model`       | Path of a `.hsm` file, relative to the scenario file. Exactly one of `model` and `text` is required. |
 | `text`        | Inline model; a string or an array of lines (joined with `\n`). |
-| `operations`  | Optional scripted results of operations by declared name (`op` or `Iface.op`): the values are returned in call order, the last value is repeated. Operations not listed return the default value of their return type (`0`, `0.0`, `false`, `""`). |
+| `files`       | Optional inline texts of further files the model imports (`import "motor.hsm"`), by path relative to the model: `{ "motor.hsm": ["statemachine Motor {", "...", "}"] }` (strings or arrays of lines). Used by the submachine scenarios `s9-*`, which the C and C++ generator tests skip (explicit list `SUBMACHINE_SCENARIOS` in `test/helpers.ts`) because the generators do not support submachine instances yet. |
+| `operations`  | Optional scripted results of operations by declared name (`op` or `Iface.op`, `motor.op` for an operation of the submachine instance `motor`): the values are returned in call order, the last value is repeated. Operations not listed return the default value of their return type (`0`, `0.0`, `false`, `""`). |
 | `steps`       | The steps, executed in order. |
 
 ### Steps
@@ -65,7 +66,7 @@ All keys are optional:
 
 | Key             | Check |
 |-----------------|-------|
-| `active`        | Each listed state is active. States are given by fully qualified name (`Closed.Active.Playing`, regions are not part of the name) or a unique suffix (`Playing`). |
+| `active`        | Each listed state is active. States are given by fully qualified name (`Closed.Active.Playing`, regions are not part of the name) or a unique suffix (`Playing`); states of submachine instances as `motor.On` (docs/semantics.md §9). |
 | `inactive`      | Each listed state is not active. |
 | `configuration` | The set of active **leaf** states (active states without active sub states) is exactly the listed set (order does not matter). A composite state whose regions are all final is a leaf. |
 | `final`         | Whether the state machine is final (`isFinal()`). |
