@@ -7,7 +7,9 @@ export default defineConfig({
             // the TypeScript sources of the language package (as in the bundles)
             'hsm-language': path.resolve(__dirname, '../language/src/index.ts'),
             // modules of the web app shared with the webview (DOM-free ones only)
-            '@hsm-web': path.resolve(__dirname, '../web/src')
+            '@hsm-web': path.resolve(__dirname, '../web/src'),
+            // a minimal stand-in for the VS Code API (unit tests of extension host code)
+            'vscode': path.resolve(__dirname, 'test/mocks/vscode.ts')
         }
     },
     test: {
