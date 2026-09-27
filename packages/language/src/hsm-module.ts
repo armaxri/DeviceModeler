@@ -6,6 +6,7 @@ import {
 import { HsmGeneratedModule, HsmGeneratedSharedModule, HsmTestGeneratedModule } from './generated/module.js';
 import { HsmDocumentValidator, HsmExpressionValidator } from './hsm-expression-validator.js';
 import { HsmFormatter } from './hsm-formatter.js';
+import { HsmDocumentationProvider } from './doc/hsm-documentation-provider.js';
 import { HsmLinker } from './hsm-linker.js';
 import { HsmScopeProvider } from './hsm-scope.js';
 import { HsmValidator, registerValidationChecks } from './hsm-validator.js';
@@ -33,8 +34,17 @@ export const HsmModule: Module<HsmServices, PartialLangiumServices & HsmAddedSer
     },
     lsp: {
         Formatter: () => new HsmFormatter()
+    },
+    documentation: {
+        DocumentationProvider: (services) => new HsmDocumentationProvider(services)
     }
 };
+
+/** Additional modules, e.g. language server features (semantic highlighting, hover) of an IDE integration. */
+export interface HsmServiceExtensions {
+    hsm?: Module<HsmServices, PartialLangiumServices>;
+    hsmTest?: Module<HsmTestServices, PartialLangiumServices>;
+}
 
 /**
  * Creates the full set of services required by the HSM language (`.hsm`) and its unit test
@@ -42,7 +52,7 @@ export const HsmModule: Module<HsmServices, PartialLangiumServices & HsmAddedSer
  * reference state machines of other documents.
  * Works in Node.js as well as in the browser (pass `EmptyFileSystem` there).
  */
-export function createHsmServices(context: DefaultSharedModuleContext = EmptyFileSystem): {
+export function createHsmServices(context: DefaultSharedModuleContext = EmptyFileSystem, extensions: HsmServiceExtensions = {}): {
     shared: LangiumSharedServices,
     Hsm: HsmServices,
     HsmTest: HsmTestServices
@@ -54,12 +64,14 @@ export function createHsmServices(context: DefaultSharedModuleContext = EmptyFil
     const Hsm = inject(
         createDefaultModule({ shared }),
         HsmGeneratedModule,
-        HsmModule
+        HsmModule,
+        extensions.hsm ?? {}
     );
     const HsmTest = inject(
         createDefaultModule({ shared }),
         HsmTestGeneratedModule,
-        HsmTestModule
+        HsmTestModule,
+        extensions.hsmTest ?? {}
     );
     shared.ServiceRegistry.register(Hsm);
     shared.ServiceRegistry.register(HsmTest);

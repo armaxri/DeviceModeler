@@ -1,0 +1,687 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic hsm-export" width="1012" height="989" viewBox="0 0 1012 989" font-family="Helvetica, Arial, sans-serif">
+<title>TrafficLight</title>
+<style><![CDATA[
+.theme-classic, .theme-modern, .theme-dark {
+    --hsm-font: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
+    --hsm-select: #1a73e8;
+    --hsm-error: #d32f2f;
+    --hsm-warning: #f5a623;
+    --hsm-mono: "DejaVu Sans Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --hsm-def-fill: #fbfbf8;
+    --hsm-def-stroke: #b8b8b0;
+    --hsm-muted: #6e6e6e;
+    --hsm-keyword: #7a1f47;
+}
+
+/* PlantUML "classic" skin: light yellow states with dark red borders */
+.theme-classic {
+    --hsm-bg: #ffffff;
+    --hsm-state-fill: #fefece;
+    --hsm-state-stroke: #a80036;
+    --hsm-text: #000000;
+    --hsm-edge: #a80036;
+    --hsm-pseudo: #000000;
+    --hsm-grid: #f3f3f3;
+}
+
+/* current PlantUML default look */
+.theme-modern {
+    --hsm-bg: #ffffff;
+    --hsm-state-fill: #f1f1f1;
+    --hsm-state-stroke: #181818;
+    --hsm-text: #000000;
+    --hsm-edge: #181818;
+    --hsm-pseudo: #222222;
+    --hsm-grid: #f5f5f5;
+}
+
+.theme-dark {
+    --hsm-bg: #1e2227;
+    --hsm-state-fill: #2d333b;
+    --hsm-state-stroke: #9fb3c8;
+    --hsm-text: #e6edf3;
+    --hsm-edge: #9fb3c8;
+    --hsm-pseudo: #e6edf3;
+    --hsm-grid: #23282e;
+    --hsm-select: #58a6ff;
+    --hsm-def-fill: #252a30;
+    --hsm-def-stroke: #56606b;
+    --hsm-muted: #8b949e;
+    --hsm-keyword: #ff9ab5;
+}
+
+.theme-modern {
+    --hsm-keyword: #0b4f9c;
+}
+
+.sprotty-graph {
+    background: var(--hsm-bg);
+    font-family: var(--hsm-font);
+}
+
+.sprotty-graph text {
+    font-family: var(--hsm-font);
+    fill: var(--hsm-text);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.export-background {
+    fill: var(--hsm-bg);
+}
+
+/* ---- states ---- */
+
+.state-shape {
+    fill: var(--hsm-state-fill);
+    stroke: var(--hsm-state-stroke);
+    stroke-width: 1.5px;
+}
+
+.state-separator {
+    stroke: var(--hsm-state-stroke);
+    stroke-width: 1.5px;
+}
+
+.state-name {
+    font-size: 14px;
+    text-anchor: middle;
+}
+
+.state-body {
+    font-size: 12px;
+}
+
+/* ---- regions ---- */
+
+.region-shape {
+    fill: transparent;
+    stroke: none;
+}
+
+.region-separator {
+    stroke: var(--hsm-state-stroke);
+    stroke-width: 1.2px;
+    stroke-dasharray: 6 4;
+}
+
+.region-name {
+    font-size: 11px;
+    font-style: italic;
+    opacity: 0.75;
+}
+
+.region.selected > .region-shape {
+    fill: var(--hsm-select);
+    fill-opacity: 0.06;
+    stroke: var(--hsm-select);
+    stroke-width: 1.5px;
+    stroke-dasharray: 4 3;
+}
+
+/* ---- pseudo states ---- */
+
+.initial-shape,
+.junction-shape,
+.final-inner {
+    fill: var(--hsm-pseudo);
+}
+
+.final-outer {
+    fill: var(--hsm-bg);
+    stroke: var(--hsm-pseudo);
+    stroke-width: 1.5px;
+}
+
+.choice-shape,
+.history-shape {
+    fill: var(--hsm-state-fill);
+    stroke: var(--hsm-state-stroke);
+    stroke-width: 1.5px;
+}
+
+.history-text {
+    font-size: 12px;
+    font-weight: bold;
+    text-anchor: middle;
+}
+
+.sync-shape {
+    fill: var(--hsm-pseudo);
+}
+
+.entry-shape,
+.exit-shape {
+    fill: var(--hsm-bg);
+    stroke: var(--hsm-pseudo);
+    stroke-width: 1.5px;
+}
+
+.exit-cross {
+    fill: none;
+    stroke: var(--hsm-pseudo);
+    stroke-width: 1.3px;
+}
+
+.node-label {
+    font-size: 12px;
+}
+
+/* ---- definition section ---- */
+
+.definition-shape {
+    fill: var(--hsm-def-fill);
+    stroke: var(--hsm-def-stroke);
+    stroke-width: 1.2px;
+}
+
+.definition-separator {
+    stroke: var(--hsm-def-stroke);
+    stroke-width: 1px;
+}
+
+.definition-header {
+    font-size: 14px;
+}
+
+.definition-name {
+    font-weight: bold;
+}
+
+.sprotty-graph .definition-kind {
+    font-size: 11px;
+    font-style: italic;
+    fill: var(--hsm-muted);
+}
+
+.definition-line {
+    font-size: 11.5px;
+}
+
+.sprotty-graph .definition-line {
+    font-family: var(--hsm-mono);
+}
+
+.sprotty-graph .definition-scope {
+    fill: var(--hsm-keyword);
+}
+
+/* ---- transitions ---- */
+
+.transition-line {
+    fill: none;
+    stroke: var(--hsm-edge);
+    stroke-width: 1.2px;
+}
+
+.transition-arrow {
+    fill: var(--hsm-edge);
+    stroke: var(--hsm-edge);
+    stroke-width: 0.6px;
+    stroke-linejoin: round;
+}
+
+.transition-hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 12px;
+}
+
+.transition-label text {
+    font-size: 12px;
+}
+
+.transition-label-hit {
+    fill: transparent;
+}
+
+/* ---- interaction feedback ---- */
+
+.hsm-node.mouseover > .state-shape,
+.hsm-node.mouseover > .choice-shape,
+.hsm-node.mouseover > .history-shape {
+    stroke-width: 2.5px;
+}
+
+.hsm-node.mouseover > .initial-shape,
+.hsm-node.mouseover > .junction-shape,
+.hsm-node.mouseover > .sync-shape,
+.hsm-node.mouseover > .entry-shape,
+.hsm-node.mouseover > .exit-shape,
+.hsm-node.mouseover > .definition-shape,
+.hsm-node.mouseover > .final-outer {
+    stroke: var(--hsm-select);
+    stroke-width: 2px;
+}
+
+.hsm-node.selected > .state-shape,
+.hsm-node.selected > .choice-shape,
+.hsm-node.selected > .history-shape,
+.hsm-node.selected > .entry-shape,
+.hsm-node.selected > .exit-shape,
+.hsm-node.selected > .definition-shape,
+.hsm-node.selected > .final-outer {
+    stroke: var(--hsm-select);
+    stroke-width: 2.5px;
+}
+
+.hsm-node.selected > .state-separator,
+.hsm-node.selected > .definition-separator {
+    stroke: var(--hsm-select);
+}
+
+.hsm-node.selected > .initial-shape,
+.hsm-node.selected > .sync-shape,
+.hsm-node.selected > .junction-shape {
+    stroke: var(--hsm-select);
+    stroke-width: 3px;
+}
+
+.hsm-node.pending-source > .state-shape,
+.hsm-node.pending-source > .choice-shape,
+.hsm-node.pending-source > .history-shape,
+.hsm-node.pending-source > .initial-shape,
+.hsm-node.pending-source > .sync-shape,
+.hsm-node.pending-source > .entry-shape,
+.hsm-node.pending-source > .exit-shape,
+.hsm-node.pending-source > .junction-shape {
+    stroke: var(--hsm-select);
+    stroke-width: 3px;
+    stroke-dasharray: 5 3;
+}
+
+.transition.mouseover .transition-line {
+    stroke-width: 2px;
+}
+
+.transition.selected .transition-line {
+    stroke: var(--hsm-select);
+    stroke-width: 2px;
+}
+
+.transition.selected .transition-arrow {
+    fill: var(--hsm-select);
+    stroke: var(--hsm-select);
+}
+
+.transition.selected .transition-label text {
+    fill: var(--hsm-select);
+}
+
+/* ---- problems ---- */
+
+.hsm-node.has-error > .state-shape,
+.hsm-node.has-error > .choice-shape,
+.hsm-node.has-error > .entry-shape,
+.hsm-node.has-error > .exit-shape,
+.hsm-node.has-error > .definition-shape,
+.hsm-node.has-error > .history-shape {
+    stroke: var(--hsm-error);
+}
+
+.transition.has-error .transition-line {
+    stroke: var(--hsm-error);
+    stroke-dasharray: 5 3;
+}
+
+.issue circle {
+    stroke: var(--hsm-bg);
+    stroke-width: 1.5px;
+}
+
+.issue-error circle {
+    fill: var(--hsm-error);
+}
+
+.issue-warning circle {
+    fill: var(--hsm-warning);
+}
+
+.sprotty-graph .issue text {
+    fill: #ffffff;
+    font-size: 11px;
+    font-weight: bold;
+    text-anchor: middle;
+}
+
+.hsm-export .issue {
+    display: none;
+}
+
+/* ---- simulation ---- */
+
+.theme-classic, .theme-modern {
+    --hsm-active-fill: #d4f5cc;
+    --hsm-active-fill-composite: #effbeb;
+    --hsm-active-stroke: #1e8e3e;
+    --hsm-taken: #ff6d00;
+    --hsm-breakpoint: #e53935;
+}
+
+.theme-dark {
+    --hsm-active-fill: #1f4a2b;
+    --hsm-active-fill-composite: #22362a;
+    --hsm-active-stroke: #4ade80;
+    --hsm-taken: #ffa94d;
+    --hsm-breakpoint: #ff5252;
+}
+
+.state-shape,
+.transition-line,
+.transition-arrow {
+    transition: fill 0.25s, stroke 0.9s ease-out, stroke-width 0.9s ease-out;
+}
+
+.hsm-node.active > .state-shape {
+    fill: var(--hsm-active-fill);
+    stroke: var(--hsm-active-stroke);
+    stroke-width: 3px;
+}
+
+.hsm-node.active.composite > .state-shape {
+    fill: var(--hsm-active-fill-composite);
+}
+
+.hsm-node.active > .state-separator {
+    stroke: var(--hsm-active-stroke);
+    stroke-width: 2px;
+}
+
+.hsm-node.active > .state-name {
+    font-weight: bold;
+}
+
+.hsm-node.active > .final-outer {
+    stroke: var(--hsm-active-stroke);
+    stroke-width: 3px;
+}
+
+.hsm-node.active > .final-inner {
+    fill: var(--hsm-active-stroke);
+}
+
+/* taken transitions are highlighted immediately and fade out when the flag is removed */
+.transition.taken .transition-line {
+    transition: none;
+    stroke: var(--hsm-taken);
+    stroke-width: 3.5px;
+}
+
+.transition.taken .transition-arrow {
+    transition: none;
+    fill: var(--hsm-taken);
+    stroke: var(--hsm-taken);
+}
+
+.breakpoint-marker circle {
+    fill: var(--hsm-breakpoint);
+    stroke: var(--hsm-bg);
+    stroke-width: 1.5px;
+}
+
+.hsm-export .breakpoint-marker {
+    display: none;
+}
+
+/* ---- coverage (renderSvg highlight: 'covered' / 'uncovered') ---- */
+
+.theme-classic, .theme-modern {
+    --hsm-covered-fill: #d4f5cc;
+    --hsm-covered-stroke: #1e8e3e;
+    --hsm-uncovered-fill: #fde0e0;
+    --hsm-uncovered-stroke: #d32f2f;
+}
+
+.theme-dark {
+    --hsm-covered-fill: #1f4a2b;
+    --hsm-covered-stroke: #4ade80;
+    --hsm-uncovered-fill: #4a1f24;
+    --hsm-uncovered-stroke: #ff6b6b;
+}
+
+.hsm-node.hsm-covered > .state-shape,
+.hsm-node.hsm-covered > .choice-shape,
+.hsm-node.hsm-covered > .history-shape {
+    fill: var(--hsm-covered-fill);
+    stroke: var(--hsm-covered-stroke);
+    stroke-width: 2px;
+}
+
+.hsm-node.hsm-covered.composite > .state-shape,
+.hsm-node.hsm-uncovered.composite > .state-shape {
+    fill-opacity: 0.5;
+}
+
+.hsm-node.hsm-covered > .state-separator {
+    stroke: var(--hsm-covered-stroke);
+}
+
+.hsm-node.hsm-covered > .initial-shape,
+.hsm-node.hsm-covered > .junction-shape,
+.hsm-node.hsm-covered > .sync-shape,
+.hsm-node.hsm-covered > .final-inner {
+    fill: var(--hsm-covered-stroke);
+}
+
+.hsm-node.hsm-covered > .final-outer,
+.hsm-node.hsm-covered > .entry-shape,
+.hsm-node.hsm-covered > .exit-shape,
+.hsm-node.hsm-covered > .exit-cross {
+    stroke: var(--hsm-covered-stroke);
+}
+
+.hsm-node.hsm-uncovered > .state-shape,
+.hsm-node.hsm-uncovered > .choice-shape,
+.hsm-node.hsm-uncovered > .history-shape {
+    fill: var(--hsm-uncovered-fill);
+    stroke: var(--hsm-uncovered-stroke);
+    stroke-width: 2px;
+    stroke-dasharray: 6 3;
+}
+
+.hsm-node.hsm-uncovered > .state-separator {
+    stroke: var(--hsm-uncovered-stroke);
+}
+
+.hsm-node.hsm-uncovered > .initial-shape,
+.hsm-node.hsm-uncovered > .junction-shape,
+.hsm-node.hsm-uncovered > .sync-shape,
+.hsm-node.hsm-uncovered > .final-inner {
+    fill: var(--hsm-uncovered-stroke);
+}
+
+.hsm-node.hsm-uncovered > .final-outer,
+.hsm-node.hsm-uncovered > .entry-shape,
+.hsm-node.hsm-uncovered > .exit-shape,
+.hsm-node.hsm-uncovered > .exit-cross {
+    stroke: var(--hsm-uncovered-stroke);
+}
+
+.transition.hsm-covered .transition-line {
+    stroke: var(--hsm-covered-stroke);
+    stroke-width: 2px;
+}
+
+.transition.hsm-covered .transition-arrow {
+    fill: var(--hsm-covered-stroke);
+    stroke: var(--hsm-covered-stroke);
+}
+
+.transition.hsm-uncovered .transition-line {
+    stroke: var(--hsm-uncovered-stroke);
+    stroke-width: 2px;
+    stroke-dasharray: 6 3;
+}
+
+.transition.hsm-uncovered .transition-arrow {
+    fill: var(--hsm-uncovered-stroke);
+    stroke: var(--hsm-uncovered-stroke);
+}
+
+.sprotty-graph .transition.hsm-uncovered .transition-label text {
+    fill: var(--hsm-uncovered-stroke);
+}
+
+/* ---- title and legend of rendered SVG files (renderSvg) ---- */
+
+.hsm-title {
+    font-size: 16px;
+    font-weight: bold;
+}
+
+.hsm-legend-label {
+    font-size: 12px;
+}
+
+.hsm-legend-frame {
+    fill: var(--hsm-bg);
+    stroke: var(--hsm-def-stroke);
+    stroke-width: 1px;
+}
+]]></style>
+<rect class="export-background" width="100%" height="100%"/>
+<g>
+<g class="hsm-node definition" transform="translate(20, 20)">
+<rect class="definition-shape" x="0" y="0" rx="3" ry="3" width="314" height="278"/>
+<text class="definition-header" x="8" y="17.9"><tspan class="definition-name">TrafficLight</tspan><tspan class="definition-kind" dx="6">definitions</tspan></text>
+<line class="definition-separator" x1="0" y1="26" x2="314" y2="26"/>
+<text class="definition-line definition-scope" x="8" y="43.53">@CycleBased(100)</text>
+<text class="definition-line definition-scope" x="8" y="58.53">interface:</text>
+<text class="definition-line" x="8" y="73.53">  in event powerOn</text>
+<text class="definition-line" x="8" y="88.53">  in event powerOff</text>
+<text class="definition-line" x="8" y="103.53">  in event failure</text>
+<text class="definition-line" x="8" y="118.53">  in event reset</text>
+<text class="definition-line" x="8" y="133.53">  out event lightsChanged : integer</text>
+<text class="definition-line definition-scope" x="8" y="148.53">interface Pedestrian:</text>
+<text class="definition-line" x="8" y="163.53">  in event request</text>
+<text class="definition-line" x="8" y="178.53">  var waiting : boolean = false</text>
+<text class="definition-line definition-scope" x="8" y="193.53">internal:</text>
+<text class="definition-line" x="8" y="208.53">  const RED : integer = 1</text>
+<text class="definition-line" x="8" y="223.53">  const YELLOW : integer = 2</text>
+<text class="definition-line" x="8" y="238.53">  const GREEN : integer = 4</text>
+<text class="definition-line" x="8" y="253.53">  var lights : integer = 0</text>
+<text class="definition-line" x="8" y="268.52">  operation switchOn(mask : integer) : void</text>
+</g>
+<g class="hsm-node initial" transform="translate(708, 20)">
+<circle class="initial-shape" cx="10" cy="10" r="10"/>
+</g>
+<g class="hsm-node state" transform="translate(632, 76)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="172" height="53"/>
+<text class="state-name" x="86" y="17.9">Off</text>
+<line class="state-separator" x1="0" y1="26" x2="172" y2="26"/>
+<text class="state-body" x="6" y="43.7">entry / lights = 0; switchOn(0)</text>
+</g>
+<g class="hsm-node state composite" transform="translate(374, 216)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="516" height="613"/>
+<text class="state-name" x="258" y="17.9">Operating</text>
+<line class="state-separator" x1="0" y1="26" x2="516" y2="26"/>
+<g class="hsm-node initial" transform="translate(239, 40)">
+<circle class="initial-shape" cx="10" cy="10" r="10"/>
+</g>
+<g class="hsm-node state" transform="translate(141, 96)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="216" height="68"/>
+<text class="state-name" x="108" y="17.9">Red</text>
+<line class="state-separator" x1="0" y1="26" x2="216" y2="26"/>
+<text class="state-body" x="6" y="43.7">entry / lights = RED; switchOn(lights);<title>entry / lights = RED; switchOn(lights); raise lightsChanged : lights</title></text>
+<text class="state-body" x="6" y="58.7">    raise lightsChanged : lights<title>entry / lights = RED; switchOn(lights); raise lightsChanged : lights</title></text>
+</g>
+<g class="hsm-node state" transform="translate(230, 251)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="272" height="53"/>
+<text class="state-name" x="136" y="17.9">RedYellow</text>
+<line class="state-separator" x1="0" y1="26" x2="272" y2="26"/>
+<text class="state-body" x="6" y="43.7">entry / lights = RED | YELLOW; switchOn(lights)</text>
+</g>
+<g class="hsm-node state" transform="translate(230, 391)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="260" height="68"/>
+<text class="state-name" x="130" y="17.9">Green</text>
+<line class="state-separator" x1="0" y1="26" x2="260" y2="26"/>
+<text class="state-body" x="6" y="43.7">entry / lights = GREEN; switchOn(lights)</text>
+<text class="state-body" x="6" y="58.7">Pedestrian.request / Pedestrian.waiting = true</text>
+</g>
+<g class="hsm-node state" transform="translate(134, 546)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="237" height="53"/>
+<text class="state-name" x="118.5" y="17.9">Yellow</text>
+<line class="state-separator" x1="0" y1="26" x2="237" y2="26"/>
+<text class="state-body" x="6" y="43.7">entry / lights = YELLOW; switchOn(lights)</text>
+</g>
+</g>
+<g class="hsm-node state" transform="translate(556, 916)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="323" height="53"/>
+<text class="state-name" x="161.5" y="17.9">Blinking</text>
+<line class="state-separator" x1="0" y1="26" x2="323" y2="26"/>
+<text class="state-body" x="6" y="43.7">every 500 ms / lights = lights ^ YELLOW; switchOn(lights)</text>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 718,40 C 718,40 718,58 718,76"/>
+<path class="transition-arrow" d="M 718,76 L 722.5,66 L 718,69 L 713.5,66 Z"/>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 675,129 C 546,147 546,156 546,163.25 C 546,170.5 546,176 546,182.87 C 546,189.75 546,198 546,216"/>
+<path class="transition-arrow" d="M 546,216 L 550.5,206 L 546,209 L 541.5,206 Z"/>
+<g class="transition-label">
+<text x="491" y="176.7">powerOn</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 546,829 C 637,847 637,856 637,863.25 C 637,870.5 637,876 637,882.87 C 637,889.75 637,898 637,916"/>
+<path class="transition-arrow" d="M 637,916 L 641.5,906 L 637,909 L 632.5,906 Z"/>
+<g class="transition-label">
+<text x="584" y="876.7">1: failure</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 718,916 C 718,898 718,885.25 718,872.5 C 718,859.75 718,847 718,829"/>
+<path class="transition-arrow" d="M 718,829 L 713.5,839 L 718,836 L 722.5,839 Z"/>
+<g class="transition-label">
+<text x="725" y="876.7">1: reset</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 718,216 C 718,198 718,185.25 718,172.5 C 718,159.75 718,147 718,129"/>
+<path class="transition-arrow" d="M 718,129 L 713.5,139 L 718,136 L 722.5,139 Z"/>
+<g class="transition-label">
+<text x="725" y="176.7">2: powerOff</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 798,916 C 920,898 920,889 920,881.75 C 920,874.5 920,869 920,863.5 C 920,858 920,852.5 920,741.58 C 920,630.67 920,414.33 920,303.42 C 920,192.5 920,187 920,181.5 C 920,176 920,170.5 920,163.25 C 920,156 920,147 761,129"/>
+<path class="transition-arrow" d="M 761,129 L 770.43,134.6 L 767.96,129.79 L 771.44,125.65 Z"/>
+<g class="transition-label">
+<text x="927" y="526.7">2: powerOff</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 623,276 C 623,276 623,294 623,312"/>
+<path class="transition-arrow" d="M 623,312 L 627.5,302 L 623,305 L 618.5,302 Z"/>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 659,380 C 659,398 659,406.25 659,413.13 C 659,420 659,425.5 659,432.75 C 659,440 659,449 740,467"/>
+<path class="transition-arrow" d="M 740,467 L 731.21,460.44 L 733.17,465.48 L 729.26,469.22 Z"/>
+<g class="transition-label">
+<text x="666" y="427.7">after 20 s</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 740,520 C 734,538 734,547 734,554.25 C 734,561.5 734,567 734,573.87 C 734,580.75 734,589 734,607"/>
+<path class="transition-arrow" d="M 734,607 L 738.5,597 L 734,600 L 729.5,597 Z"/>
+<g class="transition-label">
+<text x="741" y="567.7">after 2 s</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 734,675 C 666,693 666,702 666,709.25 C 666,716.5 666,722 666,728.88 C 666,735.75 666,744 666,762"/>
+<path class="transition-arrow" d="M 666,762 L 670.5,752 L 666,755 L 661.5,752 Z"/>
+<g class="transition-label">
+<text x="673" y="722.7">after 30 s [Pedestrian.waiting]</text>
+</g>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 587,762 C 587,744 587,731.25 587,720.63 C 587,710 587,701.5 587,679.92 C 587,658.33 587,623.67 587,602.08 C 587,580.5 587,572 587,563.5 C 587,555 587,546.5 587,527.42 C 587,508.33 587,478.67 587,459.58 C 587,440.5 587,432 587,421.38 C 587,410.75 587,398 587,380"/>
+<path class="transition-arrow" d="M 587,380 L 582.5,390 L 587,387 L 591.5,390 Z"/>
+<g class="transition-label">
+<text x="390" y="567.7">after 3 s / Pedestrian.waiting = false</text>
+</g>
+</g>
+</g>
+</svg>

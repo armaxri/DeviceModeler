@@ -12,6 +12,9 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 - ✅ Graphical editing as text edits (undo, comments and formatting preserved)
 - ✅ Composite states, orthogonal regions, choice, junction, shallow and deep history, final states
 - ✅ PlantUML export, SVG export, CLI
+- ✅ SVG rendering without a browser (`hsm render`, `renderSvg()`; same look and style sheet as the
+  editor, Helvetica metrics for the layout in Node.js) and model documentation (`hsm doc`: Markdown or HTML
+  with diagram, interface / state / transition tables, `/** */` doc comments, also shown on hover)
 
 ## Phase 1 – Language parity with itemis CREATE ✅
 
@@ -96,16 +99,36 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
   operations of the state machine cannot be called from tests
 - 💭 Further generator targets only on demand (currently none planned); they can build on the shared
   generator core (`src/generator/common`)
-- 💭 Generator configuration model (like itemis `.sgen` files)
+- ✅ Generator configuration (`hsm.gen.json`, like itemis `.sgen` files) with a JSON schema: models (globs),
+  per target and per model options (output directory, namespace, class name, standard, prefix, file
+  extensions, license header), only changed files are written; `hsm generate` (no arguments),
+  `--check` for CI, `--list-outputs` / `--list-inputs` for build systems
+- ✅ CMake integration (`cmake/HsmGenerate.cmake`): `hsm_generate()` regenerates the code at build time when a
+  model changes (only changed files are recompiled), `hsm_add_tests()` runs `.hsmtest` files with CTest
+  (JUnit reports); example project `examples/cmake` built and tested by `npm test` (Ninja / Makefiles)
+  - 📋 still missing: generated GoogleTest targets from `.hsmtest` files, verification on Windows / MSVC,
+    shipping the CMake module with the npm package (currently the `cmake/` directory of the repository)
 
-## Phase 6 – Tooling 💭
+## Phase 6 – Tooling 🚧
 
-- 💭 VS Code extension (Langium language server + `sprotty-vscode` diagram)
+- ✅ VS Code extension (`packages/vscode`): Langium language server for `.hsm` / `.hsmtest` (workspace
+  index, hover with doc comments, rename, formatting, semantic highlighting, …), the diagram editor of
+  the web app as webview with selection sync and diagram edits applied as `WorkspaceEdit`s, theme
+  following VS Code, Generate C++ (`hsm.gen.json` or settings), tests and model coverage in the Test
+  Explorer, `.sct` import, SVG / PlantUML export, `.vsix` packaging
+  - limitations: no hand-arranged layout; the extension generates only the `cpp` target; no end-to-end
+    tests in a real VS Code instance (`@vscode/test-electron` could not download VS Code) – the language
+    server is tested over stdio, the webview bundle in Chromium with a mocked VS Code API
 - 💭 Multi-file projects and workspaces in the web editor
 - 🧪 Manual layout adjustments: experimental on the branch `claude/manual-layout` – stored in a sidecar
   file `<model>.hsm.layout` instead of the model; move / resize states, bend points, label offsets,
   auto-arrange / reset, undo shared with the text ([docs/manual-layout.md](docs/manual-layout.md))
-- 💭 Coverage of states and transitions from simulation and tests
+- ✅ Model coverage of unit tests (`hsm test --coverage`): states, transitions, local reactions and guard
+  decisions with per-test attribution; text, JSON, LCOV, Cobertura and HTML reports, thresholds for CI;
+  `CoverageCollector` attachable to any interpreter
+  - ✅ the HTML report shows the diagram with covered / uncovered elements (`renderSvg` highlights)
+  - ✅ coverage view in the VS Code extension (Test Explorer coverage profile)
+  - 📋 still missing: coverage view in the web simulation
 
 ## Decisions
 

@@ -8,6 +8,7 @@ import { qualifiedName } from '../hsm-scope.js';
 import type {
     DiagramEdge, DiagramGraph, DiagramNode, DiagramNodeKind, LayoutDirection, LayoutOptionsInput, LayoutResult, Point, TextMeasure, TextStyle
 } from './diagram-model.js';
+import { helveticaTextWidth, monospaceTextWidth } from './text-metrics.js';
 
 /** Metrics shared by the layout and the rendering of the diagram. */
 export const DiagramMetrics = {
@@ -37,9 +38,15 @@ export const DiagramMetrics = {
     maxLineLength: 60
 };
 
-/** Rough text measurement used when no real font metrics are available (e.g. in Node.js). */
+/**
+ * Text measurement used when no real font metrics are available (e.g. in Node.js): uses the
+ * character widths of Helvetica (metric compatible with Arial / Liberation Sans) and of a
+ * monospace font for the definition section, so the layout is close to the one in the browser.
+ */
 export const approximateTextMeasure: TextMeasure = (text, style) => ({
-    width: Math.ceil(text.length * DiagramMetrics.fontSize[style] * (style === 'code' ? 0.6 : 0.58)),
+    width: Math.ceil(style === 'code'
+        ? monospaceTextWidth(text, DiagramMetrics.fontSize[style])
+        : helveticaTextWidth(text, DiagramMetrics.fontSize[style])),
     height: DiagramMetrics.lineHeight[style]
 });
 

@@ -1,7 +1,13 @@
-/*
- * Styles of the state machine diagram. The themes mimic the look of PlantUML state diagrams.
- * This file is also embedded into exported SVG files.
+/**
+ * Style sheet of the state machine diagram, shared by the web editor (injected into the page and
+ * embedded into exported SVG files) and the SVG renderer of the language package (`renderSvg`).
+ * The themes mimic the look of PlantUML state diagrams.
+ *
+ * The root `<svg>` of a diagram has the class `sprotty-graph`; the theme class (`theme-classic`,
+ * `theme-modern` or `theme-dark`) is set on the root or on an ancestor (the diagram container of
+ * the web editor). Standalone SVG files additionally have the class `hsm-export`.
  */
+export const DIAGRAM_CSS = `
 .theme-classic, .theme-modern, .theme-dark {
     --hsm-font: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
     --hsm-select: #1a73e8;
@@ -443,3 +449,125 @@
 .manual-layout .transition.selected .transition-label {
     cursor: move;
 }
+
+.hsm-export .resize-handle,
+.hsm-export .bend-handle {
+    display: none;
+}
+
+/* ---- coverage (renderSvg highlight: 'covered' / 'uncovered') ---- */
+
+.theme-classic, .theme-modern {
+    --hsm-covered-fill: #d4f5cc;
+    --hsm-covered-stroke: #1e8e3e;
+    --hsm-uncovered-fill: #fde0e0;
+    --hsm-uncovered-stroke: #d32f2f;
+}
+
+.theme-dark {
+    --hsm-covered-fill: #1f4a2b;
+    --hsm-covered-stroke: #4ade80;
+    --hsm-uncovered-fill: #4a1f24;
+    --hsm-uncovered-stroke: #ff6b6b;
+}
+
+.hsm-node.hsm-covered > .state-shape,
+.hsm-node.hsm-covered > .choice-shape,
+.hsm-node.hsm-covered > .history-shape {
+    fill: var(--hsm-covered-fill);
+    stroke: var(--hsm-covered-stroke);
+    stroke-width: 2px;
+}
+
+.hsm-node.hsm-covered.composite > .state-shape,
+.hsm-node.hsm-uncovered.composite > .state-shape {
+    fill-opacity: 0.5;
+}
+
+.hsm-node.hsm-covered > .state-separator {
+    stroke: var(--hsm-covered-stroke);
+}
+
+.hsm-node.hsm-covered > .initial-shape,
+.hsm-node.hsm-covered > .junction-shape,
+.hsm-node.hsm-covered > .sync-shape,
+.hsm-node.hsm-covered > .final-inner {
+    fill: var(--hsm-covered-stroke);
+}
+
+.hsm-node.hsm-covered > .final-outer,
+.hsm-node.hsm-covered > .entry-shape,
+.hsm-node.hsm-covered > .exit-shape,
+.hsm-node.hsm-covered > .exit-cross {
+    stroke: var(--hsm-covered-stroke);
+}
+
+.hsm-node.hsm-uncovered > .state-shape,
+.hsm-node.hsm-uncovered > .choice-shape,
+.hsm-node.hsm-uncovered > .history-shape {
+    fill: var(--hsm-uncovered-fill);
+    stroke: var(--hsm-uncovered-stroke);
+    stroke-width: 2px;
+    stroke-dasharray: 6 3;
+}
+
+.hsm-node.hsm-uncovered > .state-separator {
+    stroke: var(--hsm-uncovered-stroke);
+}
+
+.hsm-node.hsm-uncovered > .initial-shape,
+.hsm-node.hsm-uncovered > .junction-shape,
+.hsm-node.hsm-uncovered > .sync-shape,
+.hsm-node.hsm-uncovered > .final-inner {
+    fill: var(--hsm-uncovered-stroke);
+}
+
+.hsm-node.hsm-uncovered > .final-outer,
+.hsm-node.hsm-uncovered > .entry-shape,
+.hsm-node.hsm-uncovered > .exit-shape,
+.hsm-node.hsm-uncovered > .exit-cross {
+    stroke: var(--hsm-uncovered-stroke);
+}
+
+.transition.hsm-covered .transition-line {
+    stroke: var(--hsm-covered-stroke);
+    stroke-width: 2px;
+}
+
+.transition.hsm-covered .transition-arrow {
+    fill: var(--hsm-covered-stroke);
+    stroke: var(--hsm-covered-stroke);
+}
+
+.transition.hsm-uncovered .transition-line {
+    stroke: var(--hsm-uncovered-stroke);
+    stroke-width: 2px;
+    stroke-dasharray: 6 3;
+}
+
+.transition.hsm-uncovered .transition-arrow {
+    fill: var(--hsm-uncovered-stroke);
+    stroke: var(--hsm-uncovered-stroke);
+}
+
+.sprotty-graph .transition.hsm-uncovered .transition-label text {
+    fill: var(--hsm-uncovered-stroke);
+}
+
+/* ---- title and legend of rendered SVG files (renderSvg) ---- */
+
+.hsm-title {
+    font-size: 16px;
+    font-weight: bold;
+}
+
+.hsm-legend-label {
+    font-size: 12px;
+}
+
+.hsm-legend-frame {
+    fill: var(--hsm-bg);
+    stroke: var(--hsm-def-stroke);
+    stroke-width: 1px;
+}
+`;

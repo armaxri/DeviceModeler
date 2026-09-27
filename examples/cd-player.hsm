@@ -1,17 +1,22 @@
-/*
+/**
  * CD player with a history state: after closing the lid the player
  * resumes the mode it was in before.
  */
 statemachine CdPlayer "Hierarchical CD player" {
     interface:
+        /** Play button: starts playing (or resumes a paused track). */
         in event play
         in event pause
         in event stop
         in event eject
         in event powerOff
+        /** The current track has ended. */
         in event trackEnd
+        /** Number of the current track (1-based). */
         var track : integer = 1
+        /** Number of tracks of the inserted disc (set by the host). */
         var tracks : integer = 0
+        /** Whether a disc is in the tray (implemented by the host). */
         operation discInserted() : boolean
         operation startMotor() : void
         operation stopMotor() : void
@@ -21,6 +26,7 @@ statemachine CdPlayer "Hierarchical CD player" {
     state Closed {
         [*] -> Stopped
 
+        /** Remembers the last active sub state of `Closed` when the tray is opened. */
         history H
         state Stopped {
             entry / track = 1
@@ -36,6 +42,7 @@ statemachine CdPlayer "Hierarchical CD player" {
             Playing -> Paused : pause
             Paused -> Playing : pause, play
         }
+        /** Playing starts only if a disc with tracks is inserted. */
         choice HasDisc
 
         Stopped -> HasDisc : play
@@ -47,6 +54,7 @@ statemachine CdPlayer "Hierarchical CD player" {
     state Open "Tray is open"
 
     Closed -> Open : eject
+    /** Closing the tray resumes the previous mode via the history state. */
     Open -> H : eject
     Closed -> [*] : powerOff
     Open -> [*] : powerOff

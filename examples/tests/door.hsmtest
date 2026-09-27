@@ -54,4 +54,32 @@ testclass DoorTest for statemachine Door {
         exit
         assert !active(Closed)
     }
+
+    @Test
+    operation maintenanceEntersServiceByDefault() {
+        raise maintenance
+        assert active(Service.Unlocked) && active(Service.Off) message "default entry of both regions"
+        raise close
+        raise open
+        assert active(Service.Locked) && active(Service.On)
+    }
+
+    @Test
+    operation lowerEntersMovingThroughClosing() {
+        raise maintenance
+        raise lower
+        assert active(Moving.Down) message "lower enters Moving through the entry point Closing"
+        raise motorStopped
+        assert active(Closed)
+        assert cycles == 2
+    }
+
+    @Test
+    operation obstacleWhileLowering() {
+        raise maintenance
+        raise lower
+        raise obstacle
+        assert alarm
+        assert active(Service.Locked) && active(Service.On)
+    }
 }

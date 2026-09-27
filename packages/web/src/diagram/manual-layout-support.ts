@@ -1,6 +1,6 @@
 /**
- * Support for manual (hand-arranged) layouts in the web app (experimental): storage of the layout per
- * file in the local storage, the undo history of layout changes and a model editor which records how
+ * Support for manual (hand-arranged) layouts (experimental), shared by the web app and the VS Code
+ * webview: storage of the layout per file in the local storage (web app), the undo history of layout changes and a model editor which records how
  * diagram operations change the ids of diagram elements (so the layout follows renames, moves and
  * deletions).
  */
@@ -41,12 +41,26 @@ export interface LayoutHistoryEntry {
     before: ManualLayout | undefined;
     after: ManualLayout | undefined;
     /**
-     * `alternativeVersionId` of the text model when the change was made. Layout changes and text edits
-     * share one undo order: a layout change is undone if the text is in the state it had then.
+     * Key of the text state when the change was made (see {@link textKey}; the web app uses the
+     * `alternativeVersionId` of the Monaco model). Layout changes and text edits share one undo order:
+     * a layout change is undone if the text is in the state it had then.
      */
-    textVersion: number;
+    textKey: string;
     /** The change belongs to a text edit (renamed / moved / deleted elements) and is undone with it. */
     linked: boolean;
+}
+
+/**
+ * Identifies a state of the text for the layout history (length and FNV-1a hash of the text). Used when
+ * the text editor has no version id that returns to earlier values on undo (VS Code documents).
+ */
+export function textKey(text: string): string {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return `${text.length}:${(hash >>> 0).toString(16)}`;
 }
 
 /** Undo / redo stacks of layout changes, interleaved with the undo stack of the text editor. */
@@ -74,38 +88,38 @@ export class LayoutHistory {
     }
 
     /** The layout change to undo instead of the text if the text has the given version. */
-    layoutUndo(textVersion: number): LayoutHistoryEntry | undefined {
+    layoutUndo(textKey: string): LayoutHistoryEntry | undefined {
         const top = this.undoStack[this.undoStack.length - 1];
-        if (top && !top.linked && top.textVersion === textVersion) {
+        if (top && !top.linked && top.textKey === textKey) {
             this.redoStack.push(this.undoStack.pop()!);
             return top;
         }
         return undefined;
     }
 
-    layoutRedo(textVersion: number): LayoutHistoryEntry | undefined {
+    layoutRedo(textKey: string): LayoutHistoryEntry | undefined {
         const top = this.redoStack[this.redoStack.length - 1];
-        if (top && !top.linked && top.textVersion === textVersion) {
+        if (top && !top.linked && top.textKey === textKey) {
             this.undoStack.push(this.redoStack.pop()!);
             return top;
         }
         return undefined;
     }
 
-    /** The text was undone from `previousVersion`: the layout change linked to that text edit is undone too. */
-    textUndone(previousVersion: number): LayoutHistoryEntry | undefined {
+    /** The text was undone from the state `previousKey`: the layout change linked to that text edit is undone too. */
+    textUndone(previousKey: string): LayoutHistoryEntry | undefined {
         const top = this.undoStack[this.undoStack.length - 1];
-        if (top?.linked && top.textVersion === previousVersion) {
+        if (top?.linked && top.textKey === previousKey) {
             this.redoStack.push(this.undoStack.pop()!);
             return top;
         }
         return undefined;
     }
 
-    /** The text was redone to `version`: the linked layout change is redone too. */
-    textRedone(version: number): LayoutHistoryEntry | undefined {
+    /** The text was redone to the state `key`: the linked layout change is redone too. */
+    textRedone(key: string): LayoutHistoryEntry | undefined {
         const top = this.redoStack[this.redoStack.length - 1];
-        if (top?.linked && top.textVersion === version) {
+        if (top?.linked && top.textKey === key) {
             this.undoStack.push(this.redoStack.pop()!);
             return top;
         }
