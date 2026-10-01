@@ -1,0 +1,78 @@
+{
+    "name": "s10-cpp-class-section-enum-doc",
+    "description": "C++ class sections, C++ enums and Doxygen comments together: members of the class sections whose types are enums of an imported header (enum class with underlying type, unscoped enum of a class) and that have Doxygen doc comments, a const member function with an enum parameter and an enum return value, enum typed events; the enumerators and the enums of the header are documented with Doxygen comments (also trailing ///< and /**< comments). The doc comments are copied verbatim into the generated class.",
+    "text": [
+        "statemachine M {",
+        "    import \"device.h\"",
+        "    interface:",
+        "        in event select : dev::Mode",
+        "        out event changed : dev::Mode",
+        "    public:",
+        "        /**",
+        "         * @brief The next mode after @p current.",
+        "         * @param current the current mode",
+        "         * @return the next mode",
+        "         */",
+        "        const operation next(current : dev::Mode) : dev::Mode",
+        "    private:",
+        "        /**",
+        "         * @brief The current mode.",
+        "         * @note Changed by @c select only.",
+        "         */",
+        "        var mode : dev::Mode = dev::Mode::Off",
+        "        /// The state of the device (an unscoped enum of a class).",
+        "        var status : dev::Device::State = dev::Device::Idle",
+        "        var changes : unsigned int",
+        "    [*] -> Idle",
+        "    state Idle",
+        "    state Running",
+        "    Idle -> Running : select [valueof(select) != dev::Mode::Off] / mode = next(valueof(select)); status = dev::Device::Busy; changes++; raise changed : mode",
+        "    Running -> Idle : select [valueof(select) == dev::Mode::Off] / mode = dev::Mode::Off; status = dev::Device::Idle; changes++; raise changed : mode",
+        "}"
+    ],
+    "files": {
+        "device.h": [
+            "#ifndef DEVICE_H",
+            "#define DEVICE_H",
+            "#include <cstdint>",
+            "",
+            "namespace dev {",
+            "",
+            "/**",
+            " * @brief Operating mode of the device.",
+            " * @note The values are sent to the hardware.",
+            " */",
+            "enum class Mode : std::uint8_t {",
+            "    Off,       ///< @brief switched off",
+            "    Slow = 4,  /**< slow, see @c Fast */",
+            "    Fast       ///< fast",
+            "};",
+            "",
+            "/// A device.",
+            "struct Device {",
+            "    /// @brief States of a device.",
+            "    enum State { Idle, Busy };",
+            "    int id = 0;",
+            "};",
+            "",
+            "}  // namespace dev",
+            "",
+            "#endif"
+        ]
+    },
+    "operations": {
+        "next": [
+            "dev::Mode::Fast"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"expect": {"active": ["Idle"], "variables": {"mode": "dev::Mode::Off", "status": "dev::Device::State::Idle", "changes": 0}}},
+        {"raise": "select", "value": "dev::Mode::Slow"},
+        {"runCycle": true},
+        {"expect": {"active": ["Running"], "variables": {"mode": "dev::Mode::Fast", "status": "dev::Device::State::Busy", "changes": 1}, "calls": ["next(dev::Mode::Slow)"], "outEvents": ["changed(dev::Mode::Fast)"]}},
+        {"raise": "select", "value": "dev::Mode::Off"},
+        {"runCycle": true},
+        {"expect": {"active": ["Idle"], "variables": {"mode": "dev::Mode::Off", "status": "dev::Device::State::Idle", "changes": 2}, "outEvents": ["changed(dev::Mode::Off)"]}}
+    ]
+}
