@@ -36,6 +36,7 @@ completion and validation in editors (`"$schema"`); unknown properties are error
 | `cpp`, `c` | the targets: a target is generated if its key is present (`"c": {}` for the defaults) |
 | `outDir` | output directory (default: the directory of each model) |
 | `namespace`, `className`, `std` (cpp) | like `--namespace`, `--class-name`, `--std` (17 or 11) |
+| `virtualMethods` (cpp) | `false`: the member functions of the [C++ class sections](language.md#c-class-sections) are not `virtual` (default `true`; `--non-virtual-methods`) |
 | `prefix`, `typeName`, `stringCapacity`, `queueCapacity` (c) | options of the C generator |
 | `headerExtension`, `sourceExtension` | `.h` / `.cpp` (`.c`) by default, e.g. `.hpp` / `.cc`; the includes of the generated files are adapted and the runtime header is renamed too (`sc_statemachine.hpp`) |
 | `licenseHeader` / `licenseHeaderFile` | text (string or array of lines) or file put at the top of every generated file; wrapped in `/* … */` unless it already starts with `//` or `/*` |

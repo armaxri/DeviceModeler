@@ -20,8 +20,11 @@ import { CppTypeIndex } from './cpp-header/type-index.js';
  * resolved relative to the importing file and the include paths) and everything else (unsupported, an error).
  */
 
-/** `hsm`: a state machine file; `header`: a C/C++ header; `unsupported`: any other file. */
-export type ImportKind = 'hsm' | 'header' | 'unsupported';
+/**
+ * `hsm`: a state machine file; `header`: a C/C++ header; `system`: a header in angle brackets (`"<vector>"`),
+ * only `#include`d by the generated C++ code, not analyzed; `unsupported`: any other file.
+ */
+export type ImportKind = 'hsm' | 'header' | 'system' | 'unsupported';
 
 /** File extensions of C/C++ headers accepted by `import`. */
 export const HEADER_EXTENSIONS: readonly string[] = ['.h', '.hh', '.hpp', '.hxx', '.h++', '.inl'];
@@ -52,11 +55,19 @@ export interface ResolvedHeader {
 
 /** The kind of an import path, by its file extension. */
 export function importKind(path: string): ImportKind {
+    if (isSystemInclude(path)) {
+        return 'system';
+    }
     const lower = path.toLowerCase();
     if (lower.endsWith('.hsm')) {
         return 'hsm';
     }
     return HEADER_EXTENSIONS.some(extension => lower.endsWith(extension)) ? 'header' : 'unsupported';
+}
+
+/** Whether an import path is a header in angle brackets (`<vector>`, `<sys/types.h>`): `#include <...>` without analysis. */
+export function isSystemInclude(path: string): boolean {
+    return /^<[^<>\s]+>$/.test(path.trim());
 }
 
 /** Resolves an import path relative to the URI of the importing document (absolute paths are kept). */
@@ -321,6 +332,9 @@ export class HsmImportResolver {
     protected resolvePath(node: ast.ImportPath, base: URI | undefined): ResolvedImport {
         const path = node.path ?? '';
         const kind = importKind(path);
+        if (kind === 'system') {
+            return { node, path, kind };
+        }
         const uri = base && path ? resolveImportUri(base, path) : undefined;
         if (kind === 'header') {
             return this.resolveHeader(node, path, uri);

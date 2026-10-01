@@ -6,6 +6,12 @@ import { cppSpelling } from './cpp-code.js';
 import type { CppApi } from './cpp-generator.js';
 import { hsmTypeOfCpp, isCppType, type CppHsmType } from '../../cpp-types.js';
 import type { CppResolvedType } from '../../cpp-header/model.js';
+import { isReferenceMember, isUsableInModel } from '../../class-members.js';
+
+/** The object of the harness a reference member refers to. */
+function referenceObject(variable: ast.VariableDeclaration): string {
+    return `hsm_object_${variable.name}`;
+}
 
 export interface CppHarnessOptions {
     /** Namespace of the harness code, which defines `int run()` there (default `hsm_scenario_harness`). */
@@ -71,6 +77,7 @@ class CppHarnessGenerator {
             'std::vector<std::string> calls;',
             'std::vector<std::string> out_events;',
             'int failures = 0;',
+            ...this.referenceObjects(),
             '// virtual clock (ns)',
             'sc::integer now = 0;',
             'sc::integer enter_time = 0;',
@@ -89,7 +96,7 @@ class CppHarnessGenerator {
             ...this.stateTables(),
             'int run() {',
             ...indent([
-                'Machine machine;',
+                `Machine machine${this.api.referenceMembers.length > 0 ? `(${this.api.referenceMembers.map(v => referenceObject(v)).join(', ')})` : ''};`,
                 ...this.setup(),
                 'std::string error;',
                 ...main,
@@ -102,7 +109,8 @@ class CppHarnessGenerator {
             '}',
             '',
             `} // namespace ${this.namespace}`,
-            ''
+            '',
+            ...this.methods()
         ];
         if (this.options.main ?? true) {
             lines.push('int main() {', `    return ${this.namespace}::run();`, '}', '');
@@ -120,16 +128,21 @@ class CppHarnessGenerator {
         const open = this.api.namespace ? [`namespace ${this.api.namespace} {`, ''] : [];
         lines.push(...open, '// Access to the internal scope (friend of the state machine class).', `struct ${this.api.internalsStruct} {`);
         for (const variable of this.index.variables().filter(v => this.api.isInternal(v))) {
+            const reference = isReferenceMember(variable);
             const type = this.api.declaredType(variable);
             const member = this.api.internalMember(variable);
             lines.push(
                 `    static ${type} get_${variable.name}(const ${this.api.className}& machine) {`,
                 `        return machine.${member};`,
-                '    }',
-                `    static void set_${variable.name}(${this.api.className}& machine, ${type} value) {`,
-                `        machine.${member} = value;`,
                 '    }'
             );
+            if (!variable.const && !reference) { // (the objects of reference members are set directly)
+                lines.push(
+                    `    static void set_${variable.name}(${this.api.className}& machine, ${type} value) {`,
+                    `        machine.${member} = value;`,
+                    '    }'
+                );
+            }
         }
         lines.push('};', '');
         if (this.api.namespace) {
@@ -138,40 +151,50 @@ class CppHarnessGenerator {
         return lines;
     }
 
+    /**
+     * The body of a mocked operation: records the call and returns the scripted values (the counter of the
+     * scripted values is declared by the caller; `undefined`: no counter needed).
+     */
+    private mockBody(operation: ast.OperationDeclaration, counter: string, parameterNames = this.api.operationParameterNames(operation)): { body: string[], counter?: string } {
+        const name = this.index.declarationName(operation);
+        const returnType = returnTypeOf(operation);
+        const scripted = this.scenario.operations?.[name] ?? this.scenario.operations?.[operation.name] ?? [];
+        const body: string[] = [`std::string hsm_text = ${cString(`${name}(`)};`];
+        let first = true;
+        operation.parameters.forEach((parameter, k) => {
+            const parameterName = parameterNames[k];
+            const format = `${this.namespace}::format(${parameter.varArgs ? 'hsm_value' : parameterName})`;
+            if (parameter.varArgs) {
+                body.push(`for (const auto& hsm_value : ${parameterName}) {`, `    hsm_text += hsm_text.back() == '(' ? "" : ",";`, `    hsm_text += ${format};`, '}');
+            } else {
+                body.push(...(first ? [] : ['hsm_text += ",";']), `hsm_text += ${format};`);
+            }
+            first = false;
+        });
+        body.push('hsm_text += ")";', `${this.namespace}::calls.push_back(hsm_text);`);
+        if (returnType === 'void') {
+            return { body };
+        }
+        if (scripted.length === 0) {
+            body.push(`return ${defaultLiteral(returnType)};`);
+            return { body };
+        }
+        body.push(
+            `static const ${this.api.declaredType(operation)} hsm_values[] = {${scripted.map(v => this.literal(v, returnType)).join(', ')}};`,
+            `return hsm_values[${counter} < ${scripted.length} ? ${counter}++ : ${scripted.length - 1}];`
+        );
+        return { body, counter };
+    }
+
     private callbacks(): string[] {
         const lines: string[] = [];
         this.api.operationScopes.forEach((scope, i) => {
             lines.push(`class Callbacks${i} : public Machine::${scope.callbackClass} {`, 'public:');
             const counters: string[] = [];
             scope.operations.forEach((operation, j) => {
-                const name = this.index.declarationName(operation);
-                const returnType = returnTypeOf(operation);
-                const scripted = this.scenario.operations?.[name] ?? this.scenario.operations?.[operation.name] ?? [];
-                const body: string[] = [`std::string hsm_text = ${cString(`${name}(`)};`];
-                const parameterNames = this.api.operationParameterNames(operation);
-                let first = true;
-                operation.parameters.forEach((parameter, k) => {
-                    const parameterName = parameterNames[k];
-                    const format = `${this.namespace}::format(${parameter.varArgs ? 'hsm_value' : parameterName})`;
-                    if (parameter.varArgs) {
-                        body.push(`for (const auto& hsm_value : ${parameterName}) {`, `    hsm_text += hsm_text.back() == '(' ? "" : ",";`, `    hsm_text += ${format};`, '}');
-                    } else {
-                        body.push(...(first ? [] : ['hsm_text += ",";']), `hsm_text += ${format};`);
-                    }
-                    first = false;
-                });
-                body.push('hsm_text += ")";', 'calls.push_back(hsm_text);');
-                if (returnType !== 'void') {
-                    if (scripted.length > 0) {
-                        const counter = `hsm_next${j}`;
-                        counters.push(`std::size_t ${counter} = 0;`);
-                        body.push(
-                            `static const ${this.api.declaredType(operation)} hsm_values[] = {${scripted.map(v => this.literal(v, returnType)).join(', ')}};`,
-                            `return hsm_values[${counter} < ${scripted.length} ? ${counter}++ : ${scripted.length - 1}];`
-                        );
-                    } else {
-                        body.push(`return ${defaultLiteral(returnType)};`);
-                    }
+                const { body, counter } = this.mockBody(operation, `hsm_next${j}`);
+                if (counter) {
+                    counters.push(`std::size_t ${counter} = 0;`);
                 }
                 lines.push(`    ${this.api.declaredType(operation)} ${operation.name}(${this.api.operationParameters(operation)}) override {`, ...indent(body, 2), '    }');
             });
@@ -180,6 +203,28 @@ class CppHarnessGenerator {
             }
             lines.push('};', '');
         });
+        return lines;
+    }
+
+    /** The objects the reference members of the class sections refer to (constructor arguments; `set` steps assign them). */
+    private referenceObjects(): string[] {
+        return this.api.referenceMembers.map(variable => {
+            if (!isUsableInModel(variable)) {
+                throw new Error(`The scenario harness cannot create the object of the reference member '${variable.name}' (${this.api.declaredType(variable)})`);
+            }
+            return `${this.api.referencedType(variable)} ${referenceObject(variable)}{};`;
+        });
+    }
+
+    /** Definitions of the member functions of the class sections (implemented by the application): mocks like the callbacks. */
+    private methods(): string[] {
+        const lines: string[] = [];
+        for (const operation of this.api.classMethods) {
+            // (own parameter names: the names of the model may be names of members, -Wshadow)
+            const names = operation.parameters.map((_, i) => `hsm_arg${i}`);
+            const { body, counter } = this.mockBody(operation, 'hsm_next', names);
+            lines.push(`${this.api.methodDefinition(operation, names)} {`, ...indent([...(counter ? [`static std::size_t ${counter} = 0;`] : []), ...body]), '}', '');
+        }
         return lines;
     }
 
@@ -427,7 +472,9 @@ class CppHarnessGenerator {
                     return undefined;
                 }
                 const literal = this.literal(value, this.api.variableType(variable));
-                if (this.api.isInternal(variable)) {
+                if (isReferenceMember(variable)) {
+                    lines.push(`${referenceObject(variable)} = ${literal};`);
+                } else if (this.api.isInternal(variable)) {
                     lines.push(`${this.internalsName()}::set_${variable.name}(machine, ${literal});`);
                 } else {
                     lines.push(`machine.${this.api.interfaceAccess(variable)}${this.api.setter(variable)}(${literal});`);

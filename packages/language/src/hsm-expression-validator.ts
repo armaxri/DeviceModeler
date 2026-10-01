@@ -20,6 +20,9 @@ import {
 } from './cpp-types.js';
 import { constantInteger, lvalueOf, rangeWarning, storageOfTarget, storageOfTypeReference } from './cpp-storage.js';
 import { isAssignableArray, memberPathType, typeOfDeclaration } from './hsm-typesystem.js';
+import {
+    balancedTemplateArguments, isClassMember, isConstantVariable, isReferenceMember, unusableReason, usesCppTypeSyntax, writtenCppType
+} from './class-members.js';
 
 /** Annotations that select the execution semantics (see docs/semantics.md §3 and §4). */
 export const SUPPORTED_ANNOTATIONS = ['CycleBased', 'EventDriven', 'ParentFirstExecution', 'ChildFirstExecution'];
@@ -148,7 +151,9 @@ export class HsmExpressionValidator {
         const firstScope = Math.min(...machine.scopes.map(offset));
         for (const scope of machine.scopes) {
             if (offset(scope) > firstElement) {
-                accept('error', 'Interfaces and the internal scope must come before the states and transitions.', { node: scope });
+                accept('error', ast.isClassScope(scope)
+                    ? `The class section '${scope.access}:' must come before the states and transitions.`
+                    : 'Interfaces and the internal scope must come before the states and transitions.', { node: scope });
             }
         }
         for (const annotation of semanticAnnotations(machine)) {
@@ -193,7 +198,92 @@ export class HsmExpressionValidator {
         }
     }
 
+    /**
+     * The C++ class sections: variables, constants and operations (no events and aliases); variables are
+     * data members, so their types cannot be references, and their initial values are evaluated when the
+     * object is constructed (see class-members.ts).
+     */
+    checkClassScope(scope: ast.ClassScope, accept: ValidationAcceptor): void {
+        for (const declaration of scope.declarations) {
+            if (ast.isEventDeclaration(declaration) || ast.isTypeAliasDeclaration(declaration)) {
+                accept('error', `${ast.isEventDeclaration(declaration) ? 'Events' : 'Type aliases'} cannot be declared in '${scope.access}:'; `
+                    + `the class sections contain variables, constants and operations (members of the generated C++ class).`, { node: declaration, property: 'name' });
+                continue;
+            }
+            if (!ast.isVariableDeclaration(declaration)) {
+                continue;
+            }
+            const type = declaration.type;
+            if (isInstance(declaration)) {
+                accept('error', `The submachine instance '${declaration.name}' cannot be declared in '${scope.access}:'; declare it in an interface or the internal scope.`,
+                    { node: declaration, property: 'type' });
+            } else if (type?.reference) {
+                if (declaration.const) {
+                    accept('error', `The reference member '${declaration.name}' cannot be declared with 'const'; write 'var ${declaration.name} : const T&' for a reference to a constant.`,
+                        { node: declaration, property: 'name' });
+                } else if (declaration.initialValue) {
+                    accept('error', `The reference member '${declaration.name}' cannot have an initial value: it is bound by the constructor of the generated class.`,
+                        { node: declaration, property: 'initialValue' });
+                }
+                continue;
+            } else if (type?.const && !(type.name ?? '').includes('*')) {
+                accept('error', `Declare the constant member with 'const ${declaration.name} : ${type.name}' instead of 'const' in the type.`,
+                    { node: declaration, property: 'type' });
+            }
+            if (declaration.initialValue) {
+                this.checkMemberInitialValue(declaration, scope, accept);
+            }
+        }
+    }
+
+    /**
+     * The initial value of a class member is evaluated when the object is constructed (a default member
+     * initializer): it may use literals, C++ constants and the members of the class sections declared before.
+     */
+    private checkMemberInitialValue(variable: ast.VariableDeclaration, scope: ast.ClassScope, accept: ValidationAcceptor): void {
+        const machine = scope.$container;
+        const order = machine.scopes.filter(ast.isClassScope).flatMap(s => s.declarations);
+        for (const node of AstUtils.streamAst(variable.initialValue!)) {
+            let problem: string | undefined;
+            if (ast.isValueOfExpression(node) || ast.isActiveExpression(node)) {
+                problem = `'${ast.isValueOfExpression(node) ? 'valueof' : 'active'}' cannot be used`;
+            } else if (ast.isAssignmentExpression(node) || ast.isPostfixExpression(node)) {
+                problem = 'assignments are not allowed';
+            } else if (ast.isElementReference(node)) {
+                const element = node.element.ref;
+                if (!element) {
+                    continue;
+                }
+                if (node.call || ast.isOperationDeclaration(element)) {
+                    problem = 'operations cannot be called';
+                } else if (!isClassMember(element)) {
+                    problem = `'${node.element.$refText}' is not a member of a class section`;
+                } else if (order.indexOf(element) >= order.indexOf(variable)) {
+                    problem = `'${node.element.$refText}' is declared ${element === variable ? 'here' : 'later'}`;
+                }
+            }
+            if (problem) {
+                accept('error', `The initial value of the member '${variable.name}' is evaluated when the object is constructed: ${problem} `
+                    + `(use literals, C++ constants and the members declared before).`, { node: variable, property: 'initialValue' });
+                return;
+            }
+        }
+    }
+
     checkTypeReference(reference: ast.TypeReference, accept: ValidationAcceptor): void {
+        if (!balancedTemplateArguments(reference.name ?? '')) {
+            accept('error', `The angle brackets of the template arguments of '${writtenCppType(reference)}' are not balanced.`, { node: reference, property: 'name' });
+            return;
+        }
+        if (isClassMember(reference)) {
+            this.checkClassMemberType(reference, accept);
+            return;
+        }
+        if (reference.const || reference.reference || /[<>*]/.test(reference.name ?? '')) {
+            accept('error', `C++ type syntax ('const', references, pointers, template arguments) can only be used in the C++ class sections (public:, protected:, private:).`,
+                { node: reference });
+            return;
+        }
         const builtin = resolveTypeName(reference.name);
         const alias = builtin ? undefined : resolveTypeAlias(reference);
         const machine = builtin || alias ? undefined : machineType(reference);
@@ -242,6 +332,24 @@ export class HsmExpressionValidator {
         }
     }
 
+    /**
+     * A type in a C++ class section: any C++ type can be declared; types the model does not know (pointers,
+     * templates, unknown classes) make the member unusable in the model, which is reported where it is used.
+     */
+    private checkClassMemberType(reference: ast.TypeReference, accept: ValidationAcceptor): void {
+        if (!usesCppTypeSyntax(reference) && machineType(reference)) {
+            if (!ast.isVariableDeclaration(reference.$container)) { // (instances are reported at the variable)
+                accept('error', `The state machine type '${reference.name}' cannot be used in the C++ class sections.`, { node: reference, property: 'name' });
+            }
+            return;
+        }
+        const type = typeOfTypeReference(reference);
+        const isReturnType = ast.isOperationDeclaration(reference.$container) && reference.$containerProperty === 'returnType';
+        if (type === 'void' && !isReturnType && !(reference.name ?? '').includes('*')) {
+            accept('error', `The type 'void' can only be used as the return type of an operation.`, { node: reference, property: 'name' });
+        }
+    }
+
     checkTypeAlias(alias: ast.TypeAliasDeclaration, accept: ValidationAcceptor): void {
         if (resolveTypeName(alias.name)) {
             accept('error', `The built-in type '${alias.name}' cannot be redefined.`, { node: alias, property: 'name' });
@@ -252,6 +360,12 @@ export class HsmExpressionValidator {
     }
 
     checkVariable(variable: ast.VariableDeclaration, accept: ValidationAcceptor): void {
+        if (variable.static) {
+            accept('error', `Static members are not supported: '${variable.name}' cannot be 'static' (declare it without 'static').`, { node: variable, keyword: 'static' });
+        }
+        if (isReferenceMember(variable)) {
+            return; // bound by the constructor (checked by checkClassScope)
+        }
         if (isInstance(variable)) {
             if (variable.const) {
                 accept('error', `The submachine instance '${variable.name}' cannot be a constant; declare it with 'var'.`, { node: variable, property: 'name' });
@@ -296,6 +410,13 @@ export class HsmExpressionValidator {
     }
 
     checkOperation(operation: ast.OperationDeclaration, accept: ValidationAcceptor): void {
+        if (operation.static) {
+            accept('error', `Static members are not supported: '${operation.name}' cannot be 'static' (declare it without 'static').`, { node: operation, keyword: 'static' });
+        }
+        if (operation.const && !isClassMember(operation)) {
+            accept('error', `Only the operations of the C++ class sections (public:, protected:, private:) can be const member functions; remove 'const'.`,
+                { node: operation, keyword: 'const' });
+        }
         const names = new Set<string>();
         operation.parameters.forEach((parameter, index) => {
             if (names.has(parameter.name)) {
@@ -328,6 +449,9 @@ export class HsmExpressionValidator {
             }
         }
         for (const scope of machine.scopes) {
+            if (ast.isClassScope(scope)) {
+                continue; // members of the generated class, also used by the application's C++ code
+            }
             for (const declaration of scope.declarations) {
                 if (!used.has(declaration)) {
                     const kind = ast.isEventDeclaration(declaration) ? 'Event'
@@ -450,8 +574,8 @@ export class HsmExpressionValidator {
                 accept('error', `Cannot modify the submachine instance '${operand.element.$refText}'.`, { node: operand, property: 'element' });
                 return;
             }
-            if (element.const || element.readonly) {
-                accept('error', `Cannot modify the ${element.const ? 'constant' : 'readonly variable'} '${operand.element.$refText}'.`, { node: operand, property: 'element' });
+            if (isConstantVariable(element) || element.readonly) {
+                accept('error', `Cannot modify the ${isConstantVariable(element) ? 'constant' : 'readonly variable'} '${operand.element.$refText}'.`, { node: operand, property: 'element' });
             }
             const type = typeOfVariable(element);
             if (isValueType(type) && !isNumeric(type)) {
@@ -519,8 +643,9 @@ export class HsmExpressionValidator {
             accept('error', `Cannot assign to the submachine instance '${name}': instances cannot be assigned.`, { node: reference, property: 'element' });
             return false;
         }
-        if (variable.const) {
-            accept('error', `Cannot assign a value to the constant '${name}'.`, { node: reference, property: 'element' });
+        if (isConstantVariable(variable)) {
+            accept('error', variable.const ? `Cannot assign a value to the constant '${name}'.`
+                : `Cannot assign a value to '${name}': it is a reference to a constant ('${writtenCppType(variable.type!)}').`, { node: reference, property: 'element' });
         } else if (variable.readonly) {
             accept('error', `Cannot assign a value to the readonly variable '${name}'.`, { node: reference, property: 'element' });
         }
@@ -691,6 +816,9 @@ export class HsmExpressionValidator {
     checkElementReference(reference: ast.ElementReference, accept: ValidationAcceptor): void {
         const element = reference.element.ref;
         const name = reference.element.$refText;
+        if (!this.checkUsable(element, reference, 'element', accept)) {
+            return;
+        }
         const members = referenceMembers(reference);
         if (members.length > 0) {
             this.checkReferenceMembers(reference, members, accept);
@@ -725,6 +853,16 @@ export class HsmExpressionValidator {
         if (returnTypeOf(element) === 'void' && !isStatement(reference)) {
             accept('error', `The operation '${name}' has no return value (void) and cannot be used as a value.`, { node: reference, property: 'element' });
         }
+    }
+
+    /** Reports a member of a C++ class section that cannot be used in the model (see class-members.ts); false if reported. */
+    protected checkUsable(declaration: ast.Declaration | undefined, node: AstNode, property: string, accept: ValidationAcceptor): boolean {
+        const unusable = declaration ? unusableReason(declaration) : undefined;
+        if (unusable) {
+            accept('error', `The member '${declaration!.name}' cannot be used in the model: ${unusable}. It can only be used by the C++ code of the application.`,
+                { node, property } as never);
+        }
+        return unusable === undefined;
     }
 
     protected checkArguments(reference: ast.ElementReference, operation: ast.OperationDeclaration, accept: ValidationAcceptor): void {

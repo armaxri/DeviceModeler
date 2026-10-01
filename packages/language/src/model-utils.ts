@@ -1,8 +1,8 @@
 import { AstUtils, GrammarUtils, type AstNode, type CstNode } from 'langium';
 import { semanticAnnotations } from './model-annotations.js';
 import {
-    isInternalScope, isPseudoState, isRegion, isState, isStateMachine, isTransition, isVertex,
-    type Region, type State, type StateMachine, type Transition, type Vertex
+    isClassScope, isInternalScope, isPseudoState, isRegion, isState, isStateMachine, isTransition, isVertex,
+    type Region, type Scope, type State, type StateMachine, type Transition, type Vertex
 } from './generated/ast.js';
 
 /** AST nodes which own vertices and transitions. */
@@ -202,7 +202,7 @@ export function definitionLines(machine: StateMachine): string[] {
         lines.push(nodeText(annotation));
     }
     for (const scope of machine.scopes) {
-        lines.push(isInternalScope(scope) ? 'internal:' : scope.name ? `interface ${scope.name}:` : 'interface:');
+        lines.push(scopeLabel(scope));
         for (const declaration of scope.declarations) {
             lines.push(`  ${nodeText(declaration)}`);
         }
@@ -212,6 +212,17 @@ export function definitionLines(machine: StateMachine): string[] {
         lines.push(nodeText(reaction));
     }
     return lines;
+}
+
+/** The label of a scope of the definition section: `interface:`, `interface Name:`, `internal:`, `public:`, ... */
+export function scopeLabel(scope: Scope): string {
+    if (isInternalScope(scope)) {
+        return 'internal:';
+    }
+    if (isClassScope(scope)) {
+        return `${scope.access}:`;
+    }
+    return scope.name ? `interface ${scope.name}:` : 'interface:';
 }
 
 /** Text range (offsets) of the definition section, if the state machine has one. */

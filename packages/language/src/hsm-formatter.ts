@@ -36,7 +36,7 @@ export class HsmFormatter extends AbstractFormatter {
             formatter.properties('paths').prepend(Formatting.oneSpace());
         } else if (ast.isPseudoState(node)) {
             this.getNodeFormatter(node).property('name').prepend(Formatting.oneSpace());
-        } else if (ast.isInterfaceScope(node) || ast.isInternalScope(node)) {
+        } else if (ast.isInterfaceScope(node) || ast.isInternalScope(node) || ast.isClassScope(node)) {
             const formatter = this.getNodeFormatter(node);
             formatter.keyword(':').prepend(Formatting.noSpace());
             formatter.properties('declarations').prepend(Formatting.indent({ allowMore: true }));
@@ -56,6 +56,7 @@ export class HsmFormatter extends AbstractFormatter {
             formatter.keyword(')').prepend(Formatting.noSpace());
             formatter.keyword(':').surround(Formatting.oneSpace());
             formatter.keywords(',').prepend(Formatting.noSpace()).append(Formatting.oneSpace());
+            formatter.keywords('const').append(Formatting.oneSpace());
         } else if (ast.isTransition(node)) {
             const formatter = this.getNodeFormatter(node);
             formatter.keyword('->').surround(Formatting.oneSpace());
@@ -66,6 +67,11 @@ export class HsmFormatter extends AbstractFormatter {
             const formatter = this.getNodeFormatter<ast.TypeReference | ast.CppReference>(node);
             formatter.keywords('::').surround(Formatting.noSpace());
             formatter.keywords('.').surround(Formatting.noSpace());
+            // C++ types of the class sections: `const std::map<int, std::string>&`, `hal::Driver*`
+            formatter.keywords('<').surround(Formatting.noSpace());
+            formatter.keywords('>', '>>', '*', '&', '&&').prepend(Formatting.noSpace());
+            formatter.keywords(',').prepend(Formatting.noSpace()).append(Formatting.oneSpace());
+            formatter.keywords('const').append(Formatting.oneSpace());
         } else if (ast.isMemberAccessExpression(node) || ast.isElementReference(node)) {
             // `valueof(e).x`, `pos.x`, `Iface.x`
             this.getNodeFormatter<ast.MemberAccessExpression | ast.ElementReference>(node).keywords('.').surround(Formatting.noSpace());
@@ -75,12 +81,14 @@ export class HsmFormatter extends AbstractFormatter {
             formatter.keyword('(').prepend(Formatting.noSpace()).append(Formatting.noSpace());
             formatter.keyword(')').prepend(Formatting.noSpace());
             formatter.keywords(',').prepend(Formatting.noSpace()).append(Formatting.oneSpace());
+            formatter.keywords('const').append(Formatting.oneSpace());
         } else if (ast.isReactionSpec(node) || ast.isLocalReaction(node)) {
             const formatter = this.getNodeFormatter(node);
             formatter.keyword('[').prepend(Formatting.oneSpace()).append(Formatting.noSpace());
             formatter.keyword(']').prepend(Formatting.noSpace());
             formatter.keyword('/').surround(Formatting.oneSpace());
             formatter.keywords(',').prepend(Formatting.noSpace()).append(Formatting.oneSpace());
+            formatter.keywords('const').append(Formatting.oneSpace());
         }
     }
 }

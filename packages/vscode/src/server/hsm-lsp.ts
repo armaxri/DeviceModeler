@@ -6,8 +6,8 @@ import {
 import { LocationLink, SemanticTokenModifiers, SemanticTokenTypes, type DefinitionParams, type Hover, type HoverParams } from 'vscode-languageserver';
 import {
     cppDefinition, cppHover, cppHeaderStore, cppTypeOfReference, createHsmServices, importKind, isCppReference, isEventDeclaration, isImportPath,
-    isInterfaceScope, isOperationDeclaration, isPseudoState, isState, isStateMachine, isTypeReference, isVariableDeclaration, machineType, nodeText,
-    qualifiedName, resolveCppValue, resolvedImports, type HsmServiceExtensions, type StateMachine
+    isClassScope, isInterfaceScope, isInternalScope, isOperationDeclaration, isPseudoState, isState, isStateMachine, isTypeReference, isVariableDeclaration, machineType, nodeText,
+    qualifiedName, resolveCppValue, resolvedImports, scopeLabel, type HsmServiceExtensions, type StateMachine
 } from 'hsm-language';
 import type { DefaultSharedModuleContext, LangiumSharedServices } from 'langium/lsp';
 // Node-only part of the language package (not exported from its index because the web app bundles the index)
@@ -118,7 +118,7 @@ export function hoverSignature(node: AstNode): string | undefined {
     if (isEventDeclaration(node) || isVariableDeclaration(node) || isOperationDeclaration(node)) {
         const text = nodeText(node).replace(/\s+/g, ' ');
         const scope = node.$container;
-        const prefix = isInterfaceScope(scope) ? (scope.name ? `interface ${scope.name}: ` : 'interface: ') : scope?.$type === 'InternalScope' ? 'internal: ' : '';
+        const prefix = isInterfaceScope(scope) || isInternalScope(scope) || isClassScope(scope) ? `${scopeLabel(scope)} ` : '';
         return prefix + text;
     }
     if (node.$type === 'TestClass' || node.$type === 'TestOperation') {

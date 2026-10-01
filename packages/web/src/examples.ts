@@ -3,11 +3,16 @@ const files = {
     // two files: the gate imports the motor (submachine instance)
     ...import.meta.glob('../../../examples/door-with-motor/*.hsm', { query: '?raw', import: 'default', eager: true }),
     // a model importing a C++ header (docs/cpp-integration.md)
-    ...import.meta.glob('../../../examples/cpp-types/*.hsm', { query: '?raw', import: 'default', eager: true })
+    ...import.meta.glob('../../../examples/cpp-types/*.hsm', { query: '?raw', import: 'default', eager: true }),
+    // C++ class sections: members of the generated class (docs/language.md#c-class-sections)
+    ...import.meta.glob('../../../examples/cpp-class-sections/*.hsm', { query: '?raw', import: 'default', eager: true })
 } as Record<string, string>;
 
 /** C/C++ headers of the examples (imported by the example models; not opened in the editor). */
-const headerFiles = import.meta.glob('../../../examples/cpp-types/*.h', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+const headerFiles = {
+    ...import.meta.glob('../../../examples/cpp-types/*.h', { query: '?raw', import: 'default', eager: true }),
+    ...import.meta.glob('../../../examples/cpp-class-sections/config.h', { query: '?raw', import: 'default', eager: true })
+} as Record<string, string>;
 
 /** The headers of the examples by file name. */
 export const EXAMPLE_HEADERS: Record<string, string> = Object.fromEntries(Object.entries(headerFiles)
@@ -26,7 +31,8 @@ const TITLES: Record<string, string> = {
     'door.hsm': 'Door (entry / exit points, fork / join)',
     'gate.hsm': 'Gate with a motor submachine (imports motor.hsm)',
     'motor.hsm': 'Motor (submachine of the gate)',
-    'conveyor.hsm': 'Conveyor (C++ enums, structs and constants of conveyor_types.h)'
+    'conveyor.hsm': 'Conveyor (C++ enums, structs and constants of conveyor_types.h)',
+    'controller.hsm': 'Controller (C++ class sections: members of the generated class)'
 };
 
 export const EXAMPLES: Example[] = Object.entries(files)

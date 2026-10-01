@@ -5,6 +5,7 @@ import { qualifiedName } from '../hsm-scope.js';
 import { eventDirection, typeName, typeOfAlias, typeOfEvent, typeOfParameter, typeOfVariable, returnTypeOf } from '../hsm-typesystem.js';
 import { nodeText, outgoingTransitions, scopeOf, transitionPriority, type ScopeContainer } from '../model-utils.js';
 import { docComment } from './doc-comments.js';
+import { isHsmTypeReference, writtenCppType } from '../class-members.js';
 
 /*
  * Documentation of state machines: a structured description of a model (`describeStateMachine`) and
@@ -42,7 +43,8 @@ export interface OperationDoc {
 }
 
 export interface ScopeDoc {
-    kind: 'interface' | 'internal';
+    /** `public`, `protected`, `private`: a C++ class section (its types are the C++ types as written). */
+    kind: 'interface' | 'internal' | 'public' | 'protected' | 'private';
     /** Name of a named interface. */
     name?: string;
     documentation?: string;
@@ -158,7 +160,7 @@ export function describeStateMachine(machine: ast.StateMachine): StateMachineDoc
 
 function describeScope(scope: ast.Scope): ScopeDoc {
     const result: ScopeDoc = {
-        kind: ast.isInternalScope(scope) ? 'internal' : 'interface',
+        kind: ast.isInternalScope(scope) ? 'internal' : ast.isClassScope(scope) ? scope.access : 'interface',
         name: ast.isInterfaceScope(scope) ? scope.name : undefined,
         documentation: docComment(scope),
         events: [],
@@ -166,6 +168,9 @@ function describeScope(scope: ast.Scope): ScopeDoc {
         operations: [],
         typeAliases: []
     };
+    // the C++ class sections show the C++ types as written (`unsigned int`, `const app::Config&`)
+    const typeText = (reference: ast.TypeReference | undefined, type: () => string) =>
+        ast.isClassScope(scope) && reference && !isHsmTypeReference(reference) ? writtenCppType(reference) : type();
     for (const declaration of scope.declarations) {
         const documentation = docComment(declaration);
         if (ast.isEventDeclaration(declaration)) {
@@ -173,7 +178,7 @@ function describeScope(scope: ast.Scope): ScopeDoc {
         } else if (ast.isVariableDeclaration(declaration)) {
             result.variables.push({
                 name: declaration.name,
-                type: typeName(typeOfVariable(declaration)),
+                type: typeText(declaration.type, () => typeName(typeOfVariable(declaration))),
                 constant: declaration.const,
                 readonly: declaration.readonly,
                 initialValue: declaration.initialValue ? nodeText(declaration.initialValue) : undefined,
@@ -182,9 +187,9 @@ function describeScope(scope: ast.Scope): ScopeDoc {
         } else if (ast.isTypeAliasDeclaration(declaration)) {
             result.typeAliases.push({ name: declaration.name, type: declaration.type?.name ?? '', baseType: typeName(typeOfAlias(declaration)), documentation });
         } else {
-            const parameters = declaration.parameters.map(p => ({ name: p.name, type: typeName(typeOfParameter(p)), varArgs: p.varArgs }));
-            const returnType = typeName(returnTypeOf(declaration));
-            const signature = `${declaration.name}(${parameters.map(p => `${p.name}${p.varArgs ? '...' : ''} : ${p.type}`).join(', ')}) : ${returnType}`;
+            const parameters = declaration.parameters.map(p => ({ name: p.name, type: typeText(p.type, () => typeName(typeOfParameter(p))), varArgs: p.varArgs }));
+            const returnType = typeText(declaration.returnType, () => typeName(returnTypeOf(declaration)));
+            const signature = `${declaration.const ? 'const ' : ''}${declaration.name}(${parameters.map(p => `${p.name}${p.varArgs ? '...' : ''} : ${p.type}`).join(', ')}) : ${returnType}`;
             result.operations.push({ name: declaration.name, signature, parameters, returnType, documentation });
         }
     }
@@ -377,6 +382,7 @@ function writeDoc(doc: StateMachineDoc, w: DocWriter, options: ModelDocOptions):
         w.heading(2, w.text('Interfaces'));
         for (const scope of doc.scopes) {
             const heading = scope.kind === 'internal' ? w.text('Internal scope')
+                : scope.kind !== 'interface' ? `${w.text('C++ class section ')}${w.code(`${scope.kind}:`)}`
                 : scope.name ? `${w.text('Interface ')}${w.code(scope.name)}` : w.text('Interface');
             w.heading(3, heading);
             if (scope.documentation) {

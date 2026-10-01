@@ -1,0 +1,43 @@
+// Unit tests of controller.hsm: the member functions of the class sections are mocked like operations,
+// the data members are read and written by name.
+testclass ControllerTest for statemachine Controller {
+
+    @Test
+    operation switchesOnWhenStarted() {
+        enter
+        raise start
+        proceed 1 cycle
+        assert active(Controller.Running)
+        assert called setup
+        assert errorCnt == 0
+    }
+
+    @Test
+    operation restartsAfterAFailure() {
+        mock retryAllowed returns (true)
+        enter
+        raise start
+        proceed 1 cycle
+        raise failure
+        proceed 1 cycle
+        assert active(Controller.Running)
+        assert called shutdown
+        assert called setup times 2
+        assert errorCnt == 1
+    }
+
+    @Test
+    operation givesUpWhenNoRetryIsAllowed() {
+        config.maxErrors = 1
+        mock retryAllowed returns (false)
+        enter
+        raise start
+        proceed 1 cycle
+        raise failure
+        proceed 1 cycle
+        assert active(Controller.Off)
+        assert gaveUp
+        assert errorCnt == 1
+        assert config.maxErrors == 1
+    }
+}
