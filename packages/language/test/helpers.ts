@@ -58,6 +58,7 @@ export const CPP_TYPE_SCENARIOS: readonly string[] = [
     's10-cpp-arrays.json',
     's10-cpp-constants.json',
     's10-cpp-enum-class.json',
+    's10-cpp-enum-forms.json',
     's10-cpp-enum-unscoped-and-casts.json',
     's10-cpp-float.json',
     's10-cpp-include-chain.json',

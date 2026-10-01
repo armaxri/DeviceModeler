@@ -35,11 +35,12 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
   relative to the importing file, loaded transitively (CLI, tests, language server, VS Code webview, a
   virtual file list in the web editor); missing files, cycles and duplicate names are reported
 - ✅ **C++ header imports** (`import "motor_types.h"`, [docs/cpp-integration.md](docs/cpp-integration.md)):
-  enums / enum classes, structs, `typedef` / `using` aliases and constants of namespaces are types and values
+  enums (`enum`, `enum class`, C `typedef enum`, nested in namespaces / classes, opaque, `using enum`), structs, `typedef` / `using` aliases and constants of namespaces are types and values
   of models (`var mode : motor::Mode = motor::Mode::Off`, `pos.x`, `a[i]`, `motor::kMaxSpeed`); C++ integer
-  widths are kept as storage types (wrap-around on assignment, range warnings), enums compare with `==` / `!=`,
-  structs are assigned as a whole; interpreter, unit tests, scenarios (14 `s10-cpp-*`), C++ generator
-  (`#include`s the headers, uses the types by name), hover / definition / completion, include paths, defines
+  widths are kept as storage types (wrap-around on assignment, range warnings), enums compare with `==` / `!=` (and are ordered),
+  structs are assigned as a whole; interpreter, unit tests, scenarios (15 `s10-cpp-*`), C++ generator
+  (`#include`s the headers, uses the types by name), hover / definition / completion (enumerators of the expected enum, C++ types
+  in type positions), include paths, defines
   and data model in the `headers` block of `hsm.gen.json`, `-I` / `-D` / `--data-model`, VS Code settings,
   headers re-read on change; web app: headers in the virtual file list, editors for enum and struct values
   in the simulation. Example [`examples/cpp-types`](examples/cpp-types) (also built by the CMake example)

@@ -3,6 +3,7 @@ import * as ast from './generated/ast.js';
 import type { CppDeclaration, CppArrayType, CppEnumType, CppResolvedField, CppResolvedType, CppStructType } from './cpp-header/model.js';
 import type { CppConstantInfo, CppTypeIndex } from './cpp-header/type-index.js';
 import { cppImports } from './imports.js';
+import { unknownEnumeratorDetail } from './cpp-enums.js';
 import type { HsmType } from './hsm-typesystem.js';
 
 /**
@@ -271,7 +272,7 @@ function computeCppValue(name: string, index: CppTypeIndex): CppValueResolution 
     if (!declaration) {
         return { error: index.headers.length === 0
             ? `Unknown C++ name '${name}': no C/C++ header is imported ('import "file.h"').`
-            : `Unknown C++ name '${name}': it is not declared in the imported headers.` };
+            : unknownEnumeratorDetail(name, index) ?? `Unknown C++ name '${name}': it is not declared in the imported headers.` };
     }
     const info = index.constant(name);
     if (!info) {

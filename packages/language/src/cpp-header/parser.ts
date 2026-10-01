@@ -492,8 +492,16 @@ class DeclarationParser extends TokenCursor {
             this.output.push(this.base<CppUsingDirective>({ kind: 'usingDirective', name: '', qualifiedName: this.scope, target }, keyword, keyword, doc));
             return;
         }
-        if (this.at('enum')) {
-            this.skipDeclaration(false);
+        if (this.accept('enum')) {
+            // C++20 using-enum-declaration: the enumerators become members of this scope
+            const start = this.peek();
+            const target = this.parseQualifiedName('always');
+            if (!this.accept(';')) {
+                this.skipDeclaration(false);
+                return;
+            }
+            this.relevant = true;
+            this.output.push(this.base<CppUsingDirective>({ kind: 'usingDirective', name: '', qualifiedName: this.scope, target, enum: true }, keyword, start, doc));
             return;
         }
         if (this.atIdentifier() && (this.at('=', 1) || (this.at('[', 1) && this.at('[', 2)))) {
@@ -663,6 +671,12 @@ class DeclarationParser extends TokenCursor {
             d.qualifiedName = rename(d.qualifiedName);
             d.scope = rename(d.scope);
         });
+        if (declared.kind === 'enum') {
+            // the enumerators of the named enum: `typedef enum { RED } color_t;` -> `color_t::RED` (also visible as `RED`)
+            for (const enumerator of declared.enumerators as Array<Mutable<CppEnumerator>>) {
+                enumerator.qualifiedName = `${alias.qualifiedName}::${enumerator.name}`;
+            }
+        }
 
         function forEach(declaration: CppDeclaration, action: (d: CppDeclaration) => void): void {
             action(declaration);
@@ -889,6 +903,16 @@ class DeclarationParser extends TokenCursor {
             if (!this.at('{')) {
                 if (!name) {
                     throw new SyntaxError('expected an enum name or \'{\'', this.peek());
+                }
+                if (this.at(';') && (scoped || underlyingType)) {
+                    // opaque enum declaration `enum class E : int;`: the type is known, its enumerators are not
+                    const names = this.declarationName(name);
+                    return {
+                        kind: 'declared', declaration: this.base<CppEnum>({
+                            kind: 'enum', name: names.simple, qualifiedName: names.qualified, scoped, anonymous: false, opaque: true,
+                            ...(underlyingType ? { underlyingType } : {}), enumerators: []
+                        }, keyword, nameToken ?? keyword, doc, this.output)
+                    };
                 }
                 return { kind: 'named', name };
             }

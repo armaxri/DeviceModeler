@@ -244,8 +244,11 @@ describe('parser', () => {
             ['C', false, undefined, 'C1,C2,C3'],
             ['(anonymous)', false, 'long', 'Anonymous'],
             ['TypedefEnum', false, undefined, 'T1,T2'],
+            // opaque declaration: the type without enumerators (see test/cpp-enums.test.ts)
+            ['Forward', true, 'int', ''],
             ['WithAttribute', true, undefined, 'W']
         ]);
+        expect(enums[5].opaque).toBe(true);
         // enumerators of anonymous enums belong to the enclosing scope
         expect(enums[3].enumerators[0].qualifiedName).toBe('Anonymous');
         expect(header.diagnostics).toEqual([]);

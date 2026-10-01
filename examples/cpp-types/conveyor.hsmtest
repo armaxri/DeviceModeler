@@ -14,6 +14,7 @@ testclass ConveyorTest for statemachine Conveyor {
         proceed 1 cycle
         assert active(Operating.Running)
         assert mode == conveyor::Mode::Normal
+        assert led == ::LED_GREEN
         assert called setSpeed with (400)
     }
 
@@ -55,7 +56,7 @@ testclass ConveyorTest for statemachine Conveyor {
         raise fault : conveyor::kJam
         proceed 1 cycle
         assert active(Clearing)
-        assert mode == conveyor::Mode::Reverse
+        assert mode == conveyor::Mode::Reverse && led == ::LED_BLINKING
         assert called setSpeed with (conveyor::kReverseSpeed)
         assert (faults & conveyor::kJam) != 0
         proceed 2 s
@@ -70,6 +71,7 @@ testclass ConveyorTest for statemachine Conveyor {
         raise fault : conveyor::kEmergencyStop
         proceed 1 cycle
         assert active(Faulted)
+        assert led == ::LED_RED
         raise reset
         proceed 1 cycle
         assert active(Faulted) message "the emergency stop is still active"

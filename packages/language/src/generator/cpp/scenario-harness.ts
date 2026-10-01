@@ -1,3 +1,4 @@
+import { findEnumerator } from '../../cpp-enums.js';
 import * as ast from '../../generated/ast.js';
 import { returnTypeOf, typeOfEvent, typeOfParameter, typeOfVariable, type HsmType } from '../../hsm-typesystem.js';
 import type { Scenario, ScenarioExpectation, ScenarioStep, ScenarioValue } from '../../simulation/scenario.js';
@@ -662,9 +663,7 @@ class CppHarnessGenerator {
         const resolved = type.resolved;
         if (resolved.kind === 'enum') {
             if (typeof value === 'string') {
-                const name = value.trim().replace(/^::/, '');
-                const simple = name.startsWith(`${type.cppName}::`) ? name.slice(type.cppName.length + 2) : name;
-                const enumerator = resolved.enumerators.find(e => e.name === simple || e.qualifiedName === name);
+                const enumerator = findEnumerator(resolved, value);
                 if (!enumerator) {
                     throw new Error(`'${value}' is not an enumerator of ${type.cppName}`);
                 }

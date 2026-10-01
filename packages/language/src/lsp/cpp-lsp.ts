@@ -8,9 +8,12 @@ import type { CppDeclaration, CppRange, CppResolvedField } from '../cpp-header/m
 import type { CppTypeIndex } from '../cpp-header/type-index.js';
 import { cppValueToJson, describeCppType } from '../cpp-header/report.js';
 import { displayPath } from '../cpp-headers.js';
-import { contextMachine, cppIndexAt, cppTypeOfReference, isStructType, memberOf, referenceMembers } from '../cpp-types.js';
+import { contextMachine, cppIndexAt, cppTypeOfReference, hsmTypeOfCpp, isEnumType, isStructType, memberOf, referenceMembers } from '../cpp-types.js';
+import { enumeratorSpelling } from '../cpp-enums.js';
 import { cppImports, resolvedImports } from '../imports.js';
-import { inferType, typeName, typeOfDeclaration, type HsmType } from '../hsm-typesystem.js';
+import {
+    inferType, returnTypeOf, typeAliases, typeName, typeOfAlias, typeOfDeclaration, typeOfEvent, typeOfParameter, type HsmType
+} from '../hsm-typesystem.js';
 
 /**
  * Language server features for the C++ names of imported headers, shared by the VS Code language
@@ -173,15 +176,25 @@ export function describeCppElement(element: CppElementAt, document?: LangiumDocu
                 break;
             case 'enum': {
                 const type = index.typeOf(declaration);
-                signature = `enum ${declaration.scoped ? 'class ' : ''}${declaration.qualifiedName}`;
+                const underlying = type.kind === 'enum' && (declaration.underlyingType || declaration.opaque) ? ` : ${type.underlying.cppName}` : '';
+                signature = `enum ${declaration.scoped ? 'class ' : ''}${declaration.qualifiedName}${underlying}${declaration.opaque ? ';' : ''}`;
                 if (type.kind === 'enum') {
-                    lines.push(type.enumerators.map(e => `\`${e.name} = ${e.value}\``).join(', '));
+                    lines.push(declaration.opaque
+                        ? 'opaque declaration: no enumerators are known (values are written `n as ' + declaration.qualifiedName + '`)'
+                        : type.enumerators.map(e => `\`${e.name} = ${e.value}\``).join(', '));
+                    if (!declaration.scoped) {
+                        lines.push(`unscoped: the enumerators are also members of ${declaration.qualifiedName.includes('::') ? `\`${declaration.qualifiedName.slice(0, declaration.qualifiedName.lastIndexOf('::'))}\`` : 'the global namespace'} and convert to \`integer\``);
+                    }
                 }
                 break;
             }
             case 'enumerator': {
                 const info = index.constant(declaration);
                 signature = `${declaration.qualifiedName}${info?.value !== undefined ? ` = ${formatCppValue(info.value)}` : ''}`;
+                if (info?.type.kind === 'enum') {
+                    const value = typeof info.value === 'bigint' && info.value > 9n ? ` (0x${info.value.toString(16).toUpperCase()})` : '';
+                    lines.push(`enumerator of \`enum ${info.type.scoped ? 'class ' : ''}${info.type.cppName}\` (underlying type \`${info.type.underlying.cppName}\`)${value}`);
+                }
                 break;
             }
             case 'record': {
@@ -259,10 +272,13 @@ export function cppCompletionItems(document: LangiumDocument, offset: number): C
     const scoped = /(::)?((?:[A-Za-z_]\w*\s*::\s*)+)(\w*)$/.exec(before);
     if (scoped) {
         const scope = scoped[2].replace(/\s+/g, '').replace(/::$/, '');
-        return index.members(scope).filter(d => d.name && d.kind !== 'usingDirective').map(d => cppCompletionItem(d, index));
+        const typePosition = isTypePosition(before.slice(0, scoped.index));
+        return sortedMembers(index, scope, typePosition).map(d => cppCompletionItem(d, index));
     }
-    if (/(^|[^:\w])::(\w*)$/.test(before)) {
-        return index.members('').filter(d => d.name && d.kind !== 'usingDirective').map(d => cppCompletionItem(d, index));
+    const global = /(^|[^:\w])::(\w*)$/.exec(before);
+    if (global) {
+        const typePosition = isTypePosition(before.slice(0, global.index + global[1].length));
+        return sortedMembers(index, '', typePosition).map(d => cppCompletionItem(d, index));
     }
     const member = /([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)\s*\.\s*(\w*)$/.exec(before);
     if (member && machine) {
@@ -311,6 +327,46 @@ function pathType(machine: ast.StateMachine, path: string[]): HsmType | undefine
     return undefined;
 }
 
+/** Declarations that can be written in a type (`ns::Type`) or are qualifiers of types. */
+function isTypeOrScope(declaration: CppDeclaration): boolean {
+    return declaration.kind === 'namespace' || declaration.kind === 'namespaceAlias' || declaration.kind === 'enum'
+        || declaration.kind === 'record' || (declaration.kind === 'alias' && declaration.syntax !== 'usingDeclaration');
+}
+
+/** Declarations that can be used in expressions: values and the scopes containing values. */
+function isValueOrScope(declaration: CppDeclaration, index: CppTypeIndex): boolean {
+    switch (declaration.kind) {
+        case 'enumerator': case 'constant': case 'namespace': case 'namespaceAlias': case 'enum': case 'record':
+            return true;
+        case 'alias': {
+            const type = index.typeOf(declaration);
+            return type.kind === 'enum' || type.kind === 'struct' || declaration.syntax === 'usingDeclaration';
+        }
+        default:
+            return false;
+    }
+}
+
+/**
+ * The named members of a namespace / class / enum for completion: in type positions the types and
+ * scopes, in expressions the values and scopes. Enumerators come in the order of their values.
+ */
+function sortedMembers(index: CppTypeIndex, scope: string, typePosition: boolean): CppDeclaration[] {
+    return index.members(scope)
+        .filter(d => d.name && d.kind !== 'usingDirective' && (typePosition ? isTypeOrScope(d) : isValueOrScope(d, index)));
+}
+
+/**
+ * Whether the text before a name is followed by a type: the type of an event, variable, parameter,
+ * operation or type alias declaration, or the target type of a cast (`x as `).
+ */
+export function isTypePosition(before: string): boolean {
+    return /\b(?:event|var|const|readonly)\s+[A-Za-z_]\w*\s*:\s*$/.test(before)
+        || /\balias\s+[A-Za-z_]\w*\s*:\s*$/.test(before)
+        || /\bas\s+$/.test(before)
+        || /\boperation\s+[A-Za-z_]\w*\s*\([^()]*(?:[A-Za-z_]\w*\s*(?:\.\.\.)?\s*:\s*|\)\s*:\s*)$/.test(before);
+}
+
 function cppCompletionItem(declaration: CppDeclaration, index: CppTypeIndex): CompletionItem {
     const kinds: Partial<Record<CppDeclaration['kind'], CompletionItemKind>> = {
         namespace: CompletionItemKind.Module, namespaceAlias: CompletionItemKind.Module, enum: CompletionItemKind.Enum,
@@ -318,15 +374,153 @@ function cppCompletionItem(declaration: CppDeclaration, index: CppTypeIndex): Co
         constant: CompletionItemKind.Constant, field: CompletionItemKind.Field
     };
     let detail: string | undefined;
+    let sortText: string | undefined;
     if (declaration.kind === 'constant' || declaration.kind === 'enumerator') {
         const info = index.constant(declaration);
         detail = info ? `${info.type.cppName}${info.value !== undefined ? ` = ${formatCppValue(info.value)}` : ''}` : undefined;
+        if (declaration.kind === 'enumerator' && info?.type.kind === 'enum') {
+            // enumerators in declaration order
+            const position = info.type.enumerators.findIndex(e => e.declaration === declaration);
+            sortText = `0${String(position).padStart(5, '0')}`;
+        }
     } else if (declaration.kind === 'alias') {
         detail = index.typeOf(declaration).cppName;
+    } else if (declaration.kind === 'enum') {
+        const type = index.typeOf(declaration);
+        detail = `enum ${declaration.scoped ? 'class ' : ''}: ${type.kind === 'enum' ? type.underlying.cppName : '?'}${declaration.opaque ? ' (opaque)' : ''}`;
     } else {
         detail = declaration.kind === 'record' ? 'struct' : declaration.kind;
     }
-    return { label: declaration.name, kind: kinds[declaration.kind] ?? CompletionItemKind.Text, detail, documentation: declaration.doc };
+    return { label: declaration.name, kind: kinds[declaration.kind] ?? CompletionItemKind.Text, detail, documentation: declaration.doc, ...(sortText ? { sortText } : {}) };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Context sensitive completion: enumerators where an enum value is expected, C++ types in type positions
+
+/**
+ * The type of the value expected at the end of `before`: the left operand of a comparison or
+ * assignment (`mode == `, `cfg.mode = `, `valueof(e) != `), the type of a variable with initial value
+ * (`var m : motor::Mode = `), the value of a raised event (`raise e : `), an argument of an operation
+ * call (`drive(1, `) or the return value of a mocked operation (`mock op returns (`).
+ */
+export function expectedTypeAt(machine: ast.StateMachine, before: string): HsmType | undefined {
+    const index = cppImports(machine).index;
+    const name = '[A-Za-z_]\\w*(?:\\s*\\.\\s*[A-Za-z_]\\w*)*';
+    const path = (text: string) => text.replace(/\s+/g, '').split('.');
+    let match = new RegExp(`\\b(?:var|const)\\s+[A-Za-z_]\\w*\\s*:\\s*((?:::)?[A-Za-z_][\\w:.\\t ]*?)\\s*=\\s*$`).exec(before);
+    if (match) {
+        const typeText = match[1].replace(/\s+/g, '');
+        const alias = typeAliases(machine).get(typeText);
+        if (alias) {
+            return typeOfAlias(alias);
+        }
+        const resolved = typeText.includes('.') ? undefined : index.resolveType(typeText);
+        return resolved ? hsmTypeOfCpp(resolved, index).type : undefined;
+    }
+    match = new RegExp(`\\bvalueof\\s*\\(\\s*(${name})\\s*\\)\\s*(?:==|!=|<=|>=|<|>)\\s*$`).exec(before);
+    if (match) {
+        const event = findDeclaration(machine, path(match[1]), ast.isEventDeclaration);
+        return event ? typeOfEvent(event) : undefined;
+    }
+    match = new RegExp(`\\braise\\s+(${name})\\s*:\\s*$`).exec(before);
+    if (match) {
+        const event = findDeclaration(machine, path(match[1]), ast.isEventDeclaration);
+        return event ? typeOfEvent(event) : undefined;
+    }
+    match = new RegExp(`\\bmock\\s+(${name})\\s+returns\\s*\\(([^()]*)$`).exec(before);
+    if (match) {
+        const operation = findDeclaration(machine, path(match[1]), ast.isOperationDeclaration);
+        return operation ? returnTypeOf(operation) : undefined;
+    }
+    match = new RegExp(`(?:^|[^\\w.])(${name})\\s*\\(([^()]*)$`).exec(before);
+    const operation = match ? findDeclaration(machine, path(match[1]), ast.isOperationDeclaration) : undefined;
+    if (match && operation) {
+        const position = match[2].split(',').length - 1;
+        const parameter = operation.parameters[Math.min(position, operation.parameters.length - 1)];
+        return parameter && (position < operation.parameters.length || parameter.varArgs) ? typeOfParameter(parameter) : undefined;
+    }
+    match = new RegExp(`(?:^|[^\\w.:])(${name})\\s*(?:==|!=|<=|>=|<|>|(?<![=!<>+\\-*/%&|^])=)\\s*$`).exec(before);
+    if (match) {
+        return pathType(machine, path(match[1]));
+    }
+    return undefined;
+}
+
+/** A declaration of the interface / internal scopes of a machine by its (`Iface.`-qualified) name. */
+function findDeclaration<T extends ast.Declaration>(machine: ast.StateMachine, path: string[], is: (d: unknown) => d is T): T | undefined {
+    const name = path.join('.');
+    for (const scope of machine.scopes) {
+        for (const declaration of scope.declarations) {
+            const qualified = ast.isInterfaceScope(scope) && scope.name ? `${scope.name}.${declaration.name}` : declaration.name;
+            if (qualified === name && is(declaration)) {
+                return declaration;
+            }
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Completion items of the enumerators of an enum type, written as in models (`motor::Mode::Fast`,
+ * `::RED`), replacing `range`.
+ */
+export function enumeratorCompletionItems(type: HsmType, range: Range, typed: string): CompletionItem[] {
+    if (!isEnumType(type)) {
+        return [];
+    }
+    const enumType = type.resolved;
+    return enumType.enumerators.map((enumerator, position) => {
+        const spelling = enumeratorSpelling(enumType, enumerator, type.index);
+        return {
+            label: spelling,
+            kind: CompletionItemKind.EnumMember,
+            detail: `${enumType.cppName} = ${enumerator.value}`,
+            documentation: enumerator.declaration.doc,
+            sortText: `!${String(position).padStart(5, '0')}`,
+            filterText: typed && !spelling.startsWith(typed) ? enumerator.name : spelling,
+            textEdit: { range, newText: spelling }
+        };
+    });
+}
+
+/**
+ * Completion items of the C++ types and namespaces of the global namespace for a type position
+ * (`var mode : `), with the `<cstdint>` typedefs.
+ */
+function typeCompletionItems(index: CppTypeIndex): CompletionItem[] {
+    const items = sortedMembers(index, '', true).map(d => cppCompletionItem(d, index));
+    for (const name of CSTDINT_TYPES) {
+        items.push({ label: name, kind: CompletionItemKind.TypeParameter, detail: '<cstdint>', sortText: `~${name}` });
+    }
+    return items;
+}
+
+const CSTDINT_TYPES = ['int8_t', 'int16_t', 'int32_t', 'int64_t', 'uint8_t', 'uint16_t', 'uint32_t', 'uint64_t', 'size_t'];
+
+/**
+ * Context sensitive completion items that are added to the default completion: the enumerators of
+ * the expected enum type in expressions (`mode == `, `raise setMode : `, `drive(`) and the C++
+ * types of the global namespace in type positions (`var mode : `).
+ */
+export function cppContextCompletionItems(document: LangiumDocument, offset: number): CompletionItem[] {
+    const text = document.textDocument.getText();
+    const before = text.slice(Math.max(0, offset - 300), offset);
+    const machine = machineAt(document, offset);
+    if (!machine) {
+        return [];
+    }
+    const partial = /(?:::)?\w*$/.exec(before)![0];
+    const prefix = before.slice(0, before.length - partial.length);
+    if (isTypePosition(prefix) && !partial.startsWith('::')) {
+        return typeCompletionItems(cppImports(machine).index);
+    }
+    const expected = expectedTypeAt(machine, prefix);
+    if (!expected) {
+        return [];
+    }
+    const end = document.textDocument.positionAt(offset);
+    const range = { start: document.textDocument.positionAt(offset - partial.length), end };
+    return enumeratorCompletionItems(expected, range, partial);
 }
 
 /**
@@ -348,6 +542,12 @@ export class HsmCompletionProvider extends DefaultCompletionProvider {
         if (cpp && cpp.length > 0) {
             return { isIncomplete: false, items: cpp };
         }
-        return super.getCompletion(document, params);
+        const context = cppContextCompletionItems(document, offset);
+        const list = await super.getCompletion(document, params);
+        if (context.length === 0) {
+            return list;
+        }
+        const labels = new Set(context.map(item => item.label));
+        return { isIncomplete: true, items: [...context, ...(list?.items ?? []).filter(item => !labels.has(item.label))] };
     }
 }

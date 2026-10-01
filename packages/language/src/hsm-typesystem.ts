@@ -274,6 +274,10 @@ export function isCastable(source: HsmType, target: HsmType): boolean {
  */
 export function binaryResultType(operator: BinaryOperator, left: HsmType, right: HsmType): HsmType | undefined {
     const unknown = isError(left) || isError(right);
+    if (['<', '<=', '>', '>='].includes(operator) && isEnumType(left) && sameType(left, right)) {
+        // values of the same enum (also of an enum class) are ordered by their values, like in C++
+        return 'boolean';
+    }
     if (operator !== '==' && operator !== '!=') {
         left = promoted(left);
         right = promoted(right);

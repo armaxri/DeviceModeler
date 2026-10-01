@@ -380,9 +380,11 @@ export class ExpressionCompiler {
 
     /** A binary operator applied to compiled operands (also used by compound assignments). */
     private applyBinary(operator: string, leftOperand: Code, rightOperand: Code, node: AstNode): Code {
-        const equality = operator === '==' || operator === '!=';
-        const left = equality && isEnumType(leftOperand.type) && isEnumType(rightOperand.type) ? leftOperand : this.promote(leftOperand);
-        const right = equality && isEnumType(leftOperand.type) && isEnumType(rightOperand.type) ? rightOperand : this.promote(rightOperand);
+        // values of enums are compared as they are (`==` / `!=`; `<` ... between values of the same enum, also of an enum class)
+        const comparison = ['==', '!=', '<', '<=', '>', '>='].includes(operator);
+        const enums = comparison && isEnumType(leftOperand.type) && sameType(leftOperand.type, rightOperand.type);
+        const left = enums ? leftOperand : this.promote(leftOperand);
+        const right = enums ? rightOperand : this.promote(rightOperand);
         const constant = left.constant && right.constant;
         const bool = (text: string): Code => ({ text, type: 'boolean', constant });
         switch (operator) {
@@ -396,7 +398,7 @@ export class ExpressionCompiler {
                 }
                 return bool(`(${left.text} ${operator} ${right.text})`);
             case '<': case '<=': case '>': case '>=':
-                if (left.type !== right.type) {
+                if (!enums && left.type !== right.type) {
                     return bool(`(${this.toReal(left)} ${operator} ${this.toReal(right)})`);
                 }
                 return bool(`(${left.text} ${operator} ${right.text})`);

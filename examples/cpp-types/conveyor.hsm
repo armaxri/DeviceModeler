@@ -1,6 +1,7 @@
 // A conveyor belt that uses the types and constants of a C++ header (conveyor_types.h): an enum
-// class (conveyor::Mode), flags of an unscoped enum (conveyor::Fault), structs with default member
-// initializers (conveyor::Package, conveyor::Settings), a type alias (conveyor::Speed) and constants.
+// class (conveyor::Mode), flags of an unscoped enum (conveyor::Fault), a C style enum of the global
+// namespace (conveyor_led_t, enumerators ::LED_OFF ...), structs with default member initializers
+// (conveyor::Package, conveyor::Settings), a type alias (conveyor::Speed) and constants.
 statemachine Conveyor "Belt conveyor using the types of a C++ header" {
     namespace example
     import "conveyor_types.h"
@@ -18,6 +19,8 @@ statemachine Conveyor "Belt conveyor using the types of a C++ header" {
         /** A package that is too heavy is pushed off the belt. */
         out event rejected : conveyor::Package
         var mode : conveyor::Mode
+        /** The status LED. */
+        var led : conveyor_led_t = ::LED_OFF
         var settings : conveyor::Settings = conveyor::kDefaultSettings
         var faults : integer
         var count : uint16_t
@@ -28,10 +31,11 @@ statemachine Conveyor "Belt conveyor using the types of a C++ header" {
     [*] -> Idle
 
     state Idle {
-        entry / mode = conveyor::Mode::Stopped; setSpeed(0); raise modeChanged : mode
+        entry / mode = conveyor::Mode::Stopped; setSpeed(0); raise modeChanged : mode; led = ::LED_OFF
     }
 
     state Operating {
+        entry / led = ::LED_GREEN
         [*] -> Running
         state Running {
             entry / mode = conveyor::Mode::Normal; setSpeed(settings.normalSpeed); raise modeChanged : mode
@@ -46,11 +50,11 @@ statemachine Conveyor "Belt conveyor using the types of a C++ header" {
     }
 
     state Clearing {
-        entry / mode = conveyor::Mode::Reverse; setSpeed(conveyor::kReverseSpeed); raise modeChanged : mode
+        entry / mode = conveyor::Mode::Reverse; setSpeed(conveyor::kReverseSpeed); raise modeChanged : mode; led = ::LED_BLINKING
     }
 
     state Faulted {
-        entry / mode = conveyor::Mode::Stopped; setSpeed(0); raise modeChanged : mode
+        entry / mode = conveyor::Mode::Stopped; setSpeed(0); raise modeChanged : mode; led = ::LED_RED
     }
 
     Idle -> Operating : start [count < conveyor::kMaintenanceInterval]

@@ -629,6 +629,11 @@ export class HsmExpressionValidator {
             case '<=':
             case '>':
             case '>=':
+                // values of the same enum (also of an enum class) are ordered by their values, like in C++
+                if (binaryResultType(operator, inferType(expression.left), inferType(expression.right)) === undefined) {
+                    requireOperands(isNumeric, 'numeric');
+                }
+                break;
             case '-':
             case '*':
             case '/':
