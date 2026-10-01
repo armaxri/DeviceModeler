@@ -1,7 +1,7 @@
 import { AstUtils, type AstNode } from 'langium';
 import {
-    StatechartInterpreter, declaredType, formatTraceEntry, instanceMachine, instanceVariables, isInstance, isInterfaceScope, isOperationDeclaration, isState, isTransition,
-    referableName,
+    StatechartInterpreter, declaredType, formatTraceEntry, instanceMachine, instanceVariables, isClassScope, isInstance, isInterfaceScope, isOperationDeclaration, isState,
+    isTransition, isUsableInModel, referableName,
     type EventDeclaration, type HostValue, type OperationDeclaration, type RuntimeType, type State, type StateMachine, type TraceEntry, type Transition,
     type VariableDeclaration
 } from 'hsm-language';
@@ -118,11 +118,12 @@ export class SimulationSession {
 
     constructor(machine: StateMachine, private readonly listener: SessionListener) {
         this.machine = machine;
-        const declarations = machine.scopes.flatMap(scope => scope.declarations.map(declaration => ({ scope, declaration })));
+        // (members of the C++ class sections with types the model does not know are not simulated)
+        const declarations = machine.scopes.flatMap(scope => scope.declarations.filter(isUsableInModel).map(declaration => ({ scope, declaration })));
         const qualified = (d: { scope: StateMachine['scopes'][number], declaration: { name: string } }) =>
             isInterfaceScope(d.scope) && d.scope.name ? `${d.scope.name}.${d.declaration.name}` : d.declaration.name;
         const groupOf = (scope: StateMachine['scopes'][number]) =>
-            isInterfaceScope(scope) ? (scope.name ? `interface ${scope.name}` : 'interface') : 'internal';
+            isInterfaceScope(scope) ? (scope.name ? `interface ${scope.name}` : 'interface') : isClassScope(scope) ? scope.access : 'internal';
         this.events = declarations
             .filter(d => d.declaration.$type === 'EventDeclaration' && isInterfaceScope(d.scope) && (d.declaration as EventDeclaration).direction !== 'out')
             .map(d => ({
