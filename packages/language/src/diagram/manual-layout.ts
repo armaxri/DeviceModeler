@@ -15,14 +15,15 @@
  * position (and their size if they were resized, composite states grow if their content does not fit),
  * nodes without a stored position are placed near their siblings without overlapping them. Transitions
  * keep the route of the automatic layout as long as their end points are arranged like in the automatic
- * layout, otherwise they are drawn as straight lines between the borders of their end points (through the
- * stored bend points, if any).
+ * layout and no moved vertex lies on the route. Otherwise they are routed orthogonally around the other
+ * vertices, or drawn through the stored bend points, if any.
  */
 import type * as ast from '../generated/ast.js';
 import type {
-    DiagramEdge, DiagramGraph, DiagramLabel, DiagramNode, DiagramNodeKind, LayoutDirection, LayoutOptionsInput, LayoutResult, Point, TextMeasure
+    DiagramEdge, DiagramGraph, DiagramLabel, DiagramNode, DiagramNodeKind, EdgeRouting, LayoutDirection, LayoutOptionsInput, LayoutResult, Point, TextMeasure
 } from './diagram-model.js';
 import { DiagramMetrics, MACHINE_ID, approximateTextMeasure, layoutStateMachine } from './layout.js';
+import { POINT_PORT_KINDS, crossesRect, distributePorts, routeOrthogonal, type OrthogonalRoute } from './orthogonal-router.js';
 
 export const MANUAL_LAYOUT_VERSION = 1;
 
@@ -325,6 +326,8 @@ export function contentOrigin(node: DiagramNode | undefined): Point {
 export interface ManualLayoutOptions {
     direction?: LayoutDirection;
     measure?: TextMeasure;
+    /** Shape of the rerouted transitions (default: splines, like the automatic layout). */
+    routing?: EdgeRouting;
 }
 
 /**
@@ -336,14 +339,15 @@ export async function layoutStateMachineWithLayout(machine: ast.StateMachine, op
     if (!isManualLayout(layout)) {
         return auto;
     }
-    return applyManualLayout(auto, layout, { direction: options.direction, measure: options.measure });
+    return applyManualLayout(auto, layout, { direction: options.direction, measure: options.measure, routing: options.routing });
 }
 
 /** Applies a manual layout to the result of the automatic layout (which is not modified). */
 export function applyManualLayout(auto: LayoutResult, layout: ManualLayout, options: ManualLayoutOptions = {}): ManualLayoutResult {
     return new ManualLayoutEngine(auto.graph, layout, {
         direction: layout.direction ?? options.direction ?? auto.graph.direction,
-        measure: options.measure ?? approximateTextMeasure
+        measure: options.measure ?? approximateTextMeasure,
+        routing: options.routing ?? 'SPLINES'
     }).run(auto);
 }
 
@@ -700,6 +704,8 @@ class ManualLayoutEngine {
     private routeEdges(frame: string): void {
         const edges = this.framedEdges.get(frame) ?? [];
         const straight: DiagramEdge[] = [];
+        const pending: DiagramEdge[] = [];
+        const placed: Point[][] = [];
         for (const edge of edges) {
             const stored = this.layout.edges[edge.id];
             const label = edge.label ? { ...edge.label } : undefined;
@@ -710,17 +716,70 @@ class ManualLayoutEngine {
                 route = { points: this.polyline(edge, frame, bends), label };
                 edge.routing = 'polyline';
                 this.placeLabel(route);
-            } else {
+            } else if (edge.source === edge.target || edge.source === frame || edge.target === frame) {
                 route = this.autoRoute(edge, frame);
                 if (!route) {
                     straight.push(edge);
                     continue;
                 }
+            } else {
+                route = this.autoRoute(edge, frame);
+                if (!route || this.crossesMovedVertex(edge, frame, route.points)) {
+                    pending.push(edge);
+                    continue;
+                }
             }
             this.applyLabelOffset(route, stored);
             this.localRoutes.set(edge.id, route);
+            placed.push(route.points);
         }
-        // straight lines; parallel transitions between the same vertices get a bend to separate them
+        // transitions whose end points were moved: orthogonal routes around the other vertices
+        const routes: Array<{ edge: DiagramEdge } & OrthogonalRoute> = [];
+        for (const edge of pending) {
+            const source = this.boundsIn(edge.source, frame);
+            const target = this.boundsIn(edge.target, frame);
+            const obstacles = this.obstacles(edge, frame).map(o => o.rect);
+            // states between the frame and the end points
+            const inner = (id: string) => { const path = this.path(id); return path.slice(path.indexOf(frame) + 1, -1); };
+            const containers = [...new Set([...inner(edge.source), ...inner(edge.target)])]
+                .filter(id => this.nodes.get(id)!.kind !== 'region')
+                .map(id => this.boundsIn(id, frame));
+            const points = routeOrthogonal({
+                source, target, obstacles, containers, placed,
+                sourceFixed: POINT_PORT_KINDS.has(this.nodes.get(edge.source)!.kind),
+                targetFixed: POINT_PORT_KINDS.has(this.nodes.get(edge.target)!.kind),
+                bounds: this.routingBounds(frame, [source, target, ...obstacles])
+            });
+            if (!points) {
+                straight.push(edge);
+                continue;
+            }
+            placed.push(points);
+            routes.push({
+                edge, points,
+                source: { vertex: edge.source, rect: source, kind: this.nodes.get(edge.source)!.kind },
+                target: { vertex: edge.target, rect: target, kind: this.nodes.get(edge.target)!.kind }
+            });
+        }
+        distributePorts(routes);
+        const taken = edges.map(e => this.localRoutes.get(e.id)?.label).filter((l): l is DiagramLabel => !!l);
+        const vertices = this.labelObstacles(frame);
+        const orthogonal = new Set(routes.map(r => r.points));
+        const shapes = routes.map(({ edge, points }) => this.shapeRoute(edge, frame, points));
+        const lines = [...placed.filter(p => !orthogonal.has(p)), ...shapes.map(s => s.outline)];
+        routes.forEach(({ edge }, i) => {
+            const shape = shapes[i];
+            const route = { points: shape.points, label: edge.label ? { ...edge.label } : undefined };
+            edge.routing = shape.routing;
+            this.placeFreeLabel(route, shape.outline, vertices, taken, lines.filter(l => l !== shape.outline));
+            this.applyLabelOffset(route, this.layout.edges[edge.id]);
+            this.localRoutes.set(edge.id, route);
+            if (route.label) {
+                taken.push(route.label);
+            }
+        });
+        // straight lines (self transitions, transitions into composite states and transitions without an
+        // orthogonal route); parallel transitions between the same vertices get a bend to separate them
         const groups = new Map<string, DiagramEdge[]>();
         for (const edge of straight) {
             const key = [edge.source, edge.target].sort().join('\n');
@@ -740,6 +799,193 @@ class ManualLayoutEngine {
                 this.localRoutes.set(edge.id, route);
             });
         }
+    }
+
+    /**
+     * The vertices a transition must not cross, relative to its frame: all vertices in the frame except
+     * the end points and the states containing them (whose content is an obstacle instead).
+     */
+    private obstacles(edge: DiagramEdge, frame: string): Array<{ id: string, rect: Rect }> {
+        const containing = new Set([...this.path(edge.source), ...this.path(edge.target)]);
+        const result: Array<{ id: string, rect: Rect }> = [];
+        const visit = (node: DiagramNode) => {
+            for (const child of node.children) {
+                if (child.id === edge.source || child.id === edge.target) {
+                    continue;
+                }
+                if (containing.has(child.id) || child.kind === 'region') {
+                    visit(child);
+                } else {
+                    result.push({ id: child.id, rect: this.boundsIn(child.id, frame) });
+                }
+            }
+        };
+        visit(this.nodes.get(frame)!);
+        return result;
+    }
+
+    /** Whether the route crosses a vertex which was moved relative to the end points of the transition. */
+    private crossesMovedVertex(edge: DiagramEdge, frame: string, points: Point[]): boolean {
+        const now = this.boundsIn(edge.source, frame);
+        const before = this.autoBoundsIn(edge.source, frame);
+        const dx = now.x - before.x;
+        const dy = now.y - before.y;
+        return this.obstacles(edge, frame).some(({ id, rect }) => {
+            const auto = this.autoBoundsIn(id, frame);
+            const moved = Math.abs(rect.x - auto.x - dx) > TOLERANCE || Math.abs(rect.y - auto.y - dy) > TOLERANCE
+                || Math.abs(rect.width - auto.width) > TOLERANCE || Math.abs(rect.height - auto.height) > TOLERANCE;
+            return moved && crossesRect(points, rect);
+        });
+    }
+
+    /**
+     * The route in the shape of the edge routing setting: the orthogonal route as it is, a polyline taking
+     * the shortcuts which do not cross a vertex, or a spline through the corners of that polyline.
+     * `outline` is the polyline the route follows (for the label placement).
+     */
+    private shapeRoute(edge: DiagramEdge, frame: string, orthogonal: Point[]): { points: Point[], routing: DiagramEdge['routing'], outline: Point[] } {
+        const routing = this.options.routing;
+        if (routing === 'ORTHOGONAL') {
+            return { points: orthogonal, routing: 'orthogonal', outline: orthogonal };
+        }
+        const obstacles = this.obstacles(edge, frame).map(o => o.rect);
+        const ends = [this.boundsIn(edge.source, frame), this.boundsIn(edge.target, frame)];
+        const polyline = shortcut(orthogonal, obstacles, ends);
+        if (routing === 'SPLINES') {
+            const bounds = this.routingBounds(frame, [...ends, ...obstacles]);
+            return { ...this.splineRoute(orthogonal, [...polyline], obstacles, ends, bounds), routing: 'spline' };
+        }
+        // the ends point towards the next corner (like the routes of the automatic layout), unless the
+        // ends of several routes were spread along the side
+        const [source, target] = ends;
+        const sourceKind = this.nodes.get(edge.source)!.kind;
+        const targetKind = this.nodes.get(edge.target)!.kind;
+        const start = borderPoint(source, sourceKind, polyline.length > 2 ? polyline[1] : center(target));
+        const end = borderPoint(target, targetKind, polyline.length > 2 ? polyline[polyline.length - 2] : center(source));
+        const free = (a: Point, b: Point) => !obstacles.some(o => crossesRect([a, b], o));
+        if (polyline.length > 2 ? free(start, polyline[1]) && free(polyline[polyline.length - 2], end) : free(start, end)) {
+            const spread = (p: Point, rect: Rect) => Math.abs(p.x - center(rect).x) > 0.5 && Math.abs(p.y - center(rect).y) > 0.5;
+            if (!spread(polyline[0], source) || ROUND_KINDS.has(sourceKind)) {
+                polyline[0] = start;
+            }
+            if (!spread(polyline[polyline.length - 1], target) || ROUND_KINDS.has(targetKind)) {
+                polyline[polyline.length - 1] = end;
+            }
+        }
+        return { points: polyline, routing: 'polyline', outline: polyline };
+    }
+
+    /**
+     * A smooth curve through the corners of the shortened route which leaves the source and enters the
+     * target perpendicular to their sides (like the splines of the automatic layout), as round as
+     * possible without touching a vertex.
+     */
+    private splineRoute(orthogonal: Point[], polyline: Point[], obstacles: Rect[], ends: Rect[],
+        bounds: { minX: number, minY: number, maxX: number, maxY: number }): { points: Point[], outline: Point[] } {
+        const unit = (a: Point, b: Point) => {
+            const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+            return { x: (b.x - a.x) / length, y: (b.y - a.y) / length };
+        };
+        const out = unit(orthogonal[0], orthogonal[1]);
+        const into = unit(orthogonal[orthogonal.length - 2], orthogonal[orthogonal.length - 1]);
+        const clear = (spline: Point[]) => {
+            const samples = sampleSpline(spline);
+            return samples.every(p => p.x >= bounds.minX - 1 && p.x <= bounds.maxX + 1 && p.y >= bounds.minY - 1 && p.y <= bounds.maxY + 1)
+                && obstacles.every(o => !crossesRect(samples, o))
+                && ends.every(e => !crossesRect(samples, { x: e.x + 1, y: e.y + 1, width: e.width - 2, height: e.height - 2 }));
+        };
+        // the label is placed along the curve itself
+        const result = (points: Point[]) => ({ points, outline: sampleSpline(points) });
+        for (const stiffness of [1, 0.6, 0.3]) {
+            const spline = hermiteSpline(polyline, out, into, stiffness);
+            if (clear(spline)) {
+                return result(spline);
+            }
+        }
+        // round the corners of the route as much as possible
+        for (const radius of [60, 30, 15]) {
+            const spline = toSpline(polyline, radius);
+            if (clear(spline)) {
+                return result(spline);
+            }
+        }
+        return result(toSpline(orthogonal, 10));
+    }
+
+    /** All vertices within the frame (relative to it) and whether they contain other vertices. */
+    private labelObstacles(frame: string): Array<{ rect: Rect, container: boolean }> {
+        const result: Array<{ rect: Rect, container: boolean }> = [];
+        const visit = (node: DiagramNode) => {
+            for (const child of node.children) {
+                if (child.kind !== 'region') {
+                    result.push({ rect: this.boundsIn(child.id, frame), container: child.children.length > 0 });
+                }
+                visit(child);
+            }
+        };
+        visit(this.nodes.get(frame)!);
+        return result;
+    }
+
+    /**
+     * Places the label next to a segment of the route (preferring long segments and their middle) where it
+     * does not cover a vertex, the border of a state, another label or another route.
+     */
+    private placeFreeLabel(route: { points: Point[], label?: DiagramLabel }, outline: Point[], vertices: Array<{ rect: Rect, container: boolean }>, labels: Rect[], routes: Point[][]): void {
+        const label = route.label;
+        if (!label) {
+            return;
+        }
+        const points = outline;
+        // long segments first; on curves (many short segments) the ones nearest to the middle
+        const curved = points.length > 8;
+        const middle = (points.length - 2) / 2;
+        const segments = points.slice(1).map((b, i) => ({ a: points[i], b, i })).sort((s, t) => curved
+            ? Math.abs(s.i - middle) - Math.abs(t.i - middle)
+            : Math.hypot(t.b.x - t.a.x, t.b.y - t.a.y) - Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y));
+        const candidates: Rect[] = [];
+        for (const { a, b } of segments) {
+            for (const t of [0.5, 0.25, 0.75]) {
+                const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+                if (Math.abs(b.x - a.x) >= Math.abs(b.y - a.y)) {
+                    candidates.push({ x: p.x - label.width / 2, y: p.y - label.height - 3, width: label.width, height: label.height });
+                    candidates.push({ x: p.x - label.width / 2, y: p.y + 3, width: label.width, height: label.height });
+                } else {
+                    candidates.push({ x: p.x + 5, y: p.y - label.height / 2, width: label.width, height: label.height });
+                    candidates.push({ x: p.x - label.width - 5, y: p.y - label.height / 2, width: label.width, height: label.height });
+                }
+            }
+        }
+        const contains = (outer: Rect, inner: Rect) => inner.x >= outer.x && inner.y >= outer.y
+            && inner.x + inner.width <= outer.x + outer.width && inner.y + inner.height <= outer.y + outer.height;
+        const free = (r: Rect) => vertices.every(v => !overlaps(r, v.rect, 0) || (v.container && contains(v.rect, r)))
+            && labels.every(l => !overlaps(r, l, 0))
+            && routes.every(other => !crossesRect(other, r));
+        const best = candidates.find(free) ?? candidates[0];
+        if (best) {
+            label.x = best.x;
+            label.y = best.y;
+        }
+    }
+
+    /** The area in which the transitions of a frame are routed: within the content area of the frame. */
+    private routingBounds(frame: string, rects: Rect[]): { minX: number, minY: number, maxX: number, maxY: number } {
+        const node = this.nodes.get(frame)!;
+        let min: Point = { x: 0, y: 0 };
+        if (node !== this.root) {
+            if (node.kind === 'state' && node.regions) {
+                min = { x: 0, y: stateContentTop(node) };
+            } else {
+                const origin = contentOrigin(node);
+                min = { x: origin.x / 2, y: origin.y - origin.x / 2 };
+            }
+        }
+        const space = 3 * NODE_SPACING;
+        return {
+            minX: min.x, minY: min.y,
+            maxX: Math.max(min.x, ...rects.map(r => r.x + r.width)) + space,
+            maxY: Math.max(min.y, ...rects.map(r => r.y + r.height)) + space
+        };
     }
 
     /** The route of the automatic layout if both end points are arranged like in the automatic layout. */
@@ -980,6 +1226,100 @@ function nearestBorderPoint(rect: Rect, point: Point): Point {
         { d: rect.y + rect.height - y, p: { x, y: rect.y + rect.height } }
     ];
     return options.reduce((a, b) => a.d <= b.d ? a : b).p;
+}
+
+/**
+ * Removes the corners of a route where the direct line between the points before and after does not
+ * come close to an obstacle (or run through the source / target).
+ */
+function shortcut(points: Point[], obstacles: Rect[], ends: Rect[]): Point[] {
+    const clearance = 8;
+    const inflated = obstacles.map(o => ({ x: o.x - clearance, y: o.y - clearance, width: o.width + 2 * clearance, height: o.height + 2 * clearance }));
+    const free = (a: Point, b: Point) => !inflated.some(o => crossesRect([a, b], o)) && !ends.some(e => crossesRect([a, b], e));
+    const result = [points[0]];
+    let i = 0;
+    while (i < points.length - 1) {
+        let j = points.length - 1;
+        while (j > i + 1 && !free(points[i], points[j])) {
+            j--;
+        }
+        result.push(points[j]);
+        i = j;
+    }
+    return result;
+}
+
+/**
+ * The polyline with rounded corners (up to `radius` along each segment, at most half of it) as cubic
+ * Bezier segments in the form of the spline routes of the automatic layout: start, (control, control, end)*.
+ */
+function toSpline(points: Point[], radius: number): Point[] {
+    const lerp = (a: Point, b: Point, t: number) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+    const result = [points[0]];
+    const line = (to: Point) => {
+        const from = result[result.length - 1];
+        result.push(lerp(from, to, 1 / 3), lerp(from, to, 2 / 3), to);
+    };
+    for (let i = 1; i + 1 < points.length; i++) {
+        const [prev, corner, next] = [points[i - 1], points[i], points[i + 1]];
+        const inLength = Math.hypot(corner.x - prev.x, corner.y - prev.y);
+        const outLength = Math.hypot(next.x - corner.x, next.y - corner.y);
+        const before = lerp(corner, prev, inLength > 0 ? Math.min(radius, inLength / 2) / inLength : 0);
+        const after = lerp(corner, next, outLength > 0 ? Math.min(radius, outLength / 2) / outLength : 0);
+        line(before);
+        // quadratic curve with the corner as control point
+        result.push(lerp(before, corner, 2 / 3), lerp(after, corner, 2 / 3), after);
+    }
+    line(points[points.length - 1]);
+    return result;
+}
+
+/**
+ * Cubic Bezier segments through the points: the tangents at the ends are the given directions (scaled by
+ * the length of the first / last segment and `stiffness`), inside Catmull-Rom tangents.
+ */
+function hermiteSpline(points: Point[], startDirection: Point, endDirection: Point, stiffness: number): Point[] {
+    const last = points.length - 1;
+    const length = (a: Point, b: Point) => Math.hypot(b.x - a.x, b.y - a.y);
+    const tangent = (i: number): Point => {
+        if (i === 0) {
+            const l = Math.min(length(points[0], points[1]), 240) * stiffness;
+            return { x: startDirection.x * l, y: startDirection.y * l };
+        }
+        if (i === last) {
+            const l = Math.min(length(points[last - 1], points[last]), 240) * stiffness;
+            return { x: endDirection.x * l, y: endDirection.y * l };
+        }
+        return { x: (points[i + 1].x - points[i - 1].x) / 2, y: (points[i + 1].y - points[i - 1].y) / 2 };
+    };
+    const result = [points[0]];
+    for (let i = 0; i < last; i++) {
+        const t0 = tangent(i);
+        const t1 = tangent(i + 1);
+        result.push(
+            { x: points[i].x + t0.x / 3, y: points[i].y + t0.y / 3 },
+            { x: points[i + 1].x - t1.x / 3, y: points[i + 1].y - t1.y / 3 },
+            points[i + 1]
+        );
+    }
+    return result;
+}
+
+/** Points on the spline (to check it against obstacles). */
+function sampleSpline(points: Point[]): Point[] {
+    const result = [points[0]];
+    for (let i = 0; i + 3 < points.length; i += 3) {
+        const [a, b, c, d] = [points[i], points[i + 1], points[i + 2], points[i + 3]];
+        for (let k = 1; k <= 8; k++) {
+            const t = k / 8;
+            const u = 1 - t;
+            result.push({
+                x: u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x,
+                y: u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y
+            });
+        }
+    }
+    return result;
 }
 
 /** The point in the middle (by length) of a polyline and the direction of the segment there. */

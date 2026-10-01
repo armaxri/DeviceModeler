@@ -440,7 +440,9 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         let layout: LayoutResult = auto;
         let effective: ManualLayout | undefined;
         if (this.layoutData?.mode === 'manual') {
-            const result = applyManualLayout(auto, this.layoutData, { direction: this.settings.direction, measure: canvasTextMeasure });
+            const result = applyManualLayout(auto, this.layoutData, {
+                direction: this.settings.direction, measure: canvasTextMeasure, routing: this.settings.routing
+            });
             layout = result;
             effective = result.effective;
         }

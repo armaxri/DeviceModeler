@@ -467,8 +467,8 @@ layout is active. Design, format and trade-offs: [docs/manual-layout.md](docs/ma
   layout but keeps the manual one for later.
 - Elements without a stored position (e.g. new states) are placed automatically near their siblings;
   composite states grow when their content does not fit. Transitions keep their automatic route while
-  their end points are arranged as in the automatic layout, otherwise they become straight lines
-  through their bend points.
+  their end points are arranged as in the automatic layout, otherwise they are rerouted around the
+  other states in the shape of the *Edges* setting (or drawn through their bend points, if they have any).
 
 | Action (manual layout) | How |
 | --- | --- |

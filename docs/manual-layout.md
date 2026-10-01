@@ -89,12 +89,24 @@ automatic layout, which is always computed first:
    Composite states grow to fit their content; regions are stacked in their state and fill it.
 2. **Edges, per frame node.** A transition keeps the route of the automatic layout (spline /
    orthogonal) as long as both end points are arranged like in the automatic layout (same size, same
-   displacement relative to the frame), so moving a composite state keeps its inner routes. Otherwise
-   it is a polyline from the border of the source through the stored bend points to the border of the
-   target (border intersection for rectangles, circles and diamonds). Transitions between a composite
-   state and its content start at the nearest border of the state, self transitions become a small
-   loop, parallel transitions get a symmetric bend so they do not coincide. Labels sit at the middle of
-   the route (plus the stored offset).
+   displacement relative to the frame) and no moved vertex lies on the route, so moving a composite
+   state keeps its inner routes. A transition with stored bend points is a polyline from the border of
+   the source through the bend points to the border of the target (border intersection for rectangles,
+   circles and diamonds). All other transitions are **rerouted around the vertices** of their frame
+   (`orthogonal-router.ts`): an orthogonal path with few bends on a sparse grid along the inflated
+   borders of the vertices and the channels between them; the states containing an end point are
+   entered, not run along; running on top of routes placed before is penalized; several ends at the
+   same side of a state are spread along the side, and vertices aligned with each other get a straight
+   line. The path is then shaped like the **edge routing setting** (`routing` option, the *Edges*
+   setting of the web app and `hsm.diagram.edgeRouting` in VS Code): *orthogonal* as it is, *polyline*
+   with the corners removed where the shortcut keeps clear of the vertices, *splines* as a smooth curve
+   through the corners of that polyline which leaves and enters the states perpendicular to their sides
+   (like the splines of the automatic layout; flatter, or with only the corners rounded, where a round
+   curve would touch a vertex). Their labels are placed
+   next to a long segment where they cover no vertex, label or route.
+   Transitions between a composite state and its content start at the nearest border of the state, self
+   transitions become a small loop (and a transition for which no orthogonal route exists becomes a
+   straight line). The stored label offset is added to the computed label position.
 3. The result contains the **effective layout** (all nodes pinned at their computed positions). Every
    change in the diagram starts from it, so new elements become pinned once the user touches the
    layout, and shifts / pushes are materialized.
@@ -186,8 +198,8 @@ wrapped at the itemis width), overlapping states are pushed apart; the relative 
 
 ## Limitations and risks
 
-- Straight edges do not avoid obstacles; long transitions may cross states. The user can add bend
-  points, or use *Auto-arrange*.
+- Transitions with stored bend points are not rerouted (they go straight through the bend points and
+  may cross states); remove the bend points to have them routed orthogonally again.
 - Text edits outside the diagram do not update keys (see above).
 - No alignment guides, snapping, multi-select resize or region resizing; routing of new edges is
   always a polyline (the *Edges* setting applies to routes of the automatic layout only).

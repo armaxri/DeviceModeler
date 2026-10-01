@@ -38,6 +38,50 @@ function checkNesting(node: DiagramNode, path = node.id): void {
     }
 }
 
+/** All segments are horizontal or vertical. */
+function expectOrthogonal(points: Array<{ x: number, y: number }>): void {
+    expect(points.length).toBeGreaterThanOrEqual(2);
+    for (let i = 1; i < points.length; i++) {
+        const horizontal = Math.abs(points[i].y - points[i - 1].y) < 0.01;
+        const vertical = Math.abs(points[i].x - points[i - 1].x) < 0.01;
+        expect(horizontal || vertical, JSON.stringify(points)).toBe(true);
+    }
+}
+
+/** Points on a spline route (start, (control, control, end)*). */
+function sampleSpline(points: Array<{ x: number, y: number }>): Array<{ x: number, y: number }> {
+    const result = [points[0]];
+    for (let i = 0; i + 3 < points.length; i += 3) {
+        for (let k = 1; k <= 10; k++) {
+            const t = k / 10, u = 1 - t;
+            const [a, b, c, d] = points.slice(i, i + 4);
+            result.push({ x: u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x, y: u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y });
+        }
+    }
+    return result;
+}
+
+/** Whether the polyline runs through the interior of the node (shrunk by 1). */
+function crosses(points: Array<{ x: number, y: number }>, n: AbsoluteNode): boolean {
+    const x1 = n.ax + 1, y1 = n.ay + 1, x2 = n.ax + n.width - 1, y2 = n.ay + n.height - 1;
+    return points.slice(1).some((b, i) => {
+        // clip the segment against the rectangle (Liang-Barsky)
+        const a = points[i];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        let t0 = 0, t1 = 1;
+        for (const [p, q] of [[-dx, a.x - x1], [dx, x2 - a.x], [-dy, a.y - y1], [dy, y2 - a.y]]) {
+            if (p === 0) {
+                if (q < 0) return false;
+            } else if (p < 0) {
+                t0 = Math.max(t0, q / p);
+            } else {
+                t1 = Math.min(t1, q / p);
+            }
+        }
+        return t0 < t1;
+    });
+}
+
 const TEXT = `statemachine M {
     [*] -> A
     state A
@@ -174,16 +218,16 @@ describe('manual layout: computation', () => {
             }
         }
         result.graph.children.forEach(n => checkNesting(n));
-        // moved vertices are connected by straight lines between their borders
+        // moved vertices are connected by routes between their borders in the shape of the routing setting (splines)
         const ab = result.graph.edges.find(e => e.id === 'A->B')!;
-        expect(ab.routing).toBe('polyline');
-        expect(ab.points).toHaveLength(2);
+        expect(ab.routing).toBe('spline');
+        expect((ab.points.length - 1) % 3).toBe(0);
         const a = nodes.get('A')!;
         const b = nodes.get('B')!;
         const onBorder = (p: { x: number, y: number }, n: AbsoluteNode) =>
             Math.abs(p.x - n.ax) < 0.5 || Math.abs(p.x - n.ax - n.width) < 0.5 || Math.abs(p.y - n.ay) < 0.5 || Math.abs(p.y - n.ay - n.height) < 0.5;
         expect(onBorder(ab.points[0], a)).toBe(true);
-        expect(onBorder(ab.points[1], b)).toBe(true);
+        expect(onBorder(ab.points[ab.points.length - 1], b)).toBe(true);
         expect(ab.label).toBeDefined();
     });
 
@@ -253,9 +297,7 @@ describe('manual layout: computation', () => {
         // parallel transitions in opposite directions do not coincide
         const ab = moved.graph.edges.find(e => e.id === 'A->B')!;
         const ba = moved.graph.edges.find(e => e.id === 'B->A')!;
-        expect(ab.points).toHaveLength(3);
-        expect(ba.points).toHaveLength(3);
-        expect(Math.abs(ab.points[1].y - ba.points[1].y)).toBeGreaterThan(10);
+        expect(Math.abs(ab.points[0].y - ba.points[ba.points.length - 1].y)).toBeGreaterThan(5);
         // self transition: a loop right of the state
         const loop = moved.graph.edges.find(e => e.id === 'A->A')!;
         const a = byId(moved.graph).get('A')!;
@@ -267,6 +309,101 @@ describe('manual layout: computation', () => {
             expect(p.y).toBeGreaterThan(a.ay - 60);
             expect(p.y).toBeLessThan(a.ay + a.height + 60);
         }
+    });
+
+    test('transitions of a moved vertex are routed around the other vertices', async () => {
+        const parsed = await parse(example('cd-player.hsm'));
+        const auto = await layoutStateMachine(parsed.model, { routing: 'ORTHOGONAL' });
+        const layout = captureLayout(auto.graph);
+        // the open state below left of the closed state (its transitions would cross the states inside)
+        layout.nodes['Open'] = { x: 20, y: layout.nodes['Closed'].y + 900 };
+        const result = applyManualLayout(auto, layout, { routing: 'ORTHOGONAL' });
+        const nodes = byId(result.graph);
+        const rerouted = result.graph.edges.filter(e => e.source === 'Open' || e.target === 'Open');
+        expect(rerouted.length).toBeGreaterThanOrEqual(3);
+        for (const edge of rerouted) {
+            expect(edge.routing, edge.id).toBe('orthogonal');
+            expectOrthogonal(edge.points);
+            const ends = new Set([edge.source, edge.target]);
+            for (const node of nodes.values()) {
+                const containsEnd = [...ends].some(id => id === node.id || id.startsWith(node.id + '.') || id.startsWith(node.id + '#'));
+                if (node.kind !== 'region' && !containsEnd) {
+                    expect(crosses(edge.points, node), `${edge.id} crosses ${node.id}`).toBe(false);
+                }
+            }
+            // the label does not cover a state
+            const label = edge.label!;
+            for (const node of nodes.values()) {
+                if (node.kind === 'state' && node.children.length === 0) {
+                    const covers = label.x < node.ax + node.width && node.ax < label.x + label.width && label.y < node.ay + node.height && node.ay < label.y + label.height;
+                    expect(covers, `label of ${edge.id} covers ${node.id}`).toBe(false);
+                }
+            }
+        }
+        // a straight line where the vertices are aligned
+        const final = result.graph.edges.find(e => e.id === 'Open->#machine#final')!;
+        expect(final.points).toHaveLength(2);
+        // transitions between vertices which were not moved keep their routes
+        const kept = result.graph.edges.find(e => e.id === 'Closed.Active.Playing->Closed.Active.Paused')!;
+        expect(kept.points).toEqual(auto.graph.edges.find(e => e.id === kept.id)!.points);
+    });
+
+    for (const [routing, shape] of [['SPLINES', 'spline'], ['POLYLINE', 'polyline']] as const) {
+        test(`rerouted transitions follow the routing setting: ${routing}`, async () => {
+            const parsed = await parse(example('cd-player.hsm'));
+            const auto = await layoutStateMachine(parsed.model, { routing });
+            const layout = captureLayout(auto.graph);
+            layout.nodes['Open'] = { x: 20, y: layout.nodes['Closed'].y + 900 };
+            // Stopped below right of Active: the transition from the initial state has to go around
+            layout.nodes['Closed.Stopped'] = { x: 260, y: 560 };
+            const result = applyManualLayout(auto, layout, { routing });
+            const nodes = byId(result.graph);
+            const rerouted = result.graph.edges.filter(e => e.source === 'Open' || e.target === 'Open' || e.id === 'Closed#initial->Closed.Stopped');
+            for (const edge of rerouted) {
+                expect(edge.routing, edge.id).toBe(shape);
+                const line = shape === 'spline' ? sampleSpline(edge.points) : edge.points;
+                for (const node of nodes.values()) {
+                    const containsEnd = [edge.source, edge.target].some(id => id === node.id || id.startsWith(node.id + '.') || id.startsWith(node.id + '#'));
+                    if (node.kind !== 'region' && !containsEnd) {
+                        expect(crosses(line, node), `${edge.id} crosses ${node.id}`).toBe(false);
+                    }
+                }
+            }
+            if (shape === 'spline') {
+                expect(rerouted.every(e => (e.points.length - 1) % 3 === 0)).toBe(true);
+                // the route around Active has a curve, it stays below the header of Closed
+                const initial = result.graph.edges.find(e => e.id === 'Closed#initial->Closed.Stopped')!;
+                expect(initial.points.length).toBeGreaterThan(4);
+                const closed = nodes.get('Closed')!;
+                expect(Math.min(...sampleSpline(initial.points).map(p => p.y))).toBeGreaterThan(closed.ay + 26);
+                // splines are curves even where nothing is in the way: they leave Open perpendicular to its side
+                const eject = result.graph.edges.find(e => e.id === 'Open->Closed.H')!;
+                const [a, c] = [eject.points[0], eject.points[1]];
+                const z = eject.points[eject.points.length - 1];
+                const cross = (c.x - a.x) * (z.y - a.y) - (c.y - a.y) * (z.x - a.x);
+                expect(Math.abs(cross) / Math.hypot(z.x - a.x, z.y - a.y)).toBeGreaterThan(10);
+            }
+        });
+    }
+
+    test('moving a vertex onto the route of other transitions reroutes them', async () => {
+        const parsed = await parse(TEXT);
+        const auto = await layoutStateMachine(parsed.model);
+        const layout = captureLayout(auto.graph);
+        const edge = auto.graph.edges.find(e => e.id === 'A->B')!;
+        // put C onto the middle of the route from A to B
+        const mid = edge.points[Math.floor(edge.points.length / 2)];
+        const c = byId(auto.graph).get('C')!;
+        layout.nodes['C'] = { x: mid.x - c.width / 2, y: mid.y - c.height / 2 };
+        const result = applyManualLayout(auto, layout);
+        const nodes = byId(result.graph);
+        const ab = result.graph.edges.find(e => e.id === 'A->B')!;
+        const moved = nodes.get('C')!;
+        // C may have been pushed away from A / B; if it still lies on the old route, A -> B goes around it
+        if (crosses(edge.points, moved)) {
+            expect(ab.routing).toBe('orthogonal');
+        }
+        expect(crosses(ab.points, moved)).toBe(false);
     });
 
     test('the definition section does not cover states', async () => {
