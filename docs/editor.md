@@ -31,9 +31,20 @@ before a state, `@via(…)` before a transition, …, see [the language](languag
 A model with layout annotations has a manual layout, one without the automatic layout – there is no
 mode switch. Design and trade-offs: [Manual layout](manual-layout.md).
 
+- The toolbar shows which of the two it is: **Positions: automatic** or **Positions: stored in model**.
 - The first drag writes the annotations of all elements (the current automatic layout plus the move).
-  *Auto-arrange* replaces them with the automatic layout, *Automatic layout* removes all layout
-  annotations (automatic layout again; an earlier arrangement is restored with undo, not with this button).
+
+| Control (toolbar) | Shown | What it does to the model |
+| --- | --- | --- |
+| *Direction* (Top → bottom / Left → right) | always | nothing – direction of the automatic arrangement (for stored positions: of new elements and of *Re-arrange*) |
+| **Store positions** | positions automatic | writes the current automatic arrangement as layout annotations (the diagram does not change; it can then be adjusted by hand) |
+| **Re-arrange** | positions stored | arranges all elements automatically again and replaces the layout annotations with the new positions (waypoints, sizes and label positions are dropped) |
+| **Clear positions** | positions stored | removes all layout annotations: the diagram is arranged automatically again and follows every change of the model |
+
+- *Store positions* / *Re-arrange* and *Clear positions* are one text edit each, undone with `Ctrl+Z`
+  (an earlier arrangement is restored with undo, not with a button). In VS Code they are also the commands
+  **HSM: Re-arrange Diagram and Store Positions in Model** and **HSM: Clear Stored Diagram Positions
+  (Remove Layout Annotations)**.
 - Layout changes are text edits: they are undone with `Ctrl+Z` like every other edit, mark the model as
   modified and are saved with it. Renames (also typed in the text) keep the position, because the
   annotation belongs to the element.

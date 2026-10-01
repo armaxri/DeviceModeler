@@ -33,8 +33,9 @@ export interface TextRange {
 export type StatusSeverity = 'info' | 'warning' | 'error';
 
 /**
- * Commands of the manual layout (experimental): `arrange` writes the automatic layout as layout
- * annotations into the model, `reset` removes all layout annotations.
+ * Commands of the manual layout (experimental, see layout-actions.ts of the web app): `arrange`
+ * ("Store positions" / "Re-arrange") writes the automatic layout as layout annotations into the model,
+ * `reset` ("Clear positions") removes all layout annotations.
  */
 export type LayoutCommand = 'arrange' | 'reset';
 

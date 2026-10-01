@@ -9,7 +9,8 @@
     "declaration": false,
     "paths": {
       "hsm-language": ["../language/src/index.ts"],
-      "@hsm-web/diagram/manual-layout-support.js": ["../web/src/diagram/manual-layout-support.ts"]
+      "@hsm-web/diagram/manual-layout-support.js": ["../web/src/diagram/manual-layout-support.ts"],
+      "@hsm-web/layout-actions.js": ["../web/src/layout-actions.ts"]
     }
   },
   "include": ["src/extension/**/*.ts", "src/server/**/*.ts", "src/common/**/*.ts", "test/**/*.ts", "vitest.config.ts"]
