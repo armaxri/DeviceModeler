@@ -1,0 +1,27 @@
+{
+  "name": "hsm-desktop",
+  "productName": "HSM Modeler",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HSM Modeler: desktop editor for hierarchical state machines (.hsm)",
+  "author": "HSM Modeler contributors",
+  "license": "MIT",
+  "homepage": "https://github.com/armaxri/HSM",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "bundle": "node scripts/build.mjs",
+    "start": "node scripts/build.mjs && electron .",
+    "package": "node scripts/build.mjs && node scripts/package.mjs",
+    "smoke-test": "node scripts/smoke-test.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "electron": "~44.5.1",
+    "electron-builder": "~26.15.3",
+    "esbuild": "~0.28.2",
+    "vite": "~7.3.6",
+    "vitest": "~3.2.7"
+  }
+}

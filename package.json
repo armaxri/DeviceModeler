@@ -7,17 +7,19 @@
     "packages/language",
     "packages/web",
     "packages/vscode",
-    "packages/standalone"
+    "packages/cli",
+    "packages/desktop"
   ],
   "scripts": {
     "langium:generate": "npm run langium:generate -w packages/language",
     "build": "npm run build -w packages/language && npm run build -w packages/web && npm run build -w packages/vscode",
     "dev": "npm run langium:generate && npm run dev -w packages/web",
-    "test": "npm run test -w packages/language && npm run test -w packages/vscode && npm run test -w packages/standalone",
-    "typecheck": "npm run typecheck -w packages/language && npm run typecheck -w packages/web && npm run typecheck -w packages/vscode && npm run typecheck -w packages/standalone",
+    "test": "npm run test -w packages/language && npm run test -w packages/vscode && npm run test -w packages/desktop",
+    "typecheck": "npm run typecheck -w packages/language && npm run typecheck -w packages/web && npm run typecheck -w packages/vscode && npm run typecheck -w packages/cli && npm run typecheck -w packages/desktop",
     "docs:examples": "npm run build -w packages/language && node packages/language/bin/cli.js doc examples -o docs/examples --title \"Example state machines\"",
     "package:vscode": "npm run package -w packages/vscode",
-    "build:exe": "npm run build:exe -w packages/standalone"
+    "build:exe": "npm run build:exe -w packages/cli",
+    "package:desktop": "npm run package -w packages/desktop"
   },
   "devDependencies": {
     "typescript": "~5.9.3"

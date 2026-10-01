@@ -1,19 +1,18 @@
-// Local HTTP server of the bundled web app (`hsm ui`). It serves the static files of packages/web/dist
-// from memory (embedded in the executable), binds to the loopback interface only and rejects requests
-// whose Host header is not a loopback name (protection against DNS rebinding). It has no write access
-// to anything: the web app keeps its files in the browser (localStorage, Open… / Save downloads).
+// Local HTTP server of the desktop app: serves the web app (packages/web/dist) to the app's windows and the
+// file API of FileHost (the embedded mode `?host=http` of the web app, the same protocol as the Eclipse
+// plugin). It binds to the loopback interface only, rejects requests whose Host header is not a loopback name
+// (DNS rebinding) or that come from a foreign origin, and answers only below `/s/<token>/` (random tokens of
+// the opened files and folders).
+//
+// Why HTTP and not a custom protocol / IPC: the web app is shared with the Eclipse plugin, whose browser
+// widget can only reach the plugin over HTTP. With the same transport the page needs no second code path.
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import * as path from 'node:path';
-
-/** Name reported by `GET /api/info`, used to recognize a running instance. */
-export const APP_ID = 'hsm-modeler';
+import type { FileHost } from './file-host.js';
 
 /** The loopback address the server binds to. */
-export const UI_HOST = '127.0.0.1';
-
-/** Default port of `hsm ui`: fixed, because the browser storage of the web app is per origin (host and port). */
-export const DEFAULT_UI_PORT = 51734;
+export const SERVER_HOST = '127.0.0.1';
 
 /** The static files of the web app, by path relative to the web root (`index.html`, `assets/…`). */
 export interface StaticFiles {
@@ -48,6 +47,19 @@ export function isLoopbackHost(host: string | undefined): boolean {
     return loopbackHosts.has(name.toLowerCase());
 }
 
+/** True if a request may change something: no foreign Origin (a web site must not post to the API). */
+export function isSameOrigin(request: http.IncomingMessage): boolean {
+    const origin = request.headers.origin;
+    if (origin === undefined) {
+        return true;
+    }
+    try {
+        return new URL(origin).host === request.headers.host;
+    } catch {
+        return false;
+    }
+}
+
 /** The file of a request path: `/` is `index.html`; `undefined` for paths leaving the web root. */
 export function fileOfPath(pathname: string): string | undefined {
     let decoded: string;
@@ -67,41 +79,50 @@ export function fileOfPath(pathname: string): string | undefined {
     return file === '' || file.endsWith('/') ? `${file}index.html` : file;
 }
 
-export interface UiServerOptions {
+export interface ServerOptions {
     files: StaticFiles;
-    version: string;
+    host: FileHost;
 }
 
-/** Creates the (not yet listening) HTTP server of the web app. */
-export function createUiServer(options: UiServerOptions): http.Server {
+/** Creates the (not yet listening) HTTP server. */
+export function createServer(options: ServerOptions): http.Server {
     return http.createServer((request, response) => {
         response.setHeader('X-Content-Type-Options', 'nosniff');
         response.setHeader('Referrer-Policy', 'no-referrer');
         if (!isLoopbackHost(request.headers.host)) {
-            send(response, 403, 'Forbidden: the HSM Modeler only answers requests to 127.0.0.1 / localhost\n');
+            send(response, 403, 'Forbidden: only requests to 127.0.0.1 / localhost are answered\n');
             return;
         }
-        if (request.method !== 'GET' && request.method !== 'HEAD') {
-            response.setHeader('Allow', 'GET, HEAD');
-            send(response, 405, 'Method not allowed\n');
+        if (!isSameOrigin(request)) {
+            send(response, 403, 'Forbidden: foreign origin\n');
             return;
         }
-        const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
-        if (pathname === '/api/info') {
-            response.setHeader('Cache-Control', 'no-store');
-            send(response, 200, JSON.stringify({ app: APP_ID, version: options.version, pid: process.pid }), 'application/json; charset=utf-8', request.method === 'HEAD');
-            return;
-        }
-        const file = fileOfPath(pathname);
-        const content = file === undefined ? undefined : options.files.get(file);
-        if (file === undefined || content === undefined) {
+        const url = new URL(request.url ?? '/', 'http://localhost');
+        if (!url.pathname.startsWith('/s/')) {
             send(response, 404, 'Not found\n');
             return;
         }
-        // Vite puts content hashes into the names of the files in assets/
-        response.setHeader('Cache-Control', file.startsWith('assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
-        send(response, 200, content, contentTypes[path.posix.extname(file).toLowerCase()] ?? 'application/octet-stream', request.method === 'HEAD');
+        options.host.handle(request, response, url, `http://${request.headers.host}/`).then(file => {
+            if (file !== undefined) {
+                serveStatic(request, response, options.files, fileOfPath(`/${file}`));
+            }
+        }, error => {
+            if (!response.headersSent) {
+                send(response, 500, `${error instanceof Error ? error.message : String(error)}\n`);
+            }
+        });
     });
+}
+
+function serveStatic(request: http.IncomingMessage, response: http.ServerResponse, files: StaticFiles, file: string | undefined): void {
+    const content = file === undefined ? undefined : files.get(file);
+    if (file === undefined || content === undefined) {
+        send(response, 404, 'Not found\n');
+        return;
+    }
+    // Vite puts content hashes into the names of the files in assets/
+    response.setHeader('Cache-Control', file.startsWith('assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
+    send(response, 200, content, contentTypes[path.posix.extname(file).toLowerCase()] ?? 'application/octet-stream', request.method === 'HEAD');
 }
 
 function send(response: http.ServerResponse, status: number, body: string | Uint8Array, type = 'text/plain; charset=utf-8', headOnly = false): void {
@@ -110,8 +131,8 @@ function send(response: http.ServerResponse, status: number, body: string | Uint
     response.end(headOnly ? undefined : data);
 }
 
-/** Starts listening on the loopback interface; resolves with the port (useful for port 0). */
-export function listen(server: http.Server, port: number): Promise<number> {
+/** Starts listening on a free port of the loopback interface; resolves with the base URL. */
+export function listen(server: http.Server, port = 0): Promise<string> {
     return new Promise((resolve, reject) => {
         const onError = (error: Error) => {
             server.off('listening', onListening);
@@ -119,26 +140,10 @@ export function listen(server: http.Server, port: number): Promise<number> {
         };
         const onListening = () => {
             server.off('error', onError);
-            resolve((server.address() as AddressInfo).port);
+            resolve(`http://${SERVER_HOST}:${(server.address() as AddressInfo).port}/`);
         };
         server.once('error', onError);
         server.once('listening', onListening);
-        server.listen(port, UI_HOST);
+        server.listen(port, SERVER_HOST);
     });
-}
-
-/** The URL of the web app served on a port. */
-export function uiUrl(port: number): string {
-    return `http://${UI_HOST}:${port}/`;
-}
-
-/** The version of the HSM Modeler running on a port, `undefined` if the port is used by something else. */
-export async function runningInstance(port: number, timeoutMs = 1500): Promise<string | undefined> {
-    try {
-        const response = await fetch(`${uiUrl(port)}api/info`, { signal: AbortSignal.timeout(timeoutMs) });
-        const info = await response.json() as { app?: unknown, version?: unknown };
-        return info.app === APP_ID ? String(info.version) : undefined;
-    } catch {
-        return undefined;
-    }
 }

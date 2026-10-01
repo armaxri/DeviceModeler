@@ -6,3 +6,4 @@ dist/
 .claude/worktrees/
 coverage/
 .cache/
+packages/desktop/release/
