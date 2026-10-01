@@ -41,6 +41,7 @@ packages/
     test/                       unit tests; test/scenarios: conformance suite shared with the code generators
   web/          Vite app: Monaco editor + Sprotty diagram
     src/app.ts                  the web app: Monaco editor, toolbar, files; host of the diagram controller
+    src/host.ts                 embedded mode (`?host=http`): the file comes from / is saved by the embedding application
     src/examples.ts             virtual file list (examples, imported models and headers)
     src/diagram-controller.ts   graphical editor: text -> Langium -> ELK (web worker) -> Sprotty, diagram edits -> text
                                 (independent of Monaco: also used by the VS Code webview via the DiagramHost interface)
@@ -57,6 +58,8 @@ packages/
     src/webview/                diagram webview: the DiagramController of packages/web with a VS Code DiagramHost
     src/common/protocol.ts      messages between extension host and webview
     scripts/                    esbuild / Vite bundling and packaging of the .vsix
+eclipse-plugin/ Eclipse plugin (prototype, Maven / Tycho): the web app (packages/web/dist, embedded mode of src/host.ts)
+                in an SWT browser, served by a small HTTP server of the plugin; the editor loads / saves the workspace file
 examples/       sample state machines; tests: their unit tests; door-with-motor: imports and submachines;
                 cpp-types: C++ header types; cmake: CMake example
 cmake/          CMake integration (HsmGenerate.cmake: hsm_generate, hsm_add_tests; HsmConfig.cmake)
