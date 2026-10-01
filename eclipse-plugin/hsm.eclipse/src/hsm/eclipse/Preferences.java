@@ -17,6 +17,8 @@ public final class Preferences {
     public static final String CPP_NAMESPACE = "cpp.namespace";
     /** C++ standard: {@code 17} or {@code 11}. */
     public static final String CPP_STANDARD = "cpp.standard";
+    /** Path of the {@code hsm} executable (validation of closed files); empty: the bundled one, else {@code hsm} in the PATH. */
+    public static final String HSM_EXECUTABLE = "hsm.executable";
     /** Settings of the page (theme, layout direction, …) as JSON, stored by the page. */
     public static final String PAGE_SETTINGS = "page.settings";
 
@@ -47,6 +49,7 @@ public final class Preferences {
             store.setDefault(CPP_NAMESPACE, "");
             store.setDefault(CPP_STANDARD, "17");
             store.setDefault(PAGE_SETTINGS, "");
+            store.setDefault(HSM_EXECUTABLE, "");
         }
     }
 }

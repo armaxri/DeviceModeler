@@ -71,23 +71,31 @@ Eclipse editor (HsmDiagramEditor)                       SWT Browser (Edge / WebK
 
 Without `?host=http` the web app behaves as before (only `app.ts` branches on the host).
 
-### Integrating the bundled executable
+### The bundled `hsm` executable
 
-The work on `claude/bundled-executables` (self-contained `hsm` executable) can plug in here:
+The command line executable of `packages/cli` (a Node.js single executable application, no Node.js needed)
+runs what needs no page:
 
-- **Validation of closed files**: implement `hsm.eclipse.tools.ModelValidator` by running
-  `hsm validate <file>` (with `-I` / `-D` of the header settings, or relying on `hsm.gen.json`) and parsing each
-  output line with `ModelProblem.fromCliLine(...)` (`<file>:<line>:<column>: error|warning|info: <message>`);
-  register it with `HsmTools.setValidator(...)` (e.g. in `Activator.start` once the executable is located, or
-  from a preference). The builder then validates all changed models; *Clean* removes the markers. The
-  editor keeps reporting the markers of opened files from the page (same marker type). Revalidating the
-  importers of a changed model is still to do (`HsmBuilder`).
-- **C++ generation without an editor** (several models, builds): implement `ModelGenerator` with
-  `hsm generate cpp <model>` (or `hsm generate` for a configuration) and set it with `HsmTools.setGenerator(...)`;
-  the command *Generate C++* uses it unchanged. The preferences of `Preferences.cppSettings()` map to
-  `--out`, `--namespace` and `--std`.
-- The standalone executable could also replace the page-less parts of the web server in the future (e.g. a
-  language server for LSP4E, see below); the editor itself keeps using the web app.
+- **Validation of closed files**: `hsm.eclipse.tools.CliValidator` (registered by the activator in `HsmTools`)
+  runs `hsm validate --json <models…>` (one process for up to 100 models, in the project folder; imports and
+  headers are resolved from the file system with the `headers` block of the nearest `hsm.gen.json`) and turns
+  the problems (lines, columns and character offsets) into markers. The builder `HsmBuilder` (nature: *Configure
+  > Enable / Disable HSM Validation*) validates the changed models and the models that import a changed model
+  or header (all models after a change of a generator configuration or on a full build); *Clean* removes the
+  markers. Without an executable the project gets one warning marker saying so. The opened editors keep
+  reporting the problems of the page (same marker type).
+- **Where the executable comes from** (`HsmExecutable`): the preference *Preferences > HSM Modeler > hsm
+  executable* if set; else `bin/hsm` of the platform fragment `hsm.eclipse.cli.<os>.<arch>` (Linux x86_64 /
+  aarch64, macOS x86_64 / aarch64, Windows x86_64; installed automatically with the feature for the platform of
+  Eclipse, `chmod 755` by a p2 touchpoint); else `hsm` in the `PATH` (also `/opt/homebrew/bin`,
+  `/usr/local/bin`, `~/.local/bin`, for an Eclipse started from the Finder).
+- **C++ generation** stays in the page (`PageGenerator`): it is the same generator with the same resolution of
+  `hsm.gen.json` as `hsm generate`, uses the preferences of the plugin and writes through the workspace (refresh,
+  local history). `ModelGenerator` remains the extension point for a generator based on `hsm generate`.
+- **The editor** keeps its own JDK HTTP server instead of a server process of the executable: no process to
+  start, watch and stop per Eclipse session, no dependency of the editor on the executable (it works without
+  one), and the server already knows the workspace (resources, markers, refresh). The executable is only
+  started for builds.
 
 ## Build
 
@@ -99,9 +107,12 @@ platform; set `-Declipse.repository=…` for another release or a mirror).
 npm install
 npm run build            # or: npm run langium:generate && npm run build -w packages/web
 
-# the plugin, its feature and a p2 update site
+# optional: the hsm executable of this platform for its fragment (packages/cli/dist/bin/<platform>/hsm)
+npm run build:exe
+
+# the plugin, the fragments with the executables, the feature and a p2 update site
 cd eclipse-plugin
-mvn verify
+mvn verify               # fragments without executable stay empty; -Dhsm.cli.optional=false requires all five
 # → hsm.eclipse.site/target/hsm.eclipse.site-0.1.0-SNAPSHOT.zip (update site archive)
 ```
 
@@ -147,7 +158,10 @@ On macOS (aarch64) with Eclipse 4.36 and WebKit, by the UI tests (`mvn verify -P
 - page settings stored in the preferences; *Generate C++* (command) with `hsm.gen.json` (`outDir`,
   `licenseHeaderFile`, header include); rename and move of the file (editor follows, imports re-resolved);
   *Save As*;
-- the builder with a test `ModelValidator` creates markers for a closed file.
+- the builder with a test `ModelValidator` creates markers for a closed file;
+- the builder with the bundled executable (fragment of the build, macOS aarch64): markers with ranges for a
+  closed file, `../` imports and headers of `hsm.gen.json` resolved, the importer of a changed header is
+  validated again.
 
 Manually checked once with real (OS-level) key events on macOS: typing, `Cmd+Z` and `Cmd+S` work while the
 page has the focus (they reach the page directly, not Eclipse's key bindings).
@@ -158,8 +172,8 @@ commands themselves are tested), interactive use in a full IDE.
 
 ## Limitations / next steps
 
-- Markers come from the opened editors only (validation of closed files needs the `ModelValidator` of the
-  bundled executable, see above); they reflect the text of the page, also when it is not saved yet.
+- Markers of opened files come from the page (they reflect the unsaved text), those of closed files from the
+  builder with the bundled executable (saved text, imports from the file system: not limited to the project).
 - Imports and include paths are limited to the project; include paths outside of it (absolute paths) are
   ignored. At most 500 importable files (2 MB each) of a project are passed to the page.
 - The undo history is the page's (Monaco): Eclipse's *Undo* of the menu acts on it, but there is no
@@ -170,4 +184,5 @@ commands themselves are tested), interactive use in a full IDE.
   `packages/vscode` (or of the bundled executable) and [TM4E](https://github.com/eclipse/tm4e) with its
   TextMate grammar would give a Generic Editor with validation, completion and hover. The content type
   `hsm.eclipse.hsm` is already defined for such bindings.
-- Signing of the bundle; a Maven / npm build in CI.
+- Signing of the bundles. The update site with all five executables is about 200 MB (each platform installs
+  only its fragment of about 40 MB).

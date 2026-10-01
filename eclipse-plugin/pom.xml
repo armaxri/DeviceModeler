@@ -15,10 +15,19 @@
         <!-- the plugin is compiled against this release; it runs on older and newer releases too (see README.md) -->
         <eclipse.repository>https://download.eclipse.org/releases/2025-06/</eclipse.repository>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- the hsm executables of packages/cli (packages/cli/dist/bin/<target>/hsm, other folder: -Dhsm.cli.dir=…)
+             are shipped in the platform fragments hsm.eclipse.cli.<os>.<arch>; a missing one leaves its fragment
+             empty (the plugin then uses hsm of the PATH) unless -Dhsm.cli.optional=false -->
+        <hsm.cli.optional>true</hsm.cli.optional>
     </properties>
 
     <modules>
         <module>hsm.eclipse</module>
+        <module>hsm.eclipse.cli.linux.x86_64</module>
+        <module>hsm.eclipse.cli.linux.aarch64</module>
+        <module>hsm.eclipse.cli.macosx.x86_64</module>
+        <module>hsm.eclipse.cli.macosx.aarch64</module>
+        <module>hsm.eclipse.cli.win32.x86_64</module>
         <module>hsm.eclipse.feature</module>
         <module>hsm.eclipse.site</module>
     </modules>
@@ -57,6 +66,7 @@
                     <environments>
                         <environment><os>win32</os><ws>win32</ws><arch>x86_64</arch></environment>
                         <environment><os>linux</os><ws>gtk</ws><arch>x86_64</arch></environment>
+                        <environment><os>linux</os><ws>gtk</ws><arch>aarch64</arch></environment>
                         <environment><os>macosx</os><ws>cocoa</ws><arch>x86_64</arch></environment>
                         <environment><os>macosx</os><ws>cocoa</ws><arch>aarch64</arch></environment>
                     </environments>

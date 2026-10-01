@@ -34,10 +34,13 @@ import org.eclipse.ui.handlers.IHandlerService;
 import org.eclipse.ui.ide.IDE;
 import org.eclipse.ui.views.contentoutline.IContentOutlinePage;
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 
 import hsm.eclipse.builder.HsmNature;
+import hsm.eclipse.tools.CliValidator;
+import hsm.eclipse.tools.HsmExecutable;
 import hsm.eclipse.tools.HsmTools;
 import hsm.eclipse.tools.ModelProblem;
 
@@ -225,6 +228,35 @@ public class HsmDiagramEditorTest {
         assertEquals(1, markers.length);
         assertEquals("checked motor.hsm", markers[0].getAttribute(IMarker.MESSAGE));
         assertEquals(2, markers[0].getAttribute(IMarker.LINE_NUMBER, -1));
+    }
+
+    /**
+     * The builder with the hsm executable (the platform fragment of the build, a preference or the PATH): closed
+     * files get markers with ranges; the models importing a changed header are validated again.
+     */
+    @Test
+    public void builderWithExecutable() throws Exception {
+        Assume.assumeTrue("no hsm executable (build packages/cli first: npm run build:exe)", HsmExecutable.locate().isPresent());
+        HsmTools.setValidator(new CliValidator());
+        create("models/broken.hsm", "statemachine Broken {\n    [*] -> Missing\n    state Idle\n}\n");
+        HsmNature.toggle(project);
+        project.build(IncrementalProjectBuilder.FULL_BUILD, null);
+
+        IMarker[] broken = errorMarkers(project.getFile("models/broken.hsm"));
+        assertTrue("an error in broken.hsm", broken.length > 0);
+        assertEquals(2, broken[0].getAttribute(IMarker.LINE_NUMBER, -1));
+        String text = "statemachine Broken {\n    [*] -> Missing\n    state Idle\n}\n";
+        assertTrue(text.substring(broken[0].getAttribute(IMarker.CHAR_START, 0), broken[0].getAttribute(IMarker.CHAR_END, 0)).contains("Missing"));
+        // ../motor.hsm and types.h through the include path of hsm.gen.json
+        assertEquals(0, errorMarkers(project.getFile("models/door/gate.hsm")).length);
+
+        // a changed header: the (closed, unchanged) importing model is validated again
+        project.getFile("include/types.h").setContents(new ByteArrayInputStream("#pragma once\nnamespace t {\n}\n".getBytes(StandardCharsets.UTF_8)),
+                IResource.FORCE, null);
+        // (the auto build may have taken the change already)
+        org.eclipse.core.runtime.jobs.Job.getJobManager().join(ResourcesPlugin.FAMILY_AUTO_BUILD, null);
+        project.build(IncrementalProjectBuilder.INCREMENTAL_BUILD, null);
+        waitFor("gate.hsm: t::Mode is missing", () -> errorMarkers(project.getFile("models/door/gate.hsm")).length > 0);
     }
 
     // ---------------------------------------------------------------------------------------------------------

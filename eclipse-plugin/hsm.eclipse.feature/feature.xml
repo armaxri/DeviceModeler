@@ -18,4 +18,45 @@
          id="hsm.eclipse"
          version="0.0.0"/>
 
+
+   <!-- the hsm executable (validation of closed files) for linux x86_64 -->
+   <plugin
+         id="hsm.eclipse.cli.linux.x86_64"
+         os="linux"
+         arch="x86_64"
+         version="0.0.0"
+         fragment="true"/>
+
+   <!-- the hsm executable (validation of closed files) for linux aarch64 -->
+   <plugin
+         id="hsm.eclipse.cli.linux.aarch64"
+         os="linux"
+         arch="aarch64"
+         version="0.0.0"
+         fragment="true"/>
+
+   <!-- the hsm executable (validation of closed files) for macosx x86_64 -->
+   <plugin
+         id="hsm.eclipse.cli.macosx.x86_64"
+         os="macosx"
+         arch="x86_64"
+         version="0.0.0"
+         fragment="true"/>
+
+   <!-- the hsm executable (validation of closed files) for macosx aarch64 -->
+   <plugin
+         id="hsm.eclipse.cli.macosx.aarch64"
+         os="macosx"
+         arch="aarch64"
+         version="0.0.0"
+         fragment="true"/>
+
+   <!-- the hsm executable (validation of closed files) for win32 x86_64 -->
+   <plugin
+         id="hsm.eclipse.cli.win32.x86_64"
+         os="win32"
+         arch="x86_64"
+         version="0.0.0"
+         fragment="true"/>
+
 </feature>

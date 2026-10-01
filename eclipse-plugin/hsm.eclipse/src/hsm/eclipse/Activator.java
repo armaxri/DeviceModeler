@@ -11,6 +11,9 @@ import org.eclipse.core.runtime.Status;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
 import org.osgi.framework.BundleContext;
 
+import hsm.eclipse.tools.CliValidator;
+import hsm.eclipse.tools.HsmTools;
+
 /** The plugin: owns the {@link WebServer} (started with the first editor, stopped with the plugin). */
 public class Activator extends AbstractUIPlugin {
 
@@ -26,6 +29,10 @@ public class Activator extends AbstractUIPlugin {
     public void start(BundleContext context) throws Exception {
         super.start(context);
         plugin = this;
+        // validation of closed files (builder) with the hsm executable (bundled fragment, preference or PATH)
+        if (HsmTools.validator().isEmpty()) {
+            HsmTools.setValidator(new CliValidator());
+        }
     }
 
     @Override
