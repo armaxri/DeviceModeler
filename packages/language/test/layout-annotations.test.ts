@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { describe, expect, test } from 'vitest';
+import { beforeAll, describe, expect, test } from 'vitest';
 import { diagramElementIds } from '../src/diagram/diagram-ids.js';
 import { layoutStateMachine } from '../src/diagram/layout.js';
 import { hasLayoutAnnotations, layoutFromModel, layoutTextEdits } from '../src/diagram/layout-annotations.js';
@@ -362,6 +362,12 @@ describe('layout annotations: diagram edits', () => {
 });
 
 describe('layout annotations: command line', () => {
+    // the command line tool runs from the build in `out/` (not built yet in CI when the tests run)
+    beforeAll(async () => {
+        const { execFileSync } = await import('node:child_process');
+        execFileSync(process.execPath, [path.resolve(__dirname, '../../../node_modules/typescript/bin/tsc'), '-b', path.resolve(__dirname, '../tsconfig.json')]);
+    }, 120000);
+
     /** Runs the command line tool (the build in `out/`, see `npm run build`). */
     async function run(...args: string[]): Promise<string> {
         const { execFileSync } = await import('node:child_process');
