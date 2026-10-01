@@ -338,7 +338,7 @@ describe('HSM language server', () => {
         await fs.writeFile(path.join(dir, 'models/types.h'), TYPES_H.replace('Closed, Open', 'Closed, Opened'));
         connection.sendNotification('workspace/didChangeWatchedFiles', { changes: [{ uri: uriOf('models/types.h'), type: 2 }] });
         const errors = await diagnosticsFor(valveUri, d => d.some(e => e.severity === 1));
-        expect(errors.some(d => /app::Mode::Open/.test(d.message))).toBe(true);
+        expect(errors.some(d => /'app::Mode' has no enumerator 'Open'/.test(d.message))).toBe(true);
         await fs.writeFile(path.join(dir, 'models/types.h'), TYPES_H);
         connection.sendNotification('workspace/didChangeWatchedFiles', { changes: [{ uri: uriOf('models/types.h'), type: 2 }] });
         await diagnosticsFor(valveUri, d => !d.some(e => e.severity === 1));

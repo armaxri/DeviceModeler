@@ -522,6 +522,7 @@ class DeclarationParser extends TokenCursor {
         // using-declaration
         const start = this.peek();
         const target = this.parseQualifiedName('always');
+        const nameToken = this.previous();
         if (!this.accept(';')) {
             this.skipDeclaration(false);
             return;
@@ -534,7 +535,7 @@ class DeclarationParser extends TokenCursor {
         const type = makeTypeRef({ name: { kind: 'named', name: target }, const: false, volatile: false }, 0, undefined, [], false, range);
         this.output.push(this.base<CppAlias>({
             kind: 'alias', name, qualifiedName: this.qualify(name), type, syntax: 'usingDeclaration'
-        }, keyword, this.previous(), doc));
+        }, keyword, nameToken, doc));
     }
 
     // -----------------------------------------------------------------------------------------
@@ -664,6 +665,8 @@ class DeclarationParser extends TokenCursor {
             : value.startsWith(oldName + '::') ? alias.qualifiedName + value.slice(oldName.length) : value;
         const renamed = declared as Mutable<CppEnum | CppRecord>;
         renamed.name = alias.name;
+        // go to definition of the typedef name leads to the name (not to the keyword of the anonymous type)
+        renamed.nameRange = alias.nameRange;
         const type = alias.type as Mutable<CppTypeRef>;
         type.spelling = type.spelling.replace(oldName, alias.qualifiedName);
         forEach(declared, declaration => {

@@ -4,12 +4,13 @@ import { CompletionItemKind, type CompletionItem, type CompletionList, type Rang
 
 type CompletionParams = Parameters<DefaultCompletionProvider['getCompletion']>[1];
 import * as ast from '../generated/ast.js';
-import type { CppDeclaration, CppRange, CppResolvedField } from '../cpp-header/model.js';
+import type { CppDeclaration, CppResolvedField } from '../cpp-header/model.js';
 import type { CppTypeIndex } from '../cpp-header/type-index.js';
 import { cppValueToJson, describeCppType } from '../cpp-header/report.js';
 import { displayPath } from '../cpp-headers.js';
 import { contextMachine, cppIndexAt, cppTypeOfReference, hsmTypeOfCpp, isEnumType, isStructType, memberOf, referenceMembers } from '../cpp-types.js';
 import { enumeratorSpelling } from '../cpp-enums.js';
+import { cppLocations } from './cpp-navigation.js';
 import { cppImports, resolvedImports } from '../imports.js';
 import {
     inferType, returnTypeOf, typeAliases, typeName, typeOfAlias, typeOfDeclaration, typeOfEvent, typeOfParameter, type HsmType
@@ -42,10 +43,6 @@ export interface CppElementAt {
     readonly index: CppTypeIndex;
     /** The text range of the name at the position. */
     readonly origin: Range;
-}
-
-function toRange(range: CppRange): Range {
-    return { start: { line: range.start.line, character: range.start.character }, end: { line: range.end.line, character: range.end.character } };
 }
 
 /** The C++ declaration (or struct member) at an offset of a model or test document. */
@@ -236,24 +233,9 @@ function formatCppValue(value: unknown): string {
     return JSON.stringify(cppValueToJson(value as never));
 }
 
-/** The location of the C++ declaration at an offset (go to definition into the header). */
+/** The location of the C++ definition at an offset (go to definition into the header; all variants: `cppLocations` in cpp-navigation.ts). */
 export function cppDefinition(document: LangiumDocument, offset: number): CppLocation | undefined {
-    const element = cppElementAt(document, offset);
-    const declaration = element?.declaration;
-    if (!element || !declaration) {
-        const root = document.parseResult.value.$cstNode;
-        const leaf = root ? CstUtils.findLeafNodeAtOffset(root, offset) : undefined;
-        if (ast.isImportPath(leaf?.astNode)) {
-            const machine = AstUtils.getContainerOfType(leaf.astNode, ast.isStateMachine);
-            const resolved = machine ? resolvedImports(machine).find(i => i.node === leaf.astNode) : undefined;
-            if (resolved?.kind === 'header' && resolved.header?.found && resolved.uri) {
-                const start = { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } };
-                return { uri: resolved.uri.toString(), range: start, selection: start, origin: leaf.range };
-            }
-        }
-        return undefined;
-    }
-    return { uri: declaration.fileName, range: toRange(declaration.range), selection: toRange(declaration.nameRange), origin: element.origin };
+    return cppLocations(document, offset, 'definition')[0];
 }
 
 // ---------------------------------------------------------------------------------------------
