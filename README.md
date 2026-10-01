@@ -82,6 +82,10 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
   IDE (embedded browser): workspace files with dirty state, Save As and rename, problems in the Problems
   view, Outline, Eclipse's edit commands, imports within the project, C++ generation – see
   [eclipse-plugin/README.md](eclipse-plugin/README.md).
+- 🧪 **JetBrains plugin** (prototype, `jetbrains-plugin/`): the web app as editor of `.hsm` files in CLion,
+  IntelliJ IDEA and the other JetBrains IDEs (JCEF): views *Text* / *Text and Diagram* / *Diagram* on the IDE's
+  document, problems in the editor and the Problems tool window (closed files with `hsm validate`), Structure
+  view, edit shortcuts in the page, C++ generation – see [jetbrains-plugin/README.md](jetbrains-plugin/README.md).
 - **Build integration**: a generator configuration file (`hsm.gen.json`, like the `.sgen` files of itemis
   CREATE), `hsm generate --check` for CI and CMake functions (`hsm_generate`, `hsm_add_tests`) that
   regenerate the code when a model changes (see [Build integration (CMake)](docs/build-integration.md)).
@@ -96,7 +100,7 @@ Download from the [releases](https://github.com/armaxri/HSM/releases) (or the ar
 - **Desktop app *HSM Modeler*** (Windows installer / zip, macOS `.dmg`, Linux AppImage / `.deb`): the
   graphical editor in a native window, opening and saving `.hsm` files on disk.
 - **Command line tool `hsm`** (one executable per platform): all commands below, e.g. for builds and CI.
-- **VS Code extension** (`.vsix`) and **Eclipse plugin** (update site archive).
+- **VS Code extension** (`.vsix`), **Eclipse plugin** (update site archive) and **JetBrains plugin** (`.zip`).
 
 ```bash
 hsm validate examples/cd-player.hsm
@@ -154,7 +158,7 @@ node packages/language/bin/cli.js generate --check          # exit 1 if generate
 | [Execution semantics](docs/semantics.md) | how a state machine executes – the specification implemented by the interpreter and the code generators |
 | [Web editor](docs/editor.md) | editing in the diagram, 🧪 manual layout, simulation |
 | [Manual layout](docs/manual-layout.md) | 🧪 experimental (branch `claude/layout-annotations`): layout annotations in the model, layout computation, routing, editor integration, migration |
-| [Installation and usage](docs/installation.md) | downloads, desktop app, command line executable `hsm`, VS Code, Eclipse; unsigned downloads; how they are built |
+| [Installation and usage](docs/installation.md) | downloads, desktop app, command line executable `hsm`, VS Code, Eclipse, JetBrains IDEs; unsigned downloads; how they are built |
 | [VS Code extension](docs/vscode.md) | language server, diagram, generation, Test Explorer (details in [packages/vscode/README.md](packages/vscode/README.md)) |
 | [Rendering and model documentation](docs/rendering.md) | `hsm render` (SVG diagrams), `hsm doc` (Markdown / HTML documentation), doc comments |
 | [Unit tests and coverage](docs/testing.md) | the `.hsmtest` language, `hsm test`, model coverage, CI examples |
@@ -173,6 +177,6 @@ The repository is an npm workspace with five packages: `packages/language` (the 
 interpreter, test runner, renderer and code generators – no DOM dependencies, runs in Node.js and in the
 browser), `packages/web` (the Vite web app: Monaco editor and Sprotty diagram), `packages/vscode` (the
 VS Code extension), `packages/desktop` (the Electron desktop app around the web app) and `packages/cli`
-(the self-contained `hsm` command line executable); `eclipse-plugin/` is the Eclipse plugin (Maven / Tycho). The text is the single source of truth: diagram edits become text edits, which run
+(the self-contained `hsm` command line executable); `eclipse-plugin/` is the Eclipse plugin (Maven / Tycho), `jetbrains-plugin/` the JetBrains plugin (Gradle). The text is the single source of truth: diagram edits become text edits, which run
 through the same parse → validate → layout → render pipeline as typed changes. See
 [docs/architecture.md](docs/architecture.md) for the details.

@@ -454,6 +454,20 @@ export class HsmApp implements DiagramHost {
         this.editor.focus();
     }
 
+    /**
+     * The host changed its theme (e.g. the Look and Feel of a JetBrains IDE): a dark host → the dark theme, a
+     * light host → no dark theme (like {@link HostDocument.theme} at the start).
+     */
+    setHostTheme(theme: 'light' | 'dark'): void {
+        const next = theme === 'dark' ? 'dark' : this.settings.theme === 'dark' ? 'classic' : this.settings.theme;
+        if (next !== this.settings.theme) {
+            this.settings.theme = next;
+            byId<HTMLSelectElement>('theme-select').value = next;
+            this.saveSettings();
+            this.applyTheme();
+        }
+    }
+
     /** Generates the C++ code of the model; the host writes the files (embedded app). */
     async generateCpp(): Promise<void> {
         if (!this.host || !this.hostDocument) {
