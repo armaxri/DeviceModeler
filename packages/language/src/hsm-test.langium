@@ -100,7 +100,14 @@ AssignmentStatement:
     expression=TestAssignment;
 
 TestAssignment infers Expression:
-    ElementReference (
+    TestTarget (
         {infer AssignmentExpression.left=current} operator=AssignmentOperator value=Expression
         | {infer PostfixExpression.operand=current} operator=('++' | '--')
     );
+
+// the assigned variable, optionally with members / elements of C++ struct / array values (`pos.x`, `a[1]`)
+TestTarget infers Expression:
+    ElementReference (
+        {infer MemberAccessExpression.receiver=current} '.' member=ID
+        | {infer IndexExpression.receiver=current} '[' index=Expression ']'
+    )*;

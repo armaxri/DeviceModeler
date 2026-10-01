@@ -1,6 +1,6 @@
 import * as ast from '../generated/ast.js';
 import { qualifiedName } from '../hsm-scope.js';
-import { allTransitions, allVertices, definitionLines, nodeText, transitionLabel, type ScopeContainer } from '../model-utils.js';
+import { allTransitions, allVertices, definitionLines, entryPointOf, nodeText, transitionLabel, type ScopeContainer } from '../model-utils.js';
 
 /**
  * Generates a PlantUML state diagram (`@startuml ... @enduml`) for the given state machine.
@@ -9,7 +9,8 @@ import { allTransitions, allVertices, definitionLines, nodeText, transitionLabel
  *   their qualified name (`state "Playing" as Closed_Active_Playing`).
  * - `sync` becomes `<<fork>>` (one incoming transition) or `<<join>>`, named entry points
  *   `<<entryPoint>>` and exit nodes `<<exitPoint>>`. Transitions using an entry point (`# >E`)
- *   lead to the entry point, transitions taken at an exit node (`# X>`) start at the exit node.
+ *   lead to the entry point(s) (every region with an entry point of that name), transitions taken
+ *   at exit nodes (`# X1> X2>`) start at each exit node.
  * - The definition section is shown as a legend.
  */
 export function generatePlantUml(machine: ast.StateMachine): string {
@@ -81,20 +82,24 @@ class PlantUmlGenerator {
         let sourceVertex = transition.source?.ref;
         let targetVertex = transition.target?.ref;
         let label = transitionLabel(transition);
-        const entryPoint = transition.entryPoint && targetVertex ? namedPseudoState(targetVertex, 'entry', transition.entryPoint) : undefined;
-        const exitPoint = transition.exitPoint && sourceVertex ? namedPseudoState(sourceVertex, 'exit', transition.exitPoint) : undefined;
-        if (entryPoint || exitPoint) {
-            // the transition leads to the entry point / starts at the exit node
-            targetVertex = entryPoint ?? targetVertex;
-            sourceVertex = exitPoint ?? sourceVertex;
+        const entry = entryPointOf(transition);
+        const entryPoints = entry && targetVertex ? namedPseudoStates(targetVertex, 'entry', entry) : [];
+        const exitPoints = sourceVertex ? transition.exitPoints.flatMap(name => namedPseudoStates(sourceVertex!, 'exit', name)) : [];
+        if (entryPoints.length > 0 || exitPoints.length > 0) {
+            // the transition leads to the entry point(s) / starts at the exit node(s): one arrow per pair
             label = nodeText(transition.spec);
         }
-        const source = transition.initial ? '[*]' : this.reference(sourceVertex);
-        const target = transition.final ? '[*]' : this.reference(targetVertex);
-        if (!source || !target) {
-            return;
+        const sources = exitPoints.length > 0 ? exitPoints : [sourceVertex];
+        const targets = entryPoints.length > 0 ? entryPoints : [targetVertex];
+        for (const from of sources) {
+            for (const to of targets) {
+                const source = transition.initial ? '[*]' : this.reference(from);
+                const target = transition.final ? '[*]' : this.reference(to);
+                if (source && target) {
+                    lines.push(`${indent}${source} --> ${target}${label ? ` : ${label}` : ''}`);
+                }
+            }
         }
-        lines.push(`${indent}${source} --> ${target}${label ? ` : ${label}` : ''}`);
     }
 
     private vertex(vertex: ast.Vertex, indent: string, lines: string[]): void {
@@ -157,11 +162,11 @@ class PlantUmlGenerator {
     }
 }
 
-/** The entry point / exit node with the given name declared directly in the state (or one of its regions). */
-function namedPseudoState(vertex: ast.Vertex, kind: 'entry' | 'exit', name: string): ast.PseudoState | undefined {
+/** The entry points / exit nodes with the given name declared directly in the state or its regions (one per region). */
+function namedPseudoStates(vertex: ast.Vertex, kind: 'entry' | 'exit', name: string): ast.PseudoState[] {
     if (!ast.isState(vertex)) {
-        return undefined;
+        return [];
     }
     return [...vertex.vertices, ...vertex.regions.flatMap(r => r.vertices)]
-        .find((v): v is ast.PseudoState => ast.isPseudoState(v) && v.kind === kind && v.name === name);
+        .filter((v): v is ast.PseudoState => ast.isPseudoState(v) && v.kind === kind && v.name === name);
 }

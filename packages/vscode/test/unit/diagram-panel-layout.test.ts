@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -94,7 +94,8 @@ describe('DiagramPanel: manual layout file', () => {
         await fs.writeFile(layoutPath, LAYOUT);
         const h = createPanel(Uri.file(modelPath));
         await h.receive({ type: 'ready' });
-        expect(h.posted.map(m => m.type)).toEqual(['settings', 'layout', 'text']);
+        // (the text is posted once the imported files are collected)
+        await vi.waitFor(() => expect(h.posted.map(m => m.type)).toEqual(['settings', 'layout', 'text']));
         expect(h.posted[1]).toEqual({ type: 'layout', content: LAYOUT });
         h.panel.disposeResources();
     });
@@ -152,7 +153,8 @@ describe('DiagramPanel: manual layout file', () => {
         h.document.text = MODEL.replace('Off', 'Dark');
         h.document.version = 2;
         h.panel.documentChanged(h.document as unknown as vscode.TextDocument, TextDocumentChangeReason.Undo as unknown as vscode.TextDocumentChangeReason);
-        expect(h.posted[h.posted.length - 1]).toMatchObject({ type: 'text', change: 'undo', version: 2 });
+        // sent without debouncing (once the imported files are collected)
+        await vi.waitFor(() => expect(h.posted[h.posted.length - 1]).toMatchObject({ type: 'text', change: 'undo', version: 2 }), { timeout: 100 });
         // typing is debounced and marked as edit
         h.document.text = MODEL;
         h.document.version = 3;

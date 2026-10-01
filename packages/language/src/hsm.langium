@@ -32,11 +32,26 @@ grammar Hsm
 
 entry StateMachine:
     'statemachine' name=ID (description=STRING)? '{'
-        ('namespace' namespace=QualifiedName)?
+        imports+=Import*
+        ('namespace' namespace=QualifiedName imports+=Import*)?
         annotations+=Annotation*
         scopes+=Scope*
         (vertices+=Vertex | transitions+=Transition | reactions+=LocalReaction)*
     '}';
+
+// ---------------------------------------------------------------------------------------------
+// Imports
+
+// `import "motor.hsm"` imports the state machine of another file (its name becomes a type, variables
+// of that type are submachine instances), `import "motor_types.h"` a C/C++ header (its enums, structs,
+// type aliases and constants can be used by their `::`-qualified names, see docs/cpp-integration.md).
+// Several paths and the itemis CREATE form `import: "a" "b"` are accepted. Paths are resolved relative
+// to the importing file, headers also relative to the include paths (see imports.ts, cpp-headers.ts).
+Import:
+    'import' (colon?=':')? paths+=ImportPath+;
+
+ImportPath:
+    path=STRING;
 
 // ---------------------------------------------------------------------------------------------
 // Definition section
@@ -54,7 +69,7 @@ InternalScope:
     {infer InternalScope} 'internal' ':' declarations+=Declaration*;
 
 Declaration:
-    EventDeclaration | VariableDeclaration | OperationDeclaration;
+    EventDeclaration | VariableDeclaration | OperationDeclaration | TypeAliasDeclaration;
 
 EventDeclaration:
     (direction=('in' | 'out'))? 'event' name=ID (':' type=TypeReference)?;
@@ -68,9 +83,19 @@ OperationDeclaration:
 Parameter:
     name=ID (varArgs?='...')? ':' type=TypeReference;
 
-// Types are referenced by name (integer, real, boolean, string, void) so that further types can be added later.
+// `alias Name : type` (itemis CREATE): another name for a type; aliases may refer to other aliases.
+TypeAliasDeclaration:
+    'alias' name=ID ':' type=TypeReference;
+
+// Types are referenced by name: the built-in types (integer, real, boolean, string, void), type
+// aliases (`Name` or `Interface.Name` for aliases of a named interface), imported state machines
+// (a variable of such a type is a submachine instance) and C++ types of imported headers
+// (`motor::Mode`, `::Color`, `uint8_t`), see hsm-typesystem.ts and cpp-types.ts.
 TypeReference:
-    name=ID;
+    name=TypeReferenceName;
+
+TypeReferenceName returns string:
+    '::'? ID (('.' | '::') ID)*;
 
 // ---------------------------------------------------------------------------------------------
 // States
@@ -78,8 +103,10 @@ TypeReference:
 Vertex:
     State | PseudoState;
 
+// `state Moving : motor` binds the submachine instance `motor` (a variable whose type is an imported
+// state machine) to the state: the instance runs while the state is active.
 State:
-    'state' name=ID (description=STRING)? ('{'
+    'state' name=ID (':' submachine=[VariableDeclaration:QualifiedName])? (description=STRING)? ('{'
         (reactions+=LocalReaction | vertices+=Vertex | transitions+=Transition | regions+=Region)*
     '}')?;
 
@@ -103,11 +130,12 @@ LocalReaction:
 // `[*]` as source denotes the initial pseudo state (default entry) of the enclosing scope,
 // `[*]` as target denotes the final state of the enclosing scope.
 // `# >E` selects the entry point E of the target state, `# X>` fires when the exit node X
-// of the source state is reached.
+// of the source state is reached. As in itemis CREATE, one transition may handle several exit
+// nodes (`# X1> X2>`); of several entry points (`# >E1 >E2`) only the first one is used.
 Transition:
     (initial?='[*]' | source=[Vertex:QualifiedName]) '->' (final?='[*]' | target=[Vertex:QualifiedName])
     (':' spec=ReactionSpec)?
-    ('#' (('>' entryPoint=ID) | (exitPoint=ID '>')))?;
+    ('#' (('>' entryPoints+=ID) | (exitPoints+=ID '>'))+)?;
 
 // ---------------------------------------------------------------------------------------------
 // Reactions: triggers [guard] / effect
@@ -198,13 +226,23 @@ CastExpression infers Expression:
 
 // `x++` / `x--`: increments / decrements the variable, the value is the value before the operation
 PostfixExpression infers Expression:
-    PrimaryExpression ({infer PostfixExpression.operand=current} operator=('++' | '--'))?;
+    AccessExpression ({infer PostfixExpression.operand=current} operator=('++' | '--'))?;
+
+// Member access `valueof(e).x`, `motor::kHome.y` and element access `a[i]` of values of C++ struct and
+// array types. (`pos.x` directly after a name is part of the name of the element reference, see
+// ElementReference and hsm-linker.ts.)
+AccessExpression infers Expression:
+    PrimaryExpression (
+        {infer MemberAccessExpression.receiver=current} '.' member=ID
+        | {infer IndexExpression.receiver=current} '[' index=Expression ']'
+    )*;
 
 PrimaryExpression infers Expression:
     Literal
     | ParenthesizedExpression
     | ValueOfExpression
     | ActiveExpression
+    | CppReference
     | ElementReference;
 
 ParenthesizedExpression:
@@ -218,15 +256,26 @@ ValueOfExpression:
 ActiveExpression:
     'active' '(' state=[Vertex:QualifiedName] ')';
 
-// variable, constant, operation call or event (an event in an expression is true if it is present)
+// variable, constant, operation call or event (an event in an expression is true if it is present).
+// The name may continue with members of a value of a C++ struct type: `pos.x`, `cfg.home.y`; the
+// linker resolves the longest prefix that names a declaration, the rest are members (see
+// `referenceMembers` in cpp-types.ts).
 ElementReference:
     element=[Declaration:QualifiedName] (call?='(' (arguments+=Argument (',' arguments+=Argument)*)? ')')?;
+
+// A constant or enumerator of an imported C++ header by its qualified name: `motor::kMaxSpeed`,
+// `motor::Mode::Fast`, `::HAL_OK` (names of the global namespace need the leading `::`).
+CppReference:
+    name=CppName;
+
+CppName returns string:
+    '::' ID ('::' ID)* | ID '::' ID ('::' ID)*;
 
 Argument:
     (parameter=ID '=')? value=ConditionalExpression;
 
 Literal:
-    BoolLiteral | IntLiteral | RealLiteral | HexLiteral | StringLiteral;
+    BoolLiteral | IntLiteral | RealLiteral | HexLiteral | StringLiteral | NullLiteral;
 
 BoolLiteral:
     value=('true' | 'false');
@@ -242,6 +291,10 @@ HexLiteral:
 
 StringLiteral:
     value=STRING;
+
+// `null`: only compatible with `string` (it denotes the empty string, see docs/semantics.md §2)
+NullLiteral:
+    {infer NullLiteral} 'null';
 
 QualifiedName returns string:
     ID ('.' ID)*;

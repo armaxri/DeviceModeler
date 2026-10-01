@@ -1,0 +1,56 @@
+{
+    "name": "s10-cpp-struct-members",
+    "description": "Members of struct variables are read and assigned (also nested members, compound assignments and ++); whole structs are assigned from constants and event values.",
+    "text": [
+        "statemachine M {",
+        "    import \"motor.h\"",
+        "    interface:",
+        "        in event moveTo : motor::Position",
+        "        in event park",
+        "        var target : motor::Position",
+        "        var steps : integer",
+        "    [*] -> A",
+        "    state A",
+        "    A -> A : moveTo / target = valueof(moveTo); target.x += 1; target.y++; steps = target.x + target.y",
+        "    A -> A : park / target = motor::kHome; steps = motor::kHome.y",
+        "}"
+    ],
+    "files": {
+        "motor.h": [
+            "#ifndef MOTOR_H",
+            "#define MOTOR_H",
+            "#include <cstdint>",
+            "",
+            "namespace motor {",
+            "",
+            "/// Operating mode.",
+            "enum class Mode : std::uint8_t { Off, Slow, Fast = 10 };",
+            "",
+            "/// A position in mm.",
+            "struct Position {",
+            "    std::int32_t x = 0;",
+            "    std::int32_t y = 0;",
+            "};",
+            "",
+            "constexpr std::int32_t kMaxSpeed = 3000;",
+            "constexpr Position kHome{10, 20};",
+            "",
+            "}  // namespace motor",
+            "",
+            "#endif"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"target": {"x": 0, "y": 0}, "steps": 0}}},
+        {"raise": "moveTo", "value": {"x": 5, "y": 6}},
+        {"runCycle": true},
+        {"expect": {"variables": {"target": {"x": 6, "y": 7}, "steps": 13}}},
+        {"raise": "moveTo", "value": {"y": -3}},
+        {"runCycle": true},
+        {"expect": {"variables": {"target": {"x": 1, "y": -2}, "steps": -1}}},
+        {"raise": "park"},
+        {"runCycle": true},
+        {"expect": {"variables": {"target": {"x": 10, "y": 20}, "steps": 20}}}
+    ]
+}

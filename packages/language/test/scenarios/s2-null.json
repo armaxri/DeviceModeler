@@ -1,0 +1,28 @@
+{
+    "name": "s2-null",
+    "description": "null denotes the empty string: it can be assigned to strings, passed as string argument or event value and compared with strings.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "        out event done : string",
+        "        var s : string = \"text\"",
+        "        var t : string = null",
+        "        var wasNull : boolean = false",
+        "        var bothNull : boolean = false",
+        "        var emptyIsNull : boolean = false",
+        "        operation log(msg : string) : void",
+        "    [*] -> A",
+        "    state A",
+        "    state B",
+        "    A -> B : go [s != null && t == null] / wasNull = s == null; s = null; bothNull = null == null; emptyIsNull = s == \"\"; log(null); raise done : null",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"s": "text", "t": ""}}},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["B"], "variables": {"s": "", "wasNull": false, "bothNull": true, "emptyIsNull": true}, "calls": ["log(\"\")"], "outEvents": ["done(\"\")"]}}
+    ]
+}

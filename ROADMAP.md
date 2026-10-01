@@ -4,7 +4,9 @@ Goal: HSM Modeler becomes a replacement for **itemis CREATE** (formerly YAKINDU 
 Tools): the same statechart language and semantics, plus a web-based graphical editor with a
 PlantUML-like look.
 
-Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be decided · 🧪 experimental (separate branch)
+Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be decided · ⛔ not planned · 🧪 experimental (separate branch)
+
+Possible next steps are described in more detail in [docs/improvements.md](docs/improvements.md).
 
 ## Phase 0 – Foundation ✅
 
@@ -29,7 +31,23 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
   different composite states
 - ✅ Type system and full validation of expressions and declarations (types, operators,
   assignments, calls, raise/valueof, triggers, annotations, ambiguous names)
-- 📋 Imports of other statecharts / header files
+- ✅ Imports of other state machines (`import "motor.hsm"`, also `import: "a.hsm" "b.hsm"`): resolved
+  relative to the importing file, loaded transitively (CLI, tests, language server, VS Code webview, a
+  virtual file list in the web editor); missing files, cycles and duplicate names are reported
+- ✅ **C++ header imports** (`import "motor_types.h"`, [docs/cpp-integration.md](docs/cpp-integration.md)):
+  enums / enum classes, structs, `typedef` / `using` aliases and constants of namespaces are types and values
+  of models (`var mode : motor::Mode = motor::Mode::Off`, `pos.x`, `a[i]`, `motor::kMaxSpeed`); C++ integer
+  widths are kept as storage types (wrap-around on assignment, range warnings), enums compare with `==` / `!=`,
+  structs are assigned as a whole; interpreter, unit tests, scenarios (14 `s10-cpp-*`), C++ generator
+  (`#include`s the headers, uses the types by name), hover / definition / completion, include paths, defines
+  and data model in the `headers` block of `hsm.gen.json`, `-I` / `-D` / `--data-model`, VS Code settings,
+  headers re-read on change; web app: headers in the virtual file list, editors for enum and struct values
+  in the simulation. Example [`examples/cpp-types`](examples/cpp-types) (also built by the CMake example)
+  - 📋 still missing: struct literals (`motor::Position{1, 2}`), `==` of structs with a user-defined
+    `operator==`, C headers for the C generator (C enums / structs / typedefs), templates other than
+    `std::array`, whole-array assignment of C arrays, unsaved header edits in VS Code (headers are read from
+    disk), viewing headers in the web editor, go to definition into headers in the web editor
+  - 💭 functions of headers as operations (callbacks generated from declarations)
 
 ## Phase 2 – Structure parity ✅
 
@@ -38,19 +56,38 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 - ✅ Definition section shown as a box in the diagram (with an "Add declaration" form)
 - ✅ Transition priorities shown in the diagram (toggle in the toolbar)
 - 📋 Reorder priorities from the diagram
-- 📋 Submachines (a state that references another statechart)
+- ✅ Submachines: instances of imported state machines (`var motor : Motor`) bound to states
+  (`state Moving : motor`), accessed through their interfaces (`raise motor.start`, `motor.stopped`,
+  `motor.speed`, `active(motor.On)`), entered through entry points (`# >Run`), left through exit nodes
+  (`# Failed>`); semantics in [docs/semantics.md §9](docs/semantics.md), 19 conformance scenarios,
+  interpreter, validation, unit tests (`assert active(motor.On)`, `mock motor.op`), diagram (`Moving : Motor`,
+  submachine icon, entry / exit points on the border, active states of the instance in the simulation,
+  double-click opens the state machine), web editor and VS Code
+  - 📋 C / C++ generator support (the generators report "submachine instances are not supported yet")
+  - 💭 expanding a submachine state in the diagram (read-only view of the states of the instance);
+    instances of the same machine in several states; completion transitions of instances
 - 💭 State names with spaces (currently mapped to identifiers and the original name kept as the
   description)
 
 ## Phase 3 – Migration from itemis CREATE ✅
 
-- ✅ `.sct` importer (CLI `hsm import`, "Open…" in the web editor); 201 of the 215 `.sct` files of
-  the upstream itemis repository imported without syntax or linking errors (before the grammar
-  additions below)
+- ✅ `.sct` importer (CLI `hsm import`, "Open…" in the web editor); 213 of the 215 `.sct` files of
+  the upstream itemis repository are imported without syntax or linking errors (201 before the grammar
+  additions below; the remaining two use outdated syntax that itemis CREATE rejects as well)
 - ✅ Grammar additions found by the importer: events as conditions (`[e1 && x > 0]`), `x++` / `x--`,
   local reactions of the statechart itself
-- 📋 Remaining gaps: `null`, type aliases, transitions handling several exit nodes or entry points at
-  once, entry points with the same name in several orthogonal regions
+- ✅ `null` literal (only compatible with `string`, denotes the empty string in all implementations)
+- ✅ Type aliases (`alias Name : type`, chains, cycles reported; generators use the base type)
+- ✅ Transitions handling several exit nodes (`# X1> X2>`) or selecting several entry points
+  (`# >E1 >E2`, only the first one is used like in itemis CREATE)
+- ✅ Entry points / exit nodes with the same name in several orthogonal regions (`# >failure` enters
+  every region through its `failure` entry point)
+- ✅ Submachine states of statecharts imported together (`hsm import A.sct B.sct`, several files in
+  "Open…") become submachine instances (the reference format is assumed to be `referencedStatechart`
+  with an `href`; itemis `import:` statements of the definition section are commented out)
+- ⛔ Remaining differences found in the upstream models (raising `in` events inside the machine,
+  operations called without parentheses, `out` events as triggers, `%` on reals) – not planned, see
+  [docs/improvements.md](docs/improvements.md#differences-to-itemis-create)
 - 📋 Import test suite based on real-world models from users
 - 🧪 Keep manual layout from `.sct` notation models (saved positions): experimental on the branch
   `claude/manual-layout` – positions, sizes, region orientation and bend points are imported into
@@ -91,8 +128,9 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
   conformance suite by compiling (gcc / clang, `-Wall -Wextra -Wpedantic -Werror`) and running
   every scenario. Limitations: strings live in fixed-size buffers (`<PREFIX>_STRING_CAPACITY`,
   longer strings are truncated with an error), fixed-size event queues (`<PREFIX>_QUEUE_CAPACITY`),
-  runtime errors do not abort the step (the failed operation is skipped, see README), typed out
-  events are always reported with their value
+  runtime errors do not abort the step (the failed operation is skipped, see docs/c-generator.md), typed out
+  events are always reported with their value, no C/C++ header types (a diagnostic; the `s10-cpp-*`
+  scenarios are skipped)
 - ✅ Unit test language for statecharts (like SCTUnit, `.hsmtest`) with a test runner on the interpreter,
   `hsm test` in the CLI (JUnit XML reports) and tests for all examples. Limitations: not run in the web
   editor yet; no `@Ignore`, packages / imports, call order verification or mock value sequences;
@@ -119,10 +157,15 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
   - limitations: no hand-arranged layout on the main branch (see below); the extension generates only the `cpp` target; no end-to-end
     tests in a real VS Code instance (`@vscode/test-electron` could not download VS Code) – the language
     server is tested over stdio, the webview bundle in Chromium with a mocked VS Code API
-- 💭 Multi-file projects and workspaces in the web editor
+- 🚧 Multi-file projects in the web editor: a virtual file list (examples, opened and edited files) against
+  which imports are resolved; several files can be opened at once; 💭 real workspaces (folders, saving
+  several files)
 - 🧪 Manual layout adjustments: experimental on the branch `claude/manual-layout` – stored in a sidecar
-  file `<model>.hsm.layout` instead of the model; move / resize states, bend points, label offsets,
+  file `<model>.hsm.layout` instead of the model; move / resize states, waypoints, label offsets,
   auto-arrange / reset, undo shared with the text ([docs/manual-layout.md](docs/manual-layout.md))
+  - 🧪 transitions of moved states are rerouted around the other states in the shape of the edge routing
+    setting (orthogonal router, polyline shortcuts, splines); bend points are waypoints the route passes
+    through
   - 🧪 in the VS Code extension of the branch (`hsm-vscode-0.1.0-manual-layout.vsix`, *HSM Modeler
     (manual layout)*): the webview uses the shared diagram controller; the extension reads / writes /
     watches the `.hsm.layout` file next to the model, moves it along on renames, the `.sct` import
@@ -144,8 +187,12 @@ Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be
 - **Hand-arranged layouts are evaluated on the separate branch `claude/manual-layout`** (sidecar
   layout files, dragging / resizing, positions imported from `.sct` notation models). The main branch
   keeps the automatic layout; the experiment is merged only if it proves worthwhile.
+- **No exchange with itemis is planned.** HSM replaces itemis CREATE for our own models; remaining
+  differences to the itemis language are only closed if our models need them.
+- **Code generation improvements come later.** Submachines and C++ header types are supported by the
+  language, simulation and tests first; the C++ generator catches up when needed.
 
 ## Open questions
 
 - Is simulation or SCTUnit-style testing used in current projects?
-- Is deep C/C++ header integration (using C/C++ types in the statechart) required?
+- Does hand-arranged layout (branch `claude/manual-layout`) prove worthwhile in daily use?

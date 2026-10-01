@@ -10,7 +10,12 @@ import type { Code, Helper } from '../common/expressions.js';
 import {
     alignComments, GeneratorError, spaces, StatechartGenerator, type ErrorKind, type GeneratedFunction, type ScopeInfo, type TimerInfo
 } from '../common/statechart-generator.js';
-import { CPP_KEYWORDS, CPP_RESERVED_NAMES, cppDefault, cppParameterType, cppType, lineComment, RUNTIME_HEADER, RUNTIME_HEADER_CONTENT } from './cpp-code.js';
+import {
+    CPP_KEYWORDS, CPP_RESERVED_NAMES, cppDeclaredType, cppDefault, cppParameterType, cppSpelling, cppType, lineComment, RUNTIME_HEADER, RUNTIME_HEADER_CONTENT
+} from './cpp-code.js';
+import { integerRange, storageOfTypeReference } from '../../cpp-storage.js';
+import { resolvedImports } from '../../imports.js';
+import type { CppResolvedType } from '../../cpp-header/model.js';
 
 /** Options of the C++ code generator. */
 export interface CppGeneratorOptions {
@@ -30,6 +35,12 @@ export interface CppGeneratorOptions {
      * nested namespace definitions (`namespace a::b {` in C++17).
      */
     standard?: 11 | 17;
+    /**
+     * The path in the `#include "..."` of an imported C/C++ header (`import "motor_types.h"`), given
+     * the import path and the URI of the header. Default: the import path as written in the model
+     * (relative to the model or to an include directory, which the build has to provide).
+     */
+    headerInclude?: (header: { path: string, uri?: string }) => string | undefined;
 }
 
 export interface CppGeneratedFile {
@@ -98,6 +109,8 @@ export interface CppApi {
     internalMember(variable: ast.VariableDeclaration): string;
     /** Type of a variable as seen by the generated code. */
     variableType(variable: ast.VariableDeclaration): HsmType;
+    /** The C++ type of a variable, event value, parameter or return value in the generated API (`sc::integer`, `motor::Mode`, `std::uint8_t`). */
+    declaredType(declaration: ast.VariableDeclaration | ast.EventDeclaration | ast.Parameter | ast.OperationDeclaration): string;
     /** The scopes with operations. */
     readonly operationScopes: readonly CppOperationScope[];
     /** Parameter list of the callback method of an operation (`sc::integer mask`). */
@@ -139,6 +152,7 @@ const ERROR_KINDS: Record<ErrorKind, string> = {
     no_enabled_transition: 'NoEnabledTransition',
     no_initial_transition: 'NoInitialTransition',
     invalid_time: 'InvalidTime',
+    index_out_of_bounds: 'IndexOutOfBounds',
     loop: 'Loop',
     queue_overflow: 'Loop',
     string_overflow: 'Loop'
@@ -169,6 +183,7 @@ class CppGenerator extends StatechartGenerator {
     /** Named interfaces with the name of their member (`iface_Pedestrian`). */
     private readonly namedScopes: ScopeInfo[] = [];
     private readonly operationParamNames = new Map<ast.Parameter, string>();
+    private readonly headerInclude?: CppGeneratorOptions['headerInclude'];
 
     constructor(machine: ast.StateMachine, options: CppGeneratorOptions) {
         super(machine, options.maxMicrosteps, { keywords: CPP_RESERVED_NAMES, reservedStateNames: [...CPP_KEYWORDS, 'NO_STATE', 'FINAL_STATE'] });
@@ -177,6 +192,7 @@ class CppGenerator extends StatechartGenerator {
         this.namespace = namespace.split(/::|\./).filter(part => part).join('::');
         this.standard = options.standard ?? 17;
         this.outDir = options.outDir;
+        this.headerInclude = options.headerInclude;
         for (const scope of this.scopes.values()) {
             if (scope.kind === 'named') {
                 this.namedScopes.push(scope);
@@ -355,6 +371,45 @@ class CppGenerator extends StatechartGenerator {
         return `${target} = ${value};`;
     }
 
+    override storageCast(storage: CppResolvedType | undefined, value: Code): string {
+        // (literals that fit the type need no cast)
+        const literal = value.constant && /^\d+$/.test(value.text) ? BigInt(value.text) : undefined;
+        const fits = storage?.kind === 'integer' && literal !== undefined && literal <= integerRange(storage)[1];
+        if (storage?.kind === 'integer' && !(storage.bits === 64 && storage.signed) && !fits) {
+            return `static_cast<${cppSpelling(storage)}>(${stripParens(value.text)})`;
+        }
+        if (storage?.kind === 'real' && storage.bits === 32 && !value.constant) {
+            return `static_cast<float>(${stripParens(value.text)})`;
+        }
+        return value.text;
+    }
+
+    override checkedIndex(index: string, length: number, node: AstNode): string {
+        const check = this.use('check_index', ['sc::integer index', 'std::size_t size'], 'The index of an element access, checked against the size of the array (0 and an error if it is out of bounds).', body => {
+            body.block('if (index < 0 || static_cast<std::size_t>(index) >= size)', [
+                `${this.reportError()}(sc::ErrorKind::IndexOutOfBounds, "Index " + std::to_string(index) + " is out of bounds 0.." + std::to_string(static_cast<sc::integer>(size) - 1));`,
+                'return 0;'
+            ]);
+            body.add('return static_cast<std::size_t>(index);');
+        }, 'integer');
+        void node;
+        return `${check}(${index}, ${length})`;
+    }
+
+    /** The C++ type of a declaration in the generated code (see {@link CppApi.declaredType}). */
+    declaredType(declaration: ast.VariableDeclaration | ast.EventDeclaration | ast.Parameter | ast.OperationDeclaration): string {
+        if (ast.isVariableDeclaration(declaration)) {
+            return cppDeclaredType(declaration.type, this.variableType(declaration));
+        }
+        if (ast.isEventDeclaration(declaration)) {
+            return cppDeclaredType(declaration.type, typeOfEvent(declaration));
+        }
+        if (ast.isParameter(declaration)) {
+            return cppDeclaredType(declaration.type, typeOfParameter(declaration));
+        }
+        return declaration.returnType ? cppDeclaredType(declaration.returnType, returnTypeOf(declaration)) : 'void';
+    }
+
     compareStrings(left: Code, right: Code, operator: '==' | '!='): string {
         const leftText = left.constant && right.constant ? `sc::string(${left.text})` : left.text;
         return `(${leftText} ${operator} ${right.text})`;
@@ -404,10 +459,10 @@ class CppGenerator extends StatechartGenerator {
     private resetData(): string {
         return this.use('reset_data', [], 'Sets all variables and event values to the default values of their types.', body => {
             for (const variable of this.index.variables()) {
-                body.add(`${this.variable(variable)} = ${cppDefault(this.variableType(variable))};`);
+                body.add(`${this.variable(variable)} = ${this.defaultOf(variable.type, this.variableType(variable))};`);
             }
             for (const event of this.valueEvents) {
-                body.add(`${this.eventValue(event)} = ${cppDefault(typeOfEvent(event))};`);
+                body.add(`${this.eventValue(event)} = ${this.defaultOf(event.type, typeOfEvent(event))};`);
             }
         });
     }
@@ -488,7 +543,7 @@ class CppGenerator extends StatechartGenerator {
             if (returnType === 'void') {
                 body.block(`if (${callback} != nullptr)`, [`${call};`]);
             } else {
-                body.block(`if (${callback} == nullptr)`, [`return ${cppDefault(returnType)};`]);
+                body.block(`if (${callback} == nullptr)`, [`return ${this.defaultOf(operation.returnType, returnType)};`]);
                 body.add(`return ${call};`);
             }
         }, returnType);
@@ -500,7 +555,15 @@ class CppGenerator extends StatechartGenerator {
 
     private parameterType(parameter: ast.Parameter): string {
         const type = typeOfParameter(parameter);
-        return parameter.varArgs ? `std::initializer_list<${cppType(type)}>` : cppParameterType(type);
+        const spelling = this.declaredType(parameter);
+        return parameter.varArgs ? `std::initializer_list<${spelling}>` : cppParameterType(type, spelling);
+    }
+
+    /** The default value of a type in the generated code (`motor::Mode{}`, `0`, ...). */
+    private defaultOf(reference: ast.TypeReference | undefined, type: HsmType): string {
+        const storage = storageOfTypeReference(reference);
+        return storage && storage.kind !== 'integer' && storage.kind !== 'real' && storage.kind !== 'boolean' && storage.kind !== 'string'
+            ? `${cppDeclaredType(reference, type)}{}` : cppDefault(type);
     }
 
     private get usesVarArgs(): boolean {
@@ -616,6 +679,7 @@ class CppGenerator extends StatechartGenerator {
             isInternal: declaration => this.scopeOf(declaration).kind === 'internal',
             internalMember: variable => this.variable(variable),
             variableType: variable => this.variableType(variable),
+            declaredType: declaration => this.declaredType(declaration),
             operationScopes: this.operationScopes().map(({ scope, callbackClass, operations }) => ({
                 callbackClass,
                 operations,
@@ -668,7 +732,7 @@ class CppGenerator extends StatechartGenerator {
                 for (const variable of variables) {
                     const type = this.variableType(variable);
                     const value = this.expressions.value(variable.initialValue!, type, body);
-                    this.expressions.store(this.variable(variable), type, value.text, body);
+                    this.expressions.store(this.variable(variable), type, this.storageCast(storageOfTypeReference(variable.type), value), body);
                 }
             }
             body.add(`${this.call(this.beginStep())};`);
@@ -757,7 +821,7 @@ class CppGenerator extends StatechartGenerator {
         for (const event of this.inEvents) {
             const scope = this.namedScopeOf(event);
             const type = typeOfEvent(event);
-            const param = this.hasValue(event) ? `${cppParameterType(type)} value` : '';
+            const param = this.hasValue(event) ? `${cppParameterType(type, this.declaredType(event))} value` : '';
             const raise = (body: CBlock) => {
                 if (this.eventDriven) {
                     body.block('if (!running)', ['return;']);
@@ -788,18 +852,17 @@ class CppGenerator extends StatechartGenerator {
             const owner = scope ? scope.name! : '';
             const machine = scope ? 'machine.' : '';
             const name = this.index.declarationName(event);
-            const type = typeOfEvent(event);
             add(owner, `Whether the out event ${name} was raised during the last call of enter, exit, runCycle, raiseTimeEvent or (event driven) raise.`,
                 `bool ${this.isRaisedName(event)}() const`, body => {
                     body.add(`return ${machine}out_raised[${this.eventConstant(event)}];`);
                 });
             if (this.hasValue(event)) {
-                add(owner, `Value of the last occurrence of the out event ${name}.`, `${cppType(type)} ${this.eventValueName(event)}() const`, body => {
+                add(owner, `Value of the last occurrence of the out event ${name}.`, `${this.declaredType(event)} ${this.eventValueName(event)}() const`, body => {
                     body.add(`return ${machine}${this.eventValue(event)};`);
                 });
             }
             add(owner, `Observable of the out event ${name}: observers are notified when the event is raised.`,
-                `sc::rx::Observable<${this.hasValue(event) ? cppType(type) : 'void'}>& ${this.observableName(event)}()`, body => {
+                `sc::rx::Observable<${this.hasValue(event) ? this.declaredType(event) : 'void'}>& ${this.observableName(event)}()`, body => {
                     body.add(`return ${machine}${this.observableMember(event)};`);
                 });
         }
@@ -813,12 +876,12 @@ class CppGenerator extends StatechartGenerator {
             const type = this.variableType(variable);
             const kind = variable.const ? 'constant' : variable.readonly ? 'read-only variable' : 'variable';
             const name = this.index.declarationName(variable);
-            add(owner, `Value of the ${kind} ${name}.`, `${cppType(type)} ${this.getterName(variable)}() const`, body => {
+            add(owner, `Value of the ${kind} ${name}.`, `${this.declaredType(variable)} ${this.getterName(variable)}() const`, body => {
                 body.add(`return ${member};`);
             });
             const setter = this.setterName(variable);
             if (setter) {
-                add(owner, `Sets the variable ${name}.`, `void ${setter}(${cppParameterType(type)} value)`, body => {
+                add(owner, `Sets the variable ${name}.`, `void ${setter}(${cppParameterType(type, this.declaredType(variable))} value)`, body => {
                     body.add(`${member} = value;`);
                 });
             }
@@ -899,6 +962,20 @@ class CppGenerator extends StatechartGenerator {
 
     // ----- header
 
+    /** The `#include` paths of the imported C/C++ headers (see {@link CppGeneratorOptions.headerInclude}). */
+    private importedHeaders(): string[] {
+        const result: string[] = [];
+        for (const imported of resolvedImports(this.machine)) {
+            if (imported.kind === 'header') {
+                const path = this.headerInclude?.({ path: imported.path, uri: imported.uri?.toString() }) ?? imported.path;
+                if (!result.includes(path)) {
+                    result.push(path);
+                }
+            }
+        }
+        return result;
+    }
+
     private header(members: Map<string, Member[]>): string {
         const c = this.className;
         const guard = `${[...this.namespace.split('::').filter(p => p), c].join('_').toUpperCase()}_H_`;
@@ -917,6 +994,10 @@ class CppGenerator extends StatechartGenerator {
             lines.push('#include <initializer_list>');
         }
         lines.push('', `#include "${RUNTIME_HEADER}"`, '');
+        const headers = this.importedHeaders();
+        if (headers.length > 0) {
+            lines.push(this.comment('imported C/C++ headers (types and constants used by the state machine)'), ...headers.map(h => `#include "${h}"`), '');
+        }
         lines.push(...this.namespaceOpen());
         const bases = ['public sc::StatemachineInterface'];
         if (this.timers.length > 0) {
@@ -975,7 +1056,7 @@ class CppGenerator extends StatechartGenerator {
         const lines = [`/** Operations of ${what}, implemented by the host (setOperationCallback). */`, `class ${name} {`, 'public:', `    virtual ~${name}() = default;`];
         for (const operation of operations) {
             lines.push(`    ${lineComment(commentText(nodeText(operation)))}`);
-            lines.push(`    virtual ${cppType(returnTypeOf(operation))} ${operation.name}(${this.callbackParameters(operation)}) = 0;`);
+            lines.push(`    virtual ${this.declaredType(operation)} ${operation.name}(${this.callbackParameters(operation)}) = 0;`);
         }
         lines.push('};');
         if (name === 'InternalOperationCallback') {
@@ -1006,7 +1087,7 @@ class CppGenerator extends StatechartGenerator {
         for (const [variable, member] of this.variableMembers) {
             if (this.scopeOf(variable) === scope) {
                 const type = this.variableType(variable);
-                priv.push(`${cppType(type)} ${member}${type === 'string' ? '' : ` = ${cppDefault(type)}`};`);
+                priv.push(`${this.declaredType(variable)} ${member}${type === 'string' ? '' : ` = ${this.defaultOf(variable.type, type)}`};`);
             }
         }
         if (operations.length > 0) {
@@ -1101,7 +1182,7 @@ class CppGenerator extends StatechartGenerator {
             lines.push('struct {');
             for (const [variable, member] of variables) {
                 const type = this.variableType(variable);
-                lines.push(`    ${cppType(type)} ${member}${type === 'string' ? '' : ` = ${cppDefault(type)}`};`);
+                lines.push(`    ${this.declaredType(variable)} ${member}${type === 'string' ? '' : ` = ${this.defaultOf(variable.type, type)}`};`);
             }
             lines.push(`} ${this.scopeMember(scope)};`);
         }
@@ -1109,12 +1190,12 @@ class CppGenerator extends StatechartGenerator {
             lines.push('struct {');
             for (const event of this.valueEvents) {
                 const type = typeOfEvent(event);
-                lines.push(`    ${cppType(type)} ${this.eventNames.get(event)}${type === 'string' ? '' : ` = ${cppDefault(type)}`};`);
+                lines.push(`    ${this.declaredType(event)} ${this.eventNames.get(event)}${type === 'string' ? '' : ` = ${this.defaultOf(event.type, type)}`};`);
             }
             lines.push('} event_value;');
         }
         for (const event of this.outEvents) {
-            lines.push(`sc::rx::Observable<${this.hasValue(event) ? cppType(typeOfEvent(event)) : 'void'}> ${this.observableMember(event)};`);
+            lines.push(`sc::rx::Observable<${this.hasValue(event) ? this.declaredType(event) : 'void'}> ${this.observableMember(event)};`);
         }
         lines.push('');
         const internals = members.get('')!.filter(m => m.isPrivate);
@@ -1143,6 +1224,9 @@ class CppGenerator extends StatechartGenerator {
     }
 
     private functionReturnType(fn: GeneratedFunction): string {
+        if (fn.name === 'check_index') {
+            return 'std::size_t';
+        }
         return fn.returnType === 'void' ? 'void' : fn.returnType === 'boolean' ? 'bool' : cppType(fn.returnType as HsmType);
     }
 

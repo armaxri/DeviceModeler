@@ -7,7 +7,8 @@ import type { ExecutionMode, ExecutionOrder } from '../../simulation/interpreter
 import type { ModelIndex } from '../../simulation/model-index.js';
 import { countConcatenations, type Code, type Helper } from '../common/expressions.js';
 import {
-    alignComments, GeneratorError, spaces, StatechartGenerator, type ErrorKind, type GeneratedFunction, type ScopeInfo, type TimerInfo
+    alignComments, CPP_TYPES_NOT_SUPPORTED, cppTypeUsage, GeneratorError, spaces, StatechartGenerator, type ErrorKind, type GeneratedFunction, type ScopeInfo,
+    type TimerInfo
 } from '../common/statechart-generator.js';
 import { C_KEYWORDS, CBlock, commentText, cString, indent, snakeCase, stripParens } from './c-code.js';
 import { cDefault, cType } from './c-expressions.js';
@@ -144,6 +145,10 @@ class CGenerator extends StatechartGenerator {
     private usesStrings = false;
 
     constructor(machine: ast.StateMachine, options: CGeneratorOptions) {
+        const cppUsage = cppTypeUsage(machine);
+        if (cppUsage) {
+            throw new GeneratorError(`${CPP_TYPES_NOT_SUPPORTED}; use the C++ generator or simulate the model.`, cppUsage);
+        }
         super(machine, options.maxMicrosteps, { keywords: C_KEYWORDS, reservedStateNames: C_RESERVED_STATE_NAMES });
         this.cTypeName = options.typeName ?? machine.name;
         this.prefix = options.prefix ?? snakeCase(machine.name);

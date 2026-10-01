@@ -1,0 +1,46 @@
+{
+    "name": "s9-out-event-child-first",
+    "description": "Child first: the instance runs before the transitions of its state, which see its out events in the same cycle (if the instance did not take a transition).",
+    "text": [
+        "statemachine Door {",
+        "    import \"motor.hsm\"",
+        "    @CycleBased(100)",
+        "    @ChildFirstExecution",
+        "    interface:",
+        "        in event open",
+        "    internal:",
+        "        var motor : Motor",
+        "    [*] -> Closed",
+        "    state Closed",
+        "    state Moving : motor",
+        "    Closed -> Moving : open / raise motor.start",
+        "    Moving -> Closed : motor.stopped",
+        "}"
+    ],
+    "files": {
+        "motor.hsm": [
+            "statemachine Motor {",
+            "    @CycleBased(100)",
+            "    @ChildFirstExecution",
+            "    interface:",
+            "        in event start",
+            "        out event stopped",
+            "    [*] -> Off",
+            "    state Off",
+            "    state On {",
+            "        after 1 s / raise stopped",
+            "    }",
+            "    Off -> On : start",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"raise": "open"},
+        {"runCycle": 2},
+        {"expect": {"configuration": ["motor.On"]}},
+        {"advance": 1000},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Closed"]}}
+    ]
+}

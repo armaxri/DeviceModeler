@@ -1,0 +1,47 @@
+{
+    "name": "s9-events-to-inactive-instance-discarded",
+    "description": "Events raised on an instance that is not active at the end of the step are discarded.",
+    "text": [
+        "statemachine Door {",
+        "    import \"motor.hsm\"",
+        "    interface:",
+        "        in event open",
+        "        in event poke",
+        "    internal:",
+        "        var motor : Motor",
+        "    [*] -> Closed",
+        "    state Closed {",
+        "        poke / raise motor.start",
+        "    }",
+        "    state Moving : motor",
+        "    Closed -> Moving : open",
+        "}"
+    ],
+    "files": {
+        "motor.hsm": [
+            "statemachine Motor {",
+            "    interface:",
+            "        in event start",
+            "        in event stop",
+            "        out event stopped",
+            "        var speed : integer = 0",
+            "        operation log(msg : string) : void",
+            "    entry / log(\"motor entry\")",
+            "    exit / log(\"motor exit\")",
+            "    [*] -> Off",
+            "    state Off",
+            "    state On",
+            "    Off -> On : start / speed = 1",
+            "    On -> Off : stop / speed = 0; raise stopped",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"raise": "poke"},
+        {"runCycle": true},
+        {"raise": "open"},
+        {"runCycle": 2},
+        {"expect": {"configuration": ["motor.Off"]}}
+    ]
+}

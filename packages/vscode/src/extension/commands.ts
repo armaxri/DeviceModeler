@@ -1,11 +1,12 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
 import {
-    generatePlantUml, HsmModelLoader, importSct, layoutFileName, layoutStateMachineWithLayout, parseManualLayout, renderSvg, serializeManualLayout,
-    type ManualLayout, type ParsedModel
+    cppHeaderStore, generatePlantUml, HsmModelLoader, importSct, layoutFileName, layoutStateMachineWithLayout, parseManualLayout, renderSvg,
+    serializeManualLayout, type ManualLayout, type ParsedModel
 } from 'hsm-language';
 import { runGeneration } from '../../../language/src/generator/generate-command.js';
-import type { DiagramManager } from './diagram-panel.js';
+import { installNodeHeaderSupport } from '../../../language/src/node/cpp-headers-node.js';
+import { readText, vscodeHeaderSettings, type DiagramManager } from './diagram-panel.js';
 import type { HsmTestController } from './test-controller.js';
 import { effectiveTheme } from './logic/webview.js';
 import { resolveGeneration, type CppSettings } from './logic/generator-config.js';
@@ -23,7 +24,13 @@ let loader: HsmModelLoader | undefined;
 
 /** Parses and validates the text of a model (in the extension host, independent of the language server). */
 export async function parseModel(document: vscode.TextDocument): Promise<ParsedModel> {
-    loader ??= new HsmModelLoader();
+    // imported state machines are read from the open documents or the file system
+    if (!loader) {
+        loader = new HsmModelLoader(undefined, { readFile: uri => readText(uri.toString()) });
+        // imported C/C++ headers: read from disk with the settings of hsm.gen.json
+        installNodeHeaderSupport(loader.services.shared);
+    }
+    cppHeaderStore(loader.services.shared).updateSettings(vscodeHeaderSettings(document.uri));
     return loader.load(document.getText(), document.uri.toString());
 }
 

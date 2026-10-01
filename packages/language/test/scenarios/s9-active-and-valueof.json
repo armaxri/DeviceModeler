@@ -1,0 +1,42 @@
+{
+    "name": "s9-active-and-valueof",
+    "description": "active(motor.On) tests a state of an instance, valueof(motor.level) the value of its last out event.",
+    "text": [
+        "statemachine Door {",
+        "    import \"motor.hsm\"",
+        "    interface:",
+        "        in event open",
+        "        var level : integer = 0",
+        "    internal:",
+        "        var motor : Motor",
+        "    [*] -> Closed",
+        "    state Closed",
+        "    state Moving : motor",
+        "    state Opened",
+        "    Closed -> Moving : open / raise motor.start",
+        "    Moving -> Opened : [active(motor.On)] / level = valueof(motor.level)",
+        "}"
+    ],
+    "files": {
+        "motor.hsm": [
+            "statemachine Motor {",
+            "    interface:",
+            "        in event start",
+            "        out event level : integer",
+            "    [*] -> Off",
+            "    state Off",
+            "    state On",
+            "    Off -> On : start / raise level : 42",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"raise": "open"},
+        {"runCycle": true},
+        {"runCycle": true},
+        {"expect": {"configuration": ["motor.On"], "variables": {"level": 0}}},
+        {"runCycle": true},
+        {"expect": {"configuration": ["Opened"], "variables": {"level": 42}}}
+    ]
+}

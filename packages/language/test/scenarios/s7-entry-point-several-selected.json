@@ -1,0 +1,35 @@
+{
+    "name": "s7-entry-point-several-selected",
+    "description": "A transition selecting several entry points (# >E1 >E2) uses only the first one, like itemis CREATE.",
+    "text": [
+        "statemachine M {",
+        "    interface:",
+        "        in event go",
+        "    [*] -> Idle",
+        "    state Idle",
+        "    state P {",
+        "        region R1 {",
+        "            [*] -> A",
+        "            entry E1",
+        "            state A",
+        "            state B",
+        "            E1 -> B",
+        "        }",
+        "        region R2 {",
+        "            [*] -> C",
+        "            entry E2",
+        "            state C",
+        "            state D",
+        "            E2 -> D",
+        "        }",
+        "    }",
+        "    Idle -> P : go # >E1 >E2",
+        "}"
+    ],
+    "steps": [
+        {"enter": true},
+        {"raise": "go"},
+        {"runCycle": true},
+        {"expect": {"configuration": ["P.B", "P.C"]}}
+    ]
+}

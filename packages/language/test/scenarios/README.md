@@ -34,7 +34,8 @@ uses plain JSON values and no JS specifics.
 | `description` | The rule or behavior the scenario checks. |
 | `model`       | Path of a `.hsm` file, relative to the scenario file. Exactly one of `model` and `text` is required. |
 | `text`        | Inline model; a string or an array of lines (joined with `\n`). |
-| `operations`  | Optional scripted results of operations by declared name (`op` or `Iface.op`): the values are returned in call order, the last value is repeated. Operations not listed return the default value of their return type (`0`, `0.0`, `false`, `""`). |
+| `files`       | Optional inline texts of further files the model imports (`import "motor.hsm"`, `import "motor_types.h"`), by path relative to the model: `{ "motor.hsm": ["statemachine Motor {", "...", "}"] }` (strings or arrays of lines; headers may include each other, e.g. `include/base/errors.h`). Used by the submachine scenarios `s9-*`, which the C and C++ generator tests skip (explicit list `SUBMACHINE_SCENARIOS` in `test/helpers.ts`) because the generators do not support submachine instances yet, and by the scenarios of C/C++ header imports `s10-cpp-*`, which the C generator test skips (`CPP_TYPE_SCENARIOS`); the C++ generator test writes the headers next to the generated code and compiles each of these scenarios separately. |
+| `operations`  | Optional scripted results of operations by declared name (`op` or `Iface.op`, `motor.op` for an operation of the submachine instance `motor`): the values are returned in call order, the last value is repeated. Operations not listed return the default value of their return type (`0`, `0.0`, `false`, `""`). |
 | `steps`       | The steps, executed in order. |
 
 ### Steps
@@ -45,11 +46,11 @@ Every step contains exactly one of the following keys (plus an optional `comment
 |------------------------------------|--------|
 | `{ "enter": true }`                | Enter the state machine (`enter()`). |
 | `{ "exit": true }`                 | Exit the state machine (`exit()`). |
-| `{ "raise": "e" }`                 | Raise the in event `e` (`Iface.e` for named interfaces). Optional `"value": v` for events with a type. Cycle based: collected for the next cycle; event driven: processed immediately. |
+| `{ "raise": "e" }`                 | Raise the in event `e` (`Iface.e` for named interfaces). Optional `"value": v` for events with a type (values of C++ types as in `variables`; members of a struct that are not given get their default value). Cycle based: collected for the next cycle; event driven: processed immediately. |
 | `{ "runCycle": true }`             | Run one cycle (`runCycle()`); `"runCycle": n` runs `n` cycles. Event driven: a step without events. |
 | `{ "advance": ms }`                | Advance the virtual clock by `ms` milliseconds (`advanceTime`). Cycle based: no cycle is run, expired timers are present in the next cycle. Event driven: each expiring timer triggers its step. |
 | `{ "runFor": ms }`                 | Advance the clock by `ms` and run a cycle whenever the clock reaches a multiple of the cycle period, counted from `enter` (`runFor`). Event driven: same as `advance`. |
-| `{ "set": { "x": v, ... } }`       | Set variables (`setVariable`). |
+| `{ "set": { "x": v, ... } }`       | Set variables (`setVariable`); enums also by the simple enumerator name (`"Fast"`), structs by an object (missing members get their default value). |
 | `{ "expect": { ... } }`            | Check observations (see below). |
 
 An action step may carry `"expectError": "text"`: the action must fail with a runtime error whose
@@ -65,11 +66,11 @@ All keys are optional:
 
 | Key             | Check |
 |-----------------|-------|
-| `active`        | Each listed state is active. States are given by fully qualified name (`Closed.Active.Playing`, regions are not part of the name) or a unique suffix (`Playing`). |
+| `active`        | Each listed state is active. States are given by fully qualified name (`Closed.Active.Playing`, regions are not part of the name) or a unique suffix (`Playing`); states of submachine instances as `motor.On` (docs/semantics.md §9). |
 | `inactive`      | Each listed state is not active. |
 | `configuration` | The set of active **leaf** states (active states without active sub states) is exactly the listed set (order does not matter). A composite state whose regions are all final is a leaf. |
 | `final`         | Whether the state machine is final (`isFinal()`). |
-| `variables`     | Values of variables and constants by declared name (`x`, `Iface.x`). Integers and booleans are compared exactly, reals with a relative tolerance of `1e-9`. |
+| `variables`     | Values of variables and constants by declared name (`x`, `Iface.x`). Integers and booleans are compared exactly, reals with a relative tolerance of `1e-9`. Values of C++ types: enums as the qualified enumerator name (`"motor::Mode::Fast"`), structs as objects – only the listed members are compared (`{"x": 1}`) –, arrays as arrays. |
 | `outEvents`     | The out events raised since the previous `expect` step, in order. |
 | `calls`         | The operation calls made since the previous `expect` step, in order. |
 
@@ -79,7 +80,8 @@ Out events and calls are written in a canonical text form: `name` for an out eve
 `name(value)` for an out event with value, and `name(arg1, arg2)` for calls (`name()` without
 arguments), with the arguments in parameter order (variable arguments flattened). Values are
 formatted as integers `42`, reals with a decimal point or exponent `2.0`, `0.5`, booleans `true` /
-`false` and strings as JSON strings `"text"`. White space outside of strings is ignored in the
+`false`, strings as JSON strings `"text"`, enum values as `motor::Mode::Fast` (`motor::Mode(7)` without
+enumerator), structs as `{x: 1, y: 2}` and arrays as `[1, 2]`. White space outside of strings is ignored in the
 comparison. The declared name is used for named interfaces: `Panel.shown(2)`.
 
 ## Running

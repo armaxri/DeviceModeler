@@ -1,0 +1,42 @@
+{
+    "name": "s10-cpp-include-chain",
+    "description": "The declarations of the headers included by an imported header (#include \"...\", relative to the including header) are visible, too.",
+    "text": [
+        "statemachine M {",
+        "    import \"include/device.h\"",
+        "    interface:",
+        "        in event report : dev::Status",
+        "        var status : dev::Status",
+        "        var code : base::ErrorCode = base::ErrorCode::None",
+        "    [*] -> A",
+        "    state A",
+        "    A -> A : report / status = valueof(report); code = status.error",
+        "}"
+    ],
+    "files": {
+        "include/device.h": [
+            "#pragma once",
+            "#include \"base/errors.h\"",
+            "namespace dev {",
+            "struct Status {",
+            "    base::ErrorCode error = base::ErrorCode::None;",
+            "    int temperature = base::kRoomTemperature;",
+            "};",
+            "}"
+        ],
+        "include/base/errors.h": [
+            "#pragma once",
+            "namespace base {",
+            "enum class ErrorCode { None, Timeout, Overheat };",
+            "constexpr int kRoomTemperature = 21;",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"expect": {"variables": {"status": {"error": "base::ErrorCode::None", "temperature": 21}, "code": "base::ErrorCode::None"}}},
+        {"raise": "report", "value": {"error": "base::ErrorCode::Overheat", "temperature": 90}},
+        {"runCycle": true},
+        {"expect": {"variables": {"status": {"error": "base::ErrorCode::Overheat", "temperature": 90}, "code": "base::ErrorCode::Overheat"}}}
+    ]
+}

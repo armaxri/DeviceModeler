@@ -1,0 +1,32 @@
+{
+    "name": "s10-cpp-index-out-of-bounds",
+    "description": "An element access outside of the bounds of an array is a runtime error.",
+    "text": [
+        "statemachine M {",
+        "    import \"buffers.h\"",
+        "    interface:",
+        "        in event put : integer",
+        "        var buffer : buf::Buffer",
+        "    [*] -> A",
+        "    state A",
+        "    A -> A : put / buffer[valueof(put)] = 1",
+        "}"
+    ],
+    "files": {
+        "buffers.h": [
+            "#pragma once",
+            "#include <array>",
+            "namespace buf {",
+            "using Buffer = std::array<int, 2>;",
+            "}"
+        ]
+    },
+    "steps": [
+        {"enter": true},
+        {"raise": "put", "value": 1},
+        {"runCycle": true},
+        {"expect": {"variables": {"buffer": [0, 1]}}},
+        {"raise": "put", "value": 2},
+        {"runCycle": true, "expectError": "out of bounds"}
+    ]
+}

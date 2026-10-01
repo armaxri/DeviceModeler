@@ -1,3 +1,5 @@
+import type { CppHeaderSettings } from 'hsm-language';
+
 /**
  * Messages between the extension and the diagram webview. The webview holds a copy of the document
  * text, parses and lays it out and computes the text edits of diagram operations; the extension owns
@@ -39,10 +41,11 @@ export type LayoutCommand = 'auto' | 'manual' | 'arrange' | 'reset';
 /** Messages from the extension to the webview. */
 export type ToWebview =
     /**
-     * The document text (on open and after every change, debounced; undo / redo immediately).
-     * `change`: how the text was changed (missing: initial text or unknown).
+     * The document text (on open and after every change, debounced; undo / redo immediately) and the texts
+     * of the `.hsm` files it imports (transitively) by URI, so that the webview can resolve the imports.
+     * `change`: how the text was changed (missing: initial text, imported files changed or unknown).
      */
-    | { type: 'text', text: string, version: number, fileName: string, uri: string, change?: TextChange }
+    | { type: 'text', text: string, version: number, fileName: string, uri: string, files?: Record<string, string>, headers?: CppHeaderSettings, change?: TextChange }
     /**
      * Manual layout (experimental): the content of the layout file `<model>.hsm.layout` (sent before the
      * first text and when the file is changed by another tool); `content` undefined: there is no file.
@@ -76,6 +79,8 @@ export type FromWebview =
     /** Runs a command of the extension (toolbar buttons). */
     | { type: 'command', command: 'exportSvg' | 'exportPlantUml' | 'generateCpp' }
     | { type: 'simulation', running: boolean }
+    /** Opens a file and its diagram (double-click on a submachine state). */
+    | { type: 'openFile', uri: string }
     /**
      * Manual layout (experimental): the layout was changed in the diagram; the extension writes the
      * layout file. `content` undefined: the manual layout was discarded (Reset).

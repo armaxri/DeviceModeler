@@ -62,6 +62,13 @@ describe('diagram content', () => {
             '  var waiting : boolean = false', 'internal:', '  operation switchOn(mask : integer) : void']));
     });
 
+    test('the definition section shows the imports (state machines and C/C++ headers)', async () => {
+        const parsed = await parse('statemachine M {\n    import "types.h"\n    interface:\n        var m : app::Mode\n    [*] -> A\n    state A\n}',
+            { 'types.h': 'namespace app { enum class Mode { A, B }; }' });
+        const { graph } = await layoutStateMachine(parsed.model);
+        expect(graph.children[0].body).toEqual(['import "types.h"', 'interface:', '  var m : app::Mode']);
+    });
+
     test('no definition node without definition section', async () => {
         const parsed = await parse('statemachine M { [*] -> A state A }');
         const { graph } = await layoutStateMachine(parsed.model);
@@ -161,5 +168,84 @@ describe('PlantUML generator', () => {
         const parsed = await parse(example('keyboard.hsm'));
         const puml = generatePlantUml(parsed.model);
         expect(puml).toMatch(/CapsOn --> CapsOff : capsLock\n  --\n  state NumOff/);
+    });
+});
+
+describe('entry points and exit nodes with the same name in several regions', () => {
+    const TEXT = `statemachine M {
+    interface:
+        in event go
+        in event stop
+    [*] -> Idle
+    state Idle
+    state P {
+        region R1 {
+            [*] -> A
+            entry failure
+            exit done
+            state A
+            state B
+            failure -> B
+            A -> done : stop
+        }
+        region {
+            [*] -> C
+            entry failure
+            exit done
+            state C
+            state D
+            failure -> D
+            C -> done : stop
+        }
+    }
+    Idle -> P : go # >failure
+    P -> Idle # done>
+}`;
+
+    test('diagram ids include the region', async () => {
+        const parsed = await parse(TEXT);
+        const { graph, elements } = await layoutStateMachine(parsed.model, { direction: 'DOWN' });
+        const ids = flatten(graph.children).map(n => n.id);
+        expect(ids).toContain('P.R1.failure');
+        expect(ids).toContain('P.region2.failure');
+        expect(ids).toContain('P.R1.done');
+        expect(ids).toContain('P.region2.done');
+        expect(new Set(ids).size).toBe(ids.length);
+        expect(elements.get('P.region2.failure')).toBeDefined();
+        expect(graph.edges.find(e => e.source === 'Idle' && e.target === 'P')?.label?.text).toBe('go # >failure');
+        expect(graph.edges.find(e => e.source === 'P' && e.target === 'Idle')?.label?.text).toBe('# done>');
+    });
+
+    test('PlantUML: one arrow per entry point / exit node', async () => {
+        const parsed = await parse(TEXT);
+        const puml = generatePlantUml(parsed.model);
+        expect(puml).toContain('state "failure" as P_failure <<entryPoint>>');
+        expect(puml).toContain('state "failure" as P_failure_2 <<entryPoint>>');
+        expect(puml).toContain('Idle --> P_failure : go');
+        expect(puml).toContain('Idle --> P_failure_2 : go');
+        expect(puml).toContain('P_done --> Idle');
+        expect(puml).toContain('P_done_2 --> Idle');
+    });
+
+    test('PlantUML: a transition handling several exit nodes', async () => {
+        const parsed = await parse(`statemachine M {
+    interface:
+        in event a
+        in event b
+    [*] -> P
+    state P {
+        [*] -> A
+        exit X1
+        exit X2
+        state A
+        A -> X1 : a
+        A -> X2 : b
+    }
+    state Q
+    P -> Q # X1> X2>
+}`);
+        const puml = generatePlantUml(parsed.model);
+        expect(puml).toContain('X1 --> Q');
+        expect(puml).toContain('X2 --> Q');
     });
 });

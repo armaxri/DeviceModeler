@@ -28,6 +28,16 @@ as **Deviation**.
 - Integer arithmetic wraps around on overflow (two's complement). Integer division or `%` by zero
   and shift amounts outside `0..63` are runtime errors. Real arithmetic follows IEEE 754 (division
   by zero yields an infinity).
+- **Type aliases** (`alias Name : type`) are other names for their base type (resolved through
+  chains of aliases); they have no semantics of their own.
+- **`null`** (itemis CREATE) has its own type, which can only be assigned to `string` variables,
+  parameters and event values and compared (`==`, `!=`) with strings and `null`. It denotes the
+  **empty string**: `s = null` sets `s` to `""`, `s == null` is `true` iff `s` is empty, `null == null`
+  is `true`. The type of a variable cannot be inferred from `null`.
+  **Deviation:** in itemis CREATE the type of `null` is not compatible with `string` in the default
+  domain (it is meant for pointer types of the C/C++ domains, `null == null` is valid); HSM allows it
+  for strings because `std::string` in the generated C++ code and the string buffers in C cannot be
+  null, all implementations use the empty string. Pointer types may follow with C/C++ header types.
 - `+` on two strings concatenates them. `%` and the bitwise and shift operators apply to integers
   only, relational operators (`<` ...) to numbers only (see `hsm-typesystem.ts`).
 - A variable without declared type has the type of its initializer (no initializer: `integer`).
@@ -49,6 +59,7 @@ as **Deviation**.
   in the current step.
 - `x++` / `x--` increment / decrement the numeric variable `x`; the value of the expression is the
   value before the operation.
+- Values of **imported C/C++ types** (enums, structs, arrays, integer widths) follow §10.
 
 ## 3. Execution modes
 
@@ -179,11 +190,17 @@ checked in steps; they are only taken when the exit node `X` is reached (§7).
   history the outgoing (default) transition of the history pseudo state is taken, otherwise the
   initial transition of the region.
 - **Entry points** (`entry E` inside composite `C`): a transition to `C` with `# >E` enters `C`
-  via `E` by taking the outgoing transition of `E`. Orthogonal regions of `C` not entered through
-  the entry point are entered by default.
+  via `E` by taking the outgoing transition of `E`. Entry points with the same name may be placed in
+  several orthogonal regions of `C` (as in itemis CREATE): every region of `C` that has an entry point
+  `E` is entered through it (regions in document order), orthogonal regions without such an entry
+  point are entered by default. A transition may list several entry points (`# >E1 >E2`); as in itemis
+  CREATE, only the **first** one is used (the validator warns about the others).
 - **Exit nodes** (`exit X` inside composite `C`): when a transition reaches `X`, `C` is exited
-  completely and the first transition from `C` with `# X>` (priority order) whose guard holds is
-  taken; its triggers are ignored. If there is none, the runtime reports an error.
+  completely and the first transition from `C` whose exit specification lists `X` (`# X>`, also
+  `# X> Y>`: one transition may handle several exit nodes) and whose guard holds is taken (priority
+  order); its triggers are ignored. If there is none, the runtime reports an error. Exit nodes with the
+  same name may be placed in several orthogonal regions of `C`; reaching any of them has the same
+  effect.
 - **Synchronization** (`sync`): a sync with more than one incoming transition is a join. It is
   checked when the first of its source states is processed in a step (as one of that state's
   outgoing transitions) and fires when all incoming transitions are enabled in the same step
@@ -215,3 +232,153 @@ Entering the state machine (`enter()`): initialize variables, execute the `entry
 state machine and start the timers of its reactions, then enter the top-level region by default.
 `exit()` exits all active states (innermost first), then executes the `exit` reactions of the
 state machine.
+
+## 9. Submachine instances
+
+A state machine may import other state machines (`import "motor.hsm"`, resolved relative to the
+importing file). A variable whose type is an imported state machine (`var motor : Motor`) is a
+**submachine instance**; a state bound to it (`state Moving : motor`) runs the instance while it is
+active. The instance is a separate object – its state machine is not inlined: it has its own active
+configuration, history, variables, event values and timers. Two instances of the same state machine are
+independent.
+
+**Structure and scoping** (checked by the validator)
+
+- An instance can be bound to at most one state; the bound state is a simple state (no sub states or
+  regions, local reactions are allowed). An instance that is not bound never runs (warning).
+- The parent uses the instance only through the **interfaces** of its state machine: it raises its `in`
+  events (`raise motor.start`), observes its `out` events (`motor.stopped` as trigger or condition,
+  `valueof(motor.failed)`), reads its interface variables and constants and assigns its interface
+  variables (not constants or `readonly` variables), and tests its states (`active(motor.On)`). The
+  internal scope, the operations and the instances of the instance's machine are not visible. Raising an
+  out event of an instance or observing one of its in events is an error. Instances cannot be assigned,
+  compared or used as values.
+- Entry points (`entry E`) and exit nodes (`exit X`) declared at the top level of a state machine are its
+  entry points / exit nodes as a submachine (`# >E`, `# X>` on transitions of the parent).
+- The instance is executed with the execution mode and order of the top-level state machine; a
+  different `@CycleBased` / `@EventDriven` / `@ParentFirstExecution` / `@ChildFirstExecution` of the
+  instance's machine is ignored (warning).
+
+**Data**: the variables of the instance are initialized when the top-level state machine is entered
+(`enter()`, in declaration order; the variables of an instance are initialized where the instance is
+declared). They **keep their values** when the instance is exited and entered again, as do its event
+values and the history of its regions (entering the instance again re-enters its states, it does not
+reset its data). **Deviation:** in the multi-state-machine models of itemis CREATE the parent controls the
+lifecycle of an instance explicitly (`motor.enter()`, `motor.exit()`); HSM binds it to the state.
+
+**Entering and exiting** (extends §5 and §8)
+
+- Entering the bound state `S`: the entry reactions of `S` are executed and its timers started, then the
+  instance is **entered**: the `entry` reactions of its state machine are executed, the timers of the
+  machine's own reactions are started, and its top-level region is entered through the entry point `E` if
+  the transition that entered `S` selects one (`# >E`), otherwise by default (initial transition). `S`
+  entered through a history pseudo state of the parent enters the instance by default as well.
+- Exiting `S`: the instance is **exited** first – its active states are exited (innermost first, history of
+  its sub regions recorded), then the `exit` reactions of its state machine are executed and its timers
+  cancelled; then the exit reactions of `S` are executed and its timers cancelled.
+- When the instance reaches an **exit node** `X` of its state machine, it has already exited the source of
+  the transition to `X`; `S` is then left by the first transition `S -> T : ... # X>` (also `# X> Y>`) of the
+  parent whose guard holds (priority order, triggers ignored, like §7), which exits the instance and `S`.
+  Without such a transition the runtime reports an error. A state machine that is not an instance becomes
+  final when it reaches one of its top-level exit nodes.
+- When the instance reaches its **final state**, it stays there (no further processing, no completion
+  transition – as in itemis CREATE there are no completion events) until `S` is exited. The parent can
+  observe it through out events or variables of the instance.
+
+**Steps** (extends §4): the instance is processed like the only **sub region** of `S`. When `S` is
+processed (`react(S)`) and was not entered in the current step:
+
+- **Parent first**: the transitions of `S` are checked; if none is taken, the local reactions of `S` are
+  executed, then the instance is processed.
+- **Child first**: the instance is processed first; if it took a transition (or left `S` through an exit
+  node), the transitions and local reactions of `S` are not checked in this step (like for sub regions);
+  otherwise the transitions of `S` are checked, then its local reactions.
+- Processing the instance: the events raised on it become present (see below), then the local reactions of
+  its state machine are executed and its top-level active state is processed with the rules of §4 (states of
+  the instance entered in this step are not processed again). At the end of the processing, its events are
+  cleared.
+
+**Events raised on the instance** (`raise motor.start`):
+
+- Cycle based: the event is stored with the instance and becomes present at the beginning of the **next
+  processing of the instance** – later in the same run cycle if the instance is processed after the raise
+  (e.g. raised by a local reaction of `S` with parent first, by an earlier region, or by the transition
+  entering `S`: the instance is not processed in the step it was entered, so it processes the event in the
+  next cycle), otherwise in the next cycle. All stored events are present at once. Events stored for an
+  instance that is not active at the end of the parent's step are discarded (also when the instance is exited).
+- Event driven: the event is appended to the internal queue of the top-level machine (§3); when it is its
+  turn, a step is performed in which only this event is present, in the instance (no event of the parent
+  is present in this step). If the instance is not active any more, the event is discarded.
+- Internal events of the instance and `in` events raised by the instance itself follow §3 within the
+  instance (cycle based: present for the rest of its processing, otherwise at its next processing; event
+  driven: queued in the internal queue of the top-level machine).
+
+**Out events of the instance** (`motor.stopped`):
+
+- They are not reported to the host as out events of the parent (they appear in the trace as
+  `raise out motor.stopped`).
+- An occurrence is visible to the parent from the moment it is raised until the end of the **next** step,
+  but every trigger (and every event used as a condition) of the parent **sees it only once**: in the step it
+  is raised in, it is visible to the reactions that are evaluated after the raise; in the next step, only to
+  the reactions that did not evaluate it in the first step. Hence reactions processed after the instance see
+  it in the same step, the others (e.g. the transitions of `S` with parent first) in the next step. Raising the
+  same out event again replaces the occurrence.
+- Event driven: raising an out event of an instance also queues a step without events (in the internal queue),
+  in which the reactions that were processed before the instance see it.
+
+**Time events**: the instance uses the virtual clock of the top-level machine. Cycle based: at the
+beginning of a run cycle all expired timers of the machine and of all its instances are present (each in its
+own machine). Event driven: each expiring timer of an instance triggers a step at its expiry time in which
+only this time event is present in the instance.
+
+**Names**: the states of an instance are reported by the interpreter as `motor.On` (the referable name of
+the instance, then the qualified name of the state; nested instances `motor.gear.Idle`), directly after the
+bound state in `activeStates`; the bound state is not a leaf of `activeLeafStates` while the instance has
+active states. Traces, scenarios (`active`, `configuration`, `variables: { "motor.speed": 1 }`) and the unit
+test language use these names. Operations of an instance are implemented by the host under the name
+`motor.setPwm` (scenarios: `operations: { "motor.setPwm": [...] }`). The host cannot raise events of an
+instance (they are raised by the state machine).
+
+The conformance scenarios `s9-*` of `packages/language/test/scenarios` cover these rules (the C and C++
+generators do not support submachine instances yet and skip them).
+
+## 10. Types and constants of C/C++ headers
+
+`import "motor_types.h"` makes the types and constants of a C/C++ header usable in a model
+([docs/cpp-integration.md](cpp-integration.md) describes the supported C++ subset and the tools).
+
+- **Integer types** (`std::uint8_t`, `int`, `char`, aliases of them) are `integer`. Expressions are
+  evaluated with 64-bit integers as always (§2); a value is **converted to the C++ type of the place it is
+  stored in** – a variable, a struct member, an array element, an event value, an argument of an operation
+  – like the implicit conversion in C++: it wraps around to the width of the type (two's complement:
+  `uint8_t u = 250; u += 10` gives `4`, `int8_t` `120 + 10` gives `-126`). Constant values out of the range
+  of the type are warnings of the validator. `x as uint8_t` converts explicitly (wrap-around), the result is
+  an `integer`.
+- `float` is `real`, values stored in `float` places are rounded to single precision (`0.1` becomes
+  `0.10000000149011612`); `double` / `long double` are `real`. `bool` is `boolean`. `std::string` is `string`;
+  `const char*` and `std::string_view` constants can be read as strings, but no place can have these types.
+- **Enums** are types of their own. A value is the numeric value of an enumerator (also values without
+  enumerator after a cast). Values of the same enum are compared with `==` / `!=`; values of **unscoped**
+  enums are integers in arithmetic, bitwise and relational operations and are assignable to `integer` /
+  `real` (C++ integral promotion), values of `enum class` are not. `n as motor::Mode` converts an integer (or
+  the value of another enum) to an enum value (wrapped to the underlying type), `mode as integer` the other
+  way round. The default value is `T{}`, i.e. the value `0`.
+- **Structs** are values (copied on assignment, never shared): members are read and assigned (`pos.x`,
+  `cfg.timing.periodMs += 1`, `pos.x++`); an assignment to a member changes only that member of the variable.
+  Structs are assigned as a whole (same type), **not compared** (C++ aggregates have no `==`). The default
+  value is `T{}`: the default member initializers, zero (`0`, `0.0`, `false`, `""`, the value `0` of enums,
+  `T{}` of nested structs) for the other members.
+- **Arrays** (`std::array<T, N>`, `T[N]` members): elements `a[i]` are read and assigned; an index outside
+  `0..N-1` is a runtime error ("Index … is out of bounds"). `std::array` values are assigned as a whole,
+  C arrays only element by element. The default value has `N` default elements.
+- **Constants** and enumerators of the headers (`motor::kMaxSpeed`, `motor::Mode::Fast`, `motor::kHome`)
+  have the values computed by the analyzer with C++ semantics (widths, promotions, wrap-around of the
+  header's constant expressions).
+- **Host values**: enum values are exchanged as the qualified name of the first enumerator with the value
+  (`"motor::Mode::Fast"`; a number if there is none); the host may also give the simple name or the number.
+  Structs are objects with one entry per member (members the host does not give get their default value),
+  arrays are arrays. Canonical text (traces, scenarios, calls): `motor::Mode::Fast`, `motor::Mode(7)` for a
+  value without enumerator, `{x: 1, y: 2}`, `[1, 2, 3]`.
+
+The conformance scenarios `s10-cpp-*` cover these rules (the C generator does not support C++ types and skips
+them).

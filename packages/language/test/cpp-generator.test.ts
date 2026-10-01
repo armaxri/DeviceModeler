@@ -5,8 +5,9 @@ import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { generateCpp, generateCppScenarioHarness, type CppGeneratorResult } from '../src/generator/cpp/index.js';
-import { scenarioText, validateScenario } from '../src/simulation/index.js';
-import { errors, parse } from './helpers.js';
+import { scenarioFiles as filesOfScenario, scenarioText, validateScenario } from '../src/simulation/index.js';
+import { CPP_TYPE_SCENARIOS, errors, parse, SUBMACHINE_SCENARIOS } from './helpers.js';
+import { SUBMACHINES_NOT_SUPPORTED } from '../src/generator/common/statechart-generator.js';
 
 /**
  * Conformance of the C++ code generator: every scenario of `test/scenarios` is compiled into a C++
@@ -41,7 +42,8 @@ const BATCH_SIZE = 12;
  * (`s2-unknown-event` runs: raising an unknown event is rejected when the harness is generated,
  * in C++ it would be a compile time error.)
  */
-const SKIP: Record<string, string> = {};
+const SKIP: Record<string, string> = Object.fromEntries(SUBMACHINE_SCENARIOS.map(file =>
+    [file, 'submachine instances are not supported by the C++ generator yet (docs/semantics.md §9)']));
 
 const scenarioDirectory = path.resolve(__dirname, 'scenarios');
 const scenarioFiles = fs.readdirSync(scenarioDirectory).filter(f => f.endsWith('.json')).sort();
@@ -171,7 +173,8 @@ describe.skipIf(!GXX)('C++ code generator: conformance suite', () => {
             try {
                 const scenario = validateScenario(JSON.parse(fs.readFileSync(path.join(scenarioDirectory, file), 'utf-8')), file);
                 const text = scenarioText(scenario) ?? fs.readFileSync(path.resolve(scenarioDirectory, scenario.model!), 'utf-8');
-                const parsed = await parse(text);
+                const files = filesOfScenario(scenario);
+                const parsed = await parse(text, files);
                 if (parsed.hasSyntaxErrors || errors(parsed).length > 0) {
                     throw new Error(`invalid model: ${errors(parsed).join('; ')}`);
                 }
@@ -181,6 +184,11 @@ describe.skipIf(!GXX)('C++ code generator: conformance suite', () => {
                 }
                 fs.mkdirSync(path.join(workDirectory, directory));
                 writeFiles(path.join(workDirectory, directory), result);
+                // imported headers next to the model (the generated code includes them by their import paths)
+                for (const [name, content] of Object.entries(files)) {
+                    fs.mkdirSync(path.dirname(path.join(workDirectory, directory, name)), { recursive: true });
+                    fs.writeFileSync(path.join(workDirectory, directory, name), content);
+                }
                 const namespace = `harness${i}`;
                 fs.writeFileSync(path.join(workDirectory, directory, 'harness.cpp'), generateCppScenarioHarness(result.api, scenario, { namespace, main: false }));
                 prepared.push({ file, directory, source: result.api.source, namespace });
@@ -188,9 +196,11 @@ describe.skipIf(!GXX)('C++ code generator: conformance suite', () => {
                 outcomes.set(file, { passed: false, output: `generate failed: ${error instanceof Error ? error.stack : String(error)}` });
             }
         }
-        const batches: Prepared[][] = [];
-        for (let i = 0; i < prepared.length; i += BATCH_SIZE) {
-            batches.push(prepared.slice(i, i + BATCH_SIZE));
+        // scenarios with C++ headers are compiled one by one (their headers may declare the same names)
+        const batches: Prepared[][] = prepared.filter(p => CPP_TYPE_SCENARIOS.includes(p.file)).map(p => [p]);
+        const others = prepared.filter(p => !CPP_TYPE_SCENARIOS.includes(p.file));
+        for (let i = 0; i < others.length; i += BATCH_SIZE) {
+            batches.push(others.slice(i, i + BATCH_SIZE));
         }
         await inParallel(batches, Math.max(2, os.cpus().length), async batch => {
             try {
@@ -262,14 +272,13 @@ describe.skipIf(!GXX && !CLANGXX)('C++ code generator: examples', () => {
         }, 60000);
     }
 
-    test('the usage example of the README compiles and runs', async () => {
-        const readme = fs.readFileSync(path.resolve(__dirname, '../../../README.md'), 'utf-8');
-        const section = readme.substring(readme.indexOf('## Code generation (C++)'));
-        const example = /```cpp\n([\s\S]*?)```/.exec(section)?.[1];
-        expect(example, 'C++ example in the README').toBeDefined();
+    test('the usage example of docs/cpp-generator.md compiles and runs', async () => {
+        const doc = fs.readFileSync(path.resolve(__dirname, '../../../docs/cpp-generator.md'), 'utf-8');
+        const example = /```cpp\n([\s\S]*?)```/.exec(doc)?.[1];
+        expect(example, 'C++ example in docs/cpp-generator.md').toBeDefined();
         const parsed = await parse(fs.readFileSync(path.join(exampleDirectory, 'traffic-light.hsm'), 'utf-8'));
         const result = generateCpp(parsed.model);
-        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cpp-readme-'));
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cpp-doc-'));
         try {
             writeFiles(directory, result);
             // a few cycles instead of a minute
@@ -416,4 +425,25 @@ describe('C++ code generator', () => {
         expect(result.files).toEqual([]);
         expect(result.diagnostics.map(d => d.message)).toEqual([expect.stringContaining("'State' is not unique")]);
     });
+});
+
+describe('C++ code generator: submachine instances', () => {
+    test('the skipped scenarios are exactly the scenarios with submachine instances', () => {
+        const withInstances = scenarioFiles.filter(file => {
+            const scenario = validateScenario(JSON.parse(fs.readFileSync(path.join(scenarioDirectory, file), 'utf-8')), file);
+            return scenario.files !== undefined && !CPP_TYPE_SCENARIOS.includes(file);
+        });
+        expect(Object.keys(SKIP).sort()).toEqual(withInstances.sort());
+    });
+
+    for (const file of Object.keys(SKIP)) {
+        test(`${file}: diagnostic instead of code`, async () => {
+            const scenario = validateScenario(JSON.parse(fs.readFileSync(path.join(scenarioDirectory, file), 'utf-8')), file);
+            const parsed = await parse(scenarioText(scenario)!, filesOfScenario(scenario));
+            expect(errors(parsed)).toEqual([]);
+            const result = generateCpp(parsed.model);
+            expect(result.files).toEqual([]);
+            expect(result.diagnostics.map(d => d.message).join()).toContain(SUBMACHINES_NOT_SUPPORTED);
+        });
+    }
 });

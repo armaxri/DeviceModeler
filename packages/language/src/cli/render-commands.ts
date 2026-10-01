@@ -8,6 +8,7 @@ import { describeStateMachine, generateDocIndex, generateModelDoc, type DocForma
 import type { StateMachine } from '../generated/ast.js';
 import { HsmModelLoader } from '../hsm-document.js';
 import { createHsmServices } from '../hsm-module.js';
+import { installNodeHeaderSupport } from '../node/cpp-headers-node.js';
 import { DIAGRAM_THEMES, renderSvg, type DiagramTheme } from '../render/svg.js';
 
 /*
@@ -58,7 +59,10 @@ interface LoadedModel {
  * failures), validation errors are reported but the models are still rendered.
  */
 async function loadModels(files: string[], logger: Logger): Promise<{ models: LoadedModel[], failures: number }> {
-    const loader = new HsmModelLoader(createHsmServices(NodeFileSystem));
+    const services = createHsmServices(NodeFileSystem);
+    // imported C/C++ headers: read from the file system, settings of the nearest hsm.gen.json
+    installNodeHeaderSupport(services.shared);
+    const loader = new HsmModelLoader(services);
     const models: LoadedModel[] = [];
     let failures = 0;
     for (const file of files) {

@@ -118,13 +118,27 @@ export function nodeText(node: AstNode | undefined): string {
 /** Label of a transition (`trigger, trigger [guard] / effect`), without source and target. */
 export function transitionLabel(transition: Transition): string {
     const spec = nodeText(transition.spec);
-    if (transition.entryPoint) {
-        return `${spec} # >${transition.entryPoint}`.trim();
-    }
-    if (transition.exitPoint) {
-        return `${spec} # ${transition.exitPoint}>`.trim();
-    }
-    return spec;
+    const points = entryExitSpec(transition);
+    return points ? `${spec} ${points}`.trim() : spec;
+}
+
+/** The entry / exit specification of a transition (`# >E`, `# X1> X2>`), empty if there is none. */
+export function entryExitSpec(transition: Transition): string {
+    const parts = [...transition.entryPoints.map(e => `>${e}`), ...transition.exitPoints.map(x => `${x}>`)];
+    return parts.length > 0 ? `# ${parts.join(' ')}` : '';
+}
+
+/**
+ * The entry point selected by a transition (`# >E`). Like itemis CREATE, only the first of several
+ * entry points is used (the validator warns about the others).
+ */
+export function entryPointOf(transition: Transition): string | undefined {
+    return transition.entryPoints[0];
+}
+
+/** Whether the transition leaves its source state through exit nodes (`# X>`) instead of being triggered. */
+export function isExitTransition(transition: Transition): boolean {
+    return transition.exitPoints.length > 0;
 }
 
 /** Human readable name of the given container, used in messages. */
@@ -166,18 +180,22 @@ export function transitionPriority(transition: Transition, outgoing?: Transition
 
 /** Whether the state machine has a definition section (namespace, annotations, interfaces, internal scope). */
 export function hasDefinitionSection(machine: StateMachine): boolean {
-    return !!machine.namespace || machine.annotations.length > 0 || machine.scopes.length > 0 || machine.reactions.length > 0;
+    return !!machine.namespace || machine.imports.length > 0 || machine.annotations.length > 0 || machine.scopes.length > 0 || machine.reactions.length > 0;
 }
 
 /**
  * Text lines of the definition section with normalized white space, e.g.
- * `['@CycleBased(100)', 'interface:', '  in event powerOn', ...]`. Declarations are indented
+ * `['import "motor_types.h"', '@CycleBased(100)', 'interface:', '  in event powerOn', ...]`. Declarations are indented
  * by two spaces.
  */
 export function definitionLines(machine: StateMachine): string[] {
     const lines: string[] = [];
     if (machine.namespace) {
         lines.push(`namespace ${machine.namespace}`);
+    }
+    // imported state machines and C/C++ headers
+    for (const node of machine.imports) {
+        lines.push(nodeText(node));
     }
     for (const annotation of machine.annotations) {
         lines.push(nodeText(annotation));
@@ -204,6 +222,7 @@ export function definitionRange(machine: StateMachine): { offset: number, end: n
     const nodes = [
         machine.namespace ? GrammarUtils.findNodeForKeyword(cst, 'namespace') : undefined,
         machine.namespace ? GrammarUtils.findNodeForProperty(cst, 'namespace') : undefined,
+        ...machine.imports.map(i => i.$cstNode),
         ...machine.annotations.map(a => a.$cstNode),
         ...machine.scopes.map(s => s.$cstNode),
         ...machine.reactions.map(r => r.$cstNode)

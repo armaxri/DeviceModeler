@@ -1,4 +1,4 @@
-import { parseManualLayout, serializeManualLayout, type ManualLayout, type TextEdit } from 'hsm-language';
+import { parseManualLayout, serializeManualLayout, type DiagramSubmachine, type ManualLayout, type TextEdit } from 'hsm-language';
 import type { DiagramController, DiagramHost, StatusSeverity, TextRange } from '@hsm-web/diagram-controller.js';
 import { textKey } from '@hsm-web/diagram/manual-layout-support.js';
 import { byId, h } from '@hsm-web/ui/dom.js';
@@ -26,6 +26,8 @@ export class WebviewHost implements DiagramHost {
     private readonly pending = new Map<number, (ok: boolean) => void>();
     private statusTimer?: ReturnType<typeof setTimeout>;
     private settings?: WebviewSettings;
+    /** The imported files of the last text message (JSON), to detect changes. */
+    private filesKey = '';
 
     constructor(private readonly vscode: VsCodeApi) {
         this.buildLayout();
@@ -128,10 +130,19 @@ export class WebviewHost implements DiagramHost {
             case 'settings':
                 this.applySettings(message.settings);
                 break;
-            case 'text':
+            case 'text': {
                 this.vscode.setState({ uri: message.uri });
-                this.textChanged(message.text, message.version, message.fileName, message.change);
+                // imports are resolved against the files sent by the extension
+                const files = message.files ?? {};
+                const key = JSON.stringify([message.uri, files, message.headers ?? {}]);
+                const filesChanged = key !== this.filesKey;
+                if (filesChanged) {
+                    this.filesKey = key;
+                    this.controller.language.setWorkspace(message.uri, files, message.headers);
+                }
+                this.textChanged(message.text, message.version, message.fileName, message.change, filesChanged);
                 break;
+            }
             case 'layout':
                 this.layoutLoaded(message.content);
                 break;
@@ -162,15 +173,16 @@ export class WebviewHost implements DiagramHost {
         }
     }
 
-    private textChanged(text: string, version: number, fileName: string, change: TextChange = 'edit'): void {
+    private textChanged(text: string, version: number, fileName: string, change: TextChange = 'edit', filesChanged = false): void {
         this.version = version;
         byId('file-name').textContent = fileName;
-        if (this.received && text === this.text) {
+        if (this.received && text === this.text && !filesChanged) {
             return;
         }
         const previousKey = textKey(this.text);
+        const textDiffers = text !== this.text;
         this.text = text;
-        if (this.received) {
+        if (this.received && textDiffers) {
             // layout changes of an undone / redone diagram edit are undone / redone with it
             this.controller.textChanged(change, previousKey);
         }
@@ -260,6 +272,14 @@ export class WebviewHost implements DiagramHost {
 
     redo(): void {
         this.post({ type: 'redo' });
+    }
+
+    openStateMachine(submachine: DiagramSubmachine): boolean {
+        if (!submachine.uri) {
+            return false;
+        }
+        this.post({ type: 'openFile', uri: submachine.uri });
+        return true;
     }
 
     simulationStateChanged(running: boolean): void {

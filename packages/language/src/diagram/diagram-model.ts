@@ -60,7 +60,27 @@ export interface DiagramNode {
     index?: number;
     /** Regions (manual layout): where the separator line to the previous region is drawn (default: by layout direction). */
     separator?: 'top' | 'left';
+    /** A submachine state (`state Moving : motor`), see {@link DiagramSubmachine}. */
+    submachine?: DiagramSubmachine;
     children: DiagramNode[];
+}
+
+/**
+ * The submachine instance of a state: shown as `Moving : Motor` with a submachine icon, a body line
+ * with the instance (replaced by its active states in the simulation) and the entry points / exit
+ * nodes of the instance used by transitions as named points on the border.
+ */
+export interface DiagramSubmachine {
+    /** Name of the instance (`motor`). */
+    instance: string;
+    /** Name of the state machine of the instance (`Motor`). */
+    machine: string;
+    /** URI of the file of the state machine. */
+    uri?: string;
+    /** Index of the body line showing the instance. */
+    line: number;
+    /** Entry points (`# >Run`) and exit nodes (`# Failed>`) of the instance used by transitions. */
+    points: Array<{ kind: 'entry' | 'exit', name: string }>;
 }
 
 export interface DiagramLabel {

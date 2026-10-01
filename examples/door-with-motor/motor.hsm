@@ -1,0 +1,34 @@
+// A motor, used as a submachine by gate.hsm (see docs/semantics.md §9).
+/** Drives the gate: ramps up after being started and reports when it has stopped. */
+statemachine Motor {
+    interface:
+        in event start
+        in event stop
+        in event fault
+        out event stopped
+        out event failed : integer
+        var speed : integer = 0
+        var maxSpeed : integer = 3
+        operation setPwm(duty : integer) : void
+
+    // entered with `# >Run` by the parent: starts ramping up immediately
+    entry Run
+    // reached when the motor fails: the parent leaves its state with `# Failed>`
+    exit Failed
+
+    [*] -> Off
+    Run -> Ramping
+
+    state Off {
+        entry / speed = 0; setPwm(0)
+    }
+    state Ramping {
+        every 100 ms / speed += 1; setPwm(speed * 10)
+    }
+    state Running
+    Off -> Ramping : start
+    Ramping -> Running : [speed >= maxSpeed]
+    Ramping -> Off : stop / raise stopped
+    Running -> Off : stop / raise stopped
+    Ramping -> Failed : fault / raise failed : speed
+}

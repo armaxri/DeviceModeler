@@ -65,6 +65,10 @@ type Listener = () => void;
 export const watchers: Array<{ pattern: RelativePattern, fire(): void, disposed: boolean }> = [];
 
 export const workspace = {
+    textDocuments: [] as unknown[],
+    getWorkspaceFolder(_uri: Uri): undefined {
+        return undefined;
+    },
     fs: {
         async readFile(uri: Uri): Promise<Uint8Array> {
             return fs.readFile(uri.fsPath);
