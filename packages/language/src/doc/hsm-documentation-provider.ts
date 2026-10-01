@@ -3,11 +3,13 @@ import * as ast from '../generated/ast.js';
 import { qualifiedName } from '../hsm-scope.js';
 import { eventDirection, returnTypeOf, typeName, typeOfEvent, typeOfParameter, typeOfVariable } from '../hsm-typesystem.js';
 import { nodeText } from '../model-utils.js';
+import { docCommentMarkdown } from './doc-comments.js';
 
 /**
  * Documentation of model elements for hover (language server): a signature line (e.g.
  * `in event finished : integer`, `state Closed.Active`), the description of a state and the
- * documentation comment (`/** … *\/`) preceding the element.
+ * documentation comment (`/** … *\/`) preceding the element (as written, Doxygen / JSDoc commands
+ * rendered, `{@link Name}` links to model elements, see `doxygen.ts`).
  */
 export class HsmDocumentationProvider extends JSDocDocumentationProvider {
 
@@ -20,7 +22,10 @@ export class HsmDocumentationProvider extends JSDocDocumentationProvider {
         if (ast.isState(node) && node.description) {
             parts.push(node.description);
         }
-        const comment = super.getDocumentation(node);
+        const text = this.commentProvider.getComment(node);
+        const comment = text ? docCommentMarkdown(text, {
+            renderLink: (target, display) => this.documentationLinkRenderer(node, target, display)
+        }) : undefined;
         if (comment) {
             parts.push(comment);
         }

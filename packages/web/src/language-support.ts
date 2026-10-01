@@ -1,5 +1,5 @@
 import { monaco } from './monaco.js';
-import { cppHover, HsmMonarchSyntax } from 'hsm-language';
+import { cppHover, DOC_COMMENT_RULES, DOC_COMMENT_START, HsmMonarchSyntax } from 'hsm-language';
 import { HsmModelService } from './model-service.js';
 import type { Diagnostic, Range, TextEdit } from 'vscode-languageserver-types';
 
@@ -26,7 +26,11 @@ export class HsmLanguageSupport extends HsmModelService {
             rules: [
                 { token: 'annotation', foreground: '9c5d00' },
                 { token: 'type', foreground: '267f99' },
-                { token: 'operator', foreground: '555555' }
+                { token: 'operator', foreground: '555555' },
+                // Doxygen / JSDoc commands in documentation comments (colors of VS Code's Light+ theme)
+                { token: 'comment.doc.tag', foreground: '0000ff', fontStyle: 'bold' },
+                { token: 'comment.doc.param', foreground: '001080' },
+                { token: 'comment.doc.code', foreground: 'a31515' }
             ]
         });
         monaco.editor.defineTheme(EDITOR_THEMES.dark, {
@@ -34,7 +38,11 @@ export class HsmLanguageSupport extends HsmModelService {
             rules: [
                 { token: 'annotation', foreground: 'dcdcaa' },
                 { token: 'type', foreground: '4ec9b0' },
-                { token: 'operator', foreground: 'c8c8c8' }
+                { token: 'operator', foreground: 'c8c8c8' },
+                // Doxygen / JSDoc commands in documentation comments (colors of VS Code's Dark+ theme)
+                { token: 'comment.doc.tag', foreground: '569cd6', fontStyle: 'bold' },
+                { token: 'comment.doc.param', foreground: '9cdcfe' },
+                { token: 'comment.doc.code', foreground: 'ce9178' }
             ]
         });
         monaco.languages.setLanguageConfiguration(LANGUAGE_ID, {
@@ -169,17 +177,18 @@ export class HsmLanguageSupport extends HsmModelService {
     }
 }
 
-type MonarchRule = { regex?: RegExp, include?: string, action?: { token?: string, cases?: Record<string, { token: string }> } };
+type MonarchRule = { regex?: RegExp, include?: string, action?: unknown };
 
 /**
  * The generated Monarch grammar, adjusted for nicer highlighting: numbers, annotations (`@EventDriven`),
- * built-in type names and the `[*]` pseudo state.
+ * built-in type names, the `[*]` pseudo state and the Doxygen / JSDoc commands in documentation
+ * comments (`/** @param … *\/`).
  */
 function monarchSyntax(): monaco.languages.IMonarchLanguage {
     const generated = HsmMonarchSyntax as unknown as { tokenizer: Record<string, MonarchRule[]> };
     const rename: Record<string, string> = { HEX: 'number.hex', REAL: 'number.float', ID: 'identifier' };
     const initial = generated.tokenizer.initial.map((rule): MonarchRule => {
-        const action = rule.action;
+        const action = rule.action as { token?: string, cases?: Record<string, { token: string }> } | undefined;
         if (action?.token && rename[action.token]) {
             return { ...rule, action: { ...action, token: rename[action.token] } };
         }
@@ -200,7 +209,9 @@ function monarchSyntax(): monaco.languages.IMonarchLanguage {
                 { regex: /@[_a-zA-Z]\w*/, action: { token: 'annotation' } },
                 { regex: /\[\*\]/, action: { token: 'keyword' } },
                 ...initial
-            ]
+            ],
+            whitespace: [DOC_COMMENT_START, ...generated.tokenizer.whitespace],
+            docComment: [...DOC_COMMENT_RULES]
         }
     } as unknown as monaco.languages.IMonarchLanguage;
 }

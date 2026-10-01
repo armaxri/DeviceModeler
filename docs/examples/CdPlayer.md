@@ -4,7 +4,7 @@
 
 > Hierarchical CD player
 
-CD player with a history state: after closing the lid the player
+CD player with a history state: after closing the lid the player  
 resumes the mode it was in before.
 
 Source: [`examples/cd-player.hsm`](../../examples/cd-player.hsm)

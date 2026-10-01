@@ -70,6 +70,14 @@
         "language": "hsmtest",
         "scopeName": "source.hsmtest",
         "path": "./syntaxes/hsmtest.tmLanguage.json"
+      },
+      {
+        "scopeName": "documentation.injection.hsm",
+        "path": "./syntaxes/hsm-doc-comments.tmLanguage.json",
+        "injectTo": [
+          "source.hsm",
+          "source.hsmtest"
+        ]
       }
     ],
     "commands": [

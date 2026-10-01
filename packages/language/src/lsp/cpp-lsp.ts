@@ -1,6 +1,6 @@
 import { AstUtils, CstUtils, type CstNode, type LangiumDocument } from 'langium';
 import { DefaultCompletionProvider, type LangiumServices } from 'langium/lsp';
-import { CompletionItemKind, type CompletionItem, type CompletionList, type Range } from 'vscode-languageserver-types';
+import { CompletionItemKind, MarkupKind, type CompletionItem, type CompletionList, type MarkupContent, type Range } from 'vscode-languageserver-types';
 
 type CompletionParams = Parameters<DefaultCompletionProvider['getCompletion']>[1];
 import * as ast from '../generated/ast.js';
@@ -8,6 +8,7 @@ import type { CppDeclaration, CppRange, CppResolvedField } from '../cpp-header/m
 import type { CppTypeIndex } from '../cpp-header/type-index.js';
 import { cppValueToJson, describeCppType } from '../cpp-header/report.js';
 import { displayPath } from '../cpp-headers.js';
+import { doxygenToMarkdown } from '../doc/doxygen.js';
 import { contextMachine, cppIndexAt, cppTypeOfReference, hsmTypeOfCpp, isEnumType, isStructType, memberOf, referenceMembers } from '../cpp-types.js';
 import { enumeratorSpelling } from '../cpp-enums.js';
 import { cppImports, resolvedImports } from '../imports.js';
@@ -228,8 +229,18 @@ export function describeCppElement(element: CppElementAt, document?: LangiumDocu
         return '';
     }
     const location = declaration ? `${displayPath(declaration.fileName, document ? parentOf(document.uri) : undefined)}:${declaration.nameRange.start.line + 1}` : undefined;
-    const doc = declaration?.doc;
+    const doc = declaration?.doc ? cppDocMarkdown(declaration.doc) : undefined;
     return ['```cpp\n' + signature + '\n```', ...lines, doc, location ? `*${location}*` : undefined].filter(part => part).join('\n\n');
+}
+
+/** The documentation comment of a C++ declaration (text without comment markers) as Markdown. */
+export function cppDocMarkdown(doc: string): string {
+    return doxygenToMarkdown(doc, { codeLanguage: 'cpp' });
+}
+
+/** The documentation of a C++ declaration for completion items (Markdown). */
+function cppDocumentation(doc: string | undefined): MarkupContent | undefined {
+    return doc ? { kind: MarkupKind.Markdown, value: cppDocMarkdown(doc) } : undefined;
 }
 
 function formatCppValue(value: unknown): string {
@@ -288,7 +299,7 @@ export function cppCompletionItems(document: LangiumDocument, offset: number): C
                 label: field.name,
                 kind: CompletionItemKind.Field,
                 detail: `${field.type.cppName} (${typeName(type)})`,
-                documentation: field.declaration.doc
+                documentation: cppDocumentation(field.declaration.doc)
             }));
         }
     }
@@ -391,7 +402,7 @@ function cppCompletionItem(declaration: CppDeclaration, index: CppTypeIndex): Co
     } else {
         detail = declaration.kind === 'record' ? 'struct' : declaration.kind;
     }
-    return { label: declaration.name, kind: kinds[declaration.kind] ?? CompletionItemKind.Text, detail, documentation: declaration.doc, ...(sortText ? { sortText } : {}) };
+    return { label: declaration.name, kind: kinds[declaration.kind] ?? CompletionItemKind.Text, detail, documentation: cppDocumentation(declaration.doc), ...(sortText ? { sortText } : {}) };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -461,11 +472,11 @@ function findDeclaration<T extends ast.Declaration>(machine: ast.StateMachine, p
 }
 
 /**
- * The documentation of an enumerator in completion items (the doc comment of the header). Kept in
- * one place so that it can be rendered like the other documentation comments (e.g. Doxygen to Markdown).
+ * The documentation of an enumerator in completion items: the doc comment of the header, rendered
+ * like the other documentation comments (Doxygen to Markdown).
  */
-function enumeratorDocumentation(doc: string | undefined): string | undefined {
-    return doc;
+function enumeratorDocumentation(doc: string | undefined): MarkupContent | undefined {
+    return cppDocumentation(doc);
 }
 
 /**

@@ -334,7 +334,8 @@ Event payloads, operation parameters and return values may use all these types.
 
 - Hover (`cppHover` in `lsp/cpp-lsp.ts`, used by the language server and the web editor): the declaration
   (`enum class motor::Mode` with its enumerators, `constexpr std::int32_t motor::kMaxSpeed = 6000`, struct
-  members with types), the documentation comment and the location in the header; also for each segment of a
+  members with types), the documentation comment (as written, Doxygen commands rendered like the doc comments
+  of models, see [rendering.md](rendering.md#model-documentation)) and the location in the header; also for each segment of a
   qualified name (`motor` → namespace), for struct members in names and member accesses and for header import
   paths.
 - Go to definition (`cppDefinition`): into the header (`fileName` + `nameRange` of the declaration); the

@@ -173,6 +173,14 @@ describe('model documentation', () => {
         expect(generateDocIndex(entries, 'html', 'Models')).toContain('<h1>Models</h1>');
         expect(markdownToHtml('a **b** *c* `<d>`\n\n- x\n- [y](https://e.org)')).toBe(
             '<p>a <strong>b</strong> <em>c</em> <code>&lt;d&gt;</code></p>\n<ul><li>x</li><li><a href="https://e.org">y</a></li></ul>');
+        // rendered Doxygen comments: line breaks, a label followed by a list, code blocks, escapes
+        expect(markdownToHtml('Line one  \nline two\n\n**Parameters:**\n- `a` — first  \n  continued\n\n```cpp\nif (a < b) {}\n```\n\nstd::vector\\<int>')).toBe([
+            '<p>Line one<br>line two</p>',
+            '<p><strong>Parameters:</strong></p>',
+            '<ul><li><code>a</code> — first<br>continued</li></ul>',
+            '<pre><code>if (a &lt; b) {}</code></pre>',
+            '<p>std::vector&lt;int&gt;</p>'
+        ].join('\n'));
     });
 
     test('examples are documented', async () => {
