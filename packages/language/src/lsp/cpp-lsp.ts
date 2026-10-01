@@ -461,6 +461,14 @@ function findDeclaration<T extends ast.Declaration>(machine: ast.StateMachine, p
 }
 
 /**
+ * The documentation of an enumerator in completion items (the doc comment of the header). Kept in
+ * one place so that it can be rendered like the other documentation comments (e.g. Doxygen to Markdown).
+ */
+function enumeratorDocumentation(doc: string | undefined): string | undefined {
+    return doc;
+}
+
+/**
  * Completion items of the enumerators of an enum type, written as in models (`motor::Mode::Fast`,
  * `::RED`), replacing `range`.
  */
@@ -475,7 +483,7 @@ export function enumeratorCompletionItems(type: HsmType, range: Range, typed: st
             label: spelling,
             kind: CompletionItemKind.EnumMember,
             detail: `${enumType.cppName} = ${enumerator.value}`,
-            documentation: enumerator.declaration.doc,
+            documentation: enumeratorDocumentation(enumerator.declaration.doc),
             sortText: `!${String(position).padStart(5, '0')}`,
             filterText: typed && !spelling.startsWith(typed) ? enumerator.name : spelling,
             textEdit: { range, newText: spelling }
