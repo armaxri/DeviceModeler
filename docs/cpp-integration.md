@@ -324,7 +324,7 @@ Event payloads, operation parameters and return values may use all these types.
   interpreter implements.
 - Scenario harness: `format` overloads for the enums, structs and arrays of the model (canonical text without
   white space), literals of enum values and structs (`[] { motor::Position v{}; v.x = 1; return v; }()`),
-  member-wise comparison of struct expectations. The 15 `s10-cpp-*` scenarios are compiled with g++ (and
+  member-wise comparison of struct expectations. The 17 `s10-cpp-*` scenarios are compiled with g++ (and
   checked with clang++) one by one (their headers may declare the same names).
 - The **C generator** reports `C++ header types are not supported by the C generator` for any header import or
   C++ type (also `uint8_t`); its conformance test skips exactly `CPP_TYPE_SCENARIOS` (`test/helpers.ts`).
@@ -348,6 +348,7 @@ Event payloads, operation parameters and return values may use all these types.
   written as in models (`motor::Mode::Fast`, `::LED_ON`): after `x == ` / `x != ` / `x = ` (also `<` …, `x`
   a variable or `valueof(e)`), `var m : motor::Mode = `, `raise e : `, in arguments of operation calls and
   after `mock op returns (`; they are added to Langium's completion (typing `Fa` finds `motor::Mode::Fast`).
+  Completion items show the documentation comments of the header like the hover (Doxygen commands rendered).
   In type positions without qualifier the global C++ types and namespaces and the `<cstdint>` typedefs are
   proposed.
 - Messages: an unknown enumerator lists the enumerators of the enum (`'motor::Mode' has no enumerator 'Fsat'
