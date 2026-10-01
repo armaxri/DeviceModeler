@@ -70,7 +70,7 @@ export class WebviewHost implements DiagramHost {
                 h('label', { class: 'toggle', title: 'Show the properties panel' }, properties, h('span', {}, 'Properties'))),
             h('div', { class: 'group', id: 'layout-group' },
                 h('button', { id: 'btn-arrange', title: 'Arrange all elements automatically and write the positions into the model (layout annotations)' }, 'Auto-arrange'),
-                h('button', { id: 'btn-reset-layout', title: 'Remove all layout annotations from the model and return to the automatic layout' }, 'Reset')),
+                h('button', { id: 'btn-reset-layout', title: 'Remove all layout annotations from the model and return to the automatic layout (an earlier arrangement is restored with undo)' }, 'Automatic layout')),
             h('div', { class: 'spacer' }),
             h('div', { class: 'group' },
                 h('button', { id: 'btn-svg', title: 'Export the diagram as SVG', onClick: () => this.post({ type: 'command', command: 'exportSvg' }) }, 'SVG'),

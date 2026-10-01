@@ -64,8 +64,8 @@ label of a selected transition. The first drag turns the diagram into a manual l
   `@size(w, h)`, `@via(x1, y1, …)`, `@label(dx, dy)`, `@regions(…)`) and in their bodies (`@initial`,
   `@final`, `@definitions`); syntax in `docs/manual-layout.md` of the repository. A model with layout
   annotations has a manual layout, one without the automatic layout.
-- **Auto-arrange** writes the automatic layout as annotations, **Reset** removes all layout annotations;
-  both are also commands (**HSM: Auto-arrange Diagram**, **HSM: Reset Diagram Layout**) and in the *…*
+- **Auto-arrange** writes the automatic layout as annotations, **Automatic layout** removes all layout annotations;
+  both are also commands (**HSM: Auto-arrange Diagram**, **HSM: Use Automatic Diagram Layout**) and in the *…*
   menu of the diagram.
   **HSM: Convert Layout File to Annotations** writes a `<model>.hsm.layout` of the earlier sidecar
   experiment into the model (the file is kept).

@@ -140,7 +140,8 @@ the layout of every parsed model with `layoutFromModel` and turns every layout c
 (`layoutTextEdits`), which the host applies like any other diagram edit (`DiagramHost.applyTextEdits`).
 
 - No *Auto | Manual* toggle: the diagram is manual as soon as the model has a layout annotation.
-  *Auto-arrange* writes the automatic layout as annotations, *Reset* removes all layout annotations.
+  *Auto-arrange* writes the automatic layout as annotations, *Automatic layout* removes all layout
+  annotations (it does not restore an earlier arrangement – that is undo).
   The first drag in an automatic diagram writes the annotations of all elements (the current automatic
   layout plus the move), so nothing jumps.
 - Drag a vertex (also initial / final states and the definition box) to move it; the transitions
@@ -165,8 +166,8 @@ The extension of this branch is packaged as `hsm-vscode-0.1.0-manual-layout.vsix
 *HSM Modeler (manual layout)*). It has the same extension id as the build of the main branch, so only
 one of them can be installed at a time (uninstall the other one first, or install with `--force`).
 
-- **Toolbar and commands:** the diagram webview shows *Auto-arrange* and *Reset* like the web app; the
-  same actions are the commands **HSM: Auto-arrange Diagram** and **HSM: Reset Diagram Layout** (command
+- **Toolbar and commands:** the diagram webview shows *Auto-arrange* and *Automatic layout* like the web app; the
+  same actions are the commands **HSM: Auto-arrange Diagram** and **HSM: Use Automatic Diagram Layout** (command
   palette and the *…* menu of the diagram panel).
   **HSM: Convert Layout File to Annotations** writes an old `<model>.hsm.layout` into the model.
 - The layout is part of the document: diagram edits and layout changes are `WorkspaceEdit`s, undone

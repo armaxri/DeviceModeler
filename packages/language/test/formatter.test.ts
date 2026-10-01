@@ -25,6 +25,27 @@ describe('formatter', () => {
 }`);
     });
 
+    test('indents doc comments of declarations like the declarations', async () => {
+        const text = 'statemachine M {\n    interface:\n        in event a\n    /** Doc of b. */\n        in event b\n            // line comment\n        var x : integer\n    internal:\n/** Doc of y. */\n        var y : integer\n}';
+        const parsed = await parse(text);
+        const edits = await loader.services.Hsm.lsp.Formatter!.formatDocument(parsed.document, {
+            textDocument: { uri: parsed.document.uri.toString() },
+            options: { tabSize: 4, insertSpaces: true }
+        });
+        const formatted = TextDocument.applyEdits(parsed.document.textDocument, edits);
+        expect(formatted).toBe(`statemachine M {
+    interface:
+        in event a
+        /** Doc of b. */
+        in event b
+        // line comment
+        var x : integer
+    internal:
+        /** Doc of y. */
+        var y : integer
+}`);
+    });
+
     test('formats imports and submachine states', async () => {
         const text = 'statemachine M{import  "motor.hsm"\nimport:"a.hsm"   "b.h" internal: var motor:Motor [*]->A state A:motor{entry/raise motor.start}}';
         const parsed = await parse(text, { 'motor.hsm': 'statemachine Motor {\n    interface:\n        in event start\n}', 'a.hsm': 'statemachine A {}' });

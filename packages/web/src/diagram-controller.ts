@@ -76,7 +76,7 @@ export interface ModelState {
     issues: Map<string, Issue>;
 }
 
-/** Buttons of the layout (optional, bound if present): Auto-arrange, Reset. */
+/** Buttons of the layout (optional, bound if present): Auto-arrange, Automatic layout. */
 const LAYOUT_CONTROLS = ['btn-arrange', 'btn-reset-layout'];
 
 export type DiagramTheme = 'classic' | 'modern' | 'dark';

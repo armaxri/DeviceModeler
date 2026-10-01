@@ -113,7 +113,7 @@
       },
       {
         "command": "hsm.resetLayout",
-        "title": "Reset Diagram Layout",
+        "title": "Use Automatic Diagram Layout",
         "category": "HSM",
         "icon": "$(discard)"
       },

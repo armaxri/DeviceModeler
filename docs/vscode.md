@@ -15,9 +15,9 @@
   PlantUML classic, configurable with `hsm.diagram.lightTheme`; dark: dark theme).
 - 🧪 **Manual layout** (only on the branches `claude/manual-layout` / `claude/layout-annotations`): the
   diagram is arranged by hand as soon as a state is dragged; the positions are layout annotations in the
-  model (`@at(x, y)`, `@via(…)`, …, see [Manual layout](manual-layout.md)). *Auto-arrange* and *Reset* in
-  the toolbar of the diagram (also as commands **HSM: Auto-arrange Diagram** and **HSM: Reset Diagram
-  Layout**) write the automatic layout as annotations / remove them.
+  model (`@at(x, y)`, `@via(…)`, …, see [Manual layout](manual-layout.md)). *Auto-arrange* and *Automatic layout* in
+  the toolbar of the diagram (also as commands **HSM: Auto-arrange Diagram** and **HSM: Use Automatic
+  Diagram Layout**) write the automatic layout as annotations / remove them.
   **HSM: Convert Layout File to Annotations** writes an old `<model>.hsm.layout` into the model.
   Layout changes are `WorkspaceEdit`s like every diagram edit: one undo history (`Ctrl+Z` in the text
   editor or in the diagram), the dirty marker and *Save* apply to them. The `.sct` import writes the

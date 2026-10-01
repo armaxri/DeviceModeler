@@ -32,8 +32,8 @@ A model with layout annotations has a manual layout, one without the automatic l
 mode switch. Design and trade-offs: [Manual layout](manual-layout.md).
 
 - The first drag writes the annotations of all elements (the current automatic layout plus the move).
-  *Auto-arrange* replaces them with the automatic layout, *Reset* removes all layout annotations
-  (automatic layout again).
+  *Auto-arrange* replaces them with the automatic layout, *Automatic layout* removes all layout
+  annotations (automatic layout again; an earlier arrangement is restored with undo, not with this button).
 - Layout changes are text edits: they are undone with `Ctrl+Z` like every other edit, mark the model as
   modified and are saved with it. Renames (also typed in the text) keep the position, because the
   annotation belongs to the element.
@@ -49,7 +49,7 @@ mode switch. Design and trade-offs: [Manual layout](manual-layout.md).
 | Resize a state | select it, drag the handle at the bottom right corner |
 | Add / move / remove a waypoint | select the transition; double-click its line / drag the point / double-click the point |
 | Move a transition label | select the transition, drag its label |
-| Arrange automatically / back to the automatic layout | *Auto-arrange* / *Reset* in the toolbar |
+| Arrange automatically / back to the automatic layout | *Auto-arrange* / *Automatic layout* in the toolbar |
 
 Importing an itemis CREATE `.sct` file keeps the arrangement of its diagram (also when several
 statecharts are imported together). On the command line, `hsm layout`, `hsm render` and `hsm doc` use

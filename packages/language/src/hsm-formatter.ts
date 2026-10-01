@@ -1,4 +1,4 @@
-import type { AstNode } from 'langium';
+import { isLeafCstNode, type AstNode, type CstNode } from 'langium';
 import { AbstractFormatter, Formatting } from 'langium/lsp';
 import * as ast from './generated/ast.js';
 import { elementAnnotations, type AnnotatedElement } from './model-annotations.js';
@@ -40,6 +40,12 @@ export class HsmFormatter extends AbstractFormatter {
             const formatter = this.getNodeFormatter(node);
             formatter.keyword(':').prepend(Formatting.noSpace());
             formatter.properties('declarations').prepend(Formatting.indent({ allowMore: true }));
+            // doc comments of the declarations are indented like them (otherwise they keep the indentation
+            // of the scope keyword)
+            const comments = node.declarations.flatMap(declaration => precedingComments(declaration.$cstNode));
+            if (comments.length > 0) {
+                formatter.cst(comments).prepend(Formatting.indent({ allowMore: true }));
+            }
         } else if (ast.isEventDeclaration(node) || ast.isVariableDeclaration(node) || ast.isParameter(node) || ast.isTypeAliasDeclaration(node)) {
             const formatter = this.getNodeFormatter<ast.EventDeclaration | ast.VariableDeclaration | ast.Parameter | ast.TypeAliasDeclaration>(node);
             formatter.keyword(':').surround(Formatting.oneSpace());
@@ -77,4 +83,20 @@ export class HsmFormatter extends AbstractFormatter {
             formatter.keywords(',').prepend(Formatting.noSpace()).append(Formatting.oneSpace());
         }
     }
+}
+
+/** The comments directly before a CST node (between it and the previous non-hidden node). */
+function precedingComments(node: CstNode | undefined): CstNode[] {
+    const result: CstNode[] = [];
+    const container = node?.container;
+    if (!node || !container) {
+        return result;
+    }
+    const siblings = container.content;
+    for (let i = siblings.indexOf(node) - 1; i >= 0 && siblings[i].hidden; i--) {
+        if (isLeafCstNode(siblings[i]) && /^\/[*/]/.test(siblings[i].text)) {
+            result.unshift(siblings[i]);
+        }
+    }
+    return result;
 }
