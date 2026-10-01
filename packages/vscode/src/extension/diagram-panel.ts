@@ -164,6 +164,16 @@ export class DiagramManager implements vscode.Disposable {
         }
     }
 
+    /**
+     * Converts the SVG into a PNG image in the webview of the model's diagram (a canvas is needed),
+     * opening the diagram if necessary.
+     */
+    async rasterize(uri: vscode.Uri, svg: string, scale = 2): Promise<Uint8Array> {
+        const panel = this.panels.get(uri.toString()) ?? await this.open(uri, true);
+        await panel.whenReady();
+        return panel.rasterize(svg, scale);
+    }
+
     /** Runs a layout command (auto-arrange, reset) in the active diagram. */
     layoutCommand(uri: vscode.Uri | undefined, command: LayoutCommand): boolean {
         const panel = uri ? this.panels.get(uri.toString()) : this.active;
@@ -194,6 +204,8 @@ export class DiagramPanel {
     private importedUris = new Set<string>();
     private sendQueue: Promise<void> = Promise.resolve();
     private readonly readyWaiters: Array<() => void> = [];
+    private rasterizeRequest = 0;
+    private readonly rasterizeRequests = new Map<number, { resolve: (data: Uint8Array) => void, reject: (error: Error) => void }>();
 
     constructor(private readonly manager: DiagramManager, readonly panel: vscode.WebviewPanel, private document: vscode.TextDocument) {
         panel.iconPath = vscode.Uri.joinPath(manager.context.extensionUri, 'media', 'diagram.svg');
@@ -243,6 +255,15 @@ export class DiagramPanel {
     }
 
     /** Resolves once the webview has been loaded. */
+    /** Converts the SVG into a PNG image in the webview. */
+    rasterize(svg: string, scale: number): Promise<Uint8Array> {
+        const requestId = ++this.rasterizeRequest;
+        return new Promise((resolve, reject) => {
+            this.rasterizeRequests.set(requestId, { resolve, reject });
+            this.post({ type: 'rasterize', requestId, svg, scale });
+        });
+    }
+
     whenReady(): Promise<void> {
         return this.ready ? Promise.resolve() : new Promise(resolve => this.readyWaiters.push(resolve));
     }
@@ -341,6 +362,16 @@ export class DiagramPanel {
             case 'command':
                 await vscode.commands.executeCommand(`hsm.${message.command}`, this.document.uri);
                 break;
+            case 'png': {
+                const request = this.rasterizeRequests.get(message.requestId);
+                this.rasterizeRequests.delete(message.requestId);
+                if (message.data !== undefined) {
+                    request?.resolve(Uint8Array.from(Buffer.from(message.data, 'base64')));
+                } else {
+                    request?.reject(new Error(message.error ?? 'The PNG image could not be created.'));
+                }
+                break;
+            }
             case 'simulation':
                 break;
             case 'openFile': {

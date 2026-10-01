@@ -9,7 +9,6 @@ export * from './hsm-document.js';
 export * from './imports.js';
 export * from './hsm-import-validator.js';
 export * from './model-utils.js';
-export * from './generator/plantuml.js';
 export * from './diagram/diagram-model.js';
 export * from './diagram/layout.js';
 export * from './diagram/manual-layout.js';

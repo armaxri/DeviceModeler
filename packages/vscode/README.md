@@ -49,8 +49,9 @@ the Test Explorer and the import of itemis CREATE models.
   view of VS Code. **HSM: Run Tests** runs the tests of the active `.hsmtest` file.
 - **HSM: Import itemis CREATE Model (.sct)** converts an `.sct` file into an `.hsm` file next to it
   (also in the context menu of `.sct` files in the explorer).
-- **HSM: Export Diagram as SVG** (standalone SVG with embedded styles, rendered like `hsm render`) and
-  **HSM: Export as PlantUML**.
+- **HSM: Export Diagram…** (also *Export…* in the diagram toolbar): standalone SVG with embedded styles,
+  rendered like `hsm render`, or the same diagram as PNG image (twice the resolution, rasterized in the
+  diagram webview, which is opened if necessary).
 
 ## Manual layout (experimental)
 
@@ -73,7 +74,7 @@ label of a selected transition. The first drag turns the diagram into a manual l
   `Ctrl+Z` (text editor or diagram), they mark the model as dirty and are saved with it. Renames, also
   typed in the text or via *Rename Symbol*, keep the layout.
 - **HSM: Import itemis CREATE Model** writes the arrangement of the itemis diagram as annotations;
-  **HSM: Export Diagram as SVG** applies them.
+  **HSM: Export Diagram…** applies them.
 
 ## Settings
 

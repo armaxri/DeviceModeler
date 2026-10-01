@@ -174,7 +174,7 @@ one of them can be installed at a time (uninstall the other one first, or instal
   with VS Code's undo, they make the model dirty and are saved with it. The extension no longer reads,
   writes or watches `.hsm.layout` files.
 - **Import and export:** **HSM: Import itemis CREATE Model** writes the arrangement of the itemis
-  diagram as layout annotations into the imported model; **HSM: Export Diagram as SVG** applies them.
+  diagram as layout annotations into the imported model; **HSM: Export Diagram…** (SVG / PNG) applies them.
 
 Limitation: no tests in a real VS Code instance (the webview bundle is checked in Chromium with a
 mocked VS Code API, the extension code with a `vscode` mock).

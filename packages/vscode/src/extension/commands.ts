@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
 import {
-    cppHeaderStore, generatePlantUml, HsmModelLoader, importSct, layoutFileName, layoutStateMachineWithLayout, layoutTextEdits, parseManualLayout,
+    cppHeaderStore, HsmModelLoader, importSct, layoutFileName, layoutStateMachineWithLayout, layoutTextEdits, parseManualLayout,
     renderSvg, type ParsedModel
 } from 'hsm-language';
 import { runGeneration } from '../../../language/src/generator/generate-command.js';
@@ -85,23 +85,33 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
         }
     });
 
-    register('hsm.exportSvg', async (arg?: unknown) => {
+    register('hsm.exportDiagram', async (arg?: unknown) => {
         const uri = modelUri(arg, commands.diagrams);
         if (!uri) {
             vscode.window.showWarningMessage('HSM: Open an .hsm file to export its diagram.');
             return;
         }
+        const format = await vscode.window.showQuickPick([
+            { label: 'SVG', description: 'scalable vector graphic', format: 'svg' as const },
+            { label: 'PNG', description: 'image with twice the screen resolution', format: 'png' as const }
+        ], { title: 'Export diagram', placeHolder: 'Format' });
+        if (!format) {
+            return;
+        }
         const document = await vscode.workspace.openTextDocument(uri);
         const svg = await renderModelSvg(document);
         const target = await vscode.window.showSaveDialog({
-            defaultUri: uri.with({ path: uri.path.replace(/\.hsm$/i, '') + '.svg' }),
-            filters: { SVG: ['svg'] },
-            title: 'Export diagram as SVG'
+            defaultUri: uri.with({ path: uri.path.replace(/\.hsm$/i, '') + '.' + format.format }),
+            filters: format.format === 'svg' ? { SVG: ['svg'] } : { PNG: ['png'] },
+            title: `Export diagram as ${format.label}`
         });
-        if (target) {
-            await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(svg));
-            showWritten(`Exported ${path.basename(target.path)}.`, [target]);
+        if (!target) {
+            return;
         }
+        // the PNG is rendered from the same SVG in the diagram webview (it needs a canvas)
+        const content = format.format === 'svg' ? new TextEncoder().encode(svg) : await commands.diagrams.rasterize(uri, svg);
+        await vscode.workspace.fs.writeFile(target, content);
+        showWritten(`Exported ${path.basename(target.path)}.`, [target]);
     });
 
     // manual layout (experimental, layout annotations in the model): commands of the diagram (also
@@ -133,28 +143,6 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
         if (layoutFile) {
             vscode.window.showInformationMessage(`The layout of ${path.basename(layoutFile.path)} was written into ${path.basename(uri.path)} as annotations; `
                 + `${path.basename(layoutFile.path)} is no longer used and can be deleted.`);
-        }
-    });
-
-    register('hsm.exportPlantUml', async (arg?: unknown) => {
-        const uri = modelUri(arg, commands.diagrams);
-        if (!uri) {
-            vscode.window.showWarningMessage('HSM: Open an .hsm file to export it as PlantUML.');
-            return;
-        }
-        const document = await vscode.workspace.openTextDocument(uri);
-        const parsed = await parseModel(document);
-        if (parsed.hasSyntaxErrors) {
-            throw new Error(`${path.basename(uri.path)} contains syntax errors.`);
-        }
-        const target = await vscode.window.showSaveDialog({
-            defaultUri: uri.with({ path: uri.path.replace(/\.hsm$/i, '') + '.puml' }),
-            filters: { PlantUML: ['puml', 'plantuml'] },
-            title: 'Export as PlantUML'
-        });
-        if (target) {
-            await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(generatePlantUml(parsed.model)));
-            showWritten(`Exported ${path.basename(target.path)}.`, [target]);
         }
     });
 }

@@ -1,6 +1,7 @@
 import type { DiagramSubmachine, TextEdit } from 'hsm-language';
 import type { DiagramController, DiagramHost, StatusSeverity, TextRange } from '@hsm-web/diagram-controller.js';
 import { byId, h } from '@hsm-web/ui/dom.js';
+import { svgToPng } from '@hsm-web/ui/export-svg.js';
 import type { FromWebview, LayoutCommand, ToWebview, WebviewSettings } from '../common/protocol.js';
 
 export interface VsCodeApi {
@@ -73,8 +74,7 @@ export class WebviewHost implements DiagramHost {
                 h('button', { id: 'btn-reset-layout', title: 'Remove all layout annotations from the model and return to the automatic layout (an earlier arrangement is restored with undo)' }, 'Automatic layout')),
             h('div', { class: 'spacer' }),
             h('div', { class: 'group' },
-                h('button', { id: 'btn-svg', title: 'Export the diagram as SVG', onClick: () => this.post({ type: 'command', command: 'exportSvg' }) }, 'SVG'),
-                h('button', { id: 'btn-plantuml', title: 'Export the model as PlantUML (.puml)', onClick: () => this.post({ type: 'command', command: 'exportPlantUml' }) }, 'PlantUML'),
+                h('button', { id: 'btn-export', title: 'Export the diagram as SVG or PNG', onClick: () => this.post({ type: 'command', command: 'exportDiagram' }) }, 'Export…'),
                 h('button', { id: 'btn-cpp', title: 'Generate C++ code', onClick: () => this.post({ type: 'command', command: 'generateCpp' }) }, 'C++')));
         const main = h('main', {},
             h('section', { id: 'diagram-pane' },
@@ -141,6 +141,9 @@ export class WebviewHost implements DiagramHost {
             case 'layoutCommand':
                 this.layoutCommand(message.command);
                 break;
+            case 'rasterize':
+                this.rasterize(message.requestId, message.svg, message.scale);
+                break;
             case 'cursor':
                 this.controller.selectElementAtOffset(message.offset);
                 break;
@@ -182,6 +185,21 @@ export class WebviewHost implements DiagramHost {
             this.setStatus('The model was changed – the simulation has been stopped.', 'warning');
         }
         this.controller.scheduleUpdate(100);
+    }
+
+    /** Converts an SVG of the extension into a PNG image (a canvas is only available in the webview). */
+    private async rasterize(requestId: number, svg: string, scale: number): Promise<void> {
+        try {
+            const png = await svgToPng(svg, scale);
+            const bytes = new Uint8Array(await png.arrayBuffer());
+            let binary = '';
+            for (let i = 0; i < bytes.length; i += 0x8000) {
+                binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+            }
+            this.post({ type: 'png', requestId, data: btoa(binary) });
+        } catch (error) {
+            this.post({ type: 'png', requestId, error: error instanceof Error ? error.message : String(error) });
+        }
     }
 
     private layoutCommand(command: LayoutCommand): void {

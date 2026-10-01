@@ -22,7 +22,7 @@ import { canvasTextMeasure } from './diagram/text-measure.js';
 import { byId, h } from './ui/dom.js';
 import { Icons } from './ui/icons.js';
 import { closeInlineEditor, showInlineEditor } from './ui/inline-editor.js';
-import { exportSvg } from './ui/export-svg.js';
+import { exportSvg, svgToPng } from './ui/export-svg.js';
 import { renderProperties, type PropertiesHost, type SelectionInfo } from './ui/properties.js';
 import { SimulationPanel } from './ui/simulation-panel.js';
 import { SimulationSession, canHaveBreakpoint } from './simulation/session.js';
@@ -1631,6 +1631,12 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         }
         const graph = this.state.layout.graph;
         return exportSvg(byId('sprotty'), graph.width, graph.height, `theme-${this.settings.theme}`);
+    }
+
+    /** The rendered diagram as a PNG image (undefined if nothing has been rendered yet). */
+    async exportPng(scale = 2): Promise<Blob | undefined> {
+        const svg = this.exportSvg();
+        return svg ? svgToPng(svg, scale) : undefined;
     }
 }
 

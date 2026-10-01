@@ -5,7 +5,6 @@ import { URI } from 'langium';
 import { NodeFileSystem } from 'langium/node';
 import { createHsmServices } from '../hsm-module.js';
 import { HsmModelLoader } from '../hsm-document.js';
-import { generatePlantUml } from '../generator/plantuml.js';
 import { layoutFileName, layoutStateMachineWithLayout, parseManualLayout } from '../diagram/manual-layout.js';
 import { layoutTextEdits } from '../diagram/layout-annotations.js';
 import { applyEdits } from '../edit/model-edits.js';
@@ -79,21 +78,6 @@ export function createProgram(): Command {
             } else {
                 console.log(`${file}: OK`);
             }
-        });
-
-    headerOptions(program.command('plantuml'))
-        .argument('<file>', '.hsm file')
-        .option('-o, --out <file>', 'output file (default: <file>.puml)')
-        .description('generates a PlantUML state diagram')
-        .action(async (file: string, options: { out?: string } & HeaderCommandOptions) => {
-            const { parsed, errors } = await load(file, options);
-            if (errors > 0 || parsed.hasSyntaxErrors) {
-                process.exitCode = 1;
-                return;
-            }
-            const out = options.out ?? file.replace(/\.hsm$/, '') + '.puml';
-            await fs.writeFile(out, generatePlantUml(parsed.model));
-            console.log(`Generated ${out}`);
         });
 
     headerOptions(program.command('generate'))

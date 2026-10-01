@@ -1,12 +1,11 @@
 import { monaco } from './monaco.js';
 import {
-    generatePlantUml, importSct, importSctFiles, type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ParsedModel, type TextEdit
+    importSct, importSctFiles, type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ParsedModel, type TextEdit
 } from 'hsm-language';
 import { EDITOR_THEMES, HsmLanguageSupport, LANGUAGE_ID } from './language-support.js';
 import { DiagramController, type DiagramHost, type DiagramSettings, type StatusSeverity, type TextRange } from './diagram-controller.js';
 import { createWorkerElk } from './diagram/elk.js';
 import { byId, download, h } from './ui/dom.js';
-import { plantUmlServerUrl } from './ui/plantuml.js';
 import type { SimulationSession } from './simulation/session.js';
 import { EMPTY_MODEL, EXAMPLE_HEADERS, EXAMPLES } from './examples.js';
 
@@ -263,8 +262,7 @@ export class HsmApp implements DiagramHost {
             this.applyTheme();
         });
         byId('btn-simulate').addEventListener('click', () => this.diagram.simulation ? this.diagram.stopSimulation() : this.diagram.startSimulation());
-        byId('btn-svg').addEventListener('click', () => this.exportSvg());
-        byId('btn-plantuml').addEventListener('click', () => this.showPlantUml());
+        byId('btn-export').addEventListener('click', () => this.showExport());
         byId('modal-close').addEventListener('click', () => this.closeModal());
         byId('modal').addEventListener('click', event => {
             if (event.target === byId('modal')) {
@@ -534,31 +532,32 @@ export class HsmApp implements DiagramHost {
     // -----------------------------------------------------------------------------------------
     // Export
 
-    private exportSvg(): void {
-        const svg = this.diagram.exportSvg();
-        if (svg) {
-            download(this.fileName.replace(/\.[^.]+$/, '') + '.svg', svg, 'image/svg+xml');
-        }
-    }
-
-    private async showPlantUml(): Promise<void> {
-        const state = this.diagram.model;
-        if (!state) {
-            return;
-        }
-        const text = generatePlantUml(state.parsed.model);
-        const textarea = h('textarea', { readonly: true, spellcheck: 'false' });
-        textarea.value = text;
-        const copy = h('button', {
-            onClick: async () => {
-                await navigator.clipboard.writeText(text);
-                copy.textContent = 'Copied ✓';
+    /** Export of the diagram as SVG or PNG (chosen in a dialog). */
+    private showExport(): void {
+        const base = this.fileName.replace(/\.[^.]+$/, '');
+        const choose = (format: 'svg' | 'png') => async () => {
+            this.closeModal();
+            try {
+                if (format === 'svg') {
+                    const svg = this.diagram.exportSvg();
+                    if (svg) {
+                        download(`${base}.svg`, svg, 'image/svg+xml');
+                    }
+                } else {
+                    const png = await this.diagram.exportPng();
+                    if (png) {
+                        download(`${base}.png`, png, 'image/png');
+                    }
+                }
+            } catch (error) {
+                this.setStatus(`Export failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
             }
-        }, 'Copy');
-        const save = h('button', { onClick: () => download(this.fileName.replace(/\.[^.]+$/, '') + '.puml', text, 'text/plain') }, 'Download .puml');
-        const link = h('a', { target: '_blank', rel: 'noopener' }, 'Open on plantuml.com ↗');
-        plantUmlServerUrl(text, 'uml').then(url => link.setAttribute('href', url)).catch(() => link.remove());
-        this.openModal('PlantUML', h('div', {}, textarea, h('div', { class: 'actions' }, copy, save, h('span', { class: 'spacer' }), link)));
+        };
+        this.openModal('Export diagram', h('div', { class: 'export-choice' },
+            h('p', {}, 'The diagram as shown (theme and layout), without the selection.'),
+            h('div', { class: 'actions' },
+                h('button', { title: 'Scalable vector graphic, e.g. for the web or for further editing', onClick: choose('svg') }, 'SVG'),
+                h('button', { title: 'Image with twice the screen resolution, e.g. for documents and slides', onClick: choose('png') }, 'PNG'))));
     }
 
     private openModal(title: string, content: HTMLElement): void {

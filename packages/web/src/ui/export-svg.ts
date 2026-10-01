@@ -36,3 +36,32 @@ export function exportSvg(container: HTMLElement, width: number, height: number,
     svg.insertBefore(background, style.nextSibling);
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(svg);
 }
+
+/**
+ * Renders an SVG document (see {@link exportSvg}) into a PNG image. `scale` 2 gives sharp images on
+ * high resolution screens and in documents.
+ */
+export function svgToPng(svg: string, scale = 2): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+        image.onload = () => {
+            URL.revokeObjectURL(url);
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+            canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+            const context = canvas.getContext('2d');
+            if (!context) {
+                reject(new Error('The PNG image could not be created (no canvas).'));
+                return;
+            }
+            context.drawImage(image, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('The PNG image could not be created.')), 'image/png');
+        };
+        image.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error('The SVG of the diagram could not be rendered.'));
+        };
+        image.src = url;
+    });
+}

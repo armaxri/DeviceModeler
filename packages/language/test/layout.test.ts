@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { DEFINITION_ID, layoutStateMachine, MACHINE_ID, wrapLine } from '../src/diagram/layout.js';
 import type { DiagramNode } from '../src/diagram/diagram-model.js';
-import { generatePlantUml } from '../src/generator/plantuml.js';
 import { example, parse } from './helpers.js';
 
 function flatten(nodes: DiagramNode[], parentX = 0, parentY = 0): Array<DiagramNode & { ax: number, ay: number }> {
@@ -120,57 +119,6 @@ describe('diagram content', () => {
     });
 });
 
-describe('PlantUML generator', () => {
-    test('pseudo states of itemis CREATE', async () => {
-        const parsed = await parse(example('door.hsm'));
-        const puml = generatePlantUml(parsed.model);
-        expect(puml).toContain('state Fork <<fork>>');
-        expect(puml).toContain('state Join <<join>>');
-        expect(puml).toContain('  state Opening <<entryPoint>>');
-        expect(puml).toContain('  state Blocked <<exitPoint>>');
-        expect(puml).toContain('Closed --> Opening : open');
-        expect(puml).toContain('Blocked --> Fork : / raise alarm');
-        expect(puml).toContain('Locked --> Join');
-    });
-
-    test('definition section as legend', async () => {
-        const parsed = await parse(example('keyboard.hsm'));
-        const puml = generatePlantUml(parsed.model);
-        expect(puml).toContain('legend top left\ninterface:\n  in event capsLock\n');
-        expect(puml).toContain('internal:\n  const CAPS : integer = 1\n  const NUM : integer = 2\nendlegend');
-    });
-
-    test('aliases for duplicate names', async () => {
-        const parsed = await parse(`statemachine M {
-    [*] -> A
-    state A { [*] -> X state X }
-    state B { [*] -> X state X }
-    A.X -> B.X : go
-}`);
-        const puml = generatePlantUml(parsed.model);
-        expect(puml).toContain('  state "X" as A_X');
-        expect(puml).toContain('  state "X" as B_X');
-        expect(puml).toContain('  [*] --> A_X');
-        expect(puml).toContain('A_X --> B_X : go');
-    });
-
-    test('cd player', async () => {
-        const parsed = await parse(example('cd-player.hsm'));
-        const puml = generatePlantUml(parsed.model);
-        expect(puml).toContain('@startuml');
-        expect(puml).toContain('state HasDisc <<choice>>');
-        expect(puml).toContain('Open --> Closed[H] : eject');
-        expect(puml).toContain('  Stopped --> HasDisc : play');
-        expect(puml).toContain('Playing : entry / startMotor()');
-    });
-
-    test('regions', async () => {
-        const parsed = await parse(example('keyboard.hsm'));
-        const puml = generatePlantUml(parsed.model);
-        expect(puml).toMatch(/CapsOn --> CapsOff : capsLock\n  --\n  state NumOff/);
-    });
-});
-
 describe('entry points and exit nodes with the same name in several regions', () => {
     const TEXT = `statemachine M {
     interface:
@@ -214,38 +162,5 @@ describe('entry points and exit nodes with the same name in several regions', ()
         expect(elements.get('P.region2.failure')).toBeDefined();
         expect(graph.edges.find(e => e.source === 'Idle' && e.target === 'P')?.label?.text).toBe('go # >failure');
         expect(graph.edges.find(e => e.source === 'P' && e.target === 'Idle')?.label?.text).toBe('# done>');
-    });
-
-    test('PlantUML: one arrow per entry point / exit node', async () => {
-        const parsed = await parse(TEXT);
-        const puml = generatePlantUml(parsed.model);
-        expect(puml).toContain('state "failure" as P_failure <<entryPoint>>');
-        expect(puml).toContain('state "failure" as P_failure_2 <<entryPoint>>');
-        expect(puml).toContain('Idle --> P_failure : go');
-        expect(puml).toContain('Idle --> P_failure_2 : go');
-        expect(puml).toContain('P_done --> Idle');
-        expect(puml).toContain('P_done_2 --> Idle');
-    });
-
-    test('PlantUML: a transition handling several exit nodes', async () => {
-        const parsed = await parse(`statemachine M {
-    interface:
-        in event a
-        in event b
-    [*] -> P
-    state P {
-        [*] -> A
-        exit X1
-        exit X2
-        state A
-        A -> X1 : a
-        A -> X2 : b
-    }
-    state Q
-    P -> Q # X1> X2>
-}`);
-        const puml = generatePlantUml(parsed.model);
-        expect(puml).toContain('X1 --> Q');
-        expect(puml).toContain('X2 --> Q');
     });
 });

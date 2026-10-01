@@ -13,7 +13,7 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
 - ✅ Langium language, ELK layout, Sprotty diagram with PlantUML look, Monaco editor
 - ✅ Graphical editing as text edits (undo, comments and formatting preserved)
 - ✅ Composite states, orthogonal regions, choice, junction, shallow and deep history, final states
-- ✅ PlantUML export, SVG export, CLI
+- ✅ SVG / PNG export (one *Export…* dialog; the PlantUML export was dropped), CLI
 - ✅ SVG rendering without a browser (`hsm render`, `renderSvg()`; same look and style sheet as the
   editor, Helvetica metrics for the layout in Node.js) and model documentation (`hsm doc`: Markdown or HTML
   with diagram, interface / state / transition tables, `/** */` doc comments, also shown on hover)
@@ -153,7 +153,7 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
   index, hover with doc comments, rename, formatting, semantic highlighting, …), the diagram editor of
   the web app as webview with selection sync and diagram edits applied as `WorkspaceEdit`s, theme
   following VS Code, Generate C++ (`hsm.gen.json` or settings), tests and model coverage in the Test
-  Explorer, `.sct` import, SVG / PlantUML export, `.vsix` packaging
+  Explorer, `.sct` import, SVG / PNG export, `.vsix` packaging
   - limitations: no hand-arranged layout on the main branch (see below); the extension generates only the `cpp` target; no end-to-end
     tests in a real VS Code instance (`@vscode/test-electron` could not download VS Code) – the language
     server is tested over stdio, the webview bundle in Chromium with a mocked VS Code API

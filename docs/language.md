@@ -226,7 +226,7 @@ constexpr Position kHome{10, 20};                          operation drive(p : m
   ```
 
   The nearest `hsm.gen.json` / `*.hsm.gen.json` in the directory of a model or a parent directory applies (CLI,
-  language server); `hsm validate|simulate|test|generate|layout|plantuml` add `-I <dir>`, `-D NAME[=VALUE]` and
+  language server); `hsm validate|simulate|test|generate|layout` add `-I <dir>`, `-D NAME[=VALUE]` and
   `--data-model lp64|llp64|ilp32`, VS Code the settings `hsm.headers.includePaths` / `hsm.headers.defines` /
   `hsm.headers.dataModel`, CMake `hsm_generate(… INCLUDE_DIRS … DEFINES …)`. A missing header is an error at
   the import, errors in the header are reported there with their location (`motor_types.h:12:5: …`);

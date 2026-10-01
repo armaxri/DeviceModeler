@@ -63,10 +63,9 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
   real-time mode (see [Simulation](docs/editor.md#simulation)).
 - **Selection sync**: selecting an element in the diagram highlights its text, moving the cursor in the
   text selects the element in the diagram.
-- **Export**: standalone SVG, PlantUML (`.puml`, copy to clipboard or open on plantuml.com). Synchronizations
-  become `<<fork>>` / `<<join>>`, entry points / exit nodes `<<entryPoint>>` / `<<exitPoint>>`, the
-  definition section a legend.
-- **CLI** for validation, PlantUML generation and layout computation.
+- **Export** of the diagram as standalone SVG or PNG (*Export…* in the toolbar; the PNG has twice the
+  screen resolution).
+- **CLI** for validation, layout computation, rendering and code generation.
 - **Rendering and documentation without a browser**: `hsm render` writes the diagrams as SVG files that look
   like the editor's export, `hsm doc` generates Markdown or HTML documentation of models (diagram,
   interfaces, states, transitions and `/** … */` doc comments) – see [Rendering diagrams](docs/rendering.md#rendering-diagrams)
@@ -106,7 +105,6 @@ npm run package:vscode   # packages/vscode/hsm-vscode-<version>.vsix
 ```bash
 npm run build -w packages/language
 node packages/language/bin/cli.js validate examples/cd-player.hsm
-node packages/language/bin/cli.js plantuml examples/cd-player.hsm -o cd-player.puml
 node packages/language/bin/cli.js layout examples/keyboard.hsm --direction RIGHT
 node packages/language/bin/cli.js render examples -o out --theme modern     # SVG diagrams, see below
 node packages/language/bin/cli.js doc examples -o docs/models --format html  # documentation, see below

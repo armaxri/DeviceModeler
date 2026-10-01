@@ -42,8 +42,8 @@ export function byId<T extends HTMLElement = HTMLElement>(id: string): T {
     return element as T;
 }
 
-export function download(fileName: string, content: string, type: string): void {
-    const blob = new Blob([content], { type });
+export function download(fileName: string, content: string | Blob, type: string): void {
+    const blob = content instanceof Blob ? content : new Blob([content], { type });
     const url = URL.createObjectURL(blob);
     const link = h('a', { href: url, download: fileName });
     document.body.append(link);

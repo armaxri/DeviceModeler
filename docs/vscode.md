@@ -34,8 +34,8 @@
 - **Tests** in the Test Explorer (all `@Test` operations of the workspace; failures with location and
   trace; **HSM: Run Tests** for the active file) and a **Run with Model Coverage** profile that shows
   covered states / transitions / reactions and guard decisions in the coverage view.
-- **HSM: Import itemis CREATE Model (.sct)**, **HSM: Export Diagram as SVG** (`renderSvg`),
-  **HSM: Export as PlantUML**.
+- **HSM: Import itemis CREATE Model (.sct)**, **HSM: Export Diagram…** (SVG rendered with `renderSvg`,
+  or PNG: the same SVG rasterized in the diagram webview; also *Export…* in the diagram toolbar).
 
 ```bash
 npm run package:vscode    # builds and packages packages/vscode/hsm-vscode-<version>.vsix
