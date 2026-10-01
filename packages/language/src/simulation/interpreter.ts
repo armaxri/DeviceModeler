@@ -3,6 +3,7 @@ import * as ast from '../generated/ast.js';
 import { instanceMachine, referableName } from '../imports.js';
 import { entryPointOf, transitionLabel, nodeText } from '../model-utils.js';
 import type { EventDirection } from '../hsm-typesystem.js';
+import { isClassMember } from '../class-members.js';
 import { SimulationError } from './errors.js';
 import { ExpressionEvaluator, type EvaluationContext } from './expressions.js';
 import {
@@ -242,6 +243,7 @@ export class StatechartInterpreter {
             }
         }
         this.resetData();
+        this.initializeClassMembers();
     }
 
     private get now(): number {
@@ -1387,10 +1389,21 @@ export class StatechartInterpreter {
     // -----------------------------------------------------------------------------------------
     // Data
 
+    /**
+     * Sets the variables to the default values of their types. The members of the C++ class sections keep
+     * their values: they are initialized once, when the object is constructed ({@link initializeClassMembers}).
+     */
     private resetData(): void {
-        this.values.clear();
-        this.variableTypes.clear();
+        for (const variable of [...this.values.keys()]) {
+            if (!isClassMember(variable)) {
+                this.values.delete(variable);
+                this.variableTypes.delete(variable);
+            }
+        }
         for (const variable of this.index.variables()) {
+            if (this.values.has(variable)) {
+                continue;
+            }
             const type = declaredType(variable.type);
             this.variableTypes.set(variable, type);
             this.values.set(variable, defaultValueOf(type) ?? 0n);
@@ -1431,14 +1444,31 @@ export class StatechartInterpreter {
                 instance.initializeVariables();
                 continue;
             }
-            if (!ast.isVariableDeclaration(declaration) || !declaration.initialValue || this.index.isInstance(declaration)) {
+            if (!ast.isVariableDeclaration(declaration) || !declaration.initialValue || this.index.isInstance(declaration) || isClassMember(declaration)) {
                 continue;
             }
-            const value = this.evaluator.evaluate(declaration.initialValue);
-            const type = declaredType(declaration.type) ?? runtimeTypeOfValue(value);
-            this.variableTypes.set(declaration, type);
-            this.values.set(declaration, convert(value, type, `Initial value of '${declaration.name}'`, declaration)!);
+            this.initializeVariable(declaration);
         }
+    }
+
+    /**
+     * Initializes the members of the C++ class sections with their initial values in declaration order, like
+     * the default member initializers of the generated class when the object is constructed. `enter()` does not
+     * reset them (docs/semantics.md §2).
+     */
+    private initializeClassMembers(): void {
+        for (const variable of this.index.variables()) {
+            if (variable.initialValue && isClassMember(variable)) {
+                this.initializeVariable(variable);
+            }
+        }
+    }
+
+    private initializeVariable(declaration: ast.VariableDeclaration): void {
+        const value = this.evaluator.evaluate(declaration.initialValue!);
+        const type = declaredType(declaration.type) ?? runtimeTypeOfValue(value);
+        this.variableTypes.set(declaration, type);
+        this.values.set(declaration, convert(value, type, `Initial value of '${declaration.name}'`, declaration)!);
     }
 
     /**

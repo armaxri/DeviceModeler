@@ -4,6 +4,7 @@ import { HsmTestScopeProvider } from './hsm-test-scope.js';
 import { HsmTestLinker } from '../hsm-linker.js';
 import { HsmCompletionProvider } from '../lsp/cpp-lsp.js';
 import { HsmTestValidator } from './hsm-test-validator.js';
+import { HsmValueConverter } from '../hsm-value-converter.js';
 
 export type HsmTestAddedServices = {
     validation: {
@@ -15,6 +16,9 @@ export type HsmTestAddedServices = {
 export type HsmTestServices = LangiumServices & HsmTestAddedServices;
 
 export const HsmTestModule: Module<HsmTestServices, PartialLangiumServices & HsmTestAddedServices> = {
+    parser: {
+        ValueConverter: () => new HsmValueConverter()
+    },
     references: {
         ScopeProvider: (services) => new HsmTestScopeProvider(services),
         Linker: (services) => new HsmTestLinker(services)

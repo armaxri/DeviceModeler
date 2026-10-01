@@ -3,6 +3,7 @@ import * as ast from '../../generated/ast.js';
 import { qualifiedName } from '../../hsm-scope.js';
 import { importKind, instanceVariables } from '../../imports.js';
 import { storageOfTypeReference } from '../../cpp-storage.js';
+import { isClassMember } from '../../class-members.js';
 import type { CppResolvedType } from '../../cpp-header/model.js';
 import { typeOfVariable, type HsmType } from '../../hsm-typesystem.js';
 import { entryPointOf, nodeText, transitionLabel } from '../../model-utils.js';
@@ -36,6 +37,9 @@ export const SUBMACHINES_NOT_SUPPORTED = 'Submachine instances are not supported
 
 /** Message of the C generator diagnostic for models using C/C++ header imports (docs/cpp-integration.md). */
 export const CPP_TYPES_NOT_SUPPORTED = 'C++ header types are not supported by the C generator';
+
+/** Message of the C generator diagnostic for models with C++ class sections (`public:`, `protected:`, `private:`). */
+export const CLASS_SECTIONS_NOT_SUPPORTED = 'The C++ class sections (public:, protected:, private:) are not supported by the C generator';
 
 /**
  * The first use of C/C++ header imports or C++ types in a state machine (a header import, a type
@@ -87,9 +91,9 @@ export interface GeneratedFunction {
     order: number;
 }
 
-/** A scope of the definition section: the unnamed interface, a named interface or the internal scope. */
+/** A scope of the definition section: the unnamed interface, a named interface, the internal scope or the C++ class sections. */
 export interface ScopeInfo {
-    kind: 'default' | 'named' | 'internal';
+    kind: 'default' | 'named' | 'internal' | 'class';
     /** Name of a named interface. */
     name?: string;
     /** Names of the variables of the scope. */
@@ -244,6 +248,10 @@ export abstract class StatechartGenerator implements ExpressionContext {
             if (ast.isInternalScope(scope)) {
                 key = '#internal';
                 info = { kind: 'internal', names: new UniqueNames(naming.keywords) };
+            } else if (ast.isClassScope(scope)) {
+                // members of the class sections keep their names (the application's C++ code uses them)
+                key = '#class';
+                info = { kind: 'class', names: new UniqueNames([]) };
             } else if (scope.name) {
                 key = scope.name;
                 info = { kind: 'named', name: scope.name, names: new UniqueNames(naming.keywords) };
@@ -258,7 +266,7 @@ export abstract class StatechartGenerator implements ExpressionContext {
                 if (ast.isEventDeclaration(declaration)) {
                     this.eventNames.set(declaration, events.get(ast.isInterfaceScope(scope) && scope.name ? `${scope.name}_${declaration.name}` : declaration.name));
                 } else if (ast.isVariableDeclaration(declaration)) {
-                    this.variableMembers.set(declaration, info.names.get(declaration.name));
+                    this.variableMembers.set(declaration, info.kind === 'class' ? declaration.name : info.names.get(declaration.name));
                     const type = typeOfVariable(declaration);
                     this.variableTypes.set(declaration, type === 'error' || type === 'void' ? 'integer' : type);
                 }
@@ -1059,8 +1067,19 @@ export abstract class StatechartGenerator implements ExpressionContext {
         return this.events.filter(e => this.index.eventDirection(e) === 'out');
     }
 
+    /** The operations of the interfaces and the internal scope (implemented by the host through callbacks). */
     protected get operations(): ast.OperationDeclaration[] {
-        return this.machine.scopes.flatMap(s => s.declarations).filter(ast.isOperationDeclaration);
+        return this.machine.scopes.filter(s => !ast.isClassScope(s)).flatMap(s => s.declarations).filter(ast.isOperationDeclaration);
+    }
+
+    /** The class sections (`public:`, `protected:`, `private:`) in text order. */
+    protected get classScopes(): ast.ClassScope[] {
+        return this.machine.scopes.filter(ast.isClassScope);
+    }
+
+    /** The variables of the interfaces and the internal scope (members of the class sections are not reset by `enter`). */
+    protected get scopeVariables(): ast.VariableDeclaration[] {
+        return this.index.variables().filter(v => !isClassMember(v));
     }
 
     protected get hasEvents(): boolean {

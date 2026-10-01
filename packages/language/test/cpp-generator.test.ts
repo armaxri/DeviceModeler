@@ -295,6 +295,35 @@ describe.skipIf(!GXX && !CLANGXX)('C++ code generator: examples', () => {
         }
     }, 60000);
 
+    test('the example examples/cpp-class-sections compiles with the member functions of the application and runs', async () => {
+        const source = path.join(exampleDirectory, 'cpp-class-sections');
+        const read = (name: string) => fs.readFileSync(path.join(source, name), 'utf-8');
+        const parsed = await parse(read('controller.hsm'), { 'config.h': read('config.h') });
+        expect(errors(parsed)).toEqual([]);
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cpp-class-sections-'));
+        try {
+            for (const variant of [{ standard: 17 as const, flags: FLAGS }, { standard: 11 as const, flags: [...FLAGS.filter(f => !f.startsWith('-std=')), '-std=c++11'] }]) {
+                const result = generateCpp(parsed.model, { standard: variant.standard });
+                expect(result.diagnostics).toEqual([]);
+                writeFiles(directory, result);
+                for (const name of ['config.h', 'driver.h', 'ControllerMethods.cpp', 'main.cpp']) {
+                    fs.writeFileSync(path.join(directory, name), read(name));
+                }
+                const sources = ['main.cpp', 'ControllerMethods.cpp', 'Controller.cpp'];
+                for (const compiler of compilers.slice(1)) {
+                    for (const file of sources) {
+                        await run(compiler, [...variant.flags, '-fsyntax-only', file], { cwd: directory });
+                    }
+                }
+                await run(compilers[0], [...variant.flags, '-o', 'controller', ...sources], { cwd: directory });
+                const { stdout } = await run(path.join(directory, 'controller'), [], { cwd: directory });
+                expect(stdout).toBe('power on\npower off\npower on\npower off\ngave up: yes\n');
+            }
+        } finally {
+            fs.rmSync(directory, { recursive: true, force: true });
+        }
+    }, 60000);
+
     test('names that clash with the generated code are renamed', async () => {
         const parsed = await parse([
             'statemachine M {',

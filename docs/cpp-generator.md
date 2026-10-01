@@ -10,7 +10,8 @@ Options: `--namespace a::b` (default: the `namespace` of the model, `""` for non
 `--std 11` (the code is written for C++17; with `--std 11` it also compiles as C++11 – the only
 difference are nested namespace definitions). Models importing C/C++ headers ([C/C++ header
 imports](language.md#cc-header-imports)) get `#include`s of the headers and use their types, enumerators and constants
-by name.
+by name. The [C++ class sections](#c-class-sections) (`public:`, `protected:`, `private:`) add data members and member
+functions to the class.
 
 The code implements [`docs/semantics.md`](semantics.md) exactly like the interpreter: every scenario
 of the conformance suite is compiled with g++ (`-std=c++17 -Wall -Wextra -Wpedantic -Werror -Wshadow
@@ -165,3 +166,62 @@ g++ -std=c++17 -Wall -Wextra -Igen -o traffic-light main.cpp gen/TrafficLight.cp
 The test harnesses are generated from the scenarios by `generateCppScenarioHarness(api, scenario)`
 (mocked operation callbacks with scripted results, a virtual timer service, observers recording the out
 events); `HSM_CXXFLAGS='-O1 -fsanitize=address,undefined' npm test` runs them with sanitizers.
+
+## C++ class sections
+
+The members of the [class sections](language.md#c-class-sections) `public:`, `protected:` and `private:` are
+declared in the generated class with that access, in the order of the model, after the generated API and with
+their documentation comments:
+
+| Model | Generated class |
+|---|---|
+| `var errorCnt : unsigned int = 0` | `unsigned int errorCnt = 0;` (default member initializer: initialized at construction, not reset by `enter()`) |
+| `var config : EpicProject::Config` | `EpicProject::Config config{};` (no initial value: value-initialized) |
+| `const maxErrors : unsigned int = 3` | `const unsigned int maxErrors = 3;` |
+| `operation setConfig(config : const EpicProject::Config&)` | `void setConfig(const EpicProject::Config& config);` |
+| `operation retryAllowed() : bool` | `bool retryAllowed();` |
+| `operation name(prefix : string) : string` | `sc::string name(const sc::string& prefix);` (HSM types like in the rest of the API) |
+
+The C++ types are written as in the model; the model uses data members and member functions directly
+(`errorCnt = static_cast<unsigned int>(int_add(errorCnt, 1));`, `setup();`), without getters, setters or
+callbacks. The member functions are **declared, not defined**: the application implements them in a source
+file of its own (the generated files are not edited), where they have access to all members of the class –
+also to the private data members and to the generated API:
+
+```cpp
+// ControllerMethods.cpp (examples/cpp-class-sections)
+#include "Controller.h"
+#include "driver.h"
+
+namespace example {
+
+void Controller::setConfig(const EpicProject::Config& value) {
+    config = value;
+}
+
+void Controller::setDriver(EpicProject::Driver* value) {
+    driver = value;
+}
+
+void Controller::setup() {
+    if (driver != nullptr) {
+        driver->powerOn();
+    }
+}
+
+void Controller::shutdown() {
+    if (driver != nullptr) {
+        driver->powerOff();
+    }
+}
+
+}  // namespace example
+```
+
+Compile it with the generated source (`g++ -std=c++17 -I. -Igen main.cpp ControllerMethods.cpp gen/Controller.cpp`;
+with CMake, add it to the target of `hsm_generate`). A member function the model calls but the application does
+not define is a linker error. The member functions are not `virtual` (no vtable, no subclass needed); a
+subclass of the generated class can use the `protected` members. Tip: give the parameters of the definitions
+other names than the data members (`value` instead of `config`), otherwise `-Wshadow` warns. The example
+[`examples/cpp-class-sections`](../examples/cpp-class-sections) (model, header, implementation, `main.cpp` and unit
+tests) is compiled and run by `npm test`. The scenario harnesses define the member functions as mocks.

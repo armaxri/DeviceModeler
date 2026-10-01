@@ -36,3 +36,5 @@ export * from './cpp-headers.js';
 export * from './cpp-types.js';
 export * from './cpp-storage.js';
 export * from './lsp/cpp-lsp.js';
+export * from './class-members.js';
+export * from './hsm-value-converter.js';

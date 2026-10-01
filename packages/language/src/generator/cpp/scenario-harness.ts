@@ -102,7 +102,8 @@ class CppHarnessGenerator {
             '}',
             '',
             `} // namespace ${this.namespace}`,
-            ''
+            '',
+            ...this.methods()
         ];
         if (this.options.main ?? true) {
             lines.push('int main() {', `    return ${this.namespace}::run();`, '}', '');
@@ -125,11 +126,15 @@ class CppHarnessGenerator {
             lines.push(
                 `    static ${type} get_${variable.name}(const ${this.api.className}& machine) {`,
                 `        return machine.${member};`,
-                '    }',
-                `    static void set_${variable.name}(${this.api.className}& machine, ${type} value) {`,
-                `        machine.${member} = value;`,
                 '    }'
             );
+            if (!variable.const) {
+                lines.push(
+                    `    static void set_${variable.name}(${this.api.className}& machine, ${type} value) {`,
+                    `        machine.${member} = value;`,
+                    '    }'
+                );
+            }
         }
         lines.push('};', '');
         if (this.api.namespace) {
@@ -138,40 +143,50 @@ class CppHarnessGenerator {
         return lines;
     }
 
+    /**
+     * The body of a mocked operation: records the call and returns the scripted values (the counter of the
+     * scripted values is declared by the caller; `undefined`: no counter needed).
+     */
+    private mockBody(operation: ast.OperationDeclaration, counter: string, parameterNames = this.api.operationParameterNames(operation)): { body: string[], counter?: string } {
+        const name = this.index.declarationName(operation);
+        const returnType = returnTypeOf(operation);
+        const scripted = this.scenario.operations?.[name] ?? this.scenario.operations?.[operation.name] ?? [];
+        const body: string[] = [`std::string hsm_text = ${cString(`${name}(`)};`];
+        let first = true;
+        operation.parameters.forEach((parameter, k) => {
+            const parameterName = parameterNames[k];
+            const format = `${this.namespace}::format(${parameter.varArgs ? 'hsm_value' : parameterName})`;
+            if (parameter.varArgs) {
+                body.push(`for (const auto& hsm_value : ${parameterName}) {`, `    hsm_text += hsm_text.back() == '(' ? "" : ",";`, `    hsm_text += ${format};`, '}');
+            } else {
+                body.push(...(first ? [] : ['hsm_text += ",";']), `hsm_text += ${format};`);
+            }
+            first = false;
+        });
+        body.push('hsm_text += ")";', `${this.namespace}::calls.push_back(hsm_text);`);
+        if (returnType === 'void') {
+            return { body };
+        }
+        if (scripted.length === 0) {
+            body.push(`return ${defaultLiteral(returnType)};`);
+            return { body };
+        }
+        body.push(
+            `static const ${this.api.declaredType(operation)} hsm_values[] = {${scripted.map(v => this.literal(v, returnType)).join(', ')}};`,
+            `return hsm_values[${counter} < ${scripted.length} ? ${counter}++ : ${scripted.length - 1}];`
+        );
+        return { body, counter };
+    }
+
     private callbacks(): string[] {
         const lines: string[] = [];
         this.api.operationScopes.forEach((scope, i) => {
             lines.push(`class Callbacks${i} : public Machine::${scope.callbackClass} {`, 'public:');
             const counters: string[] = [];
             scope.operations.forEach((operation, j) => {
-                const name = this.index.declarationName(operation);
-                const returnType = returnTypeOf(operation);
-                const scripted = this.scenario.operations?.[name] ?? this.scenario.operations?.[operation.name] ?? [];
-                const body: string[] = [`std::string hsm_text = ${cString(`${name}(`)};`];
-                const parameterNames = this.api.operationParameterNames(operation);
-                let first = true;
-                operation.parameters.forEach((parameter, k) => {
-                    const parameterName = parameterNames[k];
-                    const format = `${this.namespace}::format(${parameter.varArgs ? 'hsm_value' : parameterName})`;
-                    if (parameter.varArgs) {
-                        body.push(`for (const auto& hsm_value : ${parameterName}) {`, `    hsm_text += hsm_text.back() == '(' ? "" : ",";`, `    hsm_text += ${format};`, '}');
-                    } else {
-                        body.push(...(first ? [] : ['hsm_text += ",";']), `hsm_text += ${format};`);
-                    }
-                    first = false;
-                });
-                body.push('hsm_text += ")";', 'calls.push_back(hsm_text);');
-                if (returnType !== 'void') {
-                    if (scripted.length > 0) {
-                        const counter = `hsm_next${j}`;
-                        counters.push(`std::size_t ${counter} = 0;`);
-                        body.push(
-                            `static const ${this.api.declaredType(operation)} hsm_values[] = {${scripted.map(v => this.literal(v, returnType)).join(', ')}};`,
-                            `return hsm_values[${counter} < ${scripted.length} ? ${counter}++ : ${scripted.length - 1}];`
-                        );
-                    } else {
-                        body.push(`return ${defaultLiteral(returnType)};`);
-                    }
+                const { body, counter } = this.mockBody(operation, `hsm_next${j}`);
+                if (counter) {
+                    counters.push(`std::size_t ${counter} = 0;`);
                 }
                 lines.push(`    ${this.api.declaredType(operation)} ${operation.name}(${this.api.operationParameters(operation)}) override {`, ...indent(body, 2), '    }');
             });
@@ -180,6 +195,18 @@ class CppHarnessGenerator {
             }
             lines.push('};', '');
         });
+        return lines;
+    }
+
+    /** Definitions of the member functions of the class sections (implemented by the application): mocks like the callbacks. */
+    private methods(): string[] {
+        const lines: string[] = [];
+        for (const operation of this.api.classMethods) {
+            // (own parameter names: the names of the model may be names of members, -Wshadow)
+            const names = operation.parameters.map((_, i) => `hsm_arg${i}`);
+            const { body, counter } = this.mockBody(operation, 'hsm_next', names);
+            lines.push(`${this.api.methodDefinition(operation, names)} {`, ...indent([...(counter ? [`static std::size_t ${counter} = 0;`] : []), ...body]), '}', '');
+        }
         return lines;
     }
 

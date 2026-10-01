@@ -20,6 +20,8 @@ packages/
     src/cpp-headers.ts          `import "motor_types.h"`: header store, settings, path resolution
     src/cpp-types.ts            C++ types and constants of headers in the HSM type system
     src/cpp-storage.ts          storage types (`std::uint8_t`, …): width preserving values
+    src/class-members.ts        C++ class sections (`public:` …): C++ types of members, members the model cannot use
+    src/hsm-value-converter.ts  value converter: white space of (C++) type names (`unsigned int`)
     src/cpp-header/             C++ header analyzer: lexer, preprocessor, parser, type index, constant evaluation
     src/node/                   Node.js host of header imports (file system, `headers` of hsm.gen.json)
     src/lsp/                    hover, go to definition and completion of C++ names (VS Code and web)
@@ -58,7 +60,7 @@ packages/
     src/common/protocol.ts      messages between extension host and webview
     scripts/                    esbuild / Vite bundling and packaging of the .vsix
 examples/       sample state machines; tests: their unit tests; door-with-motor: imports and submachines;
-                cpp-types: C++ header types; cmake: CMake example
+                cpp-types: C++ header types; cpp-class-sections: members of the generated C++ class; cmake: CMake example
 cmake/          CMake integration (HsmGenerate.cmake: hsm_generate, hsm_add_tests; HsmConfig.cmake)
 docs/           execution semantics, C++ integration, possible improvements, generated example docs
 ```

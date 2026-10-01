@@ -32,7 +32,9 @@ statemachine MotorControl {
 }
 ```
 
-Operations stay callbacks: functions and classes with methods in the headers are **not** used.
+Operations stay callbacks: functions and classes with methods in the headers are **not** used. (Member
+functions and data members of the generated class itself are declared in the model, in the
+[C++ class sections](language.md#c-class-sections) `public:` / `protected:` / `private:`.)
 The simulator understands the imported types and constants; the C++ generator `#include`s the
 headers and uses the types directly.
 

@@ -43,6 +43,12 @@ as **Deviation**.
 - A variable without declared type has the type of its initializer (no initializer: `integer`).
 - Variables and constants are initialized in declaration order when the state machine is entered
   (`enter`). Without initializer: `0`, `0.0`, `false`, `""`.
+  **Exception:** the variables and constants of the C++ class sections (`public:`, `protected:`, `private:`,
+  data members of the generated C++ class) are initialized once, in declaration order, when the state machine
+  object is created (the interpreter is constructed); `enter` does not reset them. Their initial values may
+  only use literals, C++ constants and the members of the class sections declared before.
+- The operations of the C++ class sections (member functions implemented by the application) are called
+  like operations: the interpreter calls the operation registered by the host under their name.
 - **Operations** are implemented by the host (the application using the state machine). The
   interpreter lets the host register callbacks; an unregistered operation returns the default
   value of its return type. A result that does not fit the return type is a runtime error.

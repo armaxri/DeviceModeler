@@ -72,36 +72,49 @@ export namespace Hsm {
         | "alias"
         | "always"
         | "as"
+        | "bool"
+        | "char"
         | "choice"
         | "const"
         | "deephistory"
         | "default"
+        | "double"
         | "else"
         | "entry"
         | "event"
         | "every"
         | "exit"
         | "false"
+        | "float"
         | "history"
         | "import"
         | "in"
+        | "int"
         | "interface"
         | "internal"
         | "junction"
+        | "long"
         | "namespace"
         | "null"
         | "oncycle"
         | "operation"
         | "out"
+        | "private"
+        | "protected"
+        | "public"
         | "raise"
         | "readonly"
         | "region"
+        | "short"
+        | "signed"
         | "state"
         | "statemachine"
         | "sync"
         | "true"
+        | "unsigned"
         | "valueof"
         | "var"
+        | "void"
         | "{"
         | "|"
         | "|="
@@ -120,6 +133,7 @@ export namespace Hsm {
         BoolLiteral: BoolLiteral
         BuiltinTrigger: BuiltinTrigger
         CastExpression: CastExpression
+        ClassScope: ClassScope
         ConditionalExpression: ConditionalExpression
         CppReference: CppReference
         Declaration: Declaration
@@ -227,14 +241,20 @@ export namespace HsmTest {
         | "active"
         | "as"
         | "assert"
+        | "bool"
         | "called"
+        | "char"
         | "const"
+        | "double"
         | "else"
         | "enter"
         | "exit"
         | "false"
+        | "float"
         | "for"
         | "if"
+        | "int"
+        | "long"
         | "message"
         | "mock"
         | "null"
@@ -243,12 +263,16 @@ export namespace HsmTest {
         | "raise"
         | "readonly"
         | "returns"
+        | "short"
+        | "signed"
         | "statemachine"
         | "testclass"
         | "times"
         | "true"
+        | "unsigned"
         | "valueof"
         | "var"
+        | "void"
         | "while"
         | "with"
         | "{"
@@ -273,6 +297,7 @@ export namespace HsmTest {
         BoolLiteral: BoolLiteral
         BuiltinTrigger: BuiltinTrigger
         CastExpression: CastExpression
+        ClassScope: ClassScope
         ConditionalExpression: ConditionalExpression
         CppReference: CppReference
         Declaration: Declaration
@@ -480,6 +505,12 @@ export function isAssignmentStatement(item: unknown): item is AssignmentStatemen
     return reflection.isInstance(item, AssignmentStatement.$type);
 }
 
+export type BaseTypeName = string;
+
+export function isBaseTypeName(item: unknown): item is BaseTypeName {
+    return typeof item === 'string';
+}
+
 export interface BinaryExpression extends langium.AstNode {
     readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'BinaryExpression';
@@ -559,6 +590,23 @@ export const CastExpression = {
 
 export function isCastExpression(item: unknown): item is CastExpression {
     return reflection.isInstance(item, CastExpression.$type);
+}
+
+export interface ClassScope extends langium.AstNode {
+    readonly $container: StateMachine;
+    readonly $type: 'ClassScope';
+    access: 'private' | 'protected' | 'public';
+    declarations: Array<Declaration>;
+}
+
+export const ClassScope = {
+    $type: 'ClassScope',
+    access: 'access',
+    declarations: 'declarations'
+} as const;
+
+export function isClassScope(item: unknown): item is ClassScope {
+    return reflection.isInstance(item, ClassScope.$type);
 }
 
 export interface ConditionalExpression extends langium.AstNode {
@@ -659,7 +707,7 @@ export function isEnterStatement(item: unknown): item is EnterStatement {
 }
 
 export interface EventDeclaration extends langium.AstNode {
-    readonly $container: InterfaceScope | InternalScope;
+    readonly $container: ClassScope | InterfaceScope | InternalScope;
     readonly $type: 'EventDeclaration';
     direction?: 'in' | 'out';
     name: string;
@@ -728,6 +776,12 @@ export const ExpressionStatement = {
 
 export function isExpressionStatement(item: unknown): item is ExpressionStatement {
     return reflection.isInstance(item, ExpressionStatement.$type);
+}
+
+export type FundamentalTypeName = string;
+
+export function isFundamentalTypeName(item: unknown): item is FundamentalTypeName {
+    return typeof item === 'string';
 }
 
 export interface HexLiteral extends langium.AstNode {
@@ -975,7 +1029,7 @@ export function isOperationCallStatement(item: unknown): item is OperationCallSt
 }
 
 export interface OperationDeclaration extends langium.AstNode {
-    readonly $container: InterfaceScope | InternalScope;
+    readonly $container: ClassScope | InterfaceScope | InternalScope;
     readonly $type: 'OperationDeclaration';
     name: string;
     parameters: Array<Parameter>;
@@ -1162,7 +1216,7 @@ export function isRegion(item: unknown): item is Region {
     return reflection.isInstance(item, Region.$type);
 }
 
-export type Scope = InterfaceScope | InternalScope;
+export type Scope = ClassScope | InterfaceScope | InternalScope;
 
 export const Scope = {
     $type: 'Scope'
@@ -1254,6 +1308,12 @@ export const StringLiteral = {
 
 export function isStringLiteral(item: unknown): item is StringLiteral {
     return reflection.isInstance(item, StringLiteral.$type);
+}
+
+export type TemplateArgument = string;
+
+export function isTemplateArgument(item: unknown): item is TemplateArgument {
+    return typeof item === 'string';
 }
 
 export interface TestClass extends langium.AstNode {
@@ -1377,7 +1437,7 @@ export function isTrigger(item: unknown): item is Trigger {
 }
 
 export interface TypeAliasDeclaration extends langium.AstNode {
-    readonly $container: InterfaceScope | InternalScope;
+    readonly $container: ClassScope | InterfaceScope | InternalScope;
     readonly $type: 'TypeAliasDeclaration';
     name: string;
     type: TypeReference;
@@ -1396,12 +1456,16 @@ export function isTypeAliasDeclaration(item: unknown): item is TypeAliasDeclarat
 export interface TypeReference extends langium.AstNode {
     readonly $container: CastExpression | EventDeclaration | OperationDeclaration | Parameter | TypeAliasDeclaration | VariableDeclaration;
     readonly $type: 'TypeReference';
-    name: TypeReferenceName;
+    const: boolean;
+    name: BaseTypeName | TypeReferenceName;
+    reference?: '&&' | '&';
 }
 
 export const TypeReference = {
     $type: 'TypeReference',
-    name: 'name'
+    const: 'const',
+    name: 'name',
+    reference: 'reference'
 } as const;
 
 export function isTypeReference(item: unknown): item is TypeReference {
@@ -1447,7 +1511,7 @@ export function isValueOfExpression(item: unknown): item is ValueOfExpression {
 }
 
 export interface VariableDeclaration extends langium.AstNode {
-    readonly $container: InterfaceScope | InternalScope | LocalVariableStatement | TestOperation;
+    readonly $container: ClassScope | InterfaceScope | InternalScope | LocalVariableStatement | TestOperation;
     readonly $type: 'VariableDeclaration';
     const: boolean;
     initialValue?: Expression;
@@ -1655,6 +1719,20 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
                 }
             },
             superTypes: [Expression.$type]
+        },
+        ClassScope: {
+            name: ClassScope.$type,
+            properties: {
+                access: {
+                    name: ClassScope.access
+                },
+                declarations: {
+                    name: ClassScope.declarations,
+                    defaultValue: [],
+                    optional: true
+                }
+            },
+            superTypes: [Scope.$type]
         },
         ConditionalExpression: {
             name: ConditionalExpression.$type,
@@ -2350,8 +2428,17 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
         TypeReference: {
             name: TypeReference.$type,
             properties: {
+                const: {
+                    name: TypeReference.const,
+                    defaultValue: false,
+                    optional: true
+                },
                 name: {
                     name: TypeReference.name
+                },
+                reference: {
+                    name: TypeReference.reference,
+                    optional: true
                 }
             },
             superTypes: []

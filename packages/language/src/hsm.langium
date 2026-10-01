@@ -59,13 +59,22 @@ Annotation:
     '@' name=ID ('(' (arguments+=Expression (',' arguments+=Expression)*)? ')')?;
 
 Scope:
-    InterfaceScope | InternalScope;
+    InterfaceScope | InternalScope | ClassScope;
 
 InterfaceScope:
     'interface' (name=ID)? ':' declarations+=Declaration*;
 
 InternalScope:
     {infer InternalScope} 'internal' ':' declarations+=Declaration*;
+
+// C++ class sections `public:`, `protected:` and `private:` (see docs/language.md#c-class-sections): their
+// variables, constants and operations are members of the generated C++ class with that access. Variables are
+// data members (initialized when the object is constructed, not reset by `enter()`), operations are member
+// functions declared by the generated header and implemented by the application. Their types are C++ types
+// (`unsigned int`, `const app::Config&`, `hal::Driver*`, `std::array<int, 4>`). They are used in the model by
+// their simple names, like the members of the internal scope.
+ClassScope:
+    access=('public' | 'protected' | 'private') ':' declarations+=Declaration*;
 
 Declaration:
     EventDeclaration | VariableDeclaration | OperationDeclaration | TypeAliasDeclaration;
@@ -90,11 +99,32 @@ TypeAliasDeclaration:
 // aliases (`Name` or `Interface.Name` for aliases of a named interface), imported state machines
 // (a variable of such a type is a submachine instance) and C++ types of imported headers
 // (`motor::Mode`, `::Color`, `uint8_t`), see hsm-typesystem.ts and cpp-types.ts.
+//
+// In the C++ class sections, types are C++ types: fundamental types (`unsigned int`, `double`), `const`,
+// references (`const app::Config&`), pointers (`hal::Driver*`) and template arguments (`std::array<int, 4>`,
+// `std::map<int, std::string>`); elsewhere these forms are reported by the validator. `name` is the type
+// without the leading `const` and the reference (the value converter normalizes the white space:
+// `unsigned int`, `std::vector<const char*>`).
 TypeReference:
-    name=TypeReferenceName;
+    (const?='const')? name=TypeReferenceName (reference=('&' | '&&'))?;
+
+// a type without `const`, references, pointers and template arguments (casts: `x as uint8_t`)
+SimpleTypeReference infers TypeReference:
+    name=BaseTypeName;
 
 TypeReferenceName returns string:
-    '::'? ID (('.' | '::') ID)*;
+    BaseTypeName ('<' TemplateArgument (',' TemplateArgument)* ('>' | '>>')?)? '*'*;
+
+// (`>>` closes two template argument lists: `std::vector<std::vector<int>>`; the validator checks the brackets)
+TemplateArgument returns string:
+    'const'? TypeReferenceName ('&' | '&&')? | INT;
+
+BaseTypeName returns string:
+    FundamentalTypeName | '::'? ID (('.' | '::') ID)*;
+
+// C++ keywords of fundamental types (only C++ class sections may use them, except `void`)
+FundamentalTypeName returns string:
+    ('void' | 'bool' | 'char' | 'short' | 'int' | 'long' | 'signed' | 'unsigned' | 'float' | 'double')+;
 
 // ---------------------------------------------------------------------------------------------
 // States
@@ -226,7 +256,7 @@ UnaryExpression infers Expression:
     | CastExpression;
 
 CastExpression infers Expression:
-    PostfixExpression ({infer CastExpression.operand=current} 'as' type=TypeReference)*;
+    PostfixExpression ({infer CastExpression.operand=current} 'as' type=SimpleTypeReference)*;
 
 // `x++` / `x--`: increments / decrements the variable, the value is the value before the operation
 PostfixExpression infers Expression:

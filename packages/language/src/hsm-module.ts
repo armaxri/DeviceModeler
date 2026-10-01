@@ -12,6 +12,7 @@ import { HsmDocumentBuilder, HsmLinker } from './hsm-linker.js';
 import { HsmImportResolver } from './imports.js';
 import { HsmImportValidator, registerImportValidationChecks } from './hsm-import-validator.js';
 import { HsmScopeProvider } from './hsm-scope.js';
+import { HsmValueConverter } from './hsm-value-converter.js';
 import { HsmValidator, registerValidationChecks } from './hsm-validator.js';
 import { HsmTestModule, type HsmTestServices } from './testing/hsm-test-module.js';
 import { registerTestValidationChecks } from './testing/hsm-test-validator.js';
@@ -30,6 +31,9 @@ export type HsmAddedServices = {
 export type HsmServices = LangiumServices & HsmAddedServices;
 
 export const HsmModule: Module<HsmServices, PartialLangiumServices & HsmAddedServices> = {
+    parser: {
+        ValueConverter: () => new HsmValueConverter()
+    },
     references: {
         ScopeProvider: (services) => new HsmScopeProvider(services),
         Linker: (services) => new HsmLinker(services),

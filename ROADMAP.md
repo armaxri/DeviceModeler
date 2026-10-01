@@ -48,6 +48,14 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
     `std::array`, whole-array assignment of C arrays, unsaved header edits in VS Code (headers are read from
     disk), viewing headers in the web editor, go to definition into headers in the web editor
   - 💭 functions of headers as operations (callbacks generated from declarations)
+- ✅ **C++ class sections** `public:`, `protected:`, `private:` ([docs/language.md](docs/language.md#c-class-sections)):
+  variables, constants and operations that are members of the generated C++ class with that access, C++ types
+  (`unsigned int`, `const T&`, pointers, template arguments), doc comments copied into the header; member functions
+  implemented by the application, data members initialized at construction (not reset by `enter()`); members whose
+  types the model does not know are declared for the C++ code only; interpreter, unit tests, scenario
+  `s10-cpp-class-sections`, example [`examples/cpp-class-sections`](examples/cpp-class-sections)
+  - 💭 `virtual` / pure virtual and `const` member functions, `static` members, constructor parameters (reference
+    members), includes of system headers without analysis (`#include <vector>`)
 
 ## Phase 2 – Structure parity ✅
 

@@ -14,6 +14,8 @@ import {
     CPP_KEYWORDS, CPP_RESERVED_NAMES, cppDeclaredType, cppDefault, cppParameterType, cppSpelling, cppType, lineComment, RUNTIME_HEADER, RUNTIME_HEADER_CONTENT
 } from './cpp-code.js';
 import { integerRange, storageOfTypeReference } from '../../cpp-storage.js';
+import { isClassMember, isHsmTypeReference, isUsableInModel, writtenCppType } from '../../class-members.js';
+import { cppDocComment } from './cpp-doc.js';
 import { resolvedImports } from '../../imports.js';
 import type { CppResolvedType } from '../../cpp-header/model.js';
 
@@ -103,7 +105,7 @@ export interface CppApi {
     getter(variable: ast.VariableDeclaration): string;
     /** Setter of a variable of an interface (`undefined` for constants and read-only variables). */
     setter(variable: ast.VariableDeclaration): string | undefined;
-    /** Whether a declaration belongs to the internal scope (only accessible through {@link internalsStruct}). */
+    /** Whether a declaration belongs to the internal scope or a C++ class section (accessed through {@link internalsStruct}). */
     isInternal(declaration: ast.Declaration): boolean;
     /** Member expression of a variable of the internal scope, relative to the state machine object (`internal.lights`). */
     internalMember(variable: ast.VariableDeclaration): string;
@@ -117,6 +119,10 @@ export interface CppApi {
     operationParameters(operation: ast.OperationDeclaration): string;
     /** Names of the parameters of the callback method of an operation. */
     operationParameterNames(operation: ast.OperationDeclaration): string[];
+    /** The operations of the C++ class sections that the model can call (member functions implemented by the application). */
+    readonly classMethods: readonly ast.OperationDeclaration[];
+    /** The head of the definition of a member function of a class section (`void a::M::setup()`), optionally with other parameter names. */
+    methodDefinition(operation: ast.OperationDeclaration, parameterNames?: readonly string[]): string;
 }
 
 export interface CppGeneratorResult {
@@ -217,7 +223,7 @@ class CppGenerator extends StatechartGenerator {
                 throw new GeneratorError(`The interface name '${scope.name}' is a C++ keyword; rename the interface`, this.machine);
             }
         }
-        for (const operation of this.operations) {
+        for (const operation of [...this.operations, ...this.classMethods]) {
             if (invalid(operation.name)) {
                 throw new GeneratorError(`The operation name '${operation.name}' is a C++ keyword; rename the operation`, operation);
             }
@@ -225,6 +231,21 @@ class CppGenerator extends StatechartGenerator {
                 this.operationParamNames.set(parameter, invalid(parameter.name) ? `${cIdentifier(parameter.name)}_` : parameter.name);
             }
         }
+        for (const variable of this.classVariables) {
+            if (invalid(variable.name)) {
+                throw new GeneratorError(`The member name '${variable.name}' is a C++ keyword; rename the variable`, variable);
+            }
+        }
+    }
+
+    /** The operations of the C++ class sections: member functions implemented by the application. */
+    private get classMethods(): ast.OperationDeclaration[] {
+        return this.classScopes.flatMap(s => s.declarations).filter(ast.isOperationDeclaration);
+    }
+
+    /** The variables and constants of the C++ class sections: data members of the class. */
+    private get classVariables(): ast.VariableDeclaration[] {
+        return this.classScopes.flatMap(s => s.declarations).filter(ast.isVariableDeclaration);
     }
 
     // -----------------------------------------------------------------------------------------
@@ -320,6 +341,9 @@ class CppGenerator extends StatechartGenerator {
     // ExpressionContext
 
     variable(variable: ast.VariableDeclaration): string {
+        if (isClassMember(variable)) {
+            return variable.name;
+        }
         return `${this.scopeMember(this.scopeOf(variable))}.${this.variableMembers.get(variable)}`;
     }
 
@@ -331,6 +355,10 @@ class CppGenerator extends StatechartGenerator {
         const texts = operation.parameters.map((parameter, index) => parameter.varArgs
             ? `{${args[index].map(arg => stripParens(arg.text)).join(', ')}}`
             : stripParens(args[index][0].text));
+        if (isClassMember(operation)) {
+            // a member function of a class section, implemented by the application
+            return `${operation.name}(${texts.join(', ')})`;
+        }
         return `${this.operationWrapper(operation)}(${texts.join(', ')})`;
     }
 
@@ -398,6 +426,11 @@ class CppGenerator extends StatechartGenerator {
 
     /** The C++ type of a declaration in the generated code (see {@link CppApi.declaredType}). */
     declaredType(declaration: ast.VariableDeclaration | ast.EventDeclaration | ast.Parameter | ast.OperationDeclaration): string {
+        if (isClassMember(declaration)) {
+            return ast.isVariableDeclaration(declaration) ? this.memberType(declaration.type, this.variableType(declaration))
+                : ast.isOperationDeclaration(declaration) ? this.methodReturnType(declaration)
+                    : ast.isParameter(declaration) ? this.memberType(declaration.type, typeOfParameter(declaration)) : 'void';
+        }
         if (ast.isVariableDeclaration(declaration)) {
             return cppDeclaredType(declaration.type, this.variableType(declaration));
         }
@@ -408,6 +441,69 @@ class CppGenerator extends StatechartGenerator {
             return cppDeclaredType(declaration.type, typeOfParameter(declaration));
         }
         return declaration.returnType ? cppDeclaredType(declaration.returnType, returnTypeOf(declaration)) : 'void';
+    }
+
+    // ----- members of the C++ class sections
+
+    /** The C++ type of a member, parameter or return type of a class section: HSM types like in the API, C++ types as written. */
+    private memberType(reference: ast.TypeReference | undefined, type: HsmType): string {
+        if (!reference || isHsmTypeReference(reference)) {
+            return cppDeclaredType(reference, type);
+        }
+        return writtenCppType(reference);
+    }
+
+    private methodReturnType(operation: ast.OperationDeclaration): string {
+        return operation.returnType ? this.memberType(operation.returnType, returnTypeOf(operation)) : 'void';
+    }
+
+    /** The parameter list of a member function (HSM types like the callbacks: strings and structs by `const&`). */
+    private methodParameters(operation: ast.OperationDeclaration, names?: readonly string[]): string {
+        return operation.parameters.map((p, i) => {
+            const type = typeOfParameter(p);
+            const spelling = this.memberType(p.type, type);
+            const declared = p.varArgs ? `std::initializer_list<${spelling}>`
+                : p.type && isHsmTypeReference(p.type) ? cppParameterType(type, spelling) : spelling;
+            return `${declared} ${names?.[i] ?? this.operationParamNames.get(p)}`;
+        }).join(', ');
+    }
+
+    /**
+     * The declarations of the class sections (in text order, with their doc comments): data members with
+     * default member initializers and the member functions the application implements.
+     */
+    private classSections(): Array<{ access: string, lines: string[] }> {
+        return this.classScopes.map(scope => {
+            const lines: string[] = [];
+            for (const declaration of scope.declarations) {
+                const doc = cppDocComment(declaration);
+                if (lines.length > 0 && doc.length > 0) {
+                    lines.push('');
+                }
+                lines.push(...doc);
+                if (ast.isOperationDeclaration(declaration)) {
+                    lines.push(`${this.methodReturnType(declaration)} ${declaration.name}(${this.methodParameters(declaration)});`);
+                } else if (ast.isVariableDeclaration(declaration)) {
+                    lines.push(`${declaration.const ? 'const ' : ''}${this.declaredType(declaration)} ${declaration.name}${this.memberInitializer(declaration)};`);
+                }
+            }
+            return { access: scope.access, lines };
+        });
+    }
+
+    /** The default member initializer of a variable of a class section (` = value`, `{}` without initial value). */
+    private memberInitializer(variable: ast.VariableDeclaration): string {
+        if (!variable.initialValue) {
+            return '{}';
+        }
+        this.expressions.resetTemporaries();
+        const body = new CBlock();
+        const type = this.variableType(variable);
+        const value = this.expressions.value(variable.initialValue, type, body);
+        if (body.lines.length > 0) {
+            throw new GeneratorError(`The initial value of the member '${variable.name}' cannot be translated into a default member initializer`, variable);
+        }
+        return ` = ${stripParens(this.storageCast(storageOfTypeReference(variable.type), value))}`;
     }
 
     compareStrings(left: Code, right: Code, operator: '==' | '!='): string {
@@ -458,7 +554,7 @@ class CppGenerator extends StatechartGenerator {
 
     private resetData(): string {
         return this.use('reset_data', [], 'Sets all variables and event values to the default values of their types.', body => {
-            for (const variable of this.index.variables()) {
+            for (const variable of this.scopeVariables) {
                 body.add(`${this.variable(variable)} = ${this.defaultOf(variable.type, this.variableType(variable))};`);
             }
             for (const event of this.valueEvents) {
@@ -588,13 +684,14 @@ class CppGenerator extends StatechartGenerator {
     generate(): CppGeneratorResult {
         const api = this.createApi();
         const members = this.publicMembers();
+        const sections = this.classSections();
         this.flush();
         this.checkDuplicates(members);
         const dir = this.outDir ? this.outDir.replace(/\/+$/, '') + '/' : '';
         return {
             files: [
                 { path: `${dir}${RUNTIME_HEADER}`, content: RUNTIME_HEADER_CONTENT },
-                { path: `${dir}${this.fileBase}.h`, content: this.header(members) },
+                { path: `${dir}${this.fileBase}.h`, content: this.header(members, sections) },
                 { path: `${dir}${this.fileBase}.cpp`, content: this.source(members) }
             ],
             diagnostics: [],
@@ -676,7 +773,7 @@ class CppGenerator extends StatechartGenerator {
             observable: event => this.observableName(event),
             getter: variable => this.getterName(variable),
             setter: variable => this.setterName(variable),
-            isInternal: declaration => this.scopeOf(declaration).kind === 'internal',
+            isInternal: declaration => this.scopeOf(declaration).kind === 'internal' || this.scopeOf(declaration).kind === 'class',
             internalMember: variable => this.variable(variable),
             variableType: variable => this.variableType(variable),
             declaredType: declaration => this.declaredType(declaration),
@@ -687,7 +784,9 @@ class CppGenerator extends StatechartGenerator {
                     : scope.kind === 'named' ? `${machine}.get${scope.name}().setOperationCallback(${callback})`
                         : `${machine}.setOperationCallback(${callback})`
             })),
-            operationParameters: operation => this.callbackParameters(operation),
+            operationParameters: operation => isClassMember(operation) ? this.methodParameters(operation) : this.callbackParameters(operation),
+            classMethods: this.classMethods.filter(isUsableInModel),
+            methodDefinition: (operation, names) => `${this.methodReturnType(operation)} ${this.qualifiedClassName}::${operation.name}(${this.methodParameters(operation, names)})`,
             operationParameterNames: operation => operation.parameters.map(p => this.operationParamNames.get(p)!)
         };
     }
@@ -726,7 +825,7 @@ class CppGenerator extends StatechartGenerator {
             }
             this.clearEventFlags(body);
             body.add('running = true;');
-            const variables = this.index.variables().filter(v => v.initialValue);
+            const variables = this.scopeVariables.filter(v => v.initialValue);
             if (variables.length > 0) {
                 body.add(this.comment('variables and constants in declaration order'));
                 for (const variable of variables) {
@@ -866,7 +965,7 @@ class CppGenerator extends StatechartGenerator {
                     body.add(`return ${machine}${this.observableMember(event)};`);
                 });
         }
-        for (const variable of this.index.variables()) {
+        for (const variable of this.scopeVariables) {
             const scope = this.scopeOf(variable);
             if (scope.kind === 'internal') {
                 continue;
@@ -936,12 +1035,15 @@ class CppGenerator extends StatechartGenerator {
             ...members.get('')!.map(m => /\b(\w+)\(/.exec(m.declaration)?.[1] ?? '').filter(name => name && name !== this.className),
             ...this.outEvents.map(e => this.observableMember(e)),
             ...this.namedScopes.map(s => this.scopeMember(s)),
-            ...HELPER_ORDER
+            ...HELPER_ORDER,
+            ...this.classVariables.map(v => v.name),
+            ...this.classMethods.map(o => o.name)
         ];
         const seen = new Set<string>();
         for (const name of names) {
             if (seen.has(name) || RESERVED_MEMBERS.includes(name)) {
-                throw new GeneratorError(`The generated C++ identifier '${name}' is not unique; rename a state, event, variable, operation or interface`, this.machine);
+                throw new GeneratorError(`The generated C++ identifier '${name}' is not unique; rename a state, event, variable, operation or interface`
+                    + `${this.classVariables.some(v => v.name === name) || this.classMethods.some(o => o.name === name) ? ` (the member '${name}' of a class section is used by the generated class)` : ''}`, this.machine);
             }
             seen.add(name);
         }
@@ -976,7 +1078,7 @@ class CppGenerator extends StatechartGenerator {
         return result;
     }
 
-    private header(members: Map<string, Member[]>): string {
+    private header(members: Map<string, Member[]>, sections: Array<{ access: string, lines: string[] }>): string {
         const c = this.className;
         const guard = `${[...this.namespace.split('::').filter(p => p), c].join('_').toUpperCase()}_H_`;
         const lines: string[] = [
@@ -1013,6 +1115,7 @@ class CppGenerator extends StatechartGenerator {
             ' *',
             ` * Usage: create an instance, ${this.timers.length > 0 ? 'set the timer service (setTimerService), ' : ''}set the operation callbacks, call enter(),`,
             usage,
+            ...(this.classMethods.length > 0 ? [' * The member functions declared in the model (public:, protected:, private:) are implemented by the application.'] : []),
             ' * Runtime errors are thrown as sc::StatemachineError unless an error handler is set (setErrorHandler).',
             ` * Not thread-safe: call the member functions from one thread (or synchronize the calls).`,
             ' */',
@@ -1042,7 +1145,11 @@ class CppGenerator extends StatechartGenerator {
         for (const member of others.filter(m => !m.isPrivate)) {
             pub.push(`/** ${member.comment} */`, `${member.declaration};`);
         }
-        lines.push(...indent(pub), '', 'private:');
+        lines.push(...indent(pub));
+        for (const section of sections) {
+            lines.push('', `${section.access}:`, ...indent([this.comment(`declared in the model (${section.access}:)`), ...section.lines]));
+        }
+        lines.push('', 'private:');
         lines.push(...indent(this.privateSection(members)));
         lines.push('};', '');
         if (this.namespace) {
@@ -1174,6 +1281,9 @@ class CppGenerator extends StatechartGenerator {
             if (scope.kind === 'named') {
                 lines.push(`${scope.name} ${this.scopeMember(scope)}${this.needsMachine(scope) ? '{*this}' : ''};`);
                 continue;
+            }
+            if (scope.kind === 'class') {
+                continue; // data members declared in the class sections
             }
             const variables = [...this.variableMembers].filter(([v]) => this.scopeOf(v) === scope);
             if (variables.length === 0) {

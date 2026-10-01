@@ -28,6 +28,10 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
     enums, structs, type aliases and constants of the application's headers (`var mode : motor::Mode`,
     `pos.x = motor::kHome.x`), in the simulator, the unit tests and the generated C++ code (see
     [C/C++ header imports](docs/language.md#cc-header-imports))
+  - **C++ class sections** `public:` / `protected:` / `private:`: data members and member functions of the
+    generated C++ class with C++ types (`var errorCnt : unsigned int`, `operation setConfig(config : const
+    app::Config&)`), used in guards and effects, implemented by the application, with their doc comments (see
+    [C++ class sections](docs/language.md#c-class-sections))
 - **Language services** in the browser: syntax highlighting, validation, code completion (events,
   variables, operations, qualified state names), formatting, go to definition, find references and
   rename (Monaco editor).
@@ -122,7 +126,7 @@ node packages/language/bin/cli.js generate --check          # exit 1 if generate
 
 | Document | Content |
 | --- | --- |
-| [The language](docs/language.md) | syntax of the models: definition section, reactions, expressions, states, regions, pseudo states; imports and submachines; C/C++ header imports |
+| [The language](docs/language.md) | syntax of the models: definition section, reactions, expressions, states, regions, pseudo states; imports and submachines; C/C++ header imports; C++ class sections |
 | [Execution semantics](docs/semantics.md) | how a state machine executes – the specification implemented by the interpreter and the code generators |
 | [Web editor](docs/editor.md) | editing in the diagram, 🧪 manual layout, simulation |
 | [Manual layout](docs/manual-layout.md) | 🧪 experimental (branch `claude/layout-annotations`): layout annotations in the model, layout computation, routing, editor integration, migration |
