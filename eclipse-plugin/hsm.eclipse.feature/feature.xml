@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feature
+      id="hsm.eclipse.feature"
+      label="HSM Modeler (prototype)"
+      version="0.1.0.qualifier"
+      provider-name="HSM Modeler">
+
+   <description>
+      Editor for hierarchical state machines (.hsm): the HSM web app (text editor and PlantUML-style
+      diagram editor, simulation, export) in an embedded browser of the Eclipse IDE.
+   </description>
+
+   <license url="https://opensource.org/licenses/MIT">
+      See the LICENSE file of the HSM repository.
+   </license>
+
+   <plugin
+         id="hsm.eclipse"
+         version="0.0.0"/>
+
+</feature>

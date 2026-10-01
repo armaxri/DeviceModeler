@@ -1,0 +1,4 @@
+# copy of packages/web/dist (made by the Maven build, see ../README.md)
+/webapp/
+/bin/
+/target/

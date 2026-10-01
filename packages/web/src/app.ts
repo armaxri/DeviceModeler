@@ -8,6 +8,7 @@ import { createWorkerElk } from './diagram/elk.js';
 import { byId, download, h } from './ui/dom.js';
 import type { SimulationSession } from './simulation/session.js';
 import { EMPTY_MODEL, EXAMPLE_HEADERS, EXAMPLES } from './examples.js';
+import { HttpHost } from './host.js';
 
 export type { Tool } from './diagram-controller.js';
 
@@ -42,10 +43,20 @@ export class HsmApp implements DiagramHost {
      */
     private readonly files = new Map<string, string>();
     private settings: Settings = { direction: 'DOWN', routing: 'SPLINES', theme: 'classic', priorities: true };
+    /**
+     * The application that embeds the app (`?host=http`, e.g. the Eclipse plugin): it holds the edited file,
+     * its text is not kept in the browser storage and examples are not offered.
+     */
+    private readonly host = HttpHost.detect();
+    /** The text of the host's file (embedded app only). */
+    private hostText?: string;
     diagram!: DiagramController;
 
     async start(): Promise<void> {
         this.loadSettings();
+        if (this.host) {
+            await this.loadHostDocument();
+        }
         this.diagram = new DiagramController({ host: this, language: this.language, settings: this.settings, elk: createWorkerElk() });
         this.language.registerLanguage();
         this.createEditor();
@@ -71,6 +82,9 @@ export class HsmApp implements DiagramHost {
             if (stored) {
                 Object.assign(this.settings, JSON.parse(stored));
             }
+            if (this.host) {
+                return;
+            }
             this.fileName = localStorage.getItem(STORAGE_FILE) ?? this.fileName;
             const files = JSON.parse(localStorage.getItem(STORAGE_FILES) ?? '{}') as Record<string, string>;
             for (const [name, text] of Object.entries(files)) {
@@ -92,9 +106,9 @@ export class HsmApp implements DiagramHost {
     }
 
     private createEditor(): void {
-        let text: string | null = null;
+        let text: string | null = this.hostText ?? null;
         try {
-            text = localStorage.getItem(STORAGE_TEXT);
+            text ??= localStorage.getItem(STORAGE_TEXT);
         } catch {
             // storage is not available
         }
@@ -119,10 +133,14 @@ export class HsmApp implements DiagramHost {
         byId('file-name').textContent = this.fileName;
         this.updateWorkspace();
         this.editor.onDidChangeModelContent(() => {
-            try {
-                localStorage.setItem(STORAGE_TEXT, this.editor.getValue());
-            } catch {
-                // storage is not available
+            if (this.host) {
+                this.host.changed(() => this.editor.getValue());
+            } else {
+                try {
+                    localStorage.setItem(STORAGE_TEXT, this.editor.getValue());
+                } catch {
+                    // storage is not available
+                }
             }
             if (!this.applyingEdit) {
                 this.diagram.scheduleUpdate();
@@ -228,7 +246,14 @@ export class HsmApp implements DiagramHost {
             }
             fileInput.value = '';
         });
-        byId('btn-save').addEventListener('click', () => download(this.fileName, this.editor.getValue(), 'text/plain'));
+        byId('btn-save').addEventListener('click', () => this.save());
+        if (this.host) {
+            // the files come from the host (e.g. the Eclipse workspace)
+            for (const id of ['example-select', 'btn-new', 'btn-open']) {
+                byId(id).hidden = true;
+            }
+            byId('btn-save').title = 'Save the model (Ctrl+S)';
+        }
         byId('btn-undo').addEventListener('click', () => this.diagram.undo());
         byId('btn-redo').addEventListener('click', () => this.diagram.redo());
         byId('btn-format').addEventListener('click', () => this.editor.getAction('editor.action.formatDocument')?.run());
@@ -280,8 +305,69 @@ export class HsmApp implements DiagramHost {
             if (event.key === 'Escape' && !byId('modal').hidden) {
                 this.closeModal();
                 event.stopImmediatePropagation();
+            } else if (this.host && (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                this.save();
             }
         }, { capture: true });
+    }
+
+    /** *Save*: downloads the model, or saves it in the host. */
+    private save(): void {
+        if (this.host) {
+            this.host.save(this.editor.getValue()).then(
+                () => this.setStatus(`Saved ${this.fileName}.`),
+                error => this.setStatus(`Save failed: ${error instanceof Error ? error.message : String(error)}`, 'error'));
+        } else {
+            download(this.fileName, this.editor.getValue(), 'text/plain');
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Embedded app (`?host=http`)
+
+    /** Takes the edited file and the files it may import from the host. */
+    private async loadHostDocument(): Promise<void> {
+        const document = await this.host!.load();
+        this.fileName = document.fileName;
+        this.hostText = document.text;
+        this.files.clear();
+        for (const [name, text] of Object.entries(document.files ?? {})) {
+            this.files.set(name, text);
+        }
+        this.files.set(this.fileName, document.text);
+    }
+
+    /**
+     * Called by the host when files were changed outside of the app: loads the files the model may
+     * import again and, with `replaceText` (the edited file was changed, e.g. by another editor), its text.
+     */
+    async reloadFromHost(replaceText = false): Promise<void> {
+        if (!this.host) {
+            return;
+        }
+        const text = this.editor.getValue();
+        await this.loadHostDocument();
+        if (!replaceText) {
+            this.files.set(this.fileName, text);
+        } else if (text !== this.hostText) {
+            if (this.diagram.simulation) {
+                this.diagram.stopSimulation();
+            }
+            // an edit (not setValue): undo stays possible
+            const model = this.editor.getModel()!;
+            this.applyingEdit = true;
+            try {
+                this.editor.pushUndoStop();
+                this.editor.executeEdits('host', [{ range: model.getFullModelRange(), text: this.hostText! }]);
+                this.editor.pushUndoStop();
+            } finally {
+                this.applyingEdit = false;
+            }
+        }
+        this.updateWorkspace();
+        await this.diagram.update(true);
     }
 
     private bindSplitter(): void {
@@ -355,11 +441,13 @@ export class HsmApp implements DiagramHost {
     /** The texts the edited file may import: the examples, overridden by the opened / edited files. */
     private workspaceFiles(): Record<string, string> {
         const files: Record<string, string> = {};
-        for (const example of EXAMPLES) {
-            files[FILE_BASE + example.fileName] = example.text;
-        }
-        for (const [name, text] of Object.entries(EXAMPLE_HEADERS)) {
-            files[FILE_BASE + name] = text;
+        if (!this.host) {
+            for (const example of EXAMPLES) {
+                files[FILE_BASE + example.fileName] = example.text;
+            }
+            for (const [name, text] of Object.entries(EXAMPLE_HEADERS)) {
+                files[FILE_BASE + name] = text;
+            }
         }
         for (const [name, text] of this.files) {
             files[FILE_BASE + name] = text;
@@ -407,6 +495,9 @@ export class HsmApp implements DiagramHost {
     }
 
     private saveFiles(): void {
+        if (this.host) {
+            return;
+        }
         try {
             localStorage.setItem(STORAGE_FILES, JSON.stringify(Object.fromEntries(this.files)));
         } catch {
@@ -416,6 +507,16 @@ export class HsmApp implements DiagramHost {
 
     /** Double-click on a submachine state: opens the file of its state machine if it is available. */
     openStateMachine(submachine: DiagramSubmachine): boolean {
+        if (this.host && submachine.uri?.startsWith(FILE_BASE)) {
+            // the host opens the file in its own editor
+            const path = decodeURIComponent(submachine.uri.substring(FILE_BASE.length));
+            this.host.open(path).then(opened => {
+                if (!opened) {
+                    this.setStatus(`The file ${path} of the state machine ${submachine.machine} could not be opened.`, 'warning');
+                }
+            }, error => this.setStatus(String(error), 'error'));
+            return true;
+        }
         const fileName = submachine.uri?.startsWith('memory:') ? decodeURIComponent(submachine.uri.replace(/^.*\//, '')) : undefined;
         if (fileName && this.openFile(fileName)) {
             this.setStatus(`Opened ${fileName} (state machine ${submachine.machine} of the instance ${submachine.instance}).`);
@@ -535,18 +636,26 @@ export class HsmApp implements DiagramHost {
     /** Export of the diagram as SVG or PNG (chosen in a dialog). */
     private showExport(): void {
         const base = this.fileName.replace(/\.[^.]+$/, '');
+        const store = async (fileName: string, content: string | Blob, type: string) => {
+            if (this.host) {
+                // embedded browsers do not offer downloads: the host stores the file
+                this.setStatus(await this.host.export(fileName, content));
+            } else {
+                download(fileName, content, type);
+            }
+        };
         const choose = (format: 'svg' | 'png') => async () => {
             this.closeModal();
             try {
                 if (format === 'svg') {
                     const svg = this.diagram.exportSvg();
                     if (svg) {
-                        download(`${base}.svg`, svg, 'image/svg+xml');
+                        await store(`${base}.svg`, svg, 'image/svg+xml');
                     }
                 } else {
                     const png = await this.diagram.exportPng();
                     if (png) {
-                        download(`${base}.png`, png, 'image/png');
+                        await store(`${base}.png`, png, 'image/png');
                     }
                 }
             } catch (error) {
