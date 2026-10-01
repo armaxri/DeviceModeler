@@ -58,11 +58,14 @@ packages/
     src/webview/                diagram webview: the DiagramController of packages/web with a VS Code DiagramHost
     src/common/protocol.ts      messages between extension host and webview
     scripts/                    esbuild / Vite bundling and packaging of the .vsix
-  standalone/   self-contained `hsm` executable (Node.js single executable application, docs/standalone.md)
-    src/main.ts                 entry point: no arguments / `ui` -> web app server, otherwise the CLI of packages/language
-    src/ui-server.ts            local HTTP server of the embedded web app (127.0.0.1 only, Host header check)
-    src/web-files.ts            the web app files: SEA assets of the executable, or a directory (development)
-    scripts/                    build.mjs (Vite + esbuild bundle), sea.mjs (executable), smoke-test.mjs
+  desktop/      desktop app "HSM Modeler" (Electron, docs/installation.md)
+    src/main.ts                 main process: windows, menus, file dialogs, recent files, dirty state, smoke test mode
+    src/server.ts               loopback HTTP server of the windows (Host / Origin checks, tokens)
+    src/file-host.ts            the file API of the embedded web app (?host=http, same protocol as the Eclipse plugin)
+    scripts/                    build.mjs (Vite + esbuild), package.mjs (electron-builder), smoke-test.mjs
+  cli/          self-contained `hsm` command line executable (Node.js single executable application)
+    src/main.ts                 entry point: --version / --help, otherwise the CLI of packages/language
+    scripts/                    build.mjs (esbuild bundle), sea.mjs (executable), smoke-test.mjs
 eclipse-plugin/ Eclipse plugin (prototype, Maven / Tycho): the web app (packages/web/dist, embedded mode of src/host.ts)
                 in an SWT browser, served by a small HTTP server of the plugin; the editor loads / saves the workspace file
 examples/       sample state machines; tests: their unit tests; door-with-motor: imports and submachines;

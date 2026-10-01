@@ -1,160 +1,184 @@
-# Self-contained executable
+# Installation and usage
 
-`hsm` (`hsm.exe` on Windows) is a single file containing the graphical editor (the web app) and the
-command line tool. Users need neither Node.js nor npm: download, unpack, run.
+The HSM Modeler comes in four forms. All of them use the same language implementation (`packages/language`)
+and the same graphical editor (the web app of `packages/web`):
 
-- `hsm` without arguments starts the editor: a small web server on `127.0.0.1` serves the web app and
-  the default browser opens it. It runs until `Ctrl+C` (or until the terminal window is closed).
-- `hsm <command> …` is the command line tool, with exactly the commands and options described in the
-  [README](../README.md#command-line) (`validate`, `generate`, `test`, `render`, `doc`, `import`, …).
+| | For | Needs |
+| --- | --- | --- |
+| [**Desktop app**](#desktop-app) *HSM Modeler* | editing models: text and diagram side by side, simulation, export | nothing (Windows, macOS, Linux) |
+| [**Command line tool**](#command-line-tool-hsm) `hsm` | validation, code generation, tests, rendering in builds and CI | nothing (one executable) |
+| [**VS Code extension**](#vs-code-extension) | models and tests in VS Code: language server, diagram, Test Explorer | VS Code ≥ 1.95 |
+| [**Eclipse plugin**](#eclipse-plugin) (prototype) | the graphical editor for `.hsm` files of an Eclipse workspace | Eclipse ≥ 2025-06 (older untested), Java 21 |
 
-## Download
+## Downloads
 
-The [releases](https://github.com/armaxri/HSM/releases) of version tags have one archive per platform;
-the [*Executables* workflow](../.github/workflows/executables.yml) also builds them for every push and
-pull request (artifacts of the workflow run, kept for 90 days).
+Every [release](https://github.com/armaxri/HSM/releases) (version tag `v<version>`) contains all of them;
+the [*Distribution* workflow](../.github/workflows/distribution.yml) also builds them for every push and pull
+request (artifacts of the workflow run, kept for 90 days). `SHA256SUMS.txt` lists the checksums.
 
-| Platform | File |
-| --- | --- |
-| Windows x64 | `hsm-<version>-windows-x64.zip` |
-| macOS Apple silicon | `hsm-<version>-macos-arm64.tar.gz` |
-| macOS Intel | `hsm-<version>-macos-x64.tar.gz` |
-| Linux x64 | `hsm-<version>-linux-x64.tar.gz` (glibc ≥ 2.28, e.g. Ubuntu ≥ 20.04, Debian ≥ 10, RHEL ≥ 8) |
-| Linux arm64 | `hsm-<version>-linux-arm64.tar.gz` (glibc ≥ 2.28) |
+| Platform | Desktop app | Command line tool |
+| --- | --- | --- |
+| Windows x64 | `hsm-modeler-<version>-windows-x64-setup.exe` (installer, per user) or `…-windows-x64.zip` (portable) | `hsm-<version>-windows-x64.zip` |
+| macOS Apple silicon | `hsm-modeler-<version>-macos-arm64.dmg` (or `.zip`) | `hsm-<version>-macos-arm64.tar.gz` |
+| macOS Intel | `hsm-modeler-<version>-macos-x64.dmg` (or `.zip`) | `hsm-<version>-macos-x64.tar.gz` |
+| Linux x64 | `hsm-modeler-<version>-linux-x86_64.AppImage`, `…-linux-amd64.deb`, `…-linux-x64.tar.gz` | `hsm-<version>-linux-x64.tar.gz` |
+| Linux arm64 | `hsm-modeler-<version>-linux-arm64.AppImage`, `…-linux-arm64.deb`, `…-linux-arm64.tar.gz` | `hsm-<version>-linux-arm64.tar.gz` |
 
-`SHA256SUMS.txt` of the release lists the checksums. The executables are 100 – 130 MB (35 – 45 MB
-compressed): each contains a complete Node.js runtime.
+Independent of the platform: `hsm-vscode-<version>.vsix` (VS Code extension) and
+`hsm-eclipse-update-site-<version>.zip` (Eclipse update site archive).
 
-Put `hsm` into a directory of the `PATH` to use it like the npm installed command line tool, e.g. from
-the [CMake integration](build-integration.md#installing-the-command-line-tool), which finds `hsm` in the
-`PATH` (or set `-DHSM_EXECUTABLE=/path/to/hsm`).
+Sizes: the desktop app is about 115 MB to download (250 MB installed, most of it Electron/Chromium); the
+command line executable 100 – 130 MB (35 – 45 MB compressed, a complete Node.js runtime); the `.vsix`
+2 MB; the Eclipse update site 6 MB.
 
-### Unsigned executables
+### Unsigned downloads
 
-The executables are not signed with a certificate of Apple or Microsoft, so the operating systems warn
-before the first start:
+Nothing is signed with a certificate of Apple or Microsoft, so the operating systems warn before the
+first start:
 
-- **macOS** (Gatekeeper): the archive is unpacked with `tar -xzf hsm-…-macos-arm64.tar.gz`, then
-  `xattr -d com.apple.quarantine hsm` removes the quarantine flag of the download (or: try to start it
-  once, then *System Settings → Privacy & Security → Open Anyway*). The executable has an ad-hoc
-  signature, which Apple silicon requires to run it at all.
+- **macOS** (Gatekeeper): open the `.dmg`, drag *HSM Modeler* to *Applications*; at the first start
+  macOS refuses to open it – *System Settings → Privacy & Security → Open Anyway* (or remove the
+  quarantine flag: `xattr -dr com.apple.quarantine "/Applications/HSM Modeler.app"`). For the command
+  line tool: `tar -xzf hsm-…-macos-arm64.tar.gz && xattr -d com.apple.quarantine hsm`. App and executable
+  have an ad-hoc signature, which Apple silicon requires to run them at all.
 - **Windows** (SmartScreen): *More info → Run anyway*. Some virus scanners distrust unknown executables
-  that contain a Node.js runtime; the SHA-256 checksums allow checking the download.
-- **Linux**: `chmod +x hsm` if the executable bit got lost (it is kept in the `.tar.gz`).
+  that contain a Node.js or Electron runtime; the SHA-256 checksums allow checking the download.
+- **Linux**: `chmod +x hsm-modeler-…AppImage` (AppImages need FUSE 2: `sudo apt install libfuse2t64` on
+  Ubuntu ≥ 24.04), or `sudo apt install ./hsm-modeler-…-linux-amd64.deb` (installs `hsm-modeler` with a
+  desktop entry and the `.hsm` file type), or unpack the `.tar.gz` and start `hsm-modeler`. On Ubuntu ≥
+  24.04 the AppImage and the `.tar.gz` may need `--no-sandbox` (AppArmor restricts the Chromium sandbox
+  of applications outside of `/usr`); the `.deb` does not.
 
-## The editor (`hsm ui`)
+## Desktop app
 
-```text
-hsm                      start the graphical editor in the default browser (same as `hsm ui`)
-hsm ui [options]
-  -p, --port <port>      port on 127.0.0.1 (default: 51734; 0: a free port chosen by the system)
-  --no-open              do not open the browser
-  --json                 machine readable output: one JSON line per event on stdout
-  --exit-on-stdin-close  stop the server when stdin is closed
-hsm --version            prints the version (only the version number, e.g. 0.1.0)
-hsm --help
-```
+*HSM Modeler* is the graphical editor as a desktop application: every model opens in a native window
+with the text editor, the diagram, the properties, the simulation and the export (the same editor as the
+web app, see [Web editor](editor.md)) and is read from and saved to its file on disk.
 
-The editor is the same web app as `npm run dev`: it keeps the open model and the files of the workspace
-in the **browser storage** (`localStorage`), *Open…* reads files of the computer, *Save* and *Export…*
-download files. The browser storage belongs to the address including the port, therefore `hsm ui` uses
-the fixed port 51734: the next start finds the files again. If the port is used by another program, a free
-port is taken (with an empty storage); if it is used by a running `hsm`, the browser just opens that one.
+- **File menu**: *New Model* (`Ctrl+N`; the file is chosen on the first save), *Open…* (`Ctrl+O`, several
+  files at once), *Open Folder…* (`Ctrl+Shift+O`: a list of the models of a folder, with *New model*), *Open
+  Recent*, *Save* (`Ctrl+S`), *Save As…* (`Ctrl+Shift+S`), *Close Window*. On macOS `Cmd` instead of `Ctrl`.
+- **Starting with files**: `HSM Modeler model.hsm other.hsm folder/` (Linux: `hsm-modeler …`), double-click
+  on a `.hsm` file (the installers register the file type), or drop it on the Dock icon (macOS). A second
+  start passes its files to the running app. Without files a new model opens.
+- **Imports and submachines**: a model can import the `.hsm` models and C/C++ headers below its *root
+  folder*: the folder of the model, or the folder opened with *Open Folder…* if the model is inside of it
+  (use *Open Folder…* for `import "../motor.hsm"`). Double-clicking a submachine state opens its model in
+  a new window. *Export…* writes the SVG / PNG next to the model, *Generate C++* into the configured output
+  directory (both only inside the root folder).
+- **Unsaved changes**: the title shows `●` (macOS: the dot in the close button); closing a window or
+  quitting asks to save. Changes of the file on disk (another editor, git) are loaded into the window – after
+  a question if the window has unsaved changes; changed imports and generator configurations are loaded too.
+- The editor settings (theme, layout direction, …) are kept between starts.
 
-The server only listens on the loopback interface (`127.0.0.1`), answers only `GET` / `HEAD` requests
-whose `Host` header is `127.0.0.1`, `localhost` or `[::1]` (protection against DNS rebinding), and serves
-only the embedded files of the web app – it has no access to the file system.
+How it works: the Electron main process (`packages/desktop`) runs a small HTTP server on `127.0.0.1` for
+its own windows. It serves the web app and the same file API as the Eclipse plugin (the embedded mode
+`?host=http` of the web app, [`packages/web/src/host.ts`](../packages/web/src/host.ts)): every window has a
+random token in its URL, requests without a known token, with a foreign `Host` header (DNS rebinding) or a
+foreign `Origin` are rejected, and all paths are confined to the root folder of the window (`..` and
+symbolic links leading outside are rejected). The windows run sandboxed, without Node.js integration;
+links to other sites open in the default browser.
 
-## Embedding the editor (IDE integration)
+## Command line tool (`hsm`)
 
-An IDE plugin (e.g. the Eclipse prototype, which shows the web app in a browser widget) starts the server
-as a child process:
+`hsm` (`hsm.exe`) is a single executable with exactly the commands and options described in the
+[README](../README.md#command-line) (`validate`, `generate`, `test`, `render`, `doc`, `import`, `simulate`,
+…); without arguments it prints the help. Unpack it into a directory of the `PATH`; the
+[CMake integration](build-integration.md#installing-the-command-line-tool) finds it there (or set
+`-DHSM_EXECUTABLE=/path/to/hsm`).
 
 ```bash
-hsm ui --no-open --port 0 --json --exit-on-stdin-close
+hsm validate examples/cd-player.hsm
+hsm generate cpp examples/traffic-light.hsm -o gen
+hsm generate --check            # all models / targets of ./hsm.gen.json; exit 1 if out of date (CI)
+hsm test examples/tests/*.hsmtest --machine examples --junit report.xml
+hsm --version
 ```
 
-- `--port 0` lets the system choose a free port (no conflicts between several IDE instances; note that
-  the browser storage is then empty on every start).
-- `--json` prints events as single JSON lines on **stdout** (UTF-8, `\n` terminated); human readable
-  messages go to stderr. The first line is either
+With Node.js the same tool is available from the repository (`node packages/language/bin/cli.js …`, see
+the README).
 
-  ```json
-  {"event":"listening","url":"http://127.0.0.1:53187/","port":53187,"pid":4711,"version":"0.1.0"}
-  ```
+## VS Code extension
 
-  after which the URL can be loaded, or
+Install the `.vsix`: *Extensions* view → `…` → *Install from VSIX…*, or `code --install-extension
+hsm-vscode-<version>.vsix`. The extension brings its own language server (VS Code runs it with its
+Node.js runtime); it does not need the command line tool. Features and settings: [VS Code extension](vscode.md).
 
-  ```json
-  {"event":"error","message":"port 8080 is already in use"}
-  ```
+## Eclipse plugin
 
-  followed by exit code 1 (2 for invalid options). When the server stops, it prints `{"event":"stopped","reason":"SIGTERM"}`
-  (reasons: `SIGINT`, `SIGTERM`, `SIGHUP`, `stdin closed`). Consumers should ignore unknown events and
-  unknown properties (the format may get additional ones).
-- `--exit-on-stdin-close`: the server stops when its stdin reaches end of file, i.e. when the parent
-  process closes the pipe or terminates (also if it crashes). Without this flag, the parent has to
-  terminate the process (`SIGTERM`; on Windows `Process.destroy()` / `TerminateProcess`).
-- `GET /api/info` answers `{"app":"hsm-modeler","version":"0.1.0","pid":4711}` (e.g. as health check).
-- Exit codes: `0` stopped normally, `1` the server could not start, `2` invalid options.
+*Help → Install New Software… → Add… → Archive…* → `hsm-eclipse-update-site-<version>.zip`, select *HSM
+Modeler (prototype)* (uncheck *Group items by category* if the list is empty), accept the warning about
+unsigned content and restart. Double-clicking a `.hsm` file in the Project Explorer opens the graphical
+editor; *Open With → Text Editor* still opens the plain text. Details, requirements and the development
+setup: [eclipse-plugin/README.md](../eclipse-plugin/README.md).
 
-Java example (Eclipse):
+## How the downloads are built
 
-```java
-Process process = new ProcessBuilder(hsm, "ui", "--no-open", "--port", "0", "--json", "--exit-on-stdin-close")
-        .redirectError(ProcessBuilder.Redirect.INHERIT)
-        .start();
-BufferedReader out = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
-String line = out.readLine();   // {"event":"listening","url":"http://127.0.0.1:53187/",...}
-// parse "url", load it into the browser widget; keep process.getOutputStream() open while the editor
-// is needed, close it (or call process.destroy()) to stop the server
-```
+The [*Distribution* workflow](../.github/workflows/distribution.yml) builds everything on native runners
+(desktop app and command line tool for linux-x64, linux-arm64, macos-arm64, macos-x64 and windows-x64),
+smoke-tests the desktop app and the executables and, for version tags, creates the GitHub release with all
+files and `SHA256SUMS.txt`.
 
-Not available yet (possible next steps): opening a given model file (`hsm ui model.hsm`) and saving back
-to the file system. The web app currently only works with browser storage and downloads; a file API of the
-server (bound to `127.0.0.1`, with a per-start access token and restricted to the opened directory) would
-make that possible, as would a host bridge like the one of the VS Code webview.
-
-## How it is built
-
-The executable is a [Node.js single executable application](https://nodejs.org/api/single-executable-applications.html)
-(SEA), made by `packages/standalone`:
-
-1. `scripts/build.mjs` builds the web app (Vite, `packages/web/dist`) and bundles the entry point
-   `src/main.ts` with the command line tool and all dependencies into one CommonJS file (esbuild,
-   `dist/hsm.cjs`, about 2.6 MB). The web app files become SEA assets.
-2. `scripts/sea.mjs` downloads the official Node.js binary (currently v24 LTS, verified against the
-   published SHA-256 checksums, cached in `packages/standalone/.cache`), generates the SEA blob and
-   injects it into a copy of the binary with [postject](https://github.com/nodejs/postject). On macOS
-   the executable is then signed ad hoc (`codesign --sign -`).
-3. `scripts/smoke-test.mjs` checks an executable: `--version`, CLI commands on the examples and the UI
-   server in the embedding mode.
-
-`src/main.ts` dispatches: no arguments or `ui` → `src/ui-server.ts`; `--version` / `--help`; everything
-else is passed to the command line tool of `packages/language` (`src/cli/main.ts`) unchanged.
-
-Locally (Node.js ≥ 20.10 for the build; the result does not need it):
+Locally (Node.js ≥ 20.10; for the Eclipse plugin also Java 21 and Maven ≥ 3.9):
 
 ```bash
 npm ci
-npm run build:exe                                     # packages/standalone/dist/bin/<platform>/hsm
-node packages/standalone/scripts/smoke-test.mjs       # test it
-node packages/standalone/dist/hsm.cjs ui              # the bundle with the installed Node.js (development)
+npm run package:desktop                   # packages/desktop/release/: installers of the current platform
+node packages/desktop/scripts/smoke-test.mjs
+npm start -w packages/desktop             # the desktop app from the sources (development)
+npm run build:exe                         # packages/cli/dist/bin/<platform>/hsm
+node packages/cli/scripts/smoke-test.mjs
+npm run package:vscode                    # packages/vscode/hsm-vscode-<version>.vsix
+npm run build -w packages/web && (cd eclipse-plugin && mvn verify)   # eclipse-plugin/hsm.eclipse.site/target/*.zip
 ```
 
-Other targets: `node packages/standalone/scripts/sea.mjs --target linux-x64` (after `scripts/build.mjs`;
-targets `linux-x64`, `linux-arm64`, `macos-x64`, `macos-arm64`, `windows-x64`, `windows-arm64`;
-`--archive` also writes the release archive to `dist/release/`). Cross-building works for Linux and
-Windows; macOS executables must be built on a Mac (signing). The version is that of
-`packages/standalone/package.json`, or `HSM_VERSION` (set by the workflow from the tag `v<version>`).
+If `npm ci` did not download Electron (`node_modules/electron/dist` missing), run
+`node node_modules/electron/install.js`.
 
-Why a Node.js SEA (and not Bun or Deno `compile`, or `pkg`): the executable runs exactly the runtime
-the tool is developed and tested with (Node.js), with an official, maintained mechanism of Node.js, and the
-build only needs npm packages; `pkg` is discontinued, Bun and Deno would be a second runtime with their own
-compatibility questions. The price is the size (Node.js binary of about 100 – 120 MB).
+### Desktop app (`packages/desktop`)
 
-## Releases
+- `scripts/build.mjs` builds the web app (Vite, `packages/web/dist` → `dist/web`) and bundles the main
+  process (`src/main.ts`, `src/server.ts`, `src/file-host.ts`) with esbuild into `dist/main.cjs`.
+- `scripts/package.mjs` packages it with [electron-builder](https://www.electron.build) for the current
+  platform (`--arch x64|arm64`; `--dir`: only the unpacked app): `.dmg` + `.zip` (macOS, ad-hoc signed,
+  not notarized), NSIS installer + `.zip` (Windows), AppImage + `.deb` + `.tar.gz` (Linux), with the file
+  association for `.hsm`. Everything is bundled, the app contains no `node_modules`.
+- `scripts/smoke-test.mjs` starts the packaged app (or Electron with `dist/` in development) with
+  `--smoke-test <copy of examples/cd-player.hsm>`: a hidden window opens the model, waits until the diagram
+  shows its states, edits the text and saves it through the page, then the app exits (on Linux CI under
+  `xvfb-run`).
 
-Pushing a tag `v<version>` (e.g. `git tag v0.2.0 && git push origin v0.2.0`) builds all executables
-with that version and attaches the archives and `SHA256SUMS.txt` to the GitHub release of the tag
-(created with generated release notes if it does not exist).
+Why Electron: the editor is a static web app (Langium, ELK and the simulator run in the page), which
+Electron shows unchanged; the main process is Node.js like the rest of the tool chain, so the file access
+is plain TypeScript, shared in spirit and protocol with the Eclipse plugin. Tauri would be much smaller but
+needs Rust and a system WebView per platform (WebKitGTK on Linux renders differently) and a Node.js sidecar
+for everything that is not in the page. The price is the size of the Chromium runtime.
+
+### Command line tool (`packages/cli`)
+
+A [Node.js single executable application](https://nodejs.org/api/single-executable-applications.html)
+(SEA):
+
+1. `scripts/build.mjs` bundles the entry point `src/main.ts` with the command line tool of
+   `packages/language` and all dependencies into one CommonJS file (esbuild, `dist/hsm.cjs`, about 2.6 MB).
+2. `scripts/sea.mjs` downloads the official Node.js binary (currently v24 LTS, verified against the
+   published SHA-256 checksums, cached in `packages/cli/.cache`), generates the SEA blob and injects it
+   into a copy of the binary with [postject](https://github.com/nodejs/postject). On macOS the
+   executable is then signed ad hoc (`codesign --sign -`). `--target linux-x64|linux-arm64|macos-x64|
+   macos-arm64|windows-x64|windows-arm64` builds for another platform (Linux and Windows can be
+   cross-built; macOS executables must be built on a Mac), `--archive` writes the release archive.
+3. `scripts/smoke-test.mjs` checks an executable: `--version`, `--help` and the commands on the examples.
+
+Why a Node.js SEA (and not Bun or Deno `compile`, or `pkg`): the executable runs exactly the runtime the
+tool is developed and tested with, with an official mechanism of Node.js; `pkg` is discontinued, Bun and
+Deno would be a second runtime with their own compatibility questions. It is a separate executable and
+not part of the desktop app because Electron applications are GUI applications on Windows (no console
+output) and the CLI is used in builds and CI, where a 250 MB Chromium runtime is not wanted.
+
+### Versions and releases
+
+The version is `HSM_VERSION` (set by the workflow from the tag `v<version>`) or that of the
+`package.json` of the package (Eclipse: `pom.xml`, set with `tycho-versions-plugin` for tags). Pushing a
+tag (`git tag v0.2.0 && git push origin v0.2.0`) builds everything with that version and attaches all files
+and `SHA256SUMS.txt` to the GitHub release of the tag (created with generated release notes if it does not
+exist).

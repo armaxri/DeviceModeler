@@ -87,21 +87,23 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
 
 ## Getting started
 
-### Without Node.js: the self-contained executable
+### Installation
 
-Download the archive of your platform (Windows x64, macOS arm64 / x64, Linux x64 / arm64) from the
-[releases](https://github.com/armaxri/HSM/releases) (or from the artifacts of the *Executables* workflow),
-unpack it and run `hsm`:
+Download from the [releases](https://github.com/armaxri/HSM/releases) (or the artifacts of the
+*Distribution* workflow) – no Node.js needed:
+
+- **Desktop app *HSM Modeler*** (Windows installer / zip, macOS `.dmg`, Linux AppImage / `.deb`): the
+  graphical editor in a native window, opening and saving `.hsm` files on disk.
+- **Command line tool `hsm`** (one executable per platform): all commands below, e.g. for builds and CI.
+- **VS Code extension** (`.vsix`) and **Eclipse plugin** (update site archive).
 
 ```bash
-hsm                                      # starts the editor in the browser (Ctrl+C stops it)
-hsm validate examples/cd-player.hsm      # with arguments: the command line tool (all commands below)
+hsm validate examples/cd-player.hsm
 hsm generate cpp examples/traffic-light.hsm -o gen
 ```
 
-The executables are not signed: see [Self-contained executable](docs/standalone.md#unsigned-executables)
-for the macOS and Windows warnings, the options of `hsm ui` (also for embedding the editor in an IDE)
-and how to build them (`npm run build:exe`).
+Nothing is signed with a certificate: see [Installation and usage](docs/installation.md) for the macOS and
+Windows warnings, the features of the desktop app and how everything is built.
 
 ### Development
 
@@ -115,11 +117,13 @@ npm run dev        # starts the editor on http://localhost:5173
 Other scripts:
 
 ```bash
-npm test           # unit tests of the language package and of the VS Code extension
+npm test           # unit tests of the language package, the VS Code extension and the desktop app
 npm run build      # langium generate + TypeScript build + web app (packages/web/dist) + extension bundles (packages/vscode/dist)
 npm run typecheck
 npm run package:vscode   # packages/vscode/hsm-vscode-<version>.vsix
-npm run build:exe        # packages/standalone/dist/bin/<platform>/hsm: editor + CLI without Node.js
+npm run build:exe        # packages/cli/dist/bin/<platform>/hsm: the CLI without Node.js
+npm run package:desktop  # packages/desktop/release/: the desktop app (installers of this platform)
+npm start -w packages/desktop   # the desktop app from the sources
 ```
 
 ### Command line
@@ -148,7 +152,7 @@ node packages/language/bin/cli.js generate --check          # exit 1 if generate
 | [Execution semantics](docs/semantics.md) | how a state machine executes – the specification implemented by the interpreter and the code generators |
 | [Web editor](docs/editor.md) | editing in the diagram, 🧪 manual layout, simulation |
 | [Manual layout](docs/manual-layout.md) | 🧪 experimental (branch `claude/layout-annotations`): layout annotations in the model, layout computation, routing, editor integration, migration |
-| [Self-contained executable](docs/standalone.md) | `hsm` without Node.js: download, editor (`hsm ui`, embedding in IDEs), unsigned binaries, building |
+| [Installation and usage](docs/installation.md) | downloads, desktop app, command line executable `hsm`, VS Code, Eclipse; unsigned downloads; how they are built |
 | [VS Code extension](docs/vscode.md) | language server, diagram, generation, Test Explorer (details in [packages/vscode/README.md](packages/vscode/README.md)) |
 | [Rendering and model documentation](docs/rendering.md) | `hsm render` (SVG diagrams), `hsm doc` (Markdown / HTML documentation), doc comments |
 | [Unit tests and coverage](docs/testing.md) | the `.hsmtest` language, `hsm test`, model coverage, CI examples |
@@ -163,10 +167,10 @@ node packages/language/bin/cli.js generate --check          # exit 1 if generate
 
 ## Architecture
 
-The repository is an npm workspace with four packages: `packages/language` (the Langium language, CLI,
+The repository is an npm workspace with five packages: `packages/language` (the Langium language, CLI,
 interpreter, test runner, renderer and code generators – no DOM dependencies, runs in Node.js and in the
 browser), `packages/web` (the Vite web app: Monaco editor and Sprotty diagram), `packages/vscode` (the
-VS Code extension) and `packages/standalone` (the self-contained `hsm` executable: web app server and CLI
-in one file). The text is the single source of truth: diagram edits become text edits, which run
+VS Code extension), `packages/desktop` (the Electron desktop app around the web app) and `packages/cli`
+(the self-contained `hsm` command line executable); `eclipse-plugin/` is the Eclipse plugin (Maven / Tycho). The text is the single source of truth: diagram edits become text edits, which run
 through the same parse → validate → layout → render pipeline as typed changes. See
 [docs/architecture.md](docs/architecture.md) for the details.

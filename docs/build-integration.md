@@ -66,7 +66,7 @@ is available as `parseGeneratorConfig(json)` and `generateTarget(machine, target
 
 The CMake functions need the `hsm` command line tool (Node.js ≥ 20.10):
 
-- **Without Node.js**: the [self-contained executable](standalone.md) `hsm` in the `PATH` (or
+- **Without Node.js**: the [self-contained executable](installation.md#command-line-tool-hsm) `hsm` in the `PATH` (or
   `-DHSM_EXECUTABLE=/opt/hsm/hsm`); it has the same commands and options.
 - **In this repository**: `npm ci && npm run build -w packages/language`. `cmake/HsmGenerate.cmake` finds
   `packages/language/bin/cli.js` next to it automatically.

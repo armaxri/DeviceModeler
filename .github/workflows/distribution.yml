@@ -1,0 +1,230 @@
+# Everything users install (docs/installation.md), built on every push to main, every pull request and every
+# version tag (v1.2.3):
+#   - the desktop app "HSM Modeler" (Electron): macOS .dmg/.zip, Windows installer/.zip, Linux AppImage/.deb/.tar.gz
+#   - the command line executable `hsm` (Node.js single executable application) for 5 platforms
+#   - the VS Code extension (.vsix)
+#   - the Eclipse plugin (p2 update site archive)
+# Desktop app and command line tool are built natively on every platform (so that they can be smoke tested
+# and the macOS ones can be signed ad hoc). Every job uploads its files as a workflow artifact; for version
+# tags the release job attaches all of them and SHA256SUMS.txt to a GitHub release.
+# Nothing is signed with a certificate (see docs/installation.md#unsigned-downloads).
+name: Distribution
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: distribution-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  NODE_VERSION: 24
+
+jobs:
+  cli:
+    name: hsm CLI (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-x64, runner: ubuntu-latest }
+          - { target: linux-arm64, runner: ubuntu-24.04-arm }
+          - { target: macos-arm64, runner: macos-latest }
+          - { target: macos-x64, runner: macos-15-intel }
+          - { target: windows-x64, runner: windows-latest }
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Version of a release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: echo "HSM_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - run: npm ci
+      - name: Cache the Node.js binaries of the executables
+        uses: actions/cache@v4
+        with:
+          path: packages/cli/.cache
+          key: node-binaries-${{ matrix.target }}-${{ hashFiles('packages/cli/scripts/sea.mjs') }}
+      - name: Bundle the command line tool
+        run: node packages/cli/scripts/build.mjs
+      - name: Build the executable
+        run: node packages/cli/scripts/sea.mjs --target ${{ matrix.target }} --archive
+      - name: Smoke test
+        run: node packages/cli/scripts/smoke-test.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.target }}
+          path: packages/cli/dist/release/*
+          if-no-files-found: error
+
+  desktop:
+    name: Desktop app (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-x64, runner: ubuntu-latest, arch: x64 }
+          - { target: linux-arm64, runner: ubuntu-24.04-arm, arch: arm64 }
+          - { target: macos-arm64, runner: macos-latest, arch: arm64 }
+          - { target: macos-x64, runner: macos-15-intel, arch: x64 }
+          - { target: windows-x64, runner: windows-latest, arch: x64 }
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Version of a release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: echo "HSM_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - name: Linux packages (virtual display and libraries of Electron; fpm for .deb on arm64)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb libnss3 libgbm1 libasound2t64 libgtk-3-0t64
+          if [[ "${{ matrix.arch }}" == arm64 ]]; then
+            sudo gem install --no-document fpm
+            echo "USE_SYSTEM_FPM=true" >> "$GITHUB_ENV"
+          fi
+      - run: npm ci
+      - name: Download Electron (if the install script of the package did not run)
+        run: node node_modules/electron/install.js
+      - name: Cache the Electron downloads of electron-builder
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: electron-${{ matrix.target }}-${{ hashFiles('package-lock.json') }}
+      - name: Bundle (web app + main process)
+        run: node packages/desktop/scripts/build.mjs
+      - name: Package
+        working-directory: packages/desktop
+        run: node scripts/package.mjs --arch ${{ matrix.arch }}
+      - name: Smoke test (Linux, virtual display)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum node packages/desktop/scripts/smoke-test.mjs
+      - name: Smoke test
+        if: runner.os != 'Linux'
+        run: node packages/desktop/scripts/smoke-test.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.target }}
+          path: |
+            packages/desktop/release/*.dmg
+            packages/desktop/release/*.zip
+            packages/desktop/release/*.exe
+            packages/desktop/release/*.AppImage
+            packages/desktop/release/*.deb
+            packages/desktop/release/*.tar.gz
+          if-no-files-found: error
+
+  vscode:
+    name: VS Code extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Version of a release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npm pkg set "version=${GITHUB_REF_NAME#v}" -w packages/vscode
+      - name: Build and package the .vsix
+        run: |
+          npm run build -w packages/language
+          npm run package -w packages/vscode
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vscode
+          path: packages/vscode/*.vsix
+          if-no-files-found: error
+
+  eclipse:
+    name: Eclipse plugin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+          cache-dependency-path: eclipse-plugin/**/pom.xml
+      - run: npm ci
+      - name: Build the web app (packages/web/dist, copied into the plugin by Maven)
+        run: npm run build -w packages/web
+      - name: Version of a release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        working-directory: eclipse-plugin
+        run: mvn -B -ntp "org.eclipse.tycho:tycho-versions-plugin:5.0.4:set-version" "-DnewVersion=${GITHUB_REF_NAME#v}"
+      - name: Build plugin, feature and update site
+        working-directory: eclipse-plugin
+        run: mvn -B -ntp verify
+      - name: Name of the update site archive
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          [[ "$GITHUB_REF" == refs/tags/v* ]] || version="0.1.0-SNAPSHOT"
+          mkdir -p eclipse-release
+          cp eclipse-plugin/hsm.eclipse.site/target/hsm.eclipse.site-*.zip "eclipse-release/hsm-eclipse-update-site-${version}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eclipse
+          path: eclipse-release/*.zip
+          if-no-files-found: error
+
+  release:
+    name: GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [cli, desktop, vscode, eclipse]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Checksums
+        working-directory: release
+        run: |
+          ls -la
+          sha256sum -- * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release/* --title "HSM Modeler $GITHUB_REF_NAME" --generate-notes --verify-tag
+          fi
