@@ -1,23 +1,28 @@
 import type { Container } from 'inversify';
 import { LocalModelSource, TYPES, type IActionDispatcher, type SModelElementImpl } from 'sprotty';
-import { FitToScreenAction, SelectAction, SelectAllAction, CenterAction } from 'sprotty-protocol';
+import { FitToScreenAction, SelectAction, SelectAllAction, CenterAction, UpdateModelAction } from 'sprotty-protocol';
 import type { AstNode } from 'langium';
 import {
     EditError, ModelEditor, allVertices, applyEdits, definitionRange, isEventDeclaration, isInterfaceScope, isOperationDeclaration,
     isScopeContainer, isValidIdentifier, isPseudoState, isRegion, isState, isStateMachine, isTransition, isVertex, layoutStateMachine,
     qualifiedName, scopeOf, siblingVertices, transitionLabel, finalNodeId, DEFINITION_ID, MACHINE_ID,
-    nodeText as nodeTextOf, type DeletionTarget, type DiagramNode, type DiagramNodeKind, type DiagramSubmachine, type EdgeRouting, type EditResult, type LayoutDirection, type LayoutResult,
+    nodeText as nodeTextOf, type DeletionTarget, type DiagramEdge, type DiagramNode, type DiagramNodeKind, type DiagramSubmachine, type EdgeRouting, type EditResult,
+    type LayoutDirection, type LayoutResult,
     type NewVertexKind, type ParsedModel, type ScopeContainer, type TextEdit, type Transition, type TransitionSource, type TransitionTarget, type Vertex
+} from 'hsm-language';
+import {
+    applyManualLayout, captureLayout, cloneManualLayout, contentOrigin, diagramElementIds, layoutFromModel, layoutTextEdits, toFrameCoordinates,
+    type ManualLayout, type Point
 } from 'hsm-language';
 import { describeSyntaxProblem, type HsmModelService } from './model-service.js';
 import { createDiagramContainer } from './diagram/di.config.js';
-import type { DiagramCallbacks } from './diagram/listeners.js';
+import type { DiagramCallbacks, DragInfo } from './diagram/listeners.js';
 import { toSchema, type Issue } from './diagram/model.js';
 import { canvasTextMeasure } from './diagram/text-measure.js';
 import { byId, h } from './ui/dom.js';
 import { Icons } from './ui/icons.js';
 import { closeInlineEditor, showInlineEditor } from './ui/inline-editor.js';
-import { exportSvg } from './ui/export-svg.js';
+import { exportSvg, svgToPng } from './ui/export-svg.js';
 import { renderProperties, type PropertiesHost, type SelectionInfo } from './ui/properties.js';
 import { SimulationPanel } from './ui/simulation-panel.js';
 import { SimulationSession, canHaveBreakpoint } from './simulation/session.js';
@@ -56,10 +61,23 @@ const TOOLS: Array<ToolDescription | 'separator'> = [
 
 export interface ModelState {
     parsed: ParsedModel;
+    /** The automatic layout (reused for changes of the manual layout). */
+    auto: LayoutResult;
+    /** The diagram shown: the automatic layout or the manual layout applied to it. */
     layout: LayoutResult;
+    /**
+     * Manual layout (the model has layout annotations): all nodes pinned at their current positions
+     * (the base of layout changes). Undefined: automatic layout.
+     */
+    effective?: ManualLayout;
     nodes: Map<string, DiagramNode>;
+    /** diagram id -> id of the parent node (MACHINE_ID for top-level nodes) */
+    parents: Map<string, string>;
     issues: Map<string, Issue>;
 }
+
+/** Buttons of the layout (optional, bound if present): Auto-arrange, Automatic layout. */
+const LAYOUT_CONTROLS = ['btn-arrange', 'btn-reset-layout'];
 
 export type DiagramTheme = 'classic' | 'modern' | 'dark';
 
@@ -142,6 +160,8 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     readonly settings: DiagramSettings;
     private container!: Container;
     private modelSource!: LocalModelSource;
+    /** The next update follows a change of the layout annotations only (the automatic layout is reused). */
+    private layoutOnlyChange = false;
     private actionDispatcher!: IActionDispatcher;
 
     private state?: ModelState;
@@ -180,6 +200,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         this.createDiagram();
         this.createPalette();
         this.bindKeyboard();
+        this.bindLayoutControls();
         this.applyTheme();
     }
 
@@ -356,9 +377,10 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         if (!forceLayout && this.state?.parsed === parsed) {
             return;
         }
-        let layout: LayoutResult;
+        let auto = this.layoutOnlyChange && !forceLayout && this.state ? reuseAutoLayout(this.state, parsed) : undefined;
+        this.layoutOnlyChange = false;
         try {
-            layout = await layoutStateMachine(parsed.model, {
+            auto ??= await layoutStateMachine(parsed.model, {
                 direction: this.settings.direction,
                 routing: this.settings.routing,
                 measure: canvasTextMeasure,
@@ -374,13 +396,9 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         if (version !== this.updateVersion) {
             return;
         }
-        const nodes = new Map<string, DiagramNode>();
-        const collect = (node: DiagramNode) => {
-            nodes.set(node.id, node);
-            node.children.forEach(collect);
-        };
-        layout.graph.children.forEach(collect);
-        this.state = { parsed, layout, nodes, issues: this.computeIssues(parsed, layout, nodes) };
+        this.state = this.createState(parsed, auto);
+        const layout = this.state.layout;
+        const nodes = this.state.nodes;
 
         // keep the selection for elements which still exist
         for (const id of [...this.selection]) {
@@ -412,10 +430,37 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         }
     }
 
+    /**
+     * The diagram of the model: the automatic layout, adjusted by the layout annotations of the model
+     * (manual layout) if it has any.
+     */
+    private createState(parsed: ParsedModel, auto: LayoutResult): ModelState {
+        let layout: LayoutResult = auto;
+        let effective: ManualLayout | undefined;
+        const manual = layoutFromModel(parsed.model);
+        if (manual) {
+            const result = applyManualLayout(auto, manual, {
+                direction: this.settings.direction, measure: canvasTextMeasure, routing: this.settings.routing
+            });
+            layout = result;
+            effective = result.effective;
+        }
+        const nodes = new Map<string, DiagramNode>();
+        const parents = new Map<string, string>();
+        const collect = (node: DiagramNode, parent: string) => {
+            nodes.set(node.id, node);
+            parents.set(node.id, parent);
+            node.children.forEach(child => collect(child, node.id));
+        };
+        layout.graph.children.forEach(child => collect(child, MACHINE_ID));
+        return { parsed, auto, layout, effective, nodes, parents, issues: this.computeIssues(parsed, layout, nodes) };
+    }
+
     private async render(): Promise<void> {
         if (!this.state) {
             return;
         }
+        this.updateLayoutControls();
         const flags = this.simulationFlags();
         this.renderedFlags = flags?.key ?? '';
         const schema = toSchema(this.state.layout.graph, {
@@ -425,6 +470,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             activeStates: flags?.active,
             recentTransitions: flags?.recent,
             breakpoints: flags?.breakpoints,
+            layoutEditable: !this.simulationSession,
             instanceTexts: flags?.instanceTexts
         });
         if (!this.rendered) {
@@ -432,7 +478,11 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             await this.modelSource.setModel(schema);
             requestAnimationFrame(() => this.fit(false));
         } else {
-            await this.modelSource.updateModel(schema);
+            // not animated: an animated update can be interrupted (e.g. by the selection or a drag) and
+            // leave vertices at their previous or dragged positions while their transitions are routed to
+            // the new ones
+            (this.modelSource as unknown as { currentRoot: typeof schema }).currentRoot = schema;
+            await this.actionDispatcher.dispatch(UpdateModelAction.create(schema, { animate: false }));
             if (this.fitOnNextRender) {
                 this.fitOnNextRender = false;
                 requestAnimationFrame(() => this.fit(false));
@@ -503,9 +553,12 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
 
     /**
      * Computes text edits based on the current model and applies them to the text (undoable),
-     * then updates the diagram.
+     * then updates the diagram. The layout annotations follow renamed, moved and deleted elements
+     * (ModelEditor). `layoutChange` adjusts the layout of the changed model further (e.g. the position of
+     * a moved state); its annotation edits are applied together with the edit as one undoable step.
      */
-    async applyEdit(producer: (editor: ModelEditor, state: ModelState) => EditResult | undefined): Promise<boolean> {
+    async applyEdit(producer: (editor: ModelEditor, state: ModelState) => EditResult | undefined,
+        layoutChange?: (layout: ManualLayout | undefined, model: ParsedModel) => ManualLayout | undefined): Promise<boolean> {
         if (this.simulationSession) {
             this.setStatus('Stop the simulation to edit the model.', 'warning');
             return false;
@@ -518,8 +571,9 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             return false;
         }
         let result: EditResult | undefined;
+        const editor = new ModelEditor(this.state.parsed.text, this.state.parsed.model);
         try {
-            result = producer(new ModelEditor(this.state.parsed.text, this.state.parsed.model), this.state);
+            result = producer(editor, this.state);
         } catch (error) {
             if (error instanceof EditError) {
                 this.setStatus(error.message, 'error');
@@ -535,13 +589,35 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         if (focused instanceof HTMLButtonElement && byId('properties').contains(focused)) {
             focused.blur();
         }
-        if (!await this.host.applyTextEdits(result.edits)) {
+        let edits = result.edits;
+        if (layoutChange) {
+            edits = await this.withLayoutChange(this.state.parsed.text, edits, layoutChange);
+        }
+        if (!await this.host.applyTextEdits(edits)) {
             this.pendingRename = false;
             return false;
         }
         this.pendingSelectOffset = result.selectOffset;
         await this.update();
         return true;
+    }
+
+    /**
+     * The structural `edits` followed by the layout annotation edits of `layoutChange` (computed on the
+     * changed text, so that their ranges do not overlap), as one edit of the original text.
+     */
+    private async withLayoutChange(text: string, edits: TextEdit[],
+        layoutChange: (layout: ManualLayout | undefined, model: ParsedModel) => ManualLayout | undefined): Promise<TextEdit[]> {
+        const changed = applyEdits(text, edits);
+        const parsed = await this.language.parse(changed);
+        if (parsed.hasSyntaxErrors) {
+            return edits;
+        }
+        const layoutEdits = layoutTextEdits(parsed.model, changed, layoutChange(layoutFromModel(parsed.model), parsed));
+        if (layoutEdits.length === 0) {
+            return edits;
+        }
+        return [replacementEdit(text, applyEdits(changed, layoutEdits))];
     }
 
     /**
@@ -604,6 +680,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         return result;
     }
 
+    /** Undo in the diagram: the text editor of the host undoes (layout changes are text edits, too). */
     undo(): void {
         if (!this.simulationSession) {
             this.host.undo();
@@ -872,25 +949,45 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         }
     }
 
-    dragEnd(draggedId: string, dropTargetId: string | undefined): void {
+    /**
+     * A vertex was dragged: the moved vertices keep their new positions (written as layout annotations;
+     * the first move of a model without annotations writes the whole current layout). With Shift held,
+     * the vertex is moved into the state (or region, or the canvas) below the mouse.
+     */
+    dragEnd(draggedId: string, dropTargetId: string | undefined, info: DragInfo): void {
         if (this.simulationSession) {
             this.render();
+            return;
+        }
+        if (!info.shiftKey) {
+            this.moveNodes(info);
             return;
         }
         const vertex = this.astOf(draggedId);
         const container = this.containerAt(dropTargetId);
         const dropNode = dropTargetId ? this.astOf(dropTargetId) : undefined;
-        if (!isVertex(vertex) || !container) {
-            this.render();
-            return;
-        }
         const targetContainer = isState(dropNode) && dropNode.regions.length === 0 ? dropNode : container;
-        if (targetContainer === vertex.$container) {
-            // no structural change: restore the computed layout
-            this.render();
+        if (!isVertex(vertex) || !targetContainer || targetContainer === vertex.$container) {
+            // no structural change (or a vertex which cannot be nested elsewhere, e.g. an initial state): it
+            // keeps its new position
+            this.moveNodes(info);
             return;
         }
-        this.applyEdit(editor => editor.moveVertex(vertex, targetContainer)).then(done => {
+        const moved = info.moved.find(m => m.id === draggedId);
+        const parent = this.state?.layout.ids.get(isState(targetContainer) && targetContainer.regions.length > 0 ? targetContainer.regions[0] : targetContainer);
+        // manual layout: the moved vertex is placed where it was dropped, relative to the new parent
+        const layoutChange = this.isManualLayout() && moved && parent
+            ? (layout: ManualLayout | undefined): ManualLayout | undefined => {
+                if (!layout) {
+                    return layout;
+                }
+                const origin = this.absolutePosition(parent);
+                const id = movedId(vertex, targetContainer);
+                const nodes = { ...layout.nodes, [id]: { ...layout.nodes[id], ...this.clampToParent(parent, { x: moved.absoluteX - origin.x, y: moved.absoluteY - origin.y }) } };
+                return { ...layout, nodes };
+            }
+            : undefined;
+        this.applyEdit(editor => editor.moveVertex(vertex, targetContainer), layoutChange).then(done => {
             if (!done) {
                 this.render();
             }
@@ -1070,6 +1167,216 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     }
 
     // -----------------------------------------------------------------------------------------
+    // Manual layout (experimental): positions stored as layout annotations in the model, see docs/manual-layout.md
+
+    /** Whether the model has layout annotations (manual layout); otherwise the layout is computed automatically. */
+    isManualLayout(): boolean {
+        return this.state?.effective !== undefined;
+    }
+
+    private bindLayoutControls(): void {
+        const bind = (id: string, action: () => void) => document.getElementById(id)?.addEventListener('click', action);
+        bind('btn-arrange', () => this.autoArrange());
+        bind('btn-reset-layout', () => this.resetLayout());
+        this.updateLayoutControls();
+    }
+
+    private updateLayoutControls(): void {
+        const manual = this.isManualLayout();
+        const reset = document.getElementById('btn-reset-layout');
+        if (reset) {
+            reset.hidden = !manual;
+        }
+        byId('diagram-area').classList.toggle('manual-layout', manual);
+    }
+
+    /** Arranges everything automatically and writes the result as layout annotations. */
+    autoArrange(): void {
+        if (!this.state || this.simulationSession) {
+            return;
+        }
+        this.writeLayout(captureLayout(this.state.auto.graph, this.settings.direction)).then(changed => {
+            if (changed) {
+                this.setStatus('Arranged automatically – the positions can be adjusted by hand (Ctrl+Z restores the previous layout).');
+            }
+        });
+    }
+
+    /** Removes all layout annotations: the diagram is laid out automatically. */
+    resetLayout(): void {
+        if (!this.state || this.simulationSession || !this.isManualLayout()) {
+            return;
+        }
+        this.writeLayout(undefined).then(changed => {
+            if (changed) {
+                this.setStatus('Automatic layout – the layout annotations were removed (Ctrl+Z restores them).');
+            }
+        });
+    }
+
+    /**
+     * Changes the layout: `change` modifies the current layout with all nodes pinned at their current
+     * positions (in a model without layout annotations: the automatic layout, so that the first change
+     * writes the whole layout).
+     */
+    private changeLayout(change: (layout: ManualLayout) => void): void {
+        if (!this.state || this.simulationSession) {
+            return;
+        }
+        const layout = cloneManualLayout(this.state.effective ?? captureLayout(this.state.auto.graph, this.settings.direction));
+        change(layout);
+        this.writeLayout(layout);
+    }
+
+    /**
+     * Writes the layout as annotations into the text (one undoable edit; undefined removes all layout
+     * annotations) and updates the diagram. Resolves to false if the text did not change.
+     */
+    private async writeLayout(layout: ManualLayout | undefined): Promise<boolean> {
+        if (!this.state || this.state.parsed.text !== this.host.getText()) {
+            await this.update();
+        }
+        const state = this.state;
+        if (!state || this.syntaxErrors || state.parsed.text !== this.host.getText()) {
+            this.setStatus('Please fix the syntax errors in the text first.', 'error');
+            this.render();
+            return false;
+        }
+        const edits = layoutTextEdits(state.parsed.model, state.parsed.text, layout);
+        // only annotations change: the automatic layout can be reused (see update)
+        this.layoutOnlyChange = true;
+        if (edits.length === 0 || !await this.host.applyTextEdits(edits)) {
+            this.layoutOnlyChange = false;
+            // restores the positions of the dragged vertices
+            this.render();
+            return false;
+        }
+        await this.update();
+        return true;
+    }
+
+    private absolutePosition(id: string): Point {
+        let x = 0;
+        let y = 0;
+        for (let current: string | undefined = id; current && current !== MACHINE_ID; current = this.state?.parents.get(current)) {
+            const node = this.state?.nodes.get(current);
+            x += node?.x ?? 0;
+            y += node?.y ?? 0;
+        }
+        return { x, y };
+    }
+
+    /** Keeps a position inside the content area of the parent (below the name of a state). */
+    private clampToParent(parentId: string | undefined, position: Point): Point {
+        const origin = contentOrigin(parentId ? this.state?.nodes.get(parentId) : undefined);
+        return { x: Math.max(origin.x, position.x), y: Math.max(origin.y, position.y) };
+    }
+
+    private moveNodes(info: DragInfo): void {
+        const state = this.state;
+        if (!state) {
+            return;
+        }
+        const moves = info.moved.filter(m => state.nodes.has(m.id));
+        if (moves.length === 0) {
+            this.render();
+            return;
+        }
+        this.changeLayout(layout => {
+            for (const move of moves) {
+                const position = this.clampToParent(state.parents.get(move.id), { x: move.x, y: move.y });
+                layout.nodes[move.id] = { ...layout.nodes[move.id], ...position };
+            }
+        });
+    }
+
+    resizeEnd(id: string, width: number, height: number): void {
+        this.changeLayout(layout => {
+            const node = this.state?.nodes.get(id);
+            layout.nodes[id] = { ...(layout.nodes[id] ?? { x: node?.x ?? 0, y: node?.y ?? 0 }), width, height };
+        });
+    }
+
+    /** The waypoints of a transition (absolute). */
+    private shownBends(edgeId: string): { edge: DiagramEdge, bends: Point[] } | undefined {
+        const edge = this.state?.layout.graph.edges.find(e => e.id === edgeId);
+        return edge ? { edge, bends: (edge.waypoints ?? []).map(p => ({ ...p })) } : undefined;
+    }
+
+    private storeBends(edge: DiagramEdge, bends: Point[]): void {
+        const graph = this.state?.layout.graph;
+        if (!graph) {
+            return;
+        }
+        this.changeLayout(layout => {
+            const entry = { ...layout.edges[edge.id] };
+            if (bends.length > 0) {
+                entry.bends = bends.map(p => toFrameCoordinates(graph, edge, p));
+            } else {
+                delete entry.bends;
+            }
+            if (entry.bends || entry.label) {
+                layout.edges[edge.id] = entry;
+            } else {
+                delete layout.edges[edge.id];
+            }
+        });
+    }
+
+    bendMoved(edgeId: string, index: number, point: Point): void {
+        const shown = this.shownBends(edgeId);
+        if (shown && index >= 0 && index < shown.bends.length) {
+            shown.bends[index] = point;
+            this.storeBends(shown.edge, shown.bends);
+        }
+    }
+
+    bendAdded(edgeId: string, point: Point): void {
+        const shown = this.shownBends(edgeId);
+        if (!shown) {
+            return;
+        }
+        // insert the point between the waypoints of the part of the route which was clicked
+        const route = shown.edge.routing === 'spline' ? sampleSpline(shown.edge.points) : shown.edge.points;
+        const at = (p: Point) => {
+            let best = 0;
+            let bestDistance = Number.POSITIVE_INFINITY;
+            for (let i = 0; i + 1 < route.length; i++) {
+                const d = segmentDistance(p, route[i], route[i + 1]);
+                if (d < bestDistance - 0.01) {
+                    best = i;
+                    bestDistance = d;
+                }
+            }
+            const a = route[best];
+            const b = route[best + 1];
+            const length = Math.hypot(b.x - a.x, b.y - a.y);
+            const t = length > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (length * length))) : 0;
+            return best + t;
+        };
+        const position = at(point);
+        const index = shown.bends.filter(w => at(w) < position).length;
+        shown.bends.splice(index, 0, point);
+        this.storeBends(shown.edge, shown.bends);
+    }
+
+    bendRemoved(edgeId: string, index: number): void {
+        const shown = this.shownBends(edgeId);
+        if (shown && index >= 0 && index < shown.bends.length) {
+            shown.bends.splice(index, 1);
+            this.storeBends(shown.edge, shown.bends);
+        }
+    }
+
+    labelMoved(edgeId: string, dx: number, dy: number): void {
+        this.changeLayout(layout => {
+            const entry = { ...layout.edges[edgeId] };
+            entry.label = { x: (entry.label?.x ?? 0) + dx, y: (entry.label?.y ?? 0) + dy };
+            layout.edges[edgeId] = entry;
+        });
+    }
+
+    // -----------------------------------------------------------------------------------------
     // Simulation
 
     /** Starts the simulation mode: the model must not contain errors (warnings are fine). */
@@ -1123,10 +1430,16 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         this.render();
     }
 
-    /** The palette is disabled while simulating. */
+    /** The palette (and the layout controls) are disabled while simulating. */
     private setPaletteEnabled(enabled: boolean): void {
         for (const control of byId('palette').querySelectorAll<HTMLButtonElement>('button')) {
             control.disabled = !enabled;
+        }
+        for (const id of LAYOUT_CONTROLS) {
+            const control = document.getElementById(id);
+            if (control instanceof HTMLButtonElement) {
+                control.disabled = !enabled;
+            }
         }
     }
 
@@ -1319,4 +1632,86 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         const graph = this.state.layout.graph;
         return exportSvg(byId('sprotty'), graph.width, graph.height, `theme-${this.settings.theme}`);
     }
+
+    /** The rendered diagram as a PNG image (undefined if nothing has been rendered yet). */
+    async exportPng(scale = 2): Promise<Blob | undefined> {
+        const svg = this.exportSvg();
+        return svg ? svgToPng(svg, scale) : undefined;
+    }
+}
+
+/** Points on a spline route (start, (control, control, end)*). */
+function sampleSpline(points: Point[]): Point[] {
+    const result = [points[0]];
+    for (let i = 0; i + 3 < points.length; i += 3) {
+        const [a, b, c, d] = [points[i], points[i + 1], points[i + 2], points[i + 3]];
+        for (let k = 1; k <= 8; k++) {
+            const t = k / 8;
+            const u = 1 - t;
+            result.push({
+                x: u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x,
+                y: u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y
+            });
+        }
+    }
+    return result;
+}
+
+/** Distance of a point from the line segment a-b. */
+function segmentDistance(p: Point, a: Point, b: Point): number {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const length = dx * dx + dy * dy;
+    const t = length > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / length)) : 0;
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+/** The id (qualified name) of a vertex after moving it into `target`. */
+function movedId(vertex: Vertex, target: ScopeContainer): string {
+    const owner = isRegion(target) ? target.$container : target;
+    return isStateMachine(owner) || !isState(owner) ? vertex.name : `${qualifiedName(owner)}.${vertex.name}`;
+}
+
+/** One edit which turns `text` into `changed` (the differing middle part). */
+function replacementEdit(text: string, changed: string): TextEdit {
+    let start = 0;
+    while (start < text.length && start < changed.length && text[start] === changed[start]) {
+        start++;
+    }
+    let end = 0;
+    while (end < text.length - start && end < changed.length - start && text[text.length - 1 - end] === changed[changed.length - 1 - end]) {
+        end++;
+    }
+    return { offset: start, length: text.length - start - end, text: changed.substring(start, changed.length - end) };
+}
+
+/** The model text without layout annotations (the input of the automatic layout). */
+function withoutLayoutAnnotations(parsed: ParsedModel): string {
+    return applyEdits(parsed.text, layoutTextEdits(parsed.model, parsed.text, undefined));
+}
+
+/**
+ * The automatic layout of the previous state for the new parse result if the texts differ only in their
+ * layout annotations (the diagram elements are mapped to the new AST); undefined otherwise.
+ */
+function reuseAutoLayout(previous: ModelState, parsed: ParsedModel): LayoutResult | undefined {
+    if (withoutLayoutAnnotations(previous.parsed) !== withoutLayoutAnnotations(parsed)) {
+        return undefined;
+    }
+    const { ids, initial, final, definitions } = diagramElementIds(parsed.model);
+    const elements = new Map<string, AstNode>();
+    for (const [node, id] of ids) {
+        elements.set(id, node);
+    }
+    for (const [container, id] of [...initial, ...final]) {
+        elements.set(id, container);
+    }
+    if (definitions) {
+        elements.set(DEFINITION_ID, parsed.model);
+    }
+    const old = previous.auto.elements;
+    if (elements.size !== old.size || [...old.keys()].some(id => !elements.has(id))) {
+        return undefined;
+    }
+    return { graph: previous.auto.graph, elements, ids };
 }

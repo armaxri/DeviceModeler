@@ -9,7 +9,7 @@ import {
     COVERAGE_FORMATS, toCobertura, toCoverageHtml, toCoverageJson, toCoverageText, toLcov, type CoverageDiagramRenderer, type CoverageFormat
 } from './coverage-reports.js';
 import { toJUnitXml } from './junit.js';
-import { layoutStateMachine } from '../diagram/layout.js';
+import { layoutStateMachineWithLayout } from '../diagram/manual-layout.js';
 import { renderSvg, type HighlightKind } from '../render/svg.js';
 import { HsmTestWorkspace, type WorkspaceFile } from './test-workspace.js';
 
@@ -213,7 +213,8 @@ async function hsmFilesIn(directory: string): Promise<string[]> {
 
 /** Default diagram of the HTML coverage report: the state machine with covered / uncovered elements highlighted. */
 export const renderCoverageDiagram: CoverageDiagramRenderer = async (machine, highlight) => {
-    const { graph } = await layoutStateMachine(machine);
+    // with the layout annotations of the model (manual layout)
+    const { graph } = await layoutStateMachineWithLayout(machine);
     const kinds = new Map<string, HighlightKind>();
     for (const [id, cls] of Object.entries(highlight.classes)) {
         kinds.set(id, cls === 'hsm-covered' ? 'covered' : 'uncovered');

@@ -8,7 +8,8 @@
     "noEmit": true,
     "declaration": false,
     "paths": {
-      "hsm-language": ["../language/src/index.ts"]
+      "hsm-language": ["../language/src/index.ts"],
+      "@hsm-web/diagram/manual-layout-support.js": ["../web/src/diagram/manual-layout-support.ts"]
     }
   },
   "include": ["src/extension/**/*.ts", "src/server/**/*.ts", "src/common/**/*.ts", "test/**/*.ts", "vitest.config.ts"]

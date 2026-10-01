@@ -1,4 +1,5 @@
 import { AstUtils, GrammarUtils, type AstNode, type CstNode, type Reference } from 'langium';
+import { containerAnnotations, elementStart } from '../model-annotations.js';
 import * as ast from '../generated/ast.js';
 import { qualifiedName, referenceName } from '../hsm-scope.js';
 import {
@@ -344,7 +345,7 @@ export class ModelEditor {
         const cst = this.machine.$cstNode!;
         const anchors = [
             GrammarUtils.findNodeForProperty(cst, 'namespace'),
-            ...this.machine.annotations.map(a => a.$cstNode),
+            ...containerAnnotations(this.machine).map(a => a.$cstNode),
             ...this.machine.scopes.map(s => s.$cstNode)
         ].filter((n): n is CstNode => !!n);
         const anchor = anchors.sort((a, b) => a.end - b.end)[anchors.length - 1];
@@ -382,7 +383,7 @@ export class ModelEditor {
         if (ast.isState(container) && container.regions.length > 0) {
             throw new EditError(`State '${container.name}' has regions.`);
         }
-        const deletion = this.deletionEdit(vertex.$cstNode!);
+        const deletion = this.deletionEdit(this.rangeOf(vertex));
         const moved = this.nodeText(vertex, '').split('\n');
         const comment = this.trailingComment(vertex.$cstNode!.end);
         if (comment) {
@@ -427,7 +428,7 @@ export class ModelEditor {
         const roots = [...nodes].filter(node => ![...nodes].some(other => other !== node && isAncestorOrSelf(other, node)));
         const edits = roots
             .filter(node => node.$cstNode)
-            .map(node => this.deletionEdit(node.$cstNode!));
+            .map(node => this.deletionEdit(this.rangeOf(node)));
         // states which lose all their members become simple states again: `state A { }` -> `state A`
         const parents = new Set(roots.map(node => node.$container).filter(ast.isState));
         for (const state of parents) {
@@ -514,7 +515,7 @@ export class ModelEditor {
             result.push(...container.reactions, ...container.regions);
         } else if (ast.isStateMachine(container)) {
             // the definition section precedes the vertices
-            result.push(...container.annotations, ...container.scopes);
+            result.push(...containerAnnotations(container), ...container.scopes);
         }
         return result.filter(n => n.$cstNode).sort((a, b) => a.$cstNode!.offset - b.$cstNode!.offset);
     }
@@ -613,7 +614,7 @@ export class ModelEditor {
 
     /** Text of a node re-indented for the given indentation (first line without indentation). */
     private nodeText(node: AstNode, indent: string): string {
-        const cst = node.$cstNode!;
+        const cst = this.rangeOf(node);
         const originalIndent = this.indentOf(cst.offset);
         const lines = this.text.substring(cst.offset, cst.end).split('\n');
         return lines.map((line, i) => {
@@ -624,8 +625,20 @@ export class ModelEditor {
         }).join('\n');
     }
 
+    /**
+     * Text range of a node; for vertices, regions and transitions including their annotations (also those
+     * parsed into the state machine, see model-annotations.ts).
+     */
+    private rangeOf(node: AstNode): { offset: number, end: number } {
+        const cst = node.$cstNode!;
+        if (ast.isVertex(node) || ast.isRegion(node) || ast.isTransition(node)) {
+            return { offset: Math.min(cst.offset, elementStart(node) ?? cst.offset), end: cst.end };
+        }
+        return cst;
+    }
+
     /** Deletes the text of the node including the whole line if nothing else remains on it. */
-    private deletionEdit(cst: CstNode): TextEdit {
+    private deletionEdit(cst: { offset: number, end: number }): TextEdit {
         let start = cst.offset;
         let end = cst.end;
         const lineStart = this.text.lastIndexOf('\n', start - 1) + 1;

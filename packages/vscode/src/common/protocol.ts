@@ -32,13 +32,23 @@ export interface TextRange {
 
 export type StatusSeverity = 'info' | 'warning' | 'error';
 
+/**
+ * Commands of the manual layout (experimental): `arrange` writes the automatic layout as layout
+ * annotations into the model, `reset` removes all layout annotations.
+ */
+export type LayoutCommand = 'arrange' | 'reset';
+
 /** Messages from the extension to the webview. */
 export type ToWebview =
     /**
-     * The document text (on open and after every change, debounced) and the texts of the `.hsm` files
-     * it imports (transitively) by URI, so that the webview can resolve the imports.
+     * The document text (on open and after every change, debounced) and the texts of the `.hsm` files it
+     * imports (transitively) by URI, so that the webview can resolve the imports.
      */
     | { type: 'text', text: string, version: number, fileName: string, uri: string, files?: Record<string, string>, headers?: CppHeaderSettings }
+    /** Runs a command of the manual layout (commands of the extension). */
+    | { type: 'layoutCommand', command: LayoutCommand }
+    /** Converts the SVG of the diagram into a PNG image (answered with a `png` message). */
+    | { type: 'rasterize', requestId: number, svg: string, scale: number }
     | { type: 'settings', settings: WebviewSettings }
     /** The text cursor moved (select the element at the offset). */
     | { type: 'cursor', offset: number }
@@ -63,8 +73,9 @@ export type FromWebview =
     /** A setting was changed in the toolbar of the webview. */
     | { type: 'updateSetting', key: 'direction' | 'routing' | 'priorities' | 'showProperties', value: string | boolean }
     /** Runs a command of the extension (toolbar buttons). */
-    | { type: 'command', command: 'exportSvg' | 'exportPlantUml' | 'generateCpp' }
+    | { type: 'command', command: 'exportDiagram' | 'generateCpp' }
+    /** The PNG image of a `rasterize` request (base64), or the error. */
+    | { type: 'png', requestId: number, data?: string, error?: string }
     | { type: 'simulation', running: boolean }
     /** Opens a file and its diagram (double-click on a submachine state). */
     | { type: 'openFile', uri: string };
-

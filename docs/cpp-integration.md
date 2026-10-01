@@ -343,7 +343,7 @@ override it.
 
 | host | headers | settings |
 | --- | --- | --- |
-| CLI (`hsm validate`, `simulate`, `test`, `generate`, `layout`, `plantuml`, `render`, `doc`) | read from disk (`installNodeHeaderSupport` in `src/node/cpp-headers-node.ts`: synchronous reader) | `hsm.gen.json`; `-I <dir>`, `-D NAME[=VALUE]`, `--data-model lp64`/`llp64`/`ilp32`; `hsm generate --list-inputs` lists the imported headers (CMake dependencies); CMake `INCLUDE_DIRS` / `DEFINES` |
+| CLI (`hsm validate`, `simulate`, `test`, `generate`, `layout`, `render`, `doc`) | read from disk (`installNodeHeaderSupport` in `src/node/cpp-headers-node.ts`: synchronous reader) | `hsm.gen.json`; `-I <dir>`, `-D NAME[=VALUE]`, `--data-model lp64`/`llp64`/`ilp32`; `hsm generate --list-inputs` lists the imported headers (CMake dependencies); CMake `INCLUDE_DIRS` / `DEFINES` |
 | API (`HsmModelLoader`, `HsmTestWorkspace`) | `files` / `readFile` (async, loaded before the build by `loadImports`, also the includes), header files given to `HsmTestWorkspace.load` | `HsmModelLoaderOptions.cppHeaders`, `cppHeaderStore(shared).settings` / `settingsProvider` |
 | VS Code language server | read from disk; the `**/*` file watcher of Langium invalidates changed headers and `hsm.gen.json` files; importing models are relinked and validated again | `hsm.gen.json`; settings `hsm.headers.includePaths` (relative to the workspace folder, `${workspaceFolder}`), `hsm.headers.defines`, `hsm.headers.dataModel` |
 | VS Code diagram webview | the extension sends the header texts (and their includes) with the imported `.hsm` files (`collectImportedFiles`) | the extension sends the effective settings (`headers` of the `text` message) |

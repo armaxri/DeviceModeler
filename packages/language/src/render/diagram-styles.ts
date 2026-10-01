@@ -447,6 +447,31 @@ export const DIAGRAM_CSS = `
     display: none;
 }
 
+/* ---- manual layout (experimental) ---- */
+
+.resize-handle {
+    fill: var(--hsm-select);
+    stroke: #fff;
+    stroke-width: 1px;
+    cursor: nwse-resize;
+}
+
+.bend-handle {
+    fill: #fff;
+    stroke: var(--hsm-select);
+    stroke-width: 1.5px;
+    cursor: move;
+}
+
+.manual-layout .transition.selected .transition-label {
+    cursor: move;
+}
+
+.hsm-export .resize-handle,
+.hsm-export .bend-handle {
+    display: none;
+}
+
 /* ---- coverage (renderSvg highlight: 'covered' / 'uncovered') ---- */
 
 .theme-classic, .theme-modern {

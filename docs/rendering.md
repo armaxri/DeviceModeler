@@ -4,7 +4,7 @@
 
 `hsm render` computes the layout with ELK and renders the diagram as a standalone SVG file – in Node.js, without
 a browser, e.g. for reviews or in CI. The SVG has the shapes, classes and style sheet of the web editor
-(`DIAGRAM_CSS`, shared by both), so it looks like *Export SVG* of the editor.
+(`DIAGRAM_CSS`, shared by both), so it looks like the SVG of *Export…* in the editor.
 
 ```bash
 hsm render model.hsm                            # writes model.svg next to the model

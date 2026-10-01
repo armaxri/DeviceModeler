@@ -367,7 +367,7 @@ export function isActiveExpression(item: unknown): item is ActiveExpression {
 }
 
 export interface Annotation extends langium.AstNode {
-    readonly $container: StateMachine | TestOperation;
+    readonly $container: Region | State | StateMachine | TestOperation;
     readonly $type: 'Annotation';
     arguments: Array<Expression>;
     name: string;
@@ -1144,6 +1144,7 @@ export function isRealLiteral(item: unknown): item is RealLiteral {
 export interface Region extends langium.AstNode {
     readonly $container: State;
     readonly $type: 'Region';
+    annotations: Array<Annotation>;
     name?: string;
     transitions: Array<Transition>;
     vertices: Array<Vertex>;
@@ -1151,6 +1152,7 @@ export interface Region extends langium.AstNode {
 
 export const Region = {
     $type: 'Region',
+    annotations: 'annotations',
     name: 'name',
     transitions: 'transitions',
     vertices: 'vertices'
@@ -1173,6 +1175,7 @@ export function isScope(item: unknown): item is Scope {
 export interface State extends langium.AstNode {
     readonly $container: Region | State | StateMachine;
     readonly $type: 'State';
+    annotations: Array<Annotation>;
     description?: string;
     name: string;
     reactions: Array<LocalReaction>;
@@ -1184,6 +1187,7 @@ export interface State extends langium.AstNode {
 
 export const State = {
     $type: 'State',
+    annotations: 'annotations',
     description: 'description',
     name: 'name',
     reactions: 'reactions',
@@ -2080,6 +2084,11 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
         Region: {
             name: Region.$type,
             properties: {
+                annotations: {
+                    name: Region.annotations,
+                    defaultValue: [],
+                    optional: true
+                },
                 name: {
                     name: Region.name,
                     optional: true
@@ -2106,6 +2115,11 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
         State: {
             name: State.$type,
             properties: {
+                annotations: {
+                    name: State.annotations,
+                    defaultValue: [],
+                    optional: true
+                },
                 description: {
                     name: State.description,
                     optional: true

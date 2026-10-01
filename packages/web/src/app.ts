@@ -1,10 +1,11 @@
 import { monaco } from './monaco.js';
-import { generatePlantUml, importSct, importSctFiles, type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ParsedModel, type TextEdit } from 'hsm-language';
+import {
+    importSct, importSctFiles, type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ParsedModel, type TextEdit
+} from 'hsm-language';
 import { EDITOR_THEMES, HsmLanguageSupport, LANGUAGE_ID } from './language-support.js';
 import { DiagramController, type DiagramHost, type DiagramSettings, type StatusSeverity, type TextRange } from './diagram-controller.js';
 import { createWorkerElk } from './diagram/elk.js';
 import { byId, download, h } from './ui/dom.js';
-import { plantUmlServerUrl } from './ui/plantuml.js';
 import type { SimulationSession } from './simulation/session.js';
 import { EMPTY_MODEL, EXAMPLE_HEADERS, EXAMPLES } from './examples.js';
 
@@ -161,10 +162,10 @@ export class HsmApp implements DiagramHost {
             const all = [...fileInput.files ?? []];
             // C/C++ headers: added to the virtual workspace (models import them), not edited
             const headers = all.filter(f => isHeaderFile(f.name));
+            const selected = all.filter(f => !isHeaderFile(f.name));
             for (const header of headers) {
                 this.files.set(header.name, await header.text());
             }
-            const selected = all.filter(f => !isHeaderFile(f.name));
             if (headers.length > 0) {
                 this.saveFiles();
                 if (selected.length === 0) {
@@ -181,6 +182,7 @@ export class HsmApp implements DiagramHost {
                 // several itemis CREATE statecharts: submachine states referencing each other become instances
                 try {
                     const results = importSctFiles(await Promise.all(statecharts.map(async f => ({ fileName: f.name, xml: await f.text() }))));
+                    // (the diagrams are imported as layout annotations)
                     for (const result of results) {
                         this.files.set(result.fileName, result.text);
                     }
@@ -209,7 +211,7 @@ export class HsmApp implements DiagramHost {
             }
             const file = selected[0];
             if (file && /\.sct$/i.test(file.name)) {
-                // itemis CREATE / YAKINDU statechart: convert to HSM text
+                // itemis CREATE / YAKINDU statechart: convert to HSM text (the diagram into layout annotations)
                 try {
                     const { text, warnings } = importSct(await file.text());
                     this.loadText(text, file.name.replace(/\.sct$/i, '.hsm'));
@@ -260,8 +262,7 @@ export class HsmApp implements DiagramHost {
             this.applyTheme();
         });
         byId('btn-simulate').addEventListener('click', () => this.diagram.simulation ? this.diagram.stopSimulation() : this.diagram.startSimulation());
-        byId('btn-svg').addEventListener('click', () => this.exportSvg());
-        byId('btn-plantuml').addEventListener('click', () => this.showPlantUml());
+        byId('btn-export').addEventListener('click', () => this.showExport());
         byId('modal-close').addEventListener('click', () => this.closeModal());
         byId('modal').addEventListener('click', event => {
             if (event.target === byId('modal')) {
@@ -315,6 +316,7 @@ export class HsmApp implements DiagramHost {
         monaco.editor.setTheme(this.settings.theme === 'dark' ? EDITOR_THEMES.dark : EDITOR_THEMES.light);
     }
 
+    /** Loads a model (its layout annotations, if any, are its manual layout). */
     private loadText(text: string, fileName: string): void {
         if (this.diagram.simulation) {
             this.diagram.stopSimulation();
@@ -530,31 +532,32 @@ export class HsmApp implements DiagramHost {
     // -----------------------------------------------------------------------------------------
     // Export
 
-    private exportSvg(): void {
-        const svg = this.diagram.exportSvg();
-        if (svg) {
-            download(this.fileName.replace(/\.[^.]+$/, '') + '.svg', svg, 'image/svg+xml');
-        }
-    }
-
-    private async showPlantUml(): Promise<void> {
-        const state = this.diagram.model;
-        if (!state) {
-            return;
-        }
-        const text = generatePlantUml(state.parsed.model);
-        const textarea = h('textarea', { readonly: true, spellcheck: 'false' });
-        textarea.value = text;
-        const copy = h('button', {
-            onClick: async () => {
-                await navigator.clipboard.writeText(text);
-                copy.textContent = 'Copied ✓';
+    /** Export of the diagram as SVG or PNG (chosen in a dialog). */
+    private showExport(): void {
+        const base = this.fileName.replace(/\.[^.]+$/, '');
+        const choose = (format: 'svg' | 'png') => async () => {
+            this.closeModal();
+            try {
+                if (format === 'svg') {
+                    const svg = this.diagram.exportSvg();
+                    if (svg) {
+                        download(`${base}.svg`, svg, 'image/svg+xml');
+                    }
+                } else {
+                    const png = await this.diagram.exportPng();
+                    if (png) {
+                        download(`${base}.png`, png, 'image/png');
+                    }
+                }
+            } catch (error) {
+                this.setStatus(`Export failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
             }
-        }, 'Copy');
-        const save = h('button', { onClick: () => download(this.fileName.replace(/\.[^.]+$/, '') + '.puml', text, 'text/plain') }, 'Download .puml');
-        const link = h('a', { target: '_blank', rel: 'noopener' }, 'Open on plantuml.com ↗');
-        plantUmlServerUrl(text, 'uml').then(url => link.setAttribute('href', url)).catch(() => link.remove());
-        this.openModal('PlantUML', h('div', {}, textarea, h('div', { class: 'actions' }, copy, save, h('span', { class: 'spacer' }), link)));
+        };
+        this.openModal('Export diagram', h('div', { class: 'export-choice' },
+            h('p', {}, 'The diagram as shown (theme and layout), without the selection.'),
+            h('div', { class: 'actions' },
+                h('button', { title: 'Scalable vector graphic, e.g. for the web or for further editing', onClick: choose('svg') }, 'SVG'),
+                h('button', { title: 'Image with twice the screen resolution, e.g. for documents and slides', onClick: choose('png') }, 'PNG'))));
     }
 
     private openModal(title: string, content: HTMLElement): void {

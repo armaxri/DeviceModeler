@@ -115,6 +115,9 @@ export class StateView extends ShapeView {
             {context.renderChildren(node)}
             {issueMarker(node.issue, width - 4, 4)}
             {breakpointMarker(node.breakpoint, 9, 9)}
+            {node.resizable && node.selected
+                ? <rect class-resize-handle={true} x={width - 9} y={height - 9} width={9} height={9}><title>Drag to resize</title></rect>
+                : undefined}
         </g>;
     }
 }
@@ -337,6 +340,13 @@ export class TransitionView implements IView {
                     <text x={label.x + 2} y={baseline(label.y, label.height, m.fontSize.label)}>
                         {label.text}{label.title ? <title>{label.title}</title> : undefined}
                     </text>
+                </g>
+                : undefined}
+            {edge.editable && edge.selected
+                ? <g class-bend-handles={true}>
+                    {...edge.waypoints.map(p => <circle class-bend-handle={true} cx={p.x} cy={p.y} r={4.5}>
+                        <title>Drag to move the waypoint, double-click to remove it</title>
+                    </circle>)}
                 </g>
                 : undefined}
             {breakpointMarker(edge.breakpoint, label ? label.x - 7 : middle.x, label ? label.y + label.height / 2 : middle.y)}

@@ -101,34 +101,32 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
             "cardinality": "?"
           },
           {
-            "$type": "Assignment",
-            "feature": "annotations",
-            "operator": "+=",
-            "terminal": {
-              "$type": "RuleCall",
-              "rule": {
-                "$ref": "#/rules@3"
-              },
-              "arguments": []
-            },
-            "cardinality": "*"
-          },
-          {
-            "$type": "Assignment",
-            "feature": "scopes",
-            "operator": "+=",
-            "terminal": {
-              "$type": "RuleCall",
-              "rule": {
-                "$ref": "#/rules@4"
-              },
-              "arguments": []
-            },
-            "cardinality": "*"
-          },
-          {
             "$type": "Alternatives",
             "elements": [
+              {
+                "$type": "Assignment",
+                "feature": "annotations",
+                "operator": "+=",
+                "terminal": {
+                  "$type": "RuleCall",
+                  "rule": {
+                    "$ref": "#/rules@3"
+                  },
+                  "arguments": []
+                }
+              },
+              {
+                "$type": "Assignment",
+                "feature": "scopes",
+                "operator": "+=",
+                "terminal": {
+                  "$type": "RuleCall",
+                  "rule": {
+                    "$ref": "#/rules@4"
+                  },
+                  "arguments": []
+                }
+              },
               {
                 "$type": "Assignment",
                 "feature": "vertices",
@@ -1004,6 +1002,18 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
                 "elements": [
                   {
                     "$type": "Assignment",
+                    "feature": "annotations",
+                    "operator": "+=",
+                    "terminal": {
+                      "$type": "RuleCall",
+                      "rule": {
+                        "$ref": "#/rules@3"
+                      },
+                      "arguments": []
+                    }
+                  },
+                  {
+                    "$type": "Assignment",
                     "feature": "reactions",
                     "operator": "+=",
                     "terminal": {
@@ -1096,6 +1106,18 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
           {
             "$type": "Alternatives",
             "elements": [
+              {
+                "$type": "Assignment",
+                "feature": "annotations",
+                "operator": "+=",
+                "terminal": {
+                  "$type": "RuleCall",
+                  "rule": {
+                    "$ref": "#/rules@3"
+                  },
+                  "arguments": []
+                }
+              },
               {
                 "$type": "Assignment",
                 "feature": "vertices",
@@ -5079,34 +5101,32 @@ export const HsmTestGrammar = (): Grammar => loadedHsmTestGrammar ?? (loadedHsmT
             "cardinality": "?"
           },
           {
-            "$type": "Assignment",
-            "feature": "annotations",
-            "operator": "+=",
-            "terminal": {
-              "$type": "RuleCall",
-              "rule": {
-                "$ref": "#/rules@22"
-              },
-              "arguments": []
-            },
-            "cardinality": "*"
-          },
-          {
-            "$type": "Assignment",
-            "feature": "scopes",
-            "operator": "+=",
-            "terminal": {
-              "$type": "RuleCall",
-              "rule": {
-                "$ref": "#/rules@23"
-              },
-              "arguments": []
-            },
-            "cardinality": "*"
-          },
-          {
             "$type": "Alternatives",
             "elements": [
+              {
+                "$type": "Assignment",
+                "feature": "annotations",
+                "operator": "+=",
+                "terminal": {
+                  "$type": "RuleCall",
+                  "rule": {
+                    "$ref": "#/rules@22"
+                  },
+                  "arguments": []
+                }
+              },
+              {
+                "$type": "Assignment",
+                "feature": "scopes",
+                "operator": "+=",
+                "terminal": {
+                  "$type": "RuleCall",
+                  "rule": {
+                    "$ref": "#/rules@23"
+                  },
+                  "arguments": []
+                }
+              },
               {
                 "$type": "Assignment",
                 "feature": "vertices",
@@ -5982,6 +6002,18 @@ export const HsmTestGrammar = (): Grammar => loadedHsmTestGrammar ?? (loadedHsmT
                 "elements": [
                   {
                     "$type": "Assignment",
+                    "feature": "annotations",
+                    "operator": "+=",
+                    "terminal": {
+                      "$type": "RuleCall",
+                      "rule": {
+                        "$ref": "#/rules@22"
+                      },
+                      "arguments": []
+                    }
+                  },
+                  {
+                    "$type": "Assignment",
                     "feature": "reactions",
                     "operator": "+=",
                     "terminal": {
@@ -6074,6 +6106,18 @@ export const HsmTestGrammar = (): Grammar => loadedHsmTestGrammar ?? (loadedHsmT
           {
             "$type": "Alternatives",
             "elements": [
+              {
+                "$type": "Assignment",
+                "feature": "annotations",
+                "operator": "+=",
+                "terminal": {
+                  "$type": "RuleCall",
+                  "rule": {
+                    "$ref": "#/rules@22"
+                  },
+                  "arguments": []
+                }
+              },
               {
                 "$type": "Assignment",
                 "feature": "vertices",

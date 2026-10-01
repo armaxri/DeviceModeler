@@ -63,10 +63,9 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
   real-time mode (see [Simulation](docs/editor.md#simulation)).
 - **Selection sync**: selecting an element in the diagram highlights its text, moving the cursor in the
   text selects the element in the diagram.
-- **Export**: standalone SVG, PlantUML (`.puml`, copy to clipboard or open on plantuml.com). Synchronizations
-  become `<<fork>>` / `<<join>>`, entry points / exit nodes `<<entryPoint>>` / `<<exitPoint>>`, the
-  definition section a legend.
-- **CLI** for validation, PlantUML generation and layout computation.
+- **Export** of the diagram as standalone SVG or PNG (*Export…* in the toolbar; the PNG has twice the
+  screen resolution).
+- **CLI** for validation, layout computation, rendering and code generation.
 - **Rendering and documentation without a browser**: `hsm render` writes the diagrams as SVG files that look
   like the editor's export, `hsm doc` generates Markdown or HTML documentation of models (diagram,
   interfaces, states, transitions and `/** … */` doc comments) – see [Rendering diagrams](docs/rendering.md#rendering-diagrams)
@@ -106,7 +105,6 @@ npm run package:vscode   # packages/vscode/hsm-vscode-<version>.vsix
 ```bash
 npm run build -w packages/language
 node packages/language/bin/cli.js validate examples/cd-player.hsm
-node packages/language/bin/cli.js plantuml examples/cd-player.hsm -o cd-player.puml
 node packages/language/bin/cli.js layout examples/keyboard.hsm --direction RIGHT
 node packages/language/bin/cli.js render examples -o out --theme modern     # SVG diagrams, see below
 node packages/language/bin/cli.js doc examples -o docs/models --format html  # documentation, see below
@@ -126,7 +124,8 @@ node packages/language/bin/cli.js generate --check          # exit 1 if generate
 | --- | --- |
 | [The language](docs/language.md) | syntax of the models: definition section, reactions, expressions, states, regions, pseudo states; imports and submachines; C/C++ header imports |
 | [Execution semantics](docs/semantics.md) | how a state machine executes – the specification implemented by the interpreter and the code generators |
-| [Web editor](docs/editor.md) | editing in the diagram, simulation |
+| [Web editor](docs/editor.md) | editing in the diagram, 🧪 manual layout, simulation |
+| [Manual layout](docs/manual-layout.md) | 🧪 experimental (branch `claude/layout-annotations`): layout annotations in the model, layout computation, routing, editor integration, migration |
 | [VS Code extension](docs/vscode.md) | language server, diagram, generation, Test Explorer (details in [packages/vscode/README.md](packages/vscode/README.md)) |
 | [Rendering and model documentation](docs/rendering.md) | `hsm render` (SVG diagrams), `hsm doc` (Markdown / HTML documentation), doc comments |
 | [Unit tests and coverage](docs/testing.md) | the `.hsmtest` language, `hsm test`, model coverage, CI examples |

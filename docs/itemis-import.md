@@ -7,13 +7,16 @@ node packages/language/bin/cli.js import TrafficLight.sct -o TrafficLight.hsm   
 ```
 
 In the web editor, `Open…` accepts `.sct` files as well; warnings are shown in the status bar. From
-code, use `importSct(xml)` of `hsm-language`, which returns `{ text, warnings }` (no DOM needed).
+code, use `importSct(xml)` of `hsm-language`, which returns `{ text, warnings, layout }` (no DOM needed; the layout is already written into `text`
+as annotations, `layout: false` skips them).
 Several statecharts are imported together with `hsm import A.sct B.sct` (or several files in `Open…`,
 `importSctFiles(files)`): a **submachine state** that references one of the other statecharts becomes a
 submachine instance – `import "B.hsm"`, `var b : B` in the internal scope and `state S : b`.
 
 The definition section and all reactions are copied as they are (both languages use the same
-syntax); the diagram layout of the `.sct` file is ignored. The structure is mapped as follows:
+syntax); the diagram of the `.sct` file becomes a manual layout – layout annotations (`@at`, `@size`,
+`@via`, …) in the generated model (🧪 experimental, `--no-layout` to skip them, see
+[Manual layout](editor.md#manual-layout-experimental)). The structure is mapped as follows:
 
 | itemis CREATE                                   | HSM                                                                 |
 |-------------------------------------------------|---------------------------------------------------------------------|

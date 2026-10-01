@@ -30,7 +30,6 @@ packages/
     src/doc/                    model documentation (Markdown / HTML), doc comments, hover documentation
     src/simulation/             interpreter (docs/semantics.md) with virtual clock, scenario runner
     src/testing/                unit test language: scoping, validation, runner, workspace, JUnit XML, coverage reports
-    src/generator/plantuml.ts   PlantUML generator
     src/generator/common/       shared part of the C / C++ generators (analysis, states, transitions, expressions)
     src/generator/cpp/          C++ code generator and scenario test harness generator
     src/generator/c/            C code generator and scenario test harness generator
@@ -49,7 +48,7 @@ packages/
     src/language-support.ts     Langium services wired into Monaco (markers, completion, hover, formatting, …)
     src/diagram/                Sprotty model, views (PlantUML look), ELK worker, mouse / selection listeners
     src/simulation/             simulation session: interpreter, real-time clock, logs, operation mocks, breakpoints
-    src/ui/                     properties and simulation panels, value editor, inline editor, SVG / PlantUML export
+    src/ui/                     properties and simulation panels, value editor, inline editor, SVG / PNG export
     src/styles/                 style sheets of the app, the diagram and the simulation
   vscode/       VS Code extension
     src/extension/              extension host: language client, commands, diagram panel, test controller

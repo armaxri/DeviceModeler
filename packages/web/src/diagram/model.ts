@@ -61,6 +61,8 @@ export class VertexNode extends SNodeImpl {
     active = false;
     /** Simulation: a breakpoint is set on the state. */
     breakpoint = false;
+    /** Manual layout: the state shows a resize handle when it is selected. */
+    resizable = false;
     /** A submachine state: its instance, state machine and the entry / exit points used by transitions. */
     submachine?: DiagramSubmachine;
     /** Simulation: the active states of the instance of a submachine state (replaces the instance line). */
@@ -82,6 +84,10 @@ export class TransitionEdge extends SChildElementImpl {
     taken = false;
     /** Simulation: a breakpoint is set on the transition. */
     breakpoint = false;
+    /** Manual layout: the points the route passes through (set by the user, absolute). */
+    waypoints: Point[] = [];
+    /** Manual layout: the waypoints can be moved when the transition is selected. */
+    editable = false;
 }
 
 export function isVertexNode(element: SModelElementImpl | undefined): element is VertexNode {
@@ -102,6 +108,8 @@ export interface SchemaOptions {
     recentTransitions?: ReadonlySet<string>;
     /** Simulation: ids of the elements with a breakpoint. */
     breakpoints?: ReadonlySet<string>;
+    /** The layout can be edited (not while simulating): states can be resized, waypoints of transitions moved. */
+    layoutEditable?: boolean;
     /** Simulation: the active states of the submachine instances by the id of their state (`motor: Running`). */
     instanceTexts?: ReadonlyMap<string, string>;
 }
@@ -122,7 +130,8 @@ export function toSchema(graph: DiagramGraph, options: SchemaOptions): SModelRoo
         headerHeight: node.headerHeight ?? 0,
         composite: node.composite ?? false,
         regionIndex: node.index ?? 0,
-        separator,
+        separator: node.separator ?? separator,
+        resizable: (options.layoutEditable ?? false) && node.kind === 'state',
         selected: options.selected.has(node.id),
         issue: options.issues.get(node.id),
         pendingSource: options.pendingSource === node.id,
@@ -139,11 +148,13 @@ export function toSchema(graph: DiagramGraph, options: SchemaOptions): SModelRoo
         targetId: edge.target,
         routing: edge.routing,
         points: edge.points,
+        waypoints: edge.waypoints ?? [],
         label: edge.label,
         selected: options.selected.has(edge.id),
         issue: options.issues.get(edge.id),
         taken: options.recentTransitions?.has(edge.id) ?? false,
         breakpoint: options.breakpoints?.has(edge.id) ?? false,
+        editable: options.layoutEditable ?? false,
         children: []
     } as SModelElement);
     return {

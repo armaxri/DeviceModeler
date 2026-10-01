@@ -226,7 +226,7 @@ constexpr Position kHome{10, 20};                          operation drive(p : m
   ```
 
   The nearest `hsm.gen.json` / `*.hsm.gen.json` in the directory of a model or a parent directory applies (CLI,
-  language server); `hsm validate|simulate|test|generate|layout|plantuml` add `-I <dir>`, `-D NAME[=VALUE]` and
+  language server); `hsm validate|simulate|test|generate|layout` add `-I <dir>`, `-D NAME[=VALUE]` and
   `--data-model lp64|llp64|ilp32`, VS Code the settings `hsm.headers.includePaths` / `hsm.headers.defines` /
   `hsm.headers.dataModel`, CMake `hsm_generate(… INCLUDE_DIRS … DEFINES …)`. A missing header is an error at
   the import, errors in the header are reported there with their location (`motor_types.h:12:5: …`);
@@ -240,3 +240,41 @@ constexpr Position kHome{10, 20};                          operation drive(p : m
   `void raise_moveTo(const motor::Position& value)`, `std::uint8_t get_small() const`), enumerators and
   constants by name, stores with `static_cast` to the declared type. The **C generator** reports
   "C++ header types are not supported by the C generator".
+
+## Diagram layout annotations
+
+🧪 Experimental (branch `claude/layout-annotations`). A hand-arranged diagram is stored in the model as
+layout annotations; a model without them is laid out automatically. They have no influence on the
+semantics or the generated code, and are normally written by the diagram editor (see
+[Manual layout](manual-layout.md)).
+
+```
+statemachine Door {
+    interface:
+        in event open
+    @definitions(20, 20)
+    @initial(330, 24)
+    [*] -> Closed
+    @at(300, 80)
+    state Closed
+    @at(300, 220) @size(160, 80)
+    state Opened {
+        @initial(10, 10)
+        [*] -> Idle
+        @at(14, 40)
+        state Idle
+    }
+    @via(420, 160) @label(8, 0)
+    Closed -> Opened : open
+}
+```
+
+- Before a state, pseudo state or region: `@at(x, y)` (position relative to the content area of the
+  parent), `@size(width, height)` (states and regions), `@regions("vertical" | "horizontal")` (states).
+- Before a transition: `@via(x1, y1, x2, y2, …)` (waypoints, relative to the innermost state containing
+  both end points) and `@label(dx, dy)` (label offset).
+- In the body of the state machine, a state or a region: `@initial(x, y)` / `@final(x, y)` (its `[*]`
+  states); in the body of the state machine also `@definitions(x, y[, width, height])`.
+- Arguments are numbers (written as integers, `-` allowed), `@regions` takes a string. Other annotations
+  of the state machine (`@CycleBased`, …) and the definition section must come before the states and
+  transitions.

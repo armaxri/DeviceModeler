@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { NodeFileSystem } from 'langium/node';
 import type { EdgeRouting, LayoutDirection } from '../diagram/diagram-model.js';
-import { layoutStateMachine } from '../diagram/layout.js';
+import { layoutStateMachineWithLayout } from '../diagram/manual-layout.js';
 import { describeStateMachine, generateDocIndex, generateModelDoc, type DocFormat, type DocIndexEntry } from '../doc/model-doc.js';
 import type { StateMachine } from '../generated/ast.js';
 import { HsmModelLoader } from '../hsm-document.js';
@@ -21,6 +21,8 @@ export interface DiagramCommandOptions {
     routing?: string;
     /** Show transition priorities (default: true). */
     priorities?: boolean;
+    /** Lay out automatically, ignoring the layout annotations of the models (default: false). */
+    auto?: boolean;
 }
 
 export interface RenderCommandOptions extends DiagramCommandOptions {
@@ -88,7 +90,7 @@ async function loadModels(files: string[], logger: Logger): Promise<{ models: Lo
     return { models, failures };
 }
 
-function diagramOptions(options: DiagramCommandOptions): { theme: DiagramTheme, direction: LayoutDirection, routing: EdgeRouting, priorities: boolean } {
+function diagramOptions(options: DiagramCommandOptions): { theme: DiagramTheme, direction: LayoutDirection, routing: EdgeRouting, priorities: boolean, auto: boolean } {
     const theme = (options.theme ?? 'classic').toLowerCase();
     if (!DIAGRAM_THEMES.includes(theme as DiagramTheme)) {
         throw new Error(`Unknown theme '${options.theme}' (supported: ${DIAGRAM_THEMES.join(', ')})`);
@@ -101,11 +103,13 @@ function diagramOptions(options: DiagramCommandOptions): { theme: DiagramTheme, 
     if (routing !== 'SPLINES' && routing !== 'ORTHOGONAL' && routing !== 'POLYLINE') {
         throw new Error(`Unknown routing '${options.routing}' (supported: SPLINES, ORTHOGONAL, POLYLINE)`);
     }
-    return { theme: theme as DiagramTheme, direction, routing, priorities: options.priorities ?? true };
+    return { theme: theme as DiagramTheme, direction, routing, priorities: options.priorities ?? true, auto: options.auto ?? false };
 }
 
 async function renderModel(model: StateMachine, options: ReturnType<typeof diagramOptions>, xmlDeclaration = true): Promise<string> {
-    const { graph } = await layoutStateMachine(model, { direction: options.direction, routing: options.routing, priorities: options.priorities });
+    // the layout annotations of the model (manual layout) unless `auto`
+    const { graph } = await layoutStateMachineWithLayout(model, { direction: options.direction, routing: options.routing, priorities: options.priorities },
+        options.auto ? null : undefined);
     return renderSvg(graph, { theme: options.theme, xmlDeclaration });
 }
 
@@ -286,6 +290,7 @@ export function registerRenderCommands(program: Command): void {
         .option('-d, --direction <direction>', 'layout direction: DOWN or RIGHT', 'DOWN')
         .option('-r, --routing <routing>', 'edge routing: SPLINES, ORTHOGONAL or POLYLINE', 'SPLINES')
         .option('--no-priorities', 'do not prefix transition labels with their priority')
+        .option('--auto', 'lay out automatically, ignoring the layout annotations (@at, ...) of the models')
         .option('-f, --format <format>', 'output format (svg)', 'svg')
         .description('renders the diagrams of state machines as standalone SVG files')
         .action(async (files: string[], options: RenderCommandOptions) => {
@@ -300,6 +305,7 @@ export function registerRenderCommands(program: Command): void {
         .option('-d, --direction <direction>', 'layout direction: DOWN or RIGHT', 'DOWN')
         .option('-r, --routing <routing>', 'edge routing: SPLINES, ORTHOGONAL or POLYLINE', 'SPLINES')
         .option('--no-priorities', 'do not prefix transition labels with their priority')
+        .option('--auto', 'lay out automatically, ignoring the layout annotations (@at, ...) of the models')
         .option('--title <title>', 'title of the index page', 'State machines')
         .description('generates documentation pages (diagram, interfaces, states, transitions, doc comments) and an index')
         .action(async (files: string[], options: DocCommandOptions) => {

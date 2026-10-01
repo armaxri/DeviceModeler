@@ -34,9 +34,8 @@ entry StateMachine:
     'statemachine' name=ID (description=STRING)? '{'
         imports+=Import*
         ('namespace' namespace=QualifiedName imports+=Import*)?
-        annotations+=Annotation*
-        scopes+=Scope*
-        (vertices+=Vertex | transitions+=Transition | reactions+=LocalReaction)*
+        // the definition section (annotations, interfaces, internal scope) comes first (checked by the validator)
+        (annotations+=Annotation | scopes+=Scope | vertices+=Vertex | transitions+=Transition | reactions+=LocalReaction)*
     '}';
 
 // ---------------------------------------------------------------------------------------------
@@ -100,6 +99,11 @@ TypeReferenceName returns string:
 // ---------------------------------------------------------------------------------------------
 // States
 
+// Layout annotations (manual diagram layout, see docs/manual-layout.md and model-annotations.ts) are
+// members of the state machine, states and regions: `@at(x, y)`, `@size(w, h)`, `@regions("vertical" |
+// "horizontal")`, `@via(x1, y1, ...)` and `@label(dx, dy)` belong to the state, pseudo state, region or
+// transition that follows them, `@initial(x, y)`, `@final(x, y)` and `@definitions(x, y)` to the state
+// machine, state or region in whose body they are written.
 Vertex:
     State | PseudoState;
 
@@ -107,13 +111,13 @@ Vertex:
 // state machine) to the state: the instance runs while the state is active.
 State:
     'state' name=ID (':' submachine=[VariableDeclaration:QualifiedName])? (description=STRING)? ('{'
-        (reactions+=LocalReaction | vertices+=Vertex | transitions+=Transition | regions+=Region)*
+        (annotations+=Annotation | reactions+=LocalReaction | vertices+=Vertex | transitions+=Transition | regions+=Region)*
     '}')?;
 
 // Orthogonal (concurrent) region of a composite state.
 Region:
     'region' (name=ID)? '{'
-        (vertices+=Vertex | transitions+=Transition)*
+        (annotations+=Annotation | vertices+=Vertex | transitions+=Transition)*
     '}';
 
 // `entry` and `exit` pseudo states are the named entry points / exit nodes of itemis CREATE.

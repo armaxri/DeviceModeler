@@ -58,6 +58,8 @@ export interface DiagramNode {
     regions?: boolean;
     /** Index of a region within its state. */
     index?: number;
+    /** Regions (manual layout): where the separator line to the previous region is drawn (default: by layout direction). */
+    separator?: 'top' | 'left';
     /** A submachine state (`state Moving : motor`), see {@link DiagramSubmachine}. */
     submachine?: DiagramSubmachine;
     children: DiagramNode[];
@@ -103,6 +105,8 @@ export interface DiagramEdge {
     routing: 'spline' | 'polyline' | 'orthogonal';
     /** Absolute coordinates of the route. */
     points: Point[];
+    /** Manual layout: the points the route passes through (set by the user, absolute coordinates). */
+    waypoints?: Point[];
     label?: DiagramLabel;
     /** Priority of the transition among the outgoing transitions of its source (if it has several). */
     priority?: number;

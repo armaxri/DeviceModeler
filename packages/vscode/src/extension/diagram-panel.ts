@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
-import type { FromWebview, OffsetEdit, TextRange, ToWebview, WebviewSettings } from '../common/protocol.js';
+import type { FromWebview, LayoutCommand, OffsetEdit, TextRange, ToWebview, WebviewSettings } from '../common/protocol.js';
 import { canApplyEdit, toRangeEdits } from './logic/edits.js';
 import { effectiveTheme, webviewHtml } from './logic/webview.js';
 import { collectImportedFiles } from './logic/imports.js';
@@ -164,6 +164,23 @@ export class DiagramManager implements vscode.Disposable {
         }
     }
 
+    /**
+     * Converts the SVG into a PNG image in the webview of the model's diagram (a canvas is needed),
+     * opening the diagram if necessary.
+     */
+    async rasterize(uri: vscode.Uri, svg: string, scale = 2): Promise<Uint8Array> {
+        const panel = this.panels.get(uri.toString()) ?? await this.open(uri, true);
+        await panel.whenReady();
+        return panel.rasterize(svg, scale);
+    }
+
+    /** Runs a layout command (auto-arrange, reset) in the active diagram. */
+    layoutCommand(uri: vscode.Uri | undefined, command: LayoutCommand): boolean {
+        const panel = uri ? this.panels.get(uri.toString()) : this.active;
+        panel?.post({ type: 'layoutCommand', command });
+        return panel !== undefined;
+    }
+
     private broadcastSettings(): void {
         const settings = readSettings();
         for (const panel of this.panels.values()) {
@@ -185,8 +202,10 @@ export class DiagramPanel {
     private ready = false;
     /** URIs of the files imported by the model (sent to the webview with the text). */
     private importedUris = new Set<string>();
-    private sendSequence = 0;
+    private sendQueue: Promise<void> = Promise.resolve();
     private readonly readyWaiters: Array<() => void> = [];
+    private rasterizeRequest = 0;
+    private readonly rasterizeRequests = new Map<number, { resolve: (data: Uint8Array) => void, reject: (error: Error) => void }>();
 
     constructor(private readonly manager: DiagramManager, readonly panel: vscode.WebviewPanel, private document: vscode.TextDocument) {
         panel.iconPath = vscode.Uri.joinPath(manager.context.extensionUri, 'media', 'diagram.svg');
@@ -212,6 +231,7 @@ export class DiagramPanel {
         return this.document.uri;
     }
 
+    /** The document was renamed / moved. */
     setDocument(document: vscode.TextDocument): void {
         this.document = document;
         this.panel.title = DiagramPanel.title(document);
@@ -235,6 +255,15 @@ export class DiagramPanel {
     }
 
     /** Resolves once the webview has been loaded. */
+    /** Converts the SVG into a PNG image in the webview. */
+    rasterize(svg: string, scale: number): Promise<Uint8Array> {
+        const requestId = ++this.rasterizeRequest;
+        return new Promise((resolve, reject) => {
+            this.rasterizeRequests.set(requestId, { resolve, reject });
+            this.post({ type: 'rasterize', requestId, svg, scale });
+        });
+    }
+
     whenReady(): Promise<void> {
         return this.ready ? Promise.resolve() : new Promise(resolve => this.readyWaiters.push(resolve));
     }
@@ -267,24 +296,22 @@ export class DiagramPanel {
 
     private sendText(): void {
         clearTimeout(this.textTimer);
-        const sequence = ++this.sendSequence;
         const document = this.document;
         const text = document.getText();
         const version = document.version;
         // the texts of the imported state machines (open documents with their unsaved changes, else the files)
         const headers = headerSettingsFor(document.uri);
-        collectImportedFiles(document.uri.toString(), text, readText, 100, headers).catch(() => ({})).then(files => {
-            if (sequence !== this.sendSequence) {
-                return;
-            }
-            this.importedUris = new Set(Object.keys(files));
+        const files = collectImportedFiles(document.uri.toString(), text, readText, 100, headers).catch(() => ({}));
+        // posted in order (an older text must not overwrite a newer one)
+        this.sendQueue = this.sendQueue.then(() => files).then(imported => {
+            this.importedUris = new Set(Object.keys(imported));
             this.post({
                 type: 'text',
                 text,
                 version,
                 fileName: path.basename(document.uri.path),
                 uri: document.uri.toString(),
-                files,
+                files: imported,
                 headers
             });
         });
@@ -335,6 +362,16 @@ export class DiagramPanel {
             case 'command':
                 await vscode.commands.executeCommand(`hsm.${message.command}`, this.document.uri);
                 break;
+            case 'png': {
+                const request = this.rasterizeRequests.get(message.requestId);
+                this.rasterizeRequests.delete(message.requestId);
+                if (message.data !== undefined) {
+                    request?.resolve(Uint8Array.from(Buffer.from(message.data, 'base64')));
+                } else {
+                    request?.reject(new Error(message.error ?? 'The PNG image could not be created.'));
+                }
+                break;
+            }
             case 'simulation':
                 break;
             case 'openFile': {

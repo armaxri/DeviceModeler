@@ -1,8 +1,8 @@
 {
   "name": "hsm-vscode",
-  "displayName": "HSM Modeler",
-  "description": "Hierarchical state machines (.hsm) and their unit tests (.hsmtest): language server, PlantUML-style diagram editor, C++ code generation, test runner and itemis CREATE import",
-  "version": "0.1.0",
+  "displayName": "HSM Modeler (manual layout)",
+  "description": "Hierarchical state machines (.hsm) and their unit tests (.hsmtest): language server, PlantUML-style diagram editor, C++ code generation, test runner and itemis CREATE import – experimental build with hand-arranged diagrams (layout annotations in the model)",
+  "version": "0.1.0-manual-layout",
   "private": true,
   "publisher": "hsm-modeler",
   "license": "MIT",
@@ -96,13 +96,25 @@
         "category": "HSM"
       },
       {
-        "command": "hsm.exportSvg",
-        "title": "Export Diagram as SVG",
+        "command": "hsm.exportDiagram",
+        "title": "Export Diagram…",
         "category": "HSM"
       },
       {
-        "command": "hsm.exportPlantUml",
-        "title": "Export as PlantUML",
+        "command": "hsm.autoArrange",
+        "title": "Auto-arrange Diagram",
+        "category": "HSM",
+        "icon": "$(layout)"
+      },
+      {
+        "command": "hsm.resetLayout",
+        "title": "Use Automatic Diagram Layout",
+        "category": "HSM",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "hsm.convertLayoutFile",
+        "title": "Convert Layout File to Annotations",
         "category": "HSM"
       }
     ],
@@ -131,7 +143,7 @@
           "group": "hsm@2"
         },
         {
-          "command": "hsm.exportSvg",
+          "command": "hsm.exportDiagram",
           "when": "editorLangId == hsm",
           "group": "hsm@3"
         }
@@ -148,7 +160,7 @@
           "group": "hsm@2"
         },
         {
-          "command": "hsm.exportPlantUml",
+          "command": "hsm.exportDiagram",
           "when": "resourceExtname == .hsm",
           "group": "hsm@3"
         },
@@ -173,12 +185,32 @@
           "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram"
         },
         {
-          "command": "hsm.exportSvg",
+          "command": "hsm.exportDiagram",
           "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram"
         },
         {
-          "command": "hsm.exportPlantUml",
+          "command": "hsm.autoArrange",
           "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram"
+        },
+        {
+          "command": "hsm.resetLayout",
+          "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram"
+        },
+        {
+          "command": "hsm.convertLayoutFile",
+          "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram"
+        }
+      ],
+      "webview/title": [
+        {
+          "command": "hsm.autoArrange",
+          "when": "activeWebviewPanelId == hsm.diagram",
+          "group": "hsmLayout@1"
+        },
+        {
+          "command": "hsm.resetLayout",
+          "when": "activeWebviewPanelId == hsm.diagram",
+          "group": "hsmLayout@2"
         }
       ]
     },
