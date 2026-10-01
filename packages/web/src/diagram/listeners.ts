@@ -66,6 +66,21 @@ function movableVertex(target: SModelElementImpl, manual: boolean): VertexNode |
     return undefined;
 }
 
+/** Straight lines from the border of the source through the waypoints to the border of the target. */
+function previewLine(edge: TransitionEdge, s: Rect, sourceKind: VertexNode['kind'], t: Rect, targetKind: VertexNode['kind']): Point[] {
+    const sc = { x: s.x + s.width / 2, y: s.y + s.height / 2 };
+    const tc = { x: t.x + t.width / 2, y: t.y + t.height / 2 };
+    const waypoints = edge.waypoints;
+    return [borderPoint(s, sourceKind, waypoints[0] ?? tc), ...waypoints, borderPoint(t, targetKind, waypoints[waypoints.length - 1] ?? sc)];
+}
+
+interface Rect {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
 /** The DOM element of a handle (resize handle, bend point) the event started on. */
 function handleElement(event: MouseEvent): Element | undefined {
     const target = event.target;
@@ -227,24 +242,52 @@ export class HsmMouseListener extends MouseListener {
             if (Math.hypot(ds.x, ds.y) < 0.5 && Math.hypot(dt.x, dt.y) < 0.5) {
                 continue;
             }
-            let points: Point[];
             if (Math.hypot(ds.x - dt.x, ds.y - dt.y) < 0.5) {
-                points = element.points.map(p => ({ x: p.x + ds.x, y: p.y + ds.y }));
+                this.showPreview(element, element.points.map(p => ({ x: p.x + ds.x, y: p.y + ds.y })), element.routing === 'spline');
             } else {
-                const sc = { x: s.x + s.width / 2, y: s.y + s.height / 2 };
-                const tc = { x: t.x + t.width / 2, y: t.y + t.height / 2 };
-                points = [borderPoint(s, source.kind, tc), borderPoint(t, target.kind, sc)];
+                this.showPreview(element, previewLine(element, s, source.kind, t, target.kind), false);
             }
-            const dom = document.getElementById(`${this.viewerOptions.baseDiv}_${element.id}`);
-            if (!dom) {
+        }
+    }
+
+    /** Live feedback while resizing a vertex: its transitions as straight lines (through their waypoints). */
+    private updateResizedEdges(vertex: VertexNode, width: number, height: number): void {
+        const root = vertex.root;
+        const rect = (v: VertexNode) => v === vertex
+            ? { ...absolutePosition(v), width, height }
+            : { ...absolutePosition(v), width: v.size.width, height: v.size.height };
+        const contains = (outer: { x: number, y: number, width: number, height: number }, inner: { x: number, y: number }) =>
+            inner.x >= outer.x && inner.y >= outer.y && inner.x <= outer.x + outer.width && inner.y <= outer.y + outer.height;
+        for (const element of root.index.all()) {
+            if (!isTransitionEdge(element) || element.points.length < 2 || (element.sourceId !== vertex.id && element.targetId !== vertex.id)) {
                 continue;
             }
-            const d = routePath(points, element.routing === 'spline' && points.length === element.points.length);
-            dom.querySelectorAll('.transition-line, .transition-hit').forEach(path => path.setAttribute('d', d));
-            dom.querySelector('.transition-arrow')?.setAttribute('d', arrowHead(points[points.length - 2], points[points.length - 1]));
-            dom.querySelector('.transition-label')?.setAttribute('visibility', 'hidden');
-            this.changedEdges.add(element);
+            const source = root.index.getById(element.sourceId);
+            const target = root.index.getById(element.targetId);
+            if (!isVertexNode(source) || !isVertexNode(target) || source === target) {
+                continue;
+            }
+            const s = rect(source);
+            const t = rect(target);
+            if (contains(s, t) || contains(t, s)) {
+                // a transition between a composite state and its content: the route stays inside
+                continue;
+            }
+            this.showPreview(element, previewLine(element, s, source.kind, t, target.kind), false);
         }
+    }
+
+    /** Shows the route in the DOM (restored by {@link restoreEdges}; the label is hidden meanwhile). */
+    private showPreview(element: TransitionEdge, points: Point[], spline: boolean): void {
+        const dom = document.getElementById(`${this.viewerOptions.baseDiv}_${element.id}`);
+        if (!dom) {
+            return;
+        }
+        const d = routePath(points, spline);
+        dom.querySelectorAll('.transition-line, .transition-hit').forEach(path => path.setAttribute('d', d));
+        dom.querySelector('.transition-arrow')?.setAttribute('d', arrowHead(points[points.length - 2], points[points.length - 1]));
+        dom.querySelector('.transition-label')?.setAttribute('visibility', 'hidden');
+        this.changedEdges.add(element);
     }
 
     /** Restores the DOM of the transitions changed while dragging (the diagram update only patches changed attributes). */
@@ -279,6 +322,7 @@ export class HsmMouseListener extends MouseListener {
             dom.querySelector(':scope > .state-shape')?.setAttribute('width', String(w));
             dom.querySelector(':scope > .state-shape')?.setAttribute('height', String(h));
             dom.querySelector(':scope > .state-separator')?.setAttribute('x2', String(w));
+            this.updateResizedEdges(handle.element, w, h);
             const grip = dom.querySelector(':scope > .resize-handle');
             grip?.setAttribute('x', String(w - 9));
             grip?.setAttribute('y', String(h - 9));
@@ -331,6 +375,7 @@ export class HsmMouseListener extends MouseListener {
         // undo the live feedback: the diagram update only patches attributes which changed in the model
         const start = { ...handle, startX: event.clientX, startY: event.clientY };
         this.moveHandle(start, event);
+        this.restoreEdges();
         if (handle.kind === 'bend' && isTransitionEdge(handle.element)) {
             const edge = handle.element;
             const d = routePath(edge.points, edge.routing === 'spline');

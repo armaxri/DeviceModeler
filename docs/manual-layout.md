@@ -131,7 +131,8 @@ it sets the layout of an opened model with `loadLayout`. The toolbar buttons (`#
   layout, so nothing jumps. *Auto* keeps the manual layout for later; *Reset* discards it;
   *Auto-arrange* re-runs ELK and stores the result as the new manual layout.
 - Drag a vertex (also initial / final states and the definition box) to move it; the transitions
-  attached to it follow as straight lines while dragging and are routed on drop. Positions are kept
+  attached to it follow as straight lines (through their waypoints) while dragging or resizing and are
+  routed on drop. Positions are kept
   inside the parent's content area; the parent grows.
 - **Shift + drop** moves the state into the state / region below the mouse (the automatic mode keeps
   plain drag and drop for this). Shift was chosen because Alt + drag is taken by several window
