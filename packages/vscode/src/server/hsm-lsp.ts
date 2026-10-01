@@ -58,8 +58,9 @@ export class HsmSemanticTokenProvider extends AbstractSemanticTokenProvider {
 
     protected override highlightElement(node: AstNode, acceptor: SemanticTokenAcceptor): void {
         // C++ names of imported headers: types, enumerators and constants
-        if (isTypeReference(node) && node.$cstNode && cppTypeOfReference(node)) {
-            acceptor({ cst: node.$cstNode, type: SemanticTokenTypes.type });
+        const cppType = isTypeReference(node) && node.$cstNode ? cppTypeOfReference(node) : undefined;
+        if (cppType && node.$cstNode) {
+            acceptor({ cst: node.$cstNode, type: cppType.resolved.kind === 'enum' ? SemanticTokenTypes.enum : SemanticTokenTypes.type });
         } else if (isCppReference(node) && node.$cstNode) {
             const resolved = resolveCppValue(node);
             const enumerator = resolved.info?.declaration.kind === 'enumerator';

@@ -47,6 +47,8 @@ interface Scope {
     readonly inlineNamespaces: Scope[];
     /** `using namespace` directives of this scope. */
     readonly usingDirectives: CppQualifiedName[];
+    /** `using enum` declarations of this scope (C++20): the enumerators are members of the scope. */
+    readonly usingEnums: CppQualifiedName[];
     readonly declaration?: CppRecord | CppEnum;
 }
 
@@ -142,7 +144,7 @@ export class CppTypeIndex {
     }
 
     private static scope(qualifiedName: string, kind: Scope['kind'], parent?: Scope, declaration?: CppRecord | CppEnum): Scope {
-        return { qualifiedName, kind, parent, symbols: new Map(), inlineNamespaces: [], usingDirectives: [], declaration };
+        return { qualifiedName, kind, parent, symbols: new Map(), inlineNamespaces: [], usingDirectives: [], usingEnums: [], declaration };
     }
 
     // -----------------------------------------------------------------------------------------
@@ -159,6 +161,17 @@ export class CppTypeIndex {
             scope.symbols.set(name, list);
         }
         if (!list.includes(declaration)) {
+            if (declaration.kind === 'enum') {
+                // opaque declarations (`enum class E : int;`) and the definition denote the same enum: the definition is used
+                const other = list.findIndex(d => d.kind === 'enum');
+                if (other >= 0 && declaration.opaque) {
+                    return;
+                }
+                if (other >= 0 && (list[other] as CppEnum).opaque) {
+                    list[other] = declaration;
+                    return;
+                }
+            }
             const duplicate = list.find(other => other.kind === declaration.kind && other.kind !== 'namespace' && other.fileName !== declaration.fileName);
             if (duplicate) {
                 this.report('warning', `'${declaration.qualifiedName}' is also declared in ${duplicate.fileName}; the first declaration is used`, declaration.fileName, declaration.nameRange);
@@ -190,13 +203,17 @@ export class CppTypeIndex {
                     break;
                 }
                 case 'usingDirective':
-                    scope.usingDirectives.push(declaration.target);
+                    (declaration.enum ? scope.usingEnums : scope.usingDirectives).push(declaration.target);
                     break;
                 case 'enum': {
-                    this.addSymbol(scope, declaration.anonymous ? '' : declaration.name, declaration);
-                    const own = CppTypeIndex.scope(declaration.qualifiedName, 'enum', scope, declaration);
+                    // out-of-line definition of a nested enum (`enum class Outer::E : int { … };`): member of `Outer`
+                    const enclosing = this.enclosingScopeOf(declaration, scope);
+                    this.declarationScopes.set(declaration, enclosing);
+                    this.addSymbol(enclosing, declaration.anonymous ? '' : declaration.name, declaration);
+                    const own = CppTypeIndex.scope(declaration.qualifiedName, 'enum', enclosing, declaration);
                     this.ownScopes.set(declaration, own);
-                    if (!declaration.anonymous && !this.scopesByName.has(declaration.qualifiedName)) {
+                    const known = this.scopesByName.get(declaration.qualifiedName);
+                    if (!declaration.anonymous && (!known || (known.declaration?.kind === 'enum' && known.declaration.opaque && !declaration.opaque))) {
                         this.scopesByName.set(declaration.qualifiedName, own);
                     }
                     for (const enumerator of declaration.enumerators) {
@@ -204,7 +221,7 @@ export class CppTypeIndex {
                         this.enumOf.set(enumerator, declaration);
                         this.addSymbol(own, enumerator.name, enumerator);
                         if (!declaration.scoped) {
-                            this.addSymbol(scope, enumerator.name, enumerator);
+                            this.addSymbol(enclosing, enumerator.name, enumerator);
                         }
                     }
                     break;
@@ -228,6 +245,16 @@ export class CppTypeIndex {
                     this.addSymbol(scope, declaration.name, declaration);
             }
         }
+    }
+
+    /**
+     * The scope a declaration with a qualified name belongs to: for `enum class Outer::E {…}` the
+     * scope of `Outer` (if it is known), otherwise the scope it is written in.
+     */
+    private enclosingScopeOf(declaration: CppDeclaration, scope: Scope): Scope {
+        const separator = declaration.qualifiedName.lastIndexOf('::');
+        const prefix = separator >= 0 ? declaration.qualifiedName.slice(0, separator) : '';
+        return prefix === scope.qualifiedName || declaration.name === '' ? scope : this.scopesByName.get(prefix) ?? scope;
     }
 
     private report(severity: CppDiagnosticSeverity, message: string, fileName: string, range: CppRange): void {
@@ -317,6 +344,9 @@ export class CppTypeIndex {
             return own;
         }
         const found: CppDeclaration[] = [];
+        for (const enumScope of this.usingEnumScopes(scope)) {
+            found.push(...(enumScope.symbols.get(name) ?? []));
+        }
         for (const inline of scope.inlineNamespaces) {
             found.push(...this.findIn(inline, name, visited));
         }
@@ -348,6 +378,26 @@ export class CppTypeIndex {
             }
         }
         return found;
+    }
+
+    /** The scopes of the enums named by the `using enum` declarations of a scope. */
+    private usingEnumScopes(scope: Scope): Scope[] {
+        const result: Scope[] = [];
+        for (const target of scope.usingEnums) {
+            if (this.directivesInProgress.has(target)) {
+                continue;
+            }
+            this.directivesInProgress.add(target);
+            try {
+                const enumScope = this.lookupIn(target, scope).map(d => this.memberScope(d)).find(s => s?.kind === 'enum');
+                if (enumScope) {
+                    result.push(enumScope);
+                }
+            } finally {
+                this.directivesInProgress.delete(target);
+            }
+        }
+        return result;
     }
 
     /** The scope of the members of a namespace, class, enum or of the type an alias denotes. */
@@ -388,6 +438,9 @@ export class CppTypeIndex {
         const collect = (s: Scope) => {
             for (const list of s.symbols.values()) {
                 list.forEach(d => result.add(d));
+            }
+            for (const enumScope of this.usingEnumScopes(s)) {
+                enumScope.symbols.forEach(list => list.forEach(d => result.add(d)));
             }
             s.inlineNamespaces.forEach(collect);
         };
@@ -639,6 +692,15 @@ export class CppTypeIndex {
         const known = this.enums.get(declaration);
         if (known) {
             return known;
+        }
+        if (declaration.opaque) {
+            // an opaque declaration denotes the enum of the definition (if there is one)
+            const definition = this.lookupAll(`::${declaration.qualifiedName}`).find(d => d.kind === 'enum' && !d.opaque);
+            if (definition) {
+                const state = this.resolveEnum(definition as CppEnum);
+                this.enums.set(declaration, state);
+                return state;
+            }
         }
         const scope = this.ownScopes.get(declaration) ?? this.global;
         const outer = this.declarationScopes.get(declaration) ?? this.global;

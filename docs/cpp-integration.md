@@ -137,7 +137,7 @@ diagnostics; parsing continues after the skipped construct.
 | preprocessor | `#if`, `#ifdef`, `#ifndef`, `#elif`, `#elifdef`, `#elifndef`, `#else`, `#endif` are evaluated (see 3.1); `#define`/`#undef` (object-like and function-like, `#`, `##`, `__VA_ARGS__`, `__VA_OPT__`) are expanded; `#include` is recorded; `#pragma`, `#error` (warning), `#line` |
 | namespaces | `namespace a { }`, `namespace a::b { }`, `inline namespace`, anonymous namespaces, `namespace x = a::b;`, `using namespace a;` |
 | `extern "C" { }` | contents belong to the enclosing namespace |
-| enums | `enum`, `enum class`, `enum struct`, anonymous, `typedef enum { } Name;`, fixed underlying type (`: std::uint8_t`), explicit values as constant expressions, attributes on enumerators |
+| enums | `enum`, `enum class`, `enum struct`, anonymous, `typedef enum { } Name;`, `typedef enum Tag { } Name;`, fixed underlying type (`: std::uint8_t`), explicit values as constant expressions, attributes on enums and enumerators, enums in namespaces and classes, opaque declarations `enum class E : int;` (merged with the definition), out-of-line definitions of nested enums `enum class Outer::E : int { };`, C++20 `using enum E;` (see §3.4) |
 | classes | `struct`, `class` (and `union`, classified as unsupported) with data members (all access levels recorded, public ones used), bit-fields, arrays, default member initializers (`= x`, `{x}`), nested classes / enums / aliases, `static constexpr` / `static const` members, base classes, anonymous `struct { } member;`, C idiom `typedef struct { } Name;` |
 | aliases | `typedef` (also several declarators, pointer / array / function pointer declarators), `using X = T;`, using-declarations `using ns::X;` |
 | constants | `constexpr`, `const`, `static const(expr)`, `inline constexpr`, `extern const` (no value), initializers `= x`, `{x}`, `(x)`; `auto`; aggregate initialization of structs and arrays (positional and designated `.x = 1`), `constexpr char k[] = "…"` |
@@ -194,6 +194,27 @@ The widths of `long`, `size_t` etc. depend on the target: `CppTypeIndex` uses LP
 - Header-local macros that expand to declarations across several lines are expanded, but macros
   producing unbalanced braces may confuse the parser (it recovers at the next declaration).
 - `sizeof` of classes is unknown (layout and padding are not computed).
+
+### 3.4 Enums
+
+| form | example | type in models | enumerators in models |
+| --- | --- | --- | --- |
+| unscoped | `enum Color { Red, Green = 2, Blue };` | `Color` | `::Red`, `::Color::Red` (`ns::Red`, `ns::Color::Red` in a namespace) |
+| scoped | `enum class Mode { Off, On };`, `enum struct …` | `Mode` | `Mode::Off` |
+| fixed underlying type | `enum class Key : std::uint8_t { … };`, `enum Flags : int { … };` | `Key` | as above |
+| C style | `typedef enum { LED_OFF, LED_ON } led_t;`, `typedef enum tag { … } name_t;` | `led_t`, `name_t` (also `tag`) | `::LED_OFF` (`led_t::LED_OFF` is accepted too) |
+| in a namespace | `namespace app::io { enum class Level { Low }; }` | `app::io::Level` | `app::io::Level::Low` |
+| in a class | `struct Sensor { enum State { Idle }; enum class Kind { T }; };` | `Sensor::State`, `Sensor::Kind` | `Sensor::Idle`, `Sensor::Kind::T` |
+| opaque | `enum class Handle : std::uint32_t;` | `Handle` | no enumerators (values by cast: `7 as Handle`); a later definition (also in another header, also `enum class Outer::E : int { … }` out of line) provides them |
+| anonymous | `enum { kSize = 8 };` | – | `::kSize` (an `integer`-like value) |
+| `using enum` (C++20) | `namespace app { using enum ::Color; }` | – | also `app::Red` |
+
+Values: explicit values are constant expressions (negative, hex, character literals `'a'`, earlier
+enumerators `kExpr = kHex << 1 | 1`, enumerators of other enums with casts, macros); without value
+the previous value + 1. The values must fit into the fixed underlying type (error otherwise); without
+fixed type the underlying type is deduced from the values (`int`, `unsigned int`, `long long`, …).
+Comments and doc comments (`///`, `/** */` before, `///<` after an enumerator), `#if` branches, attributes
+(`[[deprecated]]`, `__attribute__`) and a trailing comma inside the enumerator list are handled.
 
 ## 4. Language integration (implemented)
 
@@ -262,7 +283,7 @@ compare with `sameType`). Mapping of `CppResolvedType` (`hsmTypeOfCpp`):
 | `real` | `real` | `float` places round to single precision |
 | `boolean` | `boolean` | |
 | `string` | `string` | only `std::string` can be the type of a place; `const char*` / `std::string_view` constants are readable (a type reference to them is an error) |
-| `enum` | `CppHsmType` enum | `==` / `!=` between values of the same enum; **unscoped** enums are promoted to `integer` in arithmetic, bitwise and relational operators and assignable to `integer` / `real`; `enum class` values are not; `as` converts integer ↔ enum (and enum → other enum) |
+| `enum` | `CppHsmType` enum | `==` / `!=` and `<` `<=` `>` `>=` between values of the same enum (also of an `enum class`, ordered by value as in C++); **unscoped** enums are promoted to `integer` in arithmetic, bitwise and relational operators with other types and assignable to `integer` / `real`; `enum class` values are not; nothing converts implicitly to an enum (`integer`, another enum: error, as in C++); `as` converts integer ↔ enum (and enum → other enum) |
 | `struct` | `CppHsmType` struct | members by name (public data members, inherited ones included); assignable as a whole (same type); **no `==`** (C++ aggregates have none before C++20; user-defined operators are not analyzed) |
 | `array` | `CppHsmType` array | element access `a[i]` (index: integer or unscoped enum; constant indices out of bounds are errors); `std::array` values are assignable as a whole, C arrays are not; no `==`; arrays of unknown length are unsupported |
 | `unsupported` | error where used | `The C++ type 'Foo' cannot be used: 'Foo' is not supported (union)` |
@@ -281,7 +302,8 @@ Event payloads, operation parameters and return values may use all these types.
   `CppTypeIndex.constant`.
 - Host values (API, callbacks, scenarios, simulation panels): enum → qualified enumerator name (a number if
   the value has no enumerator); input also the simple name or a number. Struct → object (missing members get
-  their default, unknown members are errors), array → array. `getValue(name)` / `getVariableType(name)` give
+  their default, unknown members are errors), array → array. Enumerators of unscoped enums are also accepted
+  in the spelling of models (`"motor::kJam"`, `"::RED"`). `getValue(name)` / `getVariableType(name)` give
   the runtime values and types (for UIs). Canonical text (`formatValue`): `motor::Mode::Fast`,
   `motor::Mode(7)`, `{x: 1, y: 2}`, `[1, 2]`.
 - Element access outside the bounds is a runtime error (`Index 3 is out of bounds 0..2`).
@@ -302,7 +324,7 @@ Event payloads, operation parameters and return values may use all these types.
   interpreter implements.
 - Scenario harness: `format` overloads for the enums, structs and arrays of the model (canonical text without
   white space), literals of enum values and structs (`[] { motor::Position v{}; v.x = 1; return v; }()`),
-  member-wise comparison of struct expectations. The 14 `s10-cpp-*` scenarios are compiled with g++ (and
+  member-wise comparison of struct expectations. The 15 `s10-cpp-*` scenarios are compiled with g++ (and
   checked with clang++) one by one (their headers may declare the same names).
 - The **C generator** reports `C++ header types are not supported by the C generator` for any header import or
   C++ type (also `uint8_t`); its conformance test skips exactly `CPP_TYPE_SCENARIOS` (`test/helpers.ts`).
@@ -317,10 +339,22 @@ Event payloads, operation parameters and return values may use all these types.
   paths.
 - Go to definition (`cppDefinition`): into the header (`fileName` + `nameRange` of the declaration); the
   import path opens the header.
-- Completion (`HsmCompletionProvider`, both languages): after `ns::` the members of the namespace / class /
-  enum, after `::` the global names, after `var.` the members of a struct variable; otherwise Langium's
-  completion.
-- Semantic highlighting (VS Code): C++ types, enumerators and constants.
+- Completion (`HsmCompletionProvider`, both languages, the VS Code language server and the web app): after
+  `ns::` the members of the namespace / class / enum (in type positions – `var x : `, `in event e : `,
+  parameters, return types, `alias`, `x as ` – only namespaces and types, in expressions values and scopes;
+  enumerators in declaration order with their values), after `::` the global names, after `var.` the members of
+  a struct variable. Where a value of an enum is expected, the enumerators of that enum are proposed first,
+  written as in models (`motor::Mode::Fast`, `::LED_ON`): after `x == ` / `x != ` / `x = ` (also `<` …, `x`
+  a variable or `valueof(e)`), `var m : motor::Mode = `, `raise e : `, in arguments of operation calls and
+  after `mock op returns (`; they are added to Langium's completion (typing `Fa` finds `motor::Mode::Fast`).
+  In type positions without qualifier the global C++ types and namespaces and the `<cstdint>` typedefs are
+  proposed.
+- Messages: an unknown enumerator lists the enumerators of the enum (`'motor::Mode' has no enumerator 'Fsat'
+  (enumerators: Off, Slow, Fast)`); an unqualified enumerator name suggests the qualified one (`Could not
+  resolve reference to Declaration named 'Fast'. (Did you mean 'motor::Mode::Fast'? …)`).
+- Hover of enumerators shows the value (also hexadecimal), the enum and its underlying type; hover of enums
+  the enumerators, the underlying type, whether the enum is unscoped or an opaque declaration.
+- Semantic highlighting (VS Code): C++ types (enum types as enums), enumerators and constants.
 - The definitions box of the diagram lists the imports.
 
 ### 4.7 Hosts and settings
@@ -358,7 +392,13 @@ Unsaved changes of a header open in VS Code are not seen (headers are read from 
 - No struct literals, no `==` of structs (also with a user-defined `operator==`), no whole-array assignment
   of C arrays, no pointers / references / unions / templates other than `std::array` / functions / methods.
 - Enum values without enumerator are shown as `motor::Mode(7)`; an enum with several enumerators of the same
-  value shows the first one.
+  value shows the first one. Values of unscoped enums are shown with the enum name (`Color::Red`,
+  `led_t::LED_ON`), which is also valid C++11.
+- The C generator does not support C enums of headers yet (it rejects all header imports): it would need the
+  C spelling of the types (`enum tag` without typedef) and enumerators, C casts instead of `static_cast` and
+  formatting in its scenario harness.
+- `using enum` and opaque enums in headers require a compiler that supports them for the generated code
+  (`using enum`: C++20; the analyzer accepts them regardless of `__cplusplus`).
 - `uint64_t` values above `INT64_MAX` are stored correctly but converted to `sc::integer` (wrapping) in
   arithmetic, like in the generated code; host values are JS numbers (exact up to 2^53).
 - The C generator does not support header types; the C++ generator does not support submachine instances

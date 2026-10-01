@@ -205,8 +205,14 @@ constexpr Position kHome{10, 20};                          operation drive(p : m
   out of range are warnings); arithmetic uses 64-bit integers like all HSM integers. `float` / `double` are
   `real` (`float` rounds to single precision), `bool` is `boolean`, `std::string` is `string`
   (`const char*` / `std::string_view` constants can be read). **Enums** are types of their own: values are
-  compared with `==` / `!=`; unscoped enum values convert to `integer` (flags: `faults | motor::kJam`);
-  `x as motor::Mode` / `mode as integer` convert. **Structs**: members are read and assigned (`pos.x`,
+  compared with `==` / `!=` and ordered (`<`, `>=`, … between values of the same enum); unscoped enum values
+  convert to `integer` (flags: `faults | motor::kJam`), but nothing converts implicitly to an enum (an `integer`
+  or a value of another enum is a type error, like in C++); `x as motor::Mode` / `mode as integer` convert. All
+  common forms of enum declarations are supported: `enum`, `enum class` / `enum struct` with or without
+  underlying type, C style `typedef enum { LED_OFF, LED_ON } led_t;` (type `led_t`, enumerators `::LED_OFF`),
+  enums in namespaces (`app::io::Level::Low`) and classes (`app::Sensor::State`, unscoped enumerators
+  `app::Sensor::Idle`), opaque declarations (`enum class Handle : std::uint32_t;`, values by cast) and
+  C++20 `using enum` (table in [docs/cpp-integration.md §3.4](cpp-integration.md#34-enums)). **Structs**: members are read and assigned (`pos.x`,
   `cfg.timing.periodMs = 5`, `valueof(e).x`, `measure().y`), structs are assigned as a whole, not compared
   (no `==`). **Arrays** (`std::array<T, N>`, `T[N]` members): elements `a[i]` (checked: an index out of bounds is
   a runtime error). Unions, pointers, templates (other than `std::array`) and the like are errors where used.
@@ -239,8 +245,10 @@ constexpr Position kHome{10, 20};                          operation drive(p : m
   `hsm cpp-header <files>` prints what the analyzer extracts. The supported C++ subset is described in
   [docs/cpp-integration.md](cpp-integration.md).
 - **Tools**: hover shows the declaration, value and documentation comment of the header, go to definition
-  opens the header (VS Code), completion after `motor::` lists the names of the namespace / enum and after
-  `pos.` the members. The language server re-reads a header when it changes on disk and revalidates the models
+  opens the header (VS Code), completion after `motor::` lists the names of the namespace / enum (only types
+  in type positions) and after `pos.` the members; where an enum value is expected (`mode == `, `mode = `,
+  `raise setMode : `, operation arguments) the enumerators of the enum are proposed (`motor::Mode::Fast`), in
+  type positions the C++ types. An unqualified enumerator (`Fast`) is an error that suggests the qualified name. The language server re-reads a header when it changes on disk and revalidates the models
   importing it; the web app accepts headers in *Open…* (they are added to its virtual file list).
 - **Generated C++** `#include`s the headers and uses the types by their names (`motor::Mode mode`,
   `void raise_moveTo(const motor::Position& value)`, `std::uint8_t get_small() const`), enumerators and

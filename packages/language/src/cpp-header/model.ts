@@ -183,10 +183,12 @@ export interface CppNamespaceAlias extends CppDeclarationBase {
     readonly target: CppQualifiedName;
 }
 
-/** `using namespace x::y;` (its name is `''`). */
+/** `using namespace x::y;` or (`enum: true`) the C++20 `using enum E;` (its name is `''`). */
 export interface CppUsingDirective extends CppDeclarationBase {
     readonly kind: 'usingDirective';
     readonly target: CppQualifiedName;
+    /** `using enum E;`: the enumerators of `E` are members of the scope. */
+    readonly enum?: boolean;
 }
 
 export interface CppEnum extends CppDeclarationBase {
@@ -196,6 +198,11 @@ export interface CppEnum extends CppDeclarationBase {
     readonly anonymous: boolean;
     /** The fixed underlying type (`enum class E : uint8_t`). */
     readonly underlyingType?: CppTypeRef;
+    /**
+     * An opaque declaration without enumerator list (`enum class E : int;`). The index prefers the
+     * definition of the enum if one exists.
+     */
+    readonly opaque?: boolean;
     readonly enumerators: readonly CppEnumerator[];
 }
 
