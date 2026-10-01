@@ -131,6 +131,10 @@ npm run package:desktop  # packages/desktop/release/: the desktop app (installer
 npm start -w packages/desktop   # the desktop app from the sources
 ```
 
+To try the IDE integrations, `npm run ide:vscode`, `npm run ide:eclipse`, `npm run ide:clion` and
+`npm run ide:desktop` build the plugin and start the IDE with it and the examples – in a sandbox (`.ide/`), without
+touching your IDE installations and settings (see [Trying the plugins locally](docs/installation.md#trying-the-plugins-locally)).
+
 ### Command line
 
 ```bash
@@ -158,7 +162,7 @@ node packages/language/bin/cli.js generate --check          # exit 1 if generate
 | [Execution semantics](docs/semantics.md) | how a state machine executes – the specification implemented by the interpreter and the code generators |
 | [Web editor](docs/editor.md) | editing in the diagram, 🧪 manual layout, simulation |
 | [Manual layout](docs/manual-layout.md) | 🧪 experimental (branch `claude/layout-annotations`): layout annotations in the model, layout computation, routing, editor integration, migration |
-| [Installation and usage](docs/installation.md) | downloads, desktop app, command line executable `hsm`, VS Code, Eclipse; unsigned downloads; how they are built |
+| [Installation and usage](docs/installation.md) | downloads, desktop app, command line executable `hsm`, VS Code, Eclipse; unsigned downloads; how they are built; trying the plugins locally (`npm run ide:*`) |
 | [VS Code extension](docs/vscode.md) | language server, diagram, generation, Test Explorer (details in [packages/vscode/README.md](packages/vscode/README.md)) |
 | [Rendering and model documentation](docs/rendering.md) | `hsm render` (SVG diagrams), `hsm doc` (Markdown / HTML documentation), doc comments |
 | [Unit tests and coverage](docs/testing.md) | the `.hsmtest` language, `hsm test`, model coverage, CI examples |

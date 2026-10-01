@@ -120,6 +120,52 @@ the bundled one, else `hsm` in the `PATH`). The editor itself does not need the 
 with a small HTTP server of the plugin, and *Generate C++* runs in the editor's page. Details, requirements and
 the development setup: [eclipse-plugin/README.md](../eclipse-plugin/README.md).
 
+## Trying the plugins locally
+
+Scripts in [`scripts/ide/`](../scripts/ide) build a plugin from the sources and start its IDE with it and the
+examples opened – in a sandbox below `.ide/` of the repository (git-ignored), so the normal installations,
+profiles, settings and extensions of the IDEs are not touched. They work on macOS, Linux and Windows
+(Node.js ≥ 20.10):
+
+```bash
+npm run ide:vscode              # VS Code with the extension (development mode)
+npm run ide:vscode -- --vsix    # … with the packaged .vsix installed instead
+npm run ide:eclipse             # Eclipse (downloaded once) with the plugin, examples imported as a project
+npm run ide:clion               # CLion with the JetBrains plugin (once jetbrains-plugin/ is merged)
+npm run ide:desktop             # the desktop app from the sources with the examples folder
+npm run ide:eclipse -- --help   # all options of a script
+```
+
+| Script | Sandbox | What it does |
+| --- | --- | --- |
+| `ide:vscode` | `.ide/vscode/` | builds `packages/vscode`, starts `code` with its own `--user-data-dir` and `--extensions-dir` and `--extensionDevelopmentPath=packages/vscode` (an *Extension Development Host* window), or with `--vsix` packages the `.vsix` and installs it into the sandbox's extensions folder. `code` is taken from the `PATH` (also `code-insiders`, `codium`) or the standard installation folders; `--code <path>` / `HSM_VSCODE` choose another one. |
+| `ide:eclipse` | `.ide/eclipse/` | builds the update site (`mvn verify`, needs Java 21 and Maven, and the `hsm` executable of this platform for the plugin's fragment), downloads *Eclipse IDE for C/C++ Developers* of the release the plugin is built against (2025-06, from archive.eclipse.org, checked against its SHA-512; once, into `.ide/eclipse/install/`), installs the feature with the p2 director (replacing an older build), imports the examples as the project `hsm-examples` with CDT's headless import (no wizard) and starts Eclipse with that workspace and `traffic-light.hsm` opened. `--eclipse <path>` / `HSM_ECLIPSE` use an existing installation instead – the plugin is installed **into** it, so use a separate one. |
+| `ide:clion` | `.ide/clion/` | needs `jetbrains-plugin/`. Finds CLion (`/Applications`, `~/Applications`, JetBrains Toolbox, `/opt`, `%LOCALAPPDATA%\Programs`, `%ProgramFiles%\JetBrains`; `--clion <path>` / `HSM_CLION`, any IntelliJ Platform IDE ≥ 2025.2 works) and runs `./gradlew runLocalIde` with [`jetbrains-local-ide.init.gradle`](../scripts/ide/jetbrains-local-ide.init.gradle): the plugin build is unchanged, Gradle builds the plugin and starts that installation with it in `.ide/clion/gradle-sandbox/` (the script waits until the IDE is closed). Without CLion it starts IntelliJ IDEA Community of the plugin's target platform (`./gradlew runIde`, downloaded by Gradle) and says so; `--download-clion` lets Gradle download CLion instead. `--zip` builds the plugin zip, unpacks it into an isolated plugins folder and starts the installed IDE directly with its own `idea.properties` (`CLION_PROPERTIES`: config, system, plugins and log folders in `.ide/clion/zip/`). The `hsm` executable of this platform is put into the plugin (`-PhsmExecutable`) for the validation of closed models. |
+| `ide:desktop` | `.ide/desktop/` | builds `packages/desktop` and starts it with Electron from `node_modules` and `--user-data-dir` in the sandbox (an installed *HSM Modeler* keeps its recent files and is not reused as running instance), with the examples folder. |
+
+Options of all scripts:
+
+- `--no-build`: use the existing build;
+- `--examples <dir>`: open that folder instead of the examples; `--in-place`: open the repository's `examples/`
+  directly (edits change the repository; Eclipse writes `examples/.project`, which is git-ignored). By default
+  the IDE opens a copy of `examples/` in `.ide/<ide>/workspace/hsm-examples`, created on the first start and
+  kept afterwards;
+- `--clean`: reset the sandbox of that IDE first (profile, settings, workspace, examples copy; the downloaded
+  Eclipse archive is kept);
+- `--dry-run`: print what would be done; `--help`.
+
+Notes:
+
+- Every IDE started by a script is a separate instance next to your own IDE windows; close it as usual. The
+  logs are in the sandbox (VS Code: `.ide/vscode/user-data/logs/…/exthost/exthost.log`; Eclipse:
+  `.ide/eclipse/workspace/.metadata/.log`; CLion: `.ide/clion/gradle-sandbox/log_runLocalIde/idea.log`).
+- First starts ask what a fresh profile asks: Eclipse nothing (the welcome page is turned off), JetBrains IDEs
+  their user agreement / license (once per sandbox).
+- Only the HSM plugin is installed. Other extensions (e.g. the C/C++ extension for the generated code) can be
+  installed in the sandbox IDE as usual; they stay in the sandbox.
+- Eclipse is started with `-data .ide/eclipse/workspace`; the `ide:eclipse` script refuses to update the plugin
+  while that Eclipse is running (p2 changes the installation).
+
 ## How the downloads are built
 
 The [*Distribution* workflow](../.github/workflows/distribution.yml) builds everything on native runners
