@@ -1018,6 +1018,11 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         this.renderPropertiesPanel();
     }
 
+    /** Selects all elements of the diagram. */
+    selectAll(): void {
+        void this.actionDispatcher.dispatch(SelectAllAction.create({ select: true }));
+    }
+
     singleSelection(): string | undefined {
         return this.selection.size === 1 ? [...this.selection][0] : undefined;
     }

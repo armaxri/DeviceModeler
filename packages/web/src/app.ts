@@ -8,7 +8,9 @@ import { createWorkerElk } from './diagram/elk.js';
 import { byId, download, h } from './ui/dom.js';
 import type { SimulationSession } from './simulation/session.js';
 import { EMPTY_MODEL, EXAMPLE_HEADERS, EXAMPLES } from './examples.js';
-import { HttpHost } from './host.js';
+import { HttpHost, type HostDocument } from './host.js';
+import { generateCppForHost, hostHeaderSettings } from './host-generate.js';
+import { modelReport } from './host-model.js';
 
 export type { Tool } from './diagram-controller.js';
 
@@ -50,6 +52,10 @@ export class HsmApp implements DiagramHost {
     private readonly host = HttpHost.detect();
     /** The text of the host's file (embedded app only). */
     private hostText?: string;
+    /** The document of the host (embedded app only); `fileName` is then its path. */
+    private hostDocument?: HostDocument;
+    /** The last keyboard shortcut handled by the page itself (embedded app: see {@link hostCommand}). */
+    private lastShortcut?: { key: string, time: number };
     diagram!: DiagramController;
 
     async start(): Promise<void> {
@@ -98,6 +104,7 @@ export class HsmApp implements DiagramHost {
     }
 
     private saveSettings(): void {
+        this.host?.settings(this.settings);
         try {
             localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(this.settings));
         } catch {
@@ -130,7 +137,7 @@ export class HsmApp implements DiagramHost {
             theme: this.settings.theme === 'dark' ? EDITOR_THEMES.dark : EDITOR_THEMES.light
         });
         this.decorations = this.editor.createDecorationsCollection();
-        byId('file-name').textContent = this.fileName;
+        byId('file-name').textContent = this.displayName;
         this.updateWorkspace();
         this.editor.onDidChangeModelContent(() => {
             if (this.host) {
@@ -253,6 +260,9 @@ export class HsmApp implements DiagramHost {
                 byId(id).hidden = true;
             }
             byId('btn-save').title = 'Save the model (Ctrl+S)';
+            const generate = h('button', { id: 'btn-generate', title: 'Generate C++ code (configured by hsm.gen.json or the HSM preferences of the host)' }, 'C++');
+            generate.addEventListener('click', () => void this.generateCpp());
+            byId('btn-export').after(generate);
         }
         byId('btn-undo').addEventListener('click', () => this.diagram.undo());
         byId('btn-redo').addEventListener('click', () => this.diagram.redo());
@@ -309,6 +319,9 @@ export class HsmApp implements DiagramHost {
                 event.preventDefault();
                 event.stopImmediatePropagation();
                 this.save();
+            } else if (this.host && (event.ctrlKey || event.metaKey)) {
+                // the page handles the shortcut itself: the same command of the host is ignored (see hostCommand)
+                this.lastShortcut = { key: event.key.toLowerCase(), time: Date.now() };
             }
         }, { capture: true });
     }
@@ -317,7 +330,7 @@ export class HsmApp implements DiagramHost {
     private save(): void {
         if (this.host) {
             this.host.save(this.editor.getValue()).then(
-                () => this.setStatus(`Saved ${this.fileName}.`),
+                () => this.setStatus(`Saved ${this.displayName}.`),
                 error => this.setStatus(`Save failed: ${error instanceof Error ? error.message : String(error)}`, 'error'));
         } else {
             download(this.fileName, this.editor.getValue(), 'text/plain');
@@ -327,16 +340,140 @@ export class HsmApp implements DiagramHost {
     // -----------------------------------------------------------------------------------------
     // Embedded app (`?host=http`)
 
-    /** Takes the edited file and the files it may import from the host. */
+    /** The name of the edited file. */
+    private get displayName(): string {
+        return this.hostDocument?.fileName ?? this.fileName;
+    }
+
+    /** Takes the edited file, the files it may import, the stored settings and the theme from the host. */
     private async loadHostDocument(): Promise<void> {
         const document = await this.host!.load();
-        this.fileName = document.fileName;
+        const first = !this.hostDocument;
+        this.hostDocument = document;
+        // the path: imports are resolved relative to it (`../motor.hsm`)
+        this.fileName = document.path ?? document.fileName;
         this.hostText = document.text;
         this.files.clear();
         for (const [name, text] of Object.entries(document.files ?? {})) {
             this.files.set(name, text);
         }
         this.files.set(this.fileName, document.text);
+        if (first) {
+            try {
+                if (document.settings) {
+                    Object.assign(this.settings, JSON.parse(document.settings));
+                }
+            } catch {
+                // invalid settings: the defaults
+            }
+            // a dark host: the dark theme; a light host: no dark theme
+            if (document.theme === 'dark') {
+                this.settings.theme = 'dark';
+            } else if (document.theme === 'light' && this.settings.theme === 'dark') {
+                this.settings.theme = 'classic';
+            }
+        } else if (this.editor) {
+            // (the file may have been renamed or moved)
+            byId('file-name').textContent = this.displayName;
+        }
+    }
+
+    /**
+     * An edit command of the host (embedded app), e.g. Eclipse's *Undo* or *Copy* while the page has the focus:
+     * applied to the focused part of the page (text editor, input field or diagram). `copy` and `cut` return
+     * the selected text (the host puts it into the clipboard), `paste` inserts the given text.
+     * A command the page just handled itself (same key) is ignored, so it never runs twice.
+     */
+    hostCommand(command: string, argument?: string): string | boolean {
+        const keys: Record<string, string[]> = { undo: ['z'], redo: ['y', 'z'], copy: ['c'], cut: ['x'], paste: ['v'], selectAll: ['a'], find: ['f'], replace: ['f', 'h'] };
+        if (this.lastShortcut && Date.now() - this.lastShortcut.time < 300 && keys[command]?.includes(this.lastShortcut.key)) {
+            this.lastShortcut = undefined;
+            return false;
+        }
+        // the target: the element with the focus (also if the window of the host is not active)
+        const active = document.activeElement;
+        const inMonaco = this.editor.hasTextFocus() || byId('editor').contains(active);
+        const input = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active : undefined;
+        if (input && !inMonaco) {
+            return inputCommand(input, command, argument);
+        }
+        const model = this.editor.getModel()!;
+        const selection = this.editor.getSelection();
+        switch (command) {
+            case 'undo':
+                this.undo();
+                return true;
+            case 'redo':
+                this.redo();
+                return true;
+            case 'selectAll':
+                if (byId('diagram-pane').contains(active)) {
+                    this.diagram.selectAll();
+                } else {
+                    this.editor.setSelection(model.getFullModelRange());
+                }
+                return true;
+            case 'copy':
+            case 'cut': {
+                if (byId('diagram-pane').contains(active) || !selection) {
+                    return '';
+                }
+                const text = model.getValueInRange(selection);
+                if (command === 'cut' && text !== '' && !this.diagram.simulation) {
+                    this.editor.pushUndoStop();
+                    this.editor.executeEdits('host', [{ range: selection, text: '' }]);
+                    this.editor.pushUndoStop();
+                }
+                return text;
+            }
+            case 'paste':
+                if (!selection || argument === undefined || this.diagram.simulation) {
+                    return false;
+                }
+                this.editor.focus();
+                this.editor.pushUndoStop();
+                this.editor.executeEdits('host', [{ range: selection, text: argument, forceMoveMarkers: true }]);
+                this.editor.pushUndoStop();
+                return true;
+            case 'find':
+            case 'replace':
+                this.editor.focus();
+                void this.editor.getAction(command === 'find' ? 'actions.find' : 'editor.action.startFindReplaceAction')?.run();
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /** Selects a range of the text and the element of the diagram at its start (problem markers, outline of the host). */
+    revealRange(offset: number, end: number): void {
+        const length = this.editor.getModel()!.getValueLength();
+        const range = { offset: Math.min(offset, length), end: Math.min(Math.max(end, offset), length) };
+        this.selectText(range);
+        this.diagram.selectElementAtOffset(range.offset);
+        this.editor.focus();
+    }
+
+    /** Generates the C++ code of the model; the host writes the files (embedded app). */
+    async generateCpp(): Promise<void> {
+        if (!this.host || !this.hostDocument) {
+            return;
+        }
+        try {
+            const parsed = await this.language.parse(this.editor.getValue());
+            const result = await generateCppForHost(parsed, this.fileName, this.hostDocument, path => this.host!.file(path));
+            const messages = [...result.errors.map(e => `error: ${e}`), ...result.warnings.map(w => `warning: ${w}`)];
+            if (result.errors.length > 0) {
+                this.setStatus(`C++ generation failed: ${result.errors.join('; ')}`, 'error');
+                await this.host.generated({ files: [], messages });
+                return;
+            }
+            const message = await this.host.generated({ files: result.files, messages });
+            this.setStatus(result.configFile ? `${message} (configured by ${result.configFile})` : message,
+                result.warnings.length > 0 ? 'warning' : 'info');
+        } catch (error) {
+            this.setStatus(`C++ generation failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
+        }
     }
 
     /**
@@ -461,7 +598,7 @@ export class HsmApp implements DiagramHost {
         if (this.editor && this.files.has(this.fileName)) {
             this.files.set(this.fileName, this.editor.getValue());
         }
-        this.language.setWorkspace(FILE_BASE + this.fileName, this.workspaceFiles());
+        this.language.setWorkspace(FILE_BASE + this.fileName, this.workspaceFiles(), this.hostDocument ? hostHeaderSettings(this.hostDocument.configs) : undefined);
         this.updateFileList();
     }
 
@@ -547,6 +684,9 @@ export class HsmApp implements DiagramHost {
     }
 
     modelParsed(parsed: ParsedModel): void {
+        if (this.host) {
+            this.host.model(modelReport(parsed));
+        }
         this.updateFileList(parsed.imported.map(i => decodeURIComponent(i.uri.replace(/^.*\//, ''))));
         HsmLanguageSupport.setMarkers(this.editor.getModel()!, parsed.diagnostics);
         this.showProblemCount(parsed);
@@ -635,7 +775,7 @@ export class HsmApp implements DiagramHost {
 
     /** Export of the diagram as SVG or PNG (chosen in a dialog). */
     private showExport(): void {
-        const base = this.fileName.replace(/\.[^.]+$/, '');
+        const base = this.displayName.replace(/\.[^.]+$/, '');
         const store = async (fileName: string, content: string | Blob, type: string) => {
             if (this.host) {
                 // embedded browsers do not offer downloads: the host stores the file
@@ -696,4 +836,36 @@ export class HsmApp implements DiagramHost {
 /** Whether a file name is a C/C++ header (imported by models, not edited). */
 function isHeaderFile(fileName: string): boolean {
     return /\.(h|hh|hpp|hxx|h\+\+|inl)$/i.test(fileName);
+}
+
+/** An edit command of the host in an input field of the page (properties panel, inline editor). */
+function inputCommand(input: HTMLInputElement | HTMLTextAreaElement, command: string, argument?: string): string | boolean {
+    const start = input.selectionStart ?? 0;
+    const end = input.selectionEnd ?? start;
+    switch (command) {
+        case 'selectAll':
+            input.select();
+            return true;
+        case 'copy':
+            return input.value.substring(start, end);
+        case 'cut': {
+            const text = input.value.substring(start, end);
+            input.setRangeText('', start, end, 'end');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            return text;
+        }
+        case 'paste':
+            if (argument === undefined) {
+                return false;
+            }
+            input.setRangeText(argument, start, end, 'end');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            return true;
+        case 'undo':
+        case 'redo':
+            // the browser's undo of the field
+            return document.execCommand(command);
+        default:
+            return false;
+    }
 }

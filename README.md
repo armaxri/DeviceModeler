@@ -79,7 +79,8 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
   of the web app next to the text editor, C++ generation, tests in the Test Explorer (with model
   coverage) and the itemis CREATE import – see [VS Code extension](docs/vscode.md).
 - 🧪 **Eclipse plugin** (prototype, `eclipse-plugin/`): the web app as editor of `.hsm` files in the Eclipse
-  IDE (embedded browser, the workspace file is loaded and saved, dirty state) – see
+  IDE (embedded browser): workspace files with dirty state, Save As and rename, problems in the Problems
+  view, Outline, Eclipse's edit commands, imports within the project, C++ generation – see
   [eclipse-plugin/README.md](eclipse-plugin/README.md).
 - **Build integration**: a generator configuration file (`hsm.gen.json`, like the `.sgen` files of itemis
   CREATE), `hsm generate --check` for CI and CMake functions (`hsm_generate`, `hsm_add_tests`) that
