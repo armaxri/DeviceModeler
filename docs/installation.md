@@ -8,7 +8,7 @@ and the same graphical editor (the web app of `packages/web`):
 | [**Desktop app**](#desktop-app) *HSM Modeler* | editing models: text and diagram side by side, simulation, export | nothing (Windows, macOS, Linux) |
 | [**Command line tool**](#command-line-tool-hsm) `hsm` | validation, code generation, tests, rendering in builds and CI | nothing (one executable) |
 | [**VS Code extension**](#vs-code-extension) | models and tests in VS Code: language server, diagram, Test Explorer | VS Code ≥ 1.95 |
-| [**Eclipse plugin**](#eclipse-plugin) (prototype) | the graphical editor for `.hsm` files of an Eclipse workspace | Eclipse ≥ 2025-06 (older untested), Java 21 |
+| [**Eclipse plugin**](#eclipse-plugin) (prototype) | the graphical editor for `.hsm` files of an Eclipse workspace | Eclipse 2025-06 (older releases untested), Java ≥ 17 |
 
 ## Downloads
 
@@ -29,7 +29,8 @@ Independent of the platform: `hsm-vscode-<version>.vsix` (VS Code extension) and
 
 Sizes: the desktop app is about 115 MB to download (250 MB installed, most of it Electron/Chromium); the
 command line executable 100 – 130 MB (35 – 45 MB compressed, a complete Node.js runtime); the `.vsix`
-2 MB; the Eclipse update site 6 MB.
+2 MB; the Eclipse update site about 200 MB (it contains the `hsm` executables of all five platforms; Eclipse
+installs only the one of its platform, about 40 MB).
 
 ### Unsigned downloads
 
@@ -109,14 +110,22 @@ Node.js runtime); it does not need the command line tool. Features and settings:
 *Help → Install New Software… → Add… → Archive…* → `hsm-eclipse-update-site-<version>.zip`, select *HSM
 Modeler (prototype)* (uncheck *Group items by category* if the list is empty), accept the warning about
 unsigned content and restart. Double-clicking a `.hsm` file in the Project Explorer opens the graphical
-editor; *Open With → Text Editor* still opens the plain text. Details, requirements and the development
-setup: [eclipse-plugin/README.md](../eclipse-plugin/README.md).
+editor; *Open With → Text Editor* still opens the plain text.
+
+The feature also installs the command line executable `hsm` of the platform (a fragment of the plugin). With
+*Configure → Enable / Disable HSM Validation* on a project, the builder validates closed models with it
+(`hsm validate --json`) and shows their problems in the *Problems* view; the models importing a changed model or
+header are validated again. *Preferences → HSM Modeler → hsm executable* selects another executable (default:
+the bundled one, else `hsm` in the `PATH`). The editor itself does not need the executable: it runs the web app
+with a small HTTP server of the plugin, and *Generate C++* runs in the editor's page. Details, requirements and
+the development setup: [eclipse-plugin/README.md](../eclipse-plugin/README.md).
 
 ## How the downloads are built
 
 The [*Distribution* workflow](../.github/workflows/distribution.yml) builds everything on native runners
 (desktop app and command line tool for linux-x64, linux-arm64, macos-arm64, macos-x64 and windows-x64),
-smoke-tests the desktop app and the executables and, for version tags, creates the GitHub release with all
+smoke-tests the desktop app and the executables, puts the five executables into the platform fragments of the
+Eclipse plugin (`mvn verify -Dhsm.cli.optional=false`) and, for version tags, creates the GitHub release with all
 files and `SHA256SUMS.txt`.
 
 Locally (Node.js ≥ 20.10; for the Eclipse plugin also Java 21 and Maven ≥ 3.9):
@@ -130,6 +139,7 @@ npm run build:exe                         # packages/cli/dist/bin/<platform>/hsm
 node packages/cli/scripts/smoke-test.mjs
 npm run package:vscode                    # packages/vscode/hsm-vscode-<version>.vsix
 npm run build -w packages/web && (cd eclipse-plugin && mvn verify)   # eclipse-plugin/hsm.eclipse.site/target/*.zip
+                                          # (with the hsm executable of this platform if built before)
 ```
 
 If `npm ci` did not download Electron (`node_modules/electron/dist` missing), run
@@ -167,7 +177,8 @@ A [Node.js single executable application](https://nodejs.org/api/single-executab
    executable is then signed ad hoc (`codesign --sign -`). `--target linux-x64|linux-arm64|macos-x64|
    macos-arm64|windows-x64|windows-arm64` builds for another platform (Linux and Windows can be
    cross-built; macOS executables must be built on a Mac), `--archive` writes the release archive.
-3. `scripts/smoke-test.mjs` checks an executable: `--version`, `--help` and the commands on the examples.
+3. `scripts/smoke-test.mjs` checks an executable: `--version`, `--help` and the commands on the examples
+   (including `validate --json`, the interface of the Eclipse builder).
 
 Why a Node.js SEA (and not Bun or Deno `compile`, or `pkg`): the executable runs exactly the runtime the
 tool is developed and tested with, with an official mechanism of Node.js; `pkg` is discontinued, Bun and

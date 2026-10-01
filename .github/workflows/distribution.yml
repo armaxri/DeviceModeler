@@ -165,6 +165,8 @@ jobs:
 
   eclipse:
     name: Eclipse plugin
+    # the platform fragments of the plugin contain the hsm executables of the cli job
+    needs: cli
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -185,9 +187,26 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         working-directory: eclipse-plugin
         run: mvn -B -ntp "org.eclipse.tycho:tycho-versions-plugin:5.0.4:set-version" "-DnewVersion=${GITHUB_REF_NAME#v}"
-      - name: Build plugin, feature and update site
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cli-*
+          path: cli-archives
+          merge-multiple: true
+      - name: Unpack the hsm executables (packages/cli/dist/bin/<target>/)
+        run: |
+          for archive in cli-archives/hsm-*; do
+            name="$(basename "$archive")"
+            target="$(echo "$name" | sed -E 's/^hsm-.*-((linux|macos|windows)-(x64|arm64))\.(tar\.gz|zip)$/\1/')"
+            mkdir -p "packages/cli/dist/bin/$target"
+            case "$archive" in
+              *.zip) unzip -o -q "$archive" -d "packages/cli/dist/bin/$target" ;;
+              *) tar -xzf "$archive" -C "packages/cli/dist/bin/$target" ;;
+            esac
+          done
+          ls -lR packages/cli/dist/bin
+      - name: Build plugin, fragments with the executables, feature and update site
         working-directory: eclipse-plugin
-        run: mvn -B -ntp verify
+        run: mvn -B -ntp verify -Dhsm.cli.optional=false
       - name: Name of the update site archive
         run: |
           version="${GITHUB_REF_NAME#v}"
