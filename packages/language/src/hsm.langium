@@ -82,11 +82,13 @@ Declaration:
 EventDeclaration:
     (direction=('in' | 'out'))? 'event' name=ID (':' type=TypeReference)?;
 
+// `static` is recognized to report that static members are not supported; `const operation` is a const
+// member function of a C++ class section (see class-members.ts).
 VariableDeclaration:
-    (const?='const' | 'var' readonly?='readonly'?) name=ID (':' type=TypeReference)? ('=' initialValue=Expression)?;
+    (static?='static')? (const?='const' | 'var' readonly?='readonly'?) name=ID (':' type=TypeReference)? ('=' initialValue=Expression)?;
 
 OperationDeclaration:
-    'operation' name=ID '(' (parameters+=Parameter (',' parameters+=Parameter)*)? ')' (':' returnType=TypeReference)?;
+    (static?='static')? (const?='const')? 'operation' name=ID '(' (parameters+=Parameter (',' parameters+=Parameter)*)? ')' (':' returnType=TypeReference)?;
 
 Parameter:
     name=ID (varArgs?='...')? ':' type=TypeReference;

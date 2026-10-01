@@ -54,8 +54,9 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
   implemented by the application, data members initialized at construction (not reset by `enter()`); members whose
   types the model does not know are declared for the C++ code only; interpreter, unit tests, scenario
   `s10-cpp-class-sections`, example [`examples/cpp-class-sections`](examples/cpp-class-sections)
-  - 💭 `virtual` / pure virtual and `const` member functions, `static` members, constructor parameters (reference
-    members), includes of system headers without analysis (`#include <vector>`)
+  - ✅ `const operation` (const member functions), member functions `virtual` by default (`virtualMethods: false`),
+    reference members bound by a generated constructor, headers only included (`import "<vector>"`)
+  - 💭 `static` members (reported as not supported), pure virtual member functions
 
 ## Phase 2 – Structure parity ✅
 

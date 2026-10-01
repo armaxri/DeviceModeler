@@ -88,6 +88,7 @@ export function createProgram(): Command {
         .option('-n, --namespace <namespace>', 'cpp: namespace of the generated class, e.g. a::b (default: the namespace of the model, "" for none)')
         .option('--class-name <name>', 'cpp: name of the generated class and files (default: the state machine name)')
         .option('--std <standard>', 'cpp: C++ standard of the generated code, 17 or 11 (default: 17)')
+        .option('--non-virtual-methods', 'cpp: the member functions of the class sections (public:, protected:, private:) are not virtual')
         .option('-p, --prefix <prefix>', 'c: prefix of the generated functions and files (default: the state machine name in snake case)')
         .option('--check', 'writes nothing; exits with 1 if a generated file is missing or out of date (for CI)')
         .option('--list-outputs', 'writes nothing; prints the absolute paths of the generated files (for build systems)')

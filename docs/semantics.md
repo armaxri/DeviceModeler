@@ -47,6 +47,8 @@ as **Deviation**.
   data members of the generated C++ class) are initialized once, in declaration order, when the state machine
   object is created (the interpreter is constructed); `enter` does not reset them. Their initial values may
   only use literals, C++ constants and the members of the class sections declared before.
+  Reference members (`var driver : Driver&`) have no initial value: they are bound by the constructor of the
+  generated class; in the interpreter they are variables whose value is the referenced object (set by the host).
 - The operations of the C++ class sections (member functions implemented by the application) are called
   like operations: the interpreter calls the operation registered by the host under their name.
 - **Operations** are implemented by the host (the application using the state machine). The

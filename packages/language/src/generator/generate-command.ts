@@ -307,6 +307,8 @@ export interface GenerateCommandOptions {
     namespace?: string;
     className?: string;
     std?: string;
+    /** `--non-virtual-methods`: the member functions of the class sections are not virtual. */
+    nonVirtualMethods?: boolean;
     prefix?: string;
     check?: boolean;
     listOutputs?: boolean;
@@ -372,6 +374,7 @@ export async function runGenerateCommand(target: string | undefined, files: stri
             namespace: options.namespace,
             className: options.className,
             std: options.std === undefined ? undefined : options.std === '11' ? 11 : 17,
+            virtualMethods: options.nonVirtualMethods ? false : undefined,
             prefix: options.prefix
         },
         mode: options.check || options.listOutputs || options.listInputs ? 'check' : 'write',

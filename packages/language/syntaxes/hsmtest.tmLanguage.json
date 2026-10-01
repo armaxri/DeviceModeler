@@ -10,7 +10,7 @@
     },
     {
       "name": "keyword.control.hsmtest",
-      "match": "\\b(statemachine|operation|testclass|readonly|unsigned|message|proceed|returns|valueof|active|assert|called|double|signed|const|enter|false|float|raise|short|times|while|bool|char|else|exit|long|mock|null|true|void|with|for|int|var|as|if)\\b"
+      "match": "\\b(statemachine|operation|testclass|readonly|unsigned|message|proceed|returns|valueof|active|assert|called|double|signed|static|const|enter|false|float|raise|short|times|while|bool|char|else|exit|long|mock|null|true|void|with|for|int|var|as|if)\\b"
     },
     {
       "name": "string.quoted.double.hsmtest",

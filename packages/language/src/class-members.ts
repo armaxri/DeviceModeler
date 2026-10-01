@@ -105,6 +105,19 @@ export function unusableReason(declaration: ast.Declaration): string | undefined
     return undefined;
 }
 
+/**
+ * Whether a variable of a class section is a reference member (`var config : const app::Config&`): it is
+ * bound by the constructor of the generated class (see docs/cpp-generator.md#c-class-sections).
+ */
+export function isReferenceMember(variable: ast.VariableDeclaration): boolean {
+    return isClassMember(variable) && variable.type?.reference !== undefined;
+}
+
+/** Whether the model cannot assign a variable: constants and references to const (`const T&`) of class sections. */
+export function isConstantVariable(variable: ast.VariableDeclaration): boolean {
+    return variable.const || (isReferenceMember(variable) && !!variable.type?.const);
+}
+
 /** Whether a declaration can be used in the model (see {@link unusableReason}). */
 export function isUsableInModel(declaration: ast.Declaration): boolean {
     return unusableReason(declaration) === undefined;

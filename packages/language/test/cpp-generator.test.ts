@@ -317,7 +317,7 @@ describe.skipIf(!GXX && !CLANGXX)('C++ code generator: examples', () => {
                 }
                 await run(compilers[0], [...variant.flags, '-o', 'controller', ...sources], { cwd: directory });
                 const { stdout } = await run(path.join(directory, 'controller'), [], { cwd: directory });
-                expect(stdout).toBe('power on\npower off\npower on\npower off\ngave up: yes\n');
+                expect(stdout).toBe('setup\npower on\npower off\nsetup\npower on\npower off\ngave up: yes, shutdowns: 2\n');
             }
         } finally {
             fs.rmSync(directory, { recursive: true, force: true });

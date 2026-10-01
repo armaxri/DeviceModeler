@@ -20,7 +20,9 @@ import {
 } from './cpp-types.js';
 import { constantInteger, lvalueOf, rangeWarning, storageOfTarget, storageOfTypeReference } from './cpp-storage.js';
 import { isAssignableArray, memberPathType, typeOfDeclaration } from './hsm-typesystem.js';
-import { balancedTemplateArguments, isClassMember, unusableReason, usesCppTypeSyntax, writtenCppType } from './class-members.js';
+import {
+    balancedTemplateArguments, isClassMember, isConstantVariable, isReferenceMember, unusableReason, usesCppTypeSyntax, writtenCppType
+} from './class-members.js';
 
 /** Annotations that select the execution semantics (see docs/semantics.md §3 and §4). */
 export const SUPPORTED_ANNOTATIONS = ['CycleBased', 'EventDriven', 'ParentFirstExecution', 'ChildFirstExecution'];
@@ -216,8 +218,14 @@ export class HsmExpressionValidator {
                 accept('error', `The submachine instance '${declaration.name}' cannot be declared in '${scope.access}:'; declare it in an interface or the internal scope.`,
                     { node: declaration, property: 'type' });
             } else if (type?.reference) {
-                accept('error', `The member '${declaration.name}' cannot be a reference ('${writtenCppType(type)}'): references would have to be initialized by a constructor; use a pointer or a value.`,
-                    { node: declaration, property: 'type' });
+                if (declaration.const) {
+                    accept('error', `The reference member '${declaration.name}' cannot be declared with 'const'; write 'var ${declaration.name} : const T&' for a reference to a constant.`,
+                        { node: declaration, property: 'name' });
+                } else if (declaration.initialValue) {
+                    accept('error', `The reference member '${declaration.name}' cannot have an initial value: it is bound by the constructor of the generated class.`,
+                        { node: declaration, property: 'initialValue' });
+                }
+                continue;
             } else if (type?.const && !(type.name ?? '').includes('*')) {
                 accept('error', `Declare the constant member with 'const ${declaration.name} : ${type.name}' instead of 'const' in the type.`,
                     { node: declaration, property: 'type' });
@@ -352,6 +360,12 @@ export class HsmExpressionValidator {
     }
 
     checkVariable(variable: ast.VariableDeclaration, accept: ValidationAcceptor): void {
+        if (variable.static) {
+            accept('error', `Static members are not supported: '${variable.name}' cannot be 'static' (declare it without 'static').`, { node: variable, keyword: 'static' });
+        }
+        if (isReferenceMember(variable)) {
+            return; // bound by the constructor (checked by checkClassScope)
+        }
         if (isInstance(variable)) {
             if (variable.const) {
                 accept('error', `The submachine instance '${variable.name}' cannot be a constant; declare it with 'var'.`, { node: variable, property: 'name' });
@@ -396,6 +410,13 @@ export class HsmExpressionValidator {
     }
 
     checkOperation(operation: ast.OperationDeclaration, accept: ValidationAcceptor): void {
+        if (operation.static) {
+            accept('error', `Static members are not supported: '${operation.name}' cannot be 'static' (declare it without 'static').`, { node: operation, keyword: 'static' });
+        }
+        if (operation.const && !isClassMember(operation)) {
+            accept('error', `Only the operations of the C++ class sections (public:, protected:, private:) can be const member functions; remove 'const'.`,
+                { node: operation, keyword: 'const' });
+        }
         const names = new Set<string>();
         operation.parameters.forEach((parameter, index) => {
             if (names.has(parameter.name)) {
@@ -553,8 +574,8 @@ export class HsmExpressionValidator {
                 accept('error', `Cannot modify the submachine instance '${operand.element.$refText}'.`, { node: operand, property: 'element' });
                 return;
             }
-            if (element.const || element.readonly) {
-                accept('error', `Cannot modify the ${element.const ? 'constant' : 'readonly variable'} '${operand.element.$refText}'.`, { node: operand, property: 'element' });
+            if (isConstantVariable(element) || element.readonly) {
+                accept('error', `Cannot modify the ${isConstantVariable(element) ? 'constant' : 'readonly variable'} '${operand.element.$refText}'.`, { node: operand, property: 'element' });
             }
             const type = typeOfVariable(element);
             if (isValueType(type) && !isNumeric(type)) {
@@ -622,8 +643,9 @@ export class HsmExpressionValidator {
             accept('error', `Cannot assign to the submachine instance '${name}': instances cannot be assigned.`, { node: reference, property: 'element' });
             return false;
         }
-        if (variable.const) {
-            accept('error', `Cannot assign a value to the constant '${name}'.`, { node: reference, property: 'element' });
+        if (isConstantVariable(variable)) {
+            accept('error', variable.const ? `Cannot assign a value to the constant '${name}'.`
+                : `Cannot assign a value to '${name}': it is a reference to a constant ('${writtenCppType(variable.type!)}').`, { node: reference, property: 'element' });
         } else if (variable.readonly) {
             accept('error', `Cannot assign a value to the readonly variable '${name}'.`, { node: reference, property: 'element' });
         }

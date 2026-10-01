@@ -601,6 +601,16 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
         "$type": "Group",
         "elements": [
           {
+            "$type": "Assignment",
+            "feature": "static",
+            "operator": "?=",
+            "terminal": {
+              "$type": "Keyword",
+              "value": "static"
+            },
+            "cardinality": "?"
+          },
+          {
             "$type": "Alternatives",
             "elements": [
               {
@@ -701,6 +711,26 @@ export const HsmGrammar = (): Grammar => loadedHsmGrammar ?? (loadedHsmGrammar =
       "definition": {
         "$type": "Group",
         "elements": [
+          {
+            "$type": "Assignment",
+            "feature": "static",
+            "operator": "?=",
+            "terminal": {
+              "$type": "Keyword",
+              "value": "static"
+            },
+            "cardinality": "?"
+          },
+          {
+            "$type": "Assignment",
+            "feature": "const",
+            "operator": "?=",
+            "terminal": {
+              "$type": "Keyword",
+              "value": "const"
+            },
+            "cardinality": "?"
+          },
           {
             "$type": "Keyword",
             "value": "operation"
@@ -5906,6 +5936,16 @@ export const HsmTestGrammar = (): Grammar => loadedHsmTestGrammar ?? (loadedHsmT
         "$type": "Group",
         "elements": [
           {
+            "$type": "Assignment",
+            "feature": "static",
+            "operator": "?=",
+            "terminal": {
+              "$type": "Keyword",
+              "value": "static"
+            },
+            "cardinality": "?"
+          },
+          {
             "$type": "Alternatives",
             "elements": [
               {
@@ -6006,6 +6046,26 @@ export const HsmTestGrammar = (): Grammar => loadedHsmTestGrammar ?? (loadedHsmT
       "definition": {
         "$type": "Group",
         "elements": [
+          {
+            "$type": "Assignment",
+            "feature": "static",
+            "operator": "?=",
+            "terminal": {
+              "$type": "Keyword",
+              "value": "static"
+            },
+            "cardinality": "?"
+          },
+          {
+            "$type": "Assignment",
+            "feature": "const",
+            "operator": "?=",
+            "terminal": {
+              "$type": "Keyword",
+              "value": "const"
+            },
+            "cardinality": "?"
+          },
           {
             "$type": "Keyword",
             "value": "operation"

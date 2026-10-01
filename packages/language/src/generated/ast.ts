@@ -109,6 +109,7 @@ export namespace Hsm {
         | "signed"
         | "state"
         | "statemachine"
+        | "static"
         | "sync"
         | "true"
         | "unsigned"
@@ -266,6 +267,7 @@ export namespace HsmTest {
         | "short"
         | "signed"
         | "statemachine"
+        | "static"
         | "testclass"
         | "times"
         | "true"
@@ -1031,16 +1033,20 @@ export function isOperationCallStatement(item: unknown): item is OperationCallSt
 export interface OperationDeclaration extends langium.AstNode {
     readonly $container: ClassScope | InterfaceScope | InternalScope;
     readonly $type: 'OperationDeclaration';
+    const: boolean;
     name: string;
     parameters: Array<Parameter>;
     returnType?: TypeReference;
+    static: boolean;
 }
 
 export const OperationDeclaration = {
     $type: 'OperationDeclaration',
+    const: 'const',
     name: 'name',
     parameters: 'parameters',
-    returnType: 'returnType'
+    returnType: 'returnType',
+    static: 'static'
 } as const;
 
 export function isOperationDeclaration(item: unknown): item is OperationDeclaration {
@@ -1517,6 +1523,7 @@ export interface VariableDeclaration extends langium.AstNode {
     initialValue?: Expression;
     name: string;
     readonly: boolean;
+    static: boolean;
     type?: TypeReference;
 }
 
@@ -1526,6 +1533,7 @@ export const VariableDeclaration = {
     initialValue: 'initialValue',
     name: 'name',
     readonly: 'readonly',
+    static: 'static',
     type: 'type'
 } as const;
 
@@ -2040,6 +2048,11 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
         OperationDeclaration: {
             name: OperationDeclaration.$type,
             properties: {
+                const: {
+                    name: OperationDeclaration.const,
+                    defaultValue: false,
+                    optional: true
+                },
                 name: {
                     name: OperationDeclaration.name
                 },
@@ -2050,6 +2063,11 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
                 },
                 returnType: {
                     name: OperationDeclaration.returnType,
+                    optional: true
+                },
+                static: {
+                    name: OperationDeclaration.static,
+                    defaultValue: false,
                     optional: true
                 }
             },
@@ -2482,6 +2500,11 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
                 },
                 readonly: {
                     name: VariableDeclaration.readonly,
+                    defaultValue: false,
+                    optional: true
+                },
+                static: {
+                    name: VariableDeclaration.static,
                     defaultValue: false,
                     optional: true
                 },

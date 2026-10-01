@@ -14,7 +14,7 @@ import {
     CPP_KEYWORDS, CPP_RESERVED_NAMES, cppDeclaredType, cppDefault, cppParameterType, cppSpelling, cppType, lineComment, RUNTIME_HEADER, RUNTIME_HEADER_CONTENT
 } from './cpp-code.js';
 import { integerRange, storageOfTypeReference } from '../../cpp-storage.js';
-import { isClassMember, isHsmTypeReference, isUsableInModel, writtenCppType } from '../../class-members.js';
+import { isClassMember, isHsmTypeReference, isReferenceMember, isUsableInModel, writtenCppType } from '../../class-members.js';
 import { cppDocComment } from './cpp-doc.js';
 import { resolvedImports } from '../../imports.js';
 import type { CppResolvedType } from '../../cpp-header/model.js';
@@ -43,6 +43,11 @@ export interface CppGeneratorOptions {
      * (relative to the model or to an include directory, which the build has to provide).
      */
     headerInclude?: (header: { path: string, uri?: string }) => string | undefined;
+    /**
+     * Whether the member functions declared in the C++ class sections are `virtual` (default true), so that
+     * subclasses can override them. The class is polymorphic anyway (`sc::StatemachineInterface`).
+     */
+    virtualMethods?: boolean;
 }
 
 export interface CppGeneratedFile {
@@ -123,6 +128,10 @@ export interface CppApi {
     readonly classMethods: readonly ast.OperationDeclaration[];
     /** The head of the definition of a member function of a class section (`void a::M::setup()`), optionally with other parameter names. */
     methodDefinition(operation: ast.OperationDeclaration, parameterNames?: readonly string[]): string;
+    /** The reference members of the class sections: the parameters of the constructor, in this order. */
+    readonly referenceMembers: readonly ast.VariableDeclaration[];
+    /** The type of the object a reference member refers to (`app::Config` for `const app::Config&`). */
+    referencedType(variable: ast.VariableDeclaration): string;
 }
 
 export interface CppGeneratorResult {
@@ -174,6 +183,9 @@ interface Member {
     body: CBlock;
     /** A private member of the state machine class (the in events of named interfaces). */
     isPrivate?: boolean;
+    /** The constructor of the state machine class, with its member initializer list (` : config(config_)`). */
+    isConstructor?: boolean;
+    init?: string;
 }
 
 /**
@@ -190,6 +202,7 @@ class CppGenerator extends StatechartGenerator {
     private readonly namedScopes: ScopeInfo[] = [];
     private readonly operationParamNames = new Map<ast.Parameter, string>();
     private readonly headerInclude?: CppGeneratorOptions['headerInclude'];
+    private readonly virtualMethods: boolean;
 
     constructor(machine: ast.StateMachine, options: CppGeneratorOptions) {
         super(machine, options.maxMicrosteps, { keywords: CPP_RESERVED_NAMES, reservedStateNames: [...CPP_KEYWORDS, 'NO_STATE', 'FINAL_STATE'] });
@@ -199,6 +212,7 @@ class CppGenerator extends StatechartGenerator {
         this.standard = options.standard ?? 17;
         this.outDir = options.outDir;
         this.headerInclude = options.headerInclude;
+        this.virtualMethods = options.virtualMethods ?? true;
         for (const scope of this.scopes.values()) {
             if (scope.kind === 'named') {
                 this.namedScopes.push(scope);
@@ -482,13 +496,29 @@ class CppGenerator extends StatechartGenerator {
                 }
                 lines.push(...doc);
                 if (ast.isOperationDeclaration(declaration)) {
-                    lines.push(`${this.methodReturnType(declaration)} ${declaration.name}(${this.methodParameters(declaration)});`);
+                    lines.push(`${this.virtualMethods ? 'virtual ' : ''}${this.methodReturnType(declaration)} ${declaration.name}(${this.methodParameters(declaration)})${declaration.const ? ' const' : ''};`);
                 } else if (ast.isVariableDeclaration(declaration)) {
-                    lines.push(`${declaration.const ? 'const ' : ''}${this.declaredType(declaration)} ${declaration.name}${this.memberInitializer(declaration)};`);
+                    const initializer = isReferenceMember(declaration) ? '' : this.memberInitializer(declaration);
+                    lines.push(`${declaration.const ? 'const ' : ''}${this.declaredType(declaration)} ${declaration.name}${initializer};`);
                 }
             }
             return { access: scope.access, lines };
         });
+    }
+
+    /** The reference members of the class sections (`var config : const app::Config&`), bound by the constructor. */
+    private get referenceMembers(): ast.VariableDeclaration[] {
+        return this.classVariables.filter(isReferenceMember);
+    }
+
+    /** The parameter of the constructor binding a reference member (`config_`: not the name of the member, -Wshadow). */
+    private referenceParameter(variable: ast.VariableDeclaration): string {
+        return `${variable.name}_`;
+    }
+
+    /** The type of the object a reference member refers to (`app::Config` for `const app::Config&`). */
+    private referencedType(variable: ast.VariableDeclaration): string {
+        return variable.type && isHsmTypeReference(variable.type) ? cppDeclaredType(variable.type, this.variableType(variable)) : variable.type?.name ?? 'void';
     }
 
     /** The default member initializer of a variable of a class section (` = value`, `{}` without initial value). */
@@ -786,7 +816,9 @@ class CppGenerator extends StatechartGenerator {
             })),
             operationParameters: operation => isClassMember(operation) ? this.methodParameters(operation) : this.callbackParameters(operation),
             classMethods: this.classMethods.filter(isUsableInModel),
-            methodDefinition: (operation, names) => `${this.methodReturnType(operation)} ${this.qualifiedClassName}::${operation.name}(${this.methodParameters(operation, names)})`,
+            methodDefinition: (operation, names) => `${this.methodReturnType(operation)} ${this.qualifiedClassName}::${operation.name}(${this.methodParameters(operation, names)})${operation.const ? ' const' : ''}`,
+            referenceMembers: this.referenceMembers,
+            referencedType: variable => this.referencedType(variable),
             operationParameterNames: operation => operation.parameters.map(p => this.operationParamNames.get(p)!)
         };
     }
@@ -807,16 +839,29 @@ class CppGenerator extends StatechartGenerator {
         for (const scope of this.namedScopes) {
             result.set(scope.name!, []);
         }
-        const add = (owner: string, comment: string, declaration: string, build: (body: CBlock) => void, options: { isPrivate?: boolean; signature?: string } = {}) => {
+        const add = (owner: string, comment: string, declaration: string, build: (body: CBlock) => void,
+            options: { isPrivate?: boolean; signature?: string; isConstructor?: boolean; init?: string } = {}) => {
             this.expressions.resetTemporaries();
             const body = new CBlock();
             build(body);
             const qualified = owner ? `${c}::${owner}::` : `${c}::`;
             const signature = options.signature ?? qualifySignature(declaration, qualified);
-            result.get(owner)!.push({ declaration, signature, comment, body, isPrivate: options.isPrivate });
+            result.get(owner)!.push({ declaration, signature, comment, body, isPrivate: options.isPrivate, isConstructor: options.isConstructor, init: options.init });
         };
         const hostCall = 'const HostCall call(*this);';
-        add('', 'Creates the state machine (not entered yet).', `${c}()`, () => { });
+        const references = this.referenceMembers;
+        if (references.length === 0) {
+            add('', 'Creates the state machine (not entered yet).', `${c}()`, () => { }, { isConstructor: true });
+        } else {
+            // the reference members of the class sections are bound by the constructor (in declaration order)
+            const parameters = references.map(v => `${this.declaredType(v)} ${this.referenceParameter(v)}`).join(', ');
+            add('', `Creates the state machine (not entered yet), binding the reference members ${references.map(v => v.name).join(', ')}.`,
+                `${references.length === 1 ? 'explicit ' : ''}${c}(${parameters})`, () => { }, {
+                    isConstructor: true,
+                    signature: `${c}::${c}(${parameters})`,
+                    init: ` : ${references.map(v => `${v.name}(${this.referenceParameter(v)})`).join(', ')}`
+                });
+        }
         add('', 'Enters the state machine (docs/semantics.md §8).', 'void enter() override', body => {
             body.block('if (running || busy)', ['return;']);
             body.add(hostCall, `${this.call(this.resetData())};`, 'active.fill(State::NO_STATE);');
@@ -1064,12 +1109,20 @@ class CppGenerator extends StatechartGenerator {
 
     // ----- header
 
-    /** The `#include` paths of the imported C/C++ headers (see {@link CppGeneratorOptions.headerInclude}). */
+    /**
+     * The operands of the `#include`s of the imported C/C++ headers (`"motor_types.h"`, see {@link
+     * CppGeneratorOptions.headerInclude}) and of the headers that are only included (`<vector>`).
+     */
     private importedHeaders(): string[] {
         const result: string[] = [];
         for (const imported of resolvedImports(this.machine)) {
-            if (imported.kind === 'header') {
-                const path = this.headerInclude?.({ path: imported.path, uri: imported.uri?.toString() }) ?? imported.path;
+            if (imported.kind === 'system') {
+                const path = imported.path.trim();
+                if (!result.includes(path)) {
+                    result.push(path);
+                }
+            } else if (imported.kind === 'header') {
+                const path = `"${this.headerInclude?.({ path: imported.path, uri: imported.uri?.toString() }) ?? imported.path}"`;
                 if (!result.includes(path)) {
                     result.push(path);
                 }
@@ -1098,7 +1151,7 @@ class CppGenerator extends StatechartGenerator {
         lines.push('', `#include "${RUNTIME_HEADER}"`, '');
         const headers = this.importedHeaders();
         if (headers.length > 0) {
-            lines.push(this.comment('imported C/C++ headers (types and constants used by the state machine)'), ...headers.map(h => `#include "${h}"`), '');
+            lines.push(this.comment('imported C/C++ headers (types and constants used by the state machine)'), ...headers.map(h => `#include ${h}`), '');
         }
         lines.push(...this.namespaceOpen());
         const bases = ['public sc::StatemachineInterface'];
@@ -1385,8 +1438,8 @@ class CppGenerator extends StatechartGenerator {
         // construction
         const initializers = this.namedScopes.filter(s => this.needsMachine(s));
         for (const member of members.get('')!) {
-            if (member.declaration === `${c}()`) {
-                define(member.comment, member.signature, member.body.lines);
+            if (member.isConstructor) {
+                define(member.comment, member.signature, member.body.lines, member.init);
             }
         }
         for (const scope of initializers) {
@@ -1403,7 +1456,7 @@ class CppGenerator extends StatechartGenerator {
         lines.push(lineComment('---- API ----'), '');
         for (const [owner, list] of members) {
             for (const member of list) {
-                if (!owner && member.declaration === `${c}()`) {
+                if (!owner && member.isConstructor) {
                     continue;
                 }
                 define(member.comment, member.signature, member.body.lines);

@@ -5,22 +5,37 @@
 #include "Controller.h"
 #include "driver.h"
 
+// The member functions of the class sections are virtual: a subclass may override them.
+class VerboseController : public example::Controller {
+public:
+    explicit VerboseController(EpicProject::Driver& driver) : example::Controller(driver) {}
+
+    std::size_t shutdowns() const {
+        return shutdownErrors.size();
+    }
+
+protected:
+    void setup() override {
+        std::printf("setup\n");
+        example::Controller::setup();
+    }
+};
+
 int main() {
     EpicProject::Driver driver;
     EpicProject::Config config;
     config.maxErrors = 2;
 
-    example::Controller controller;
-    controller.setDriver(&driver);
+    VerboseController controller(driver);    // binds the reference member driver
     controller.setConfig(config);
     controller.enter();
     controller.raise_start();
-    controller.runCycle();    // power on
+    controller.runCycle();    // setup, power on
     controller.raise_failure();
-    controller.runCycle();    // restart: power off, power on
+    controller.runCycle();    // restart: power off, setup, power on
     controller.raise_failure();
     controller.runCycle();    // second failure: power off, gives up
-    std::printf("gave up: %s\n", controller.isRaised_gaveUp() ? "yes" : "no");
+    std::printf("gave up: %s, shutdowns: %d\n", controller.isRaised_gaveUp() ? "yes" : "no", static_cast<int>(controller.shutdowns()));
     controller.exit();
     return 0;
 }

@@ -23,6 +23,8 @@ export interface Code {
     readonly type: HsmType;
     /** A literal: it can be evaluated at any time. */
     readonly constant: boolean;
+    /** The C++ storage type of a place that is read (a variable, member or element of a C++ integer type). */
+    readonly storage?: CppResolvedType;
 }
 
 /**
@@ -208,7 +210,7 @@ export class ExpressionCompiler {
                 if (member.error) {
                     return this.context.unsupported(member.error, expression);
                 }
-                return { text: `${receiver.text}.${expression.member}`, type: member.type!, constant: receiver.constant };
+                return { text: `${receiver.text}.${expression.member}`, type: member.type!, constant: receiver.constant, storage: member.field?.type };
             }
             case 'IndexExpression': {
                 const [receiver, index] = this.operands([{ expression: expression.receiver }, { expression: expression.index, type: 'integer' }], block);
@@ -216,7 +218,7 @@ export class ExpressionCompiler {
                 if (!element) {
                     return this.context.unsupported(`${hsmTypeName(receiver.type)} has no elements`, expression);
                 }
-                return { text: `${receiver.text}[${this.context.checkedIndex(stripParens(index.text), element.length, expression)}]`, type: element.type, constant: false };
+                return { text: `${receiver.text}[${this.context.checkedIndex(stripParens(index.text), element.length, expression)}]`, type: element.type, constant: false, storage: element.storage };
             }
             case 'UnaryExpression':
                 return this.unary(expression, block);
@@ -242,9 +244,9 @@ export class ExpressionCompiler {
             const members = referenceMembers(node);
             const type = this.context.variableType(element);
             if (members.length > 0) {
-                return { text: `${this.context.variable(element)}.${members.join('.')}`, type: memberPathType(type, members), constant: false };
+                return { text: `${this.context.variable(element)}.${members.join('.')}`, type: memberPathType(type, members), constant: false, storage: storageOfTarget(node) };
             }
-            return { text: this.context.variable(element), type, constant: false };
+            return { text: this.context.variable(element), type, constant: false, storage: storageOfTarget(node) };
         }
         if (ast.isOperationDeclaration(element)) {
             const call = this.callText(node, element, block);
@@ -373,9 +375,15 @@ export class ExpressionCompiler {
         return this.applyBinary(operator, left, right, node);
     }
 
-    /** An unscoped enum value as integer operand (C++ integral promotion). */
+    /**
+     * An unscoped enum value as integer operand (C++ integral promotion). Values of 32-bit unsigned C++ integer
+     * types are converted to `sc::integer` as well: with a signed `int` operand, C++ would convert the signed
+     * operand to unsigned (the interpreter compares the values exactly; `-Wsign-compare`).
+     */
     private promote(code: Code): Code {
-        return isUnscopedEnum(code.type) ? { text: `static_cast<sc::integer>(${stripParens(code.text)})`, type: 'integer', constant: code.constant } : code;
+        const unsigned = code.storage?.kind === 'integer' && !code.storage.signed && code.storage.bits === 32;
+        return isUnscopedEnum(code.type) || (unsigned && !code.constant)
+            ? { text: `static_cast<sc::integer>(${stripParens(code.text)})`, type: 'integer', constant: code.constant } : code;
     }
 
     /** A binary operator applied to compiled operands (also used by compound assignments). */

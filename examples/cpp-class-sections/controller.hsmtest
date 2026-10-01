@@ -14,6 +14,7 @@ testclass ControllerTest for statemachine Controller {
 
     @Test
     operation restartsAfterAFailure() {
+        mock retryAllowed returns (true)
         enter
         raise start
         proceed 1 cycle
@@ -26,17 +27,17 @@ testclass ControllerTest for statemachine Controller {
     }
 
     @Test
-    operation givesUpAfterMaxErrors() {
-        config.maxErrors = 2
+    operation givesUpWhenNoRetryIsAllowed() {
+        config.maxErrors = 1
+        mock retryAllowed returns (false)
         enter
         raise start
         proceed 1 cycle
         raise failure
         proceed 1 cycle
-        raise failure
-        proceed 1 cycle
         assert active(Controller.Off)
         assert gaveUp
-        assert errorCnt == 2
+        assert errorCnt == 1
+        assert config.maxErrors == 1
     }
 }

@@ -217,6 +217,9 @@ constexpr Position kHome{10, 20};                          operation drive(p : m
   `{x: 1, y: 2}`. The simulation panel of the web app and of VS Code edits enum values with a drop-down and the
   members of structs in expandable editors; the unit test language uses the same names and values
   (`assert mode == motor::Mode::Fast`, `mock measure returns (motor::kHome)`, `p.x = 3` for a local struct).
+- **Headers in angle brackets** (`import "<vector>"`) are not analyzed: the generated C++ code `#include`s them
+  (`#include <vector>`), their types can only be used by the [C++ class sections](#c-class-sections) for members that
+  the model does not use.
 - **Headers** are searched relative to the importing model, then in the **include paths**; the headers they
   include (`#include "…"` / `<…>` found in the include paths) are analyzed too and their declarations are
   visible. The settings of the analysis are configured in the `headers` block of `hsm.gen.json` (include
@@ -252,11 +255,15 @@ are data members, operations are member functions that the application implement
 see [Code generation (C++)](cpp-generator.md#c-class-sections)). They are used in guards, effects and the unit
 tests by their simple names, like the members of the internal scope. The types are **C++ types**, written as in
 C++. The types of the application are imported with `import "header.h"` (see
-[C/C++ header imports](#cc-header-imports)): the generated header `#include`s them.
+[C/C++ header imports](#cc-header-imports)): the generated header `#include`s them. Headers that are only
+needed by the generated code (standard library, system headers) are imported in angle brackets: `import "<vector>"`
+becomes `#include <vector>`; such a header is not analyzed (its types can only be used by members that the model
+does not use, see below).
 
 ```
 statemachine Controller {
     import "path/to/header.h"                 // EpicProject::Config, EpicProject::Driver
+    import "<vector>"                         // only #include <vector>
 
     interface:
         in event start
@@ -267,18 +274,19 @@ statemachine Controller {
          * @brief Config setter.
          */
         operation setConfig(config : const EpicProject::Config&)
-        operation setDriver(driver : EpicProject::Driver*)
+        /** @brief Whether the device may be restarted. */
+        const operation retryAllowed() : bool
     protected:
         /**
          * @brief Setup function.
          */
         operation setup()
-        operation retryAllowed() : bool
+        var shutdowns : std::vector<unsigned int>   // only used by the C++ code
     private:
         var errorCnt : unsigned int = 0
         const maxErrors : unsigned int = 3
         var config : EpicProject::Config
-        var driver : EpicProject::Driver*     // only used by the C++ code
+        var driver : EpicProject::Driver&     // bound by the constructor, only used by the C++ code
 
     [*] -> Off
     state Off
@@ -291,27 +299,36 @@ statemachine Controller {
 ```
 
 - **Declarations**: `var name : type = value`, `const name : type = value` (a `const` data member), `var readonly`
-  (the model cannot assign it, the C++ code can) and `operation name(parameters) : returnType` (default `void`).
-  Events and type aliases belong to the interfaces and the internal scope. Several sections, also of the same
-  access, may follow each other; the members keep their order in the generated class. `/** … */` documentation
-  comments (with Doxygen commands such as `@brief`) are copied into the generated header.
+  (the model cannot assign it, the C++ code can), `operation name(parameters) : returnType` (default `void`) and
+  `const operation name(...)`, a **const member function** (`bool retryAllowed() const;`). Events and type aliases
+  belong to the interfaces and the internal scope; `static` members are not supported (an error). Several sections,
+  also of the same access, may follow each other; the members keep their order in the generated class. `/** … */`
+  documentation comments (with Doxygen commands such as `@brief`) are copied into the generated header. The member
+  functions are `virtual` in the generated class (so that subclasses can override them; the generator option
+  `virtualMethods: false` turns this off), the model has no syntax for it.
 - **Types** are C++ types: fundamental types (`unsigned int`, `long long`, `double`, `bool`, `char`), the types of
-  the imported headers (`EpicProject::Config`), `<cstdint>` typedefs, `const`, references (`const T&`, for
-  parameters and return types), pointers (`Driver*`, `const char*`) and template arguments (`std::array<int, 4>`,
-  `std::map<int, std::string>`, `std::vector<std::vector<int>>`). The HSM types (`integer`, `string`, aliases) can
-  be used as well. Elsewhere in the model these C++ forms are reported as errors.
+  the imported headers (`EpicProject::Config`), `<cstdint>` typedefs, `const`, references (`const T&`, `T&`),
+  pointers (`Driver*`, `const char*`) and template arguments (`std::array<int, 4>`, `std::map<int, std::string>`,
+  `std::vector<std::vector<int>>`). The HSM types (`integer`, `string`, aliases) can be used as well. Elsewhere in the
+  model these C++ forms are reported as errors.
 - **Use in the model**: a member can be used in the model if the model knows its types – the types of
   [C/C++ header imports](#cc-header-imports) (integers, reals, `bool`, `std::string`, enums, structs, `std::array`),
-  where a parameter `const T&` is a value of type `T`. Members with other types (pointers, other templates, classes the
-  header analyzer cannot use, non-const reference parameters) are declared in the generated class for the C++ code
-  of the application; using them in the model is an error (`The member 'driver' cannot be used in the model: its type
-  'EpicProject::Driver*' is not a type of the model: … It can only be used by the C++ code of the application.`).
+  where `const T&` and `T&` are values of type `T`. Members with other types (pointers, other templates, types of
+  headers in angle brackets, classes the header analyzer cannot use, non-const reference parameters) are declared in
+  the generated class for the C++ code of the application; using them in the model is an error (`The member
+  'shutdowns' cannot be used in the model: its type 'std::vector<unsigned int>' is not a type of the model: … It can
+  only be used by the C++ code of the application.`).
 - **Initialization**: data members are initialized **once, when the object is constructed** (default member
   initializers); unlike the variables of the interfaces, `enter()` does not reset them, so values set by the
   application before `enter()` (`setConfig(...)`) are kept. Their initial values may use literals, C++ constants and
   the members declared before; without initial value the member is value-initialized (`T{}`: `0`, `nullptr`, the
-  default constructor). A member cannot be a reference (it would need a constructor); declare constants with
-  `const name : type` instead of `const` in the type.
+  default constructor). Declare constants with `const name : type` instead of `const` in the type.
+- **Reference members** (`var driver : EpicProject::Driver&`, `var settings : const app::Config&`) are bound by the
+  **constructor** of the generated class, which takes them as parameters in declaration order
+  (`Controller(EpicProject::Driver& driver_)`; without reference members the class has a default constructor). They
+  have no initial value; the model reads them like variables and assigns them if they are not references to
+  constants. In the simulator and the unit tests they are variables whose value is the referenced object (set by the
+  host, also before `enter`).
 - **Simulation and unit tests**: member functions are called like operations (the simulator lets the host provide
   their results, unit tests use `mock setup returns (…)` and `assert called setup`); data members are shown and
   edited like variables (`config.maxErrors = 2` in a unit test, also before `enter`). Members the model cannot use

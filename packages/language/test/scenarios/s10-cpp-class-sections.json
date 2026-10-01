@@ -1,6 +1,6 @@
 {
     "name": "s10-cpp-class-sections",
-    "description": "Members of the C++ class sections (public:, protected:, private:): variables are initialized once when the object is constructed and are not reset by enter(), constants have their initial value, member functions are called like operations (the harness defines them; scripted results), members with types the model does not know (a pointer) are declared but not used.",
+    "description": "Members of the C++ class sections (public:, protected:, private:): variables are initialized once when the object is constructed and are not reset by enter(), constants have their initial value, member functions (also const ones) are called like operations (the harness defines them; scripted results), a reference member is bound by the constructor (the harness passes an object of its own, set by the host), members with types the model does not know (a pointer) are declared but not used.",
     "text": [
         "statemachine M {",
         "    import \"app.h\"",
@@ -11,7 +11,7 @@
         "    public:",
         "        /** Sets the configuration. */",
         "        operation setConfig(config : const app::Config&) : void",
-        "        operation limit() : unsigned int",
+        "        const operation limit() : unsigned int",
         "    protected:",
         "        /**",
         "         * @brief Setup function.",
@@ -23,12 +23,13 @@
         "        const maxErrors : unsigned int = app::kMaxErrors",
         "        var config : app::Config",
         "        var mode : app::Mode = app::Mode::Slow",
+        "        var settings : const app::Config&",
         "    [*] -> Idle",
         "    state Idle {",
         "        entry / setup()",
         "    }",
         "    state Running",
-        "    Idle -> Running : go [errorCnt < limit() && errorCnt < maxErrors] / errorCnt++; config.retries = errorCnt; setConfig(config); count += 1",
+        "    Idle -> Running : go [errorCnt < limit() && errorCnt < maxErrors && errorCnt < settings.retries] / errorCnt++; config.retries = errorCnt; setConfig(config); count += 1",
         "    Running -> Idle : stop",
         "}"
     ],
@@ -56,22 +57,118 @@
         ]
     },
     "operations": {
-        "limit": [3, 0]
+        "limit": [
+            3,
+            0
+        ]
     },
     "steps": [
-        {"enter": true},
-        {"expect": {"active": ["Idle"], "variables": {"errorCnt": 1, "maxErrors": 5, "mode": "app::Mode::Slow", "count": 0}, "calls": ["setup()"]}},
-        {"set": {"errorCnt": 2}},
-        {"raise": "go"},
-        {"runCycle": true},
-        {"expect": {"active": ["Running"], "variables": {"errorCnt": 3, "config": {"retries": 3}, "count": 1}, "calls": ["limit()", "setConfig({retries: 3, mode: app::Mode::Off})"]}},
-        {"raise": "stop"},
-        {"runCycle": true},
-        {"raise": "go"},
-        {"runCycle": true},
-        {"expect": {"active": ["Idle"], "variables": {"errorCnt": 3}, "calls": ["setup()", "limit()"]}},
-        {"exit": true},
-        {"enter": true},
-        {"expect": {"active": ["Idle"], "variables": {"errorCnt": 3, "config": {"retries": 3}, "count": 0}, "calls": ["setup()"]}}
+        {
+            "set": {
+                "settings": {
+                    "retries": 4
+                }
+            }
+        },
+        {
+            "enter": true
+        },
+        {
+            "expect": {
+                "active": [
+                    "Idle"
+                ],
+                "variables": {
+                    "errorCnt": 1,
+                    "maxErrors": 5,
+                    "mode": "app::Mode::Slow",
+                    "count": 0,
+                    "settings": {
+                        "retries": 4
+                    }
+                },
+                "calls": [
+                    "setup()"
+                ]
+            }
+        },
+        {
+            "set": {
+                "errorCnt": 2
+            }
+        },
+        {
+            "raise": "go"
+        },
+        {
+            "runCycle": true
+        },
+        {
+            "expect": {
+                "active": [
+                    "Running"
+                ],
+                "variables": {
+                    "errorCnt": 3,
+                    "config": {
+                        "retries": 3
+                    },
+                    "count": 1
+                },
+                "calls": [
+                    "limit()",
+                    "setConfig({retries: 3, mode: app::Mode::Off})"
+                ]
+            }
+        },
+        {
+            "raise": "stop"
+        },
+        {
+            "runCycle": true
+        },
+        {
+            "raise": "go"
+        },
+        {
+            "runCycle": true
+        },
+        {
+            "expect": {
+                "active": [
+                    "Idle"
+                ],
+                "variables": {
+                    "errorCnt": 3
+                },
+                "calls": [
+                    "setup()",
+                    "limit()"
+                ]
+            }
+        },
+        {
+            "exit": true
+        },
+        {
+            "enter": true
+        },
+        {
+            "expect": {
+                "active": [
+                    "Idle"
+                ],
+                "variables": {
+                    "errorCnt": 3,
+                    "config": {
+                        "retries": 3
+                    },
+                    "count": 0
+                },
+                "calls": [
+                    "setup()"
+                ]
+            }
+        }
     ]
 }

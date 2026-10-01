@@ -10,7 +10,7 @@
     },
     {
       "name": "keyword.control.hsm",
-      "match": "\\b(statemachine|deephistory|interface|namespace|operation|protected|internal|junction|readonly|unsigned|default|history|oncycle|private|valueof|active|always|choice|double|import|public|region|signed|after|alias|const|entry|event|every|false|float|raise|short|state|bool|char|else|exit|long|null|sync|true|void|int|out|var|as|in)\\b"
+      "match": "\\b(statemachine|deephistory|interface|namespace|operation|protected|internal|junction|readonly|unsigned|default|history|oncycle|private|valueof|active|always|choice|double|import|public|region|signed|static|after|alias|const|entry|event|every|false|float|raise|short|state|bool|char|else|exit|long|null|sync|true|void|int|out|var|as|in)\\b"
     },
     {
       "name": "string.quoted.double.hsm",

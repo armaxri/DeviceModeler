@@ -6,6 +6,12 @@ import { cppSpelling } from './cpp-code.js';
 import type { CppApi } from './cpp-generator.js';
 import { hsmTypeOfCpp, isCppType, type CppHsmType } from '../../cpp-types.js';
 import type { CppResolvedType } from '../../cpp-header/model.js';
+import { isReferenceMember, isUsableInModel } from '../../class-members.js';
+
+/** The object of the harness a reference member refers to. */
+function referenceObject(variable: ast.VariableDeclaration): string {
+    return `hsm_object_${variable.name}`;
+}
 
 export interface CppHarnessOptions {
     /** Namespace of the harness code, which defines `int run()` there (default `hsm_scenario_harness`). */
@@ -71,6 +77,7 @@ class CppHarnessGenerator {
             'std::vector<std::string> calls;',
             'std::vector<std::string> out_events;',
             'int failures = 0;',
+            ...this.referenceObjects(),
             '// virtual clock (ns)',
             'sc::integer now = 0;',
             'sc::integer enter_time = 0;',
@@ -89,7 +96,7 @@ class CppHarnessGenerator {
             ...this.stateTables(),
             'int run() {',
             ...indent([
-                'Machine machine;',
+                `Machine machine${this.api.referenceMembers.length > 0 ? `(${this.api.referenceMembers.map(v => referenceObject(v)).join(', ')})` : ''};`,
                 ...this.setup(),
                 'std::string error;',
                 ...main,
@@ -121,6 +128,7 @@ class CppHarnessGenerator {
         const open = this.api.namespace ? [`namespace ${this.api.namespace} {`, ''] : [];
         lines.push(...open, '// Access to the internal scope (friend of the state machine class).', `struct ${this.api.internalsStruct} {`);
         for (const variable of this.index.variables().filter(v => this.api.isInternal(v))) {
+            const reference = isReferenceMember(variable);
             const type = this.api.declaredType(variable);
             const member = this.api.internalMember(variable);
             lines.push(
@@ -128,7 +136,7 @@ class CppHarnessGenerator {
                 `        return machine.${member};`,
                 '    }'
             );
-            if (!variable.const) {
+            if (!variable.const && !reference) { // (the objects of reference members are set directly)
                 lines.push(
                     `    static void set_${variable.name}(${this.api.className}& machine, ${type} value) {`,
                     `        machine.${member} = value;`,
@@ -196,6 +204,16 @@ class CppHarnessGenerator {
             lines.push('};', '');
         });
         return lines;
+    }
+
+    /** The objects the reference members of the class sections refer to (constructor arguments; `set` steps assign them). */
+    private referenceObjects(): string[] {
+        return this.api.referenceMembers.map(variable => {
+            if (!isUsableInModel(variable)) {
+                throw new Error(`The scenario harness cannot create the object of the reference member '${variable.name}' (${this.api.declaredType(variable)})`);
+            }
+            return `${this.api.referencedType(variable)} ${referenceObject(variable)}{};`;
+        });
     }
 
     /** Definitions of the member functions of the class sections (implemented by the application): mocks like the callbacks. */
@@ -454,7 +472,9 @@ class CppHarnessGenerator {
                     return undefined;
                 }
                 const literal = this.literal(value, this.api.variableType(variable));
-                if (this.api.isInternal(variable)) {
+                if (isReferenceMember(variable)) {
+                    lines.push(`${referenceObject(variable)} = ${literal};`);
+                } else if (this.api.isInternal(variable)) {
                     lines.push(`${this.internalsName()}::set_${variable.name}(machine, ${literal});`);
                 } else {
                     lines.push(`machine.${this.api.interfaceAccess(variable)}${this.api.setter(variable)}(${literal});`);

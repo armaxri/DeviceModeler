@@ -12,6 +12,7 @@ import { StatechartInterpreter } from '../src/simulation/index.js';
 import { HsmTestWorkspace } from '../src/testing/index.js';
 import { generateC } from '../src/generator/c/index.js';
 import { generateCpp } from '../src/generator/cpp/index.js';
+import { generateTarget, parseGeneratorConfig } from '../src/generator/config.js';
 import { CLASS_SECTIONS_NOT_SUPPORTED } from '../src/generator/common/statechart-generator.js';
 import { describeStateMachine, generateModelDoc } from '../src/doc/model-doc.js';
 import { definitionLines } from '../src/model-utils.js';
@@ -165,19 +166,53 @@ describe('C++ class sections: validation', () => {
             '    private:',
             '        in event e',
             '        alias Count : integer',
-            '        var r : const app::Config&',
+            '        var r : const app::Config& = app::kMax',
+            '        const q : app::Config&',
             '        var c : const unsigned int = 1',
+            '        static var s : int',
+            '        static operation f()',
             '        const k : unsigned int',
             '        var v : std::vector<int'
         ].join('\n'));
         expect(errors(parsed)).toEqual([
             "Events cannot be declared in 'private:'; the class sections contain variables, constants and operations (members of the generated C++ class).",
             "Type aliases cannot be declared in 'private:'; the class sections contain variables, constants and operations (members of the generated C++ class).",
-            "The member 'r' cannot be a reference ('const app::Config&'): references would have to be initialized by a constructor; use a pointer or a value.",
+            "The reference member 'r' cannot have an initial value: it is bound by the constructor of the generated class.",
+            "The reference member 'q' cannot be declared with 'const'; write 'var q : const T&' for a reference to a constant.",
             "Declare the constant member with 'const c : unsigned int' instead of 'const' in the type.",
+            "Static members are not supported: 's' cannot be 'static' (declare it without 'static').",
+            "Static members are not supported: 'f' cannot be 'static' (declare it without 'static').",
             "Constant 'k' must have an initial value.",
             "The angle brackets of the template arguments of 'std::vector<int' are not balanced."
         ]);
+    });
+
+    test('const operations are member functions of the class sections; references to constants cannot be assigned', async () => {
+        const parsed = await parseModel([
+            '        const operation g() : integer',
+            '    public:',
+            '        const operation ready() : bool',
+            '        var settings : const app::Config&',
+            '        var target : app::Config&'
+        ].join('\n'), 'count = ready() ? settings.retries : 0; target.retries = 1; settings.retries = 2; settings = target');
+        expect(errors(parsed)).toEqual([
+            "Only the operations of the C++ class sections (public:, protected:, private:) can be const member functions; remove 'const'.",
+            "Cannot assign a value to 'settings.retries': it is a reference to a constant ('const app::Config&').",
+            "Cannot assign a value to 'settings': it is a reference to a constant ('const app::Config&')."
+        ]);
+    });
+
+    test('headers in angle brackets are only included', async () => {
+        const withIncludes = (definitions: string, effect = '') => model(definitions, effect).replace('    import "app.h"', '    import "app.h"\n    import "<vector>"\n    import "<sys/types.h>"');
+        const parsed = await parse(withIncludes('    private:\n        var values : std::vector<int>'), { 'app.h': APP_H });
+        expect(errors(parsed)).toEqual([]);
+        expect(warnings(parsed)).toEqual([]);
+        const header = generateCpp(parsed.model).files.find(f => f.path === 'M.h')!.content;
+        expect(header).toContain('#include "app.h"\n#include <vector>\n#include <sys/types.h>\n');
+        const used = await parse(withIncludes('    private:\n        var values : std::vector<int>', 'count = values'), { 'app.h': APP_H });
+        expect(errors(used)).toEqual([expect.stringContaining("The member 'values' cannot be used in the model")]);
+        expect(generateC((await parse('statemachine M {\n    import "<vector>"\n    [*] -> A\n    state A\n}')).model).diagnostics.map(d => d.message).join())
+            .toContain('C++ header types are not supported by the C generator');
     });
 
     test('initial values of members are evaluated when the object is constructed', async () => {
@@ -332,14 +367,14 @@ describe('C++ class sections: code generation', () => {
             'public:',
             '    // declared in the model (public:)',
             '    /** Sets the configuration. */',
-            '    void setConfig(const app::Config& config);',
-            '    unsigned int retries();'
+            '    virtual void setConfig(const app::Config& config);',
+            '    virtual unsigned int retries();'
         ].join('\n'));
         expect(header).toContain([
             'protected:',
             '    // declared in the model (protected:)',
-            '    void setup();',
-            '    bool attach(app::Driver* driver);',
+            '    virtual void setup();',
+            '    virtual bool attach(app::Driver* driver);',
             '    app::Driver* driver{};'
         ].join('\n'));
         expect(header).toContain([
@@ -373,8 +408,37 @@ describe('C++ class sections: code generation', () => {
             '     * @brief Setup function.',
             '     * Details.',
             '     */',
-            '    void setup();'
+            '    virtual void setup();'
         ].join('\n'));
+    });
+
+    test('const member functions, non-virtual member functions (option) and reference members bound by the constructor', async () => {
+        const parsed = await parseModel([
+            '    public:',
+            '        const operation ready(limit : unsigned int) : bool',
+            '    private:',
+            '        var settings : const app::Config&',
+            '        var driver : app::Driver&',
+            '        var n : int = 1'
+        ].join('\n'), 'count = ready(n) ? settings.retries : 0');
+        expect(errors(parsed)).toEqual([]);
+        const result = generateCpp(parsed.model, { virtualMethods: false });
+        const header = result.files.find(f => f.path === 'M.h')!.content;
+        expect(header).toContain('    bool ready(unsigned int limit) const;');
+        expect(header).toContain('    M(const app::Config& settings_, app::Driver& driver_);');
+        expect(header).not.toContain('    M();');
+        expect(header).toContain('    const app::Config& settings;\n    app::Driver& driver;\n    int n = 1;');
+        const source = result.files.find(f => f.path === 'M.cpp')!.content;
+        expect(source).toContain('M::M(const app::Config& settings_, app::Driver& driver_) : settings(settings_), driver(driver_) {');
+        // the option of hsm.gen.json
+        const config = parseGeneratorConfig({ models: ['*.hsm'], cpp: { virtualMethods: false } });
+        expect(config.diagnostics).toEqual([]);
+        expect(generateTarget(parsed.model, 'cpp', config.config!.cpp!).files.find(f => f.path === 'M.h')!.content).toContain('    bool ready(unsigned int limit) const;');
+        expect(generateTarget(parsed.model, 'cpp', {}).files.find(f => f.path === 'M.h')!.content).toContain('    virtual bool ready(unsigned int limit) const;');
+        expect(parseGeneratorConfig({ models: ['*.hsm'], cpp: { virtualMethods: 'no' } }).diagnostics.map(d => d.message).join()).toContain('must be true or false');
+        // a single reference member: explicit constructor
+        const single = await parseModel('    private:\n        var settings : const app::Config&');
+        expect(generateCpp(single.model).files.find(f => f.path === 'M.h')!.content).toContain('    explicit M(const app::Config& settings_);');
     });
 
     test('names of members must be C++ identifiers that do not clash with the generated class', async () => {

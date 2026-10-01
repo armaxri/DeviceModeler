@@ -54,6 +54,8 @@ export interface CppTargetConfig extends CommonTargetConfig {
     className?: string;
     /** C++ standard the code is written for (default 17). */
     std?: 11 | 17;
+    /** Whether the member functions of the C++ class sections are `virtual` (default true). */
+    virtualMethods?: boolean;
 }
 
 /** Options of the C target (see `CGeneratorOptions`). */
@@ -114,7 +116,7 @@ export interface ParsedGeneratorConfig {
     diagnostics: ConfigDiagnostic[];
 }
 
-type PropertyKind = 'string' | 'extension' | 'identifier' | 'text' | 'std' | 'positive';
+type PropertyKind = 'string' | 'extension' | 'identifier' | 'text' | 'std' | 'positive' | 'boolean';
 
 const COMMON_PROPERTIES: Record<keyof CommonTargetConfig, PropertyKind> = {
     outDir: 'string',
@@ -127,7 +129,7 @@ const COMMON_PROPERTIES: Record<keyof CommonTargetConfig, PropertyKind> = {
 
 /** The properties of the targets and their kinds (kept in sync with the JSON schema by a test). */
 export const TARGET_PROPERTIES: { cpp: Record<keyof CppTargetConfig, PropertyKind>, c: Record<keyof CTargetConfig, PropertyKind> } = {
-    cpp: { ...COMMON_PROPERTIES, namespace: 'string', className: 'identifier', std: 'std' },
+    cpp: { ...COMMON_PROPERTIES, namespace: 'string', className: 'identifier', std: 'std', virtualMethods: 'boolean' },
     c: { ...COMMON_PROPERTIES, prefix: 'identifier', typeName: 'identifier', stringCapacity: 'positive', queueCapacity: 'positive' }
 };
 
@@ -344,6 +346,8 @@ function checkKind(kind: PropertyKind, value: unknown): string | undefined {
             return value === 11 || value === 17 || value === '11' || value === '17' ? undefined : 'must be 17 or 11';
         case 'positive':
             return typeof value === 'number' && Number.isInteger(value) && value > 0 ? undefined : 'must be a positive integer';
+        case 'boolean':
+            return typeof value === 'boolean' ? undefined : 'must be true or false';
     }
 }
 
@@ -404,6 +408,7 @@ function cppGeneratorOptions(options: CppTargetConfig) {
         namespace: options.namespace,
         className: options.className,
         standard: (Number(options.std ?? 17) === 11 ? 11 : 17) as 11 | 17,
+        virtualMethods: options.virtualMethods,
         maxMicrosteps: options.maxMicrosteps
     };
 }

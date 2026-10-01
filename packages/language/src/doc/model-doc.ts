@@ -189,7 +189,7 @@ function describeScope(scope: ast.Scope): ScopeDoc {
         } else {
             const parameters = declaration.parameters.map(p => ({ name: p.name, type: typeText(p.type, () => typeName(typeOfParameter(p))), varArgs: p.varArgs }));
             const returnType = typeText(declaration.returnType, () => typeName(returnTypeOf(declaration)));
-            const signature = `${declaration.name}(${parameters.map(p => `${p.name}${p.varArgs ? '...' : ''} : ${p.type}`).join(', ')}) : ${returnType}`;
+            const signature = `${declaration.const ? 'const ' : ''}${declaration.name}(${parameters.map(p => `${p.name}${p.varArgs ? '...' : ''} : ${p.type}`).join(', ')}) : ${returnType}`;
             result.operations.push({ name: declaration.name, signature, parameters, returnType, documentation });
         }
     }

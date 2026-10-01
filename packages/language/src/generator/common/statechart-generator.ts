@@ -46,7 +46,7 @@ export const CLASS_SECTIONS_NOT_SUPPORTED = 'The C++ class sections (public:, pr
  * reference resolved as C++ type, a C++ constant or enumerator), `undefined` if there is none.
  */
 export function cppTypeUsage(machine: ast.StateMachine): AstNode | undefined {
-    const header = machine.imports.flatMap(i => i.paths).find(p => p.path && importKind(p.path) === 'header');
+    const header = machine.imports.flatMap(i => i.paths).find(p => p.path && (importKind(p.path) === 'header' || importKind(p.path) === 'system'));
     if (header) {
         return header;
     }

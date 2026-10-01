@@ -60,8 +60,16 @@ export class HsmImportValidator {
                 this.checkHeader(machine, resolved, accept);
                 continue;
             }
+            if (resolved.kind === 'system') {
+                // `#include <...>` in the generated C++ code, not analyzed: its types can only be used by C++-only members
+                if (byUri.has(resolved.path)) {
+                    accept('warning', `'${resolved.path}' is imported more than once.`, target);
+                }
+                byUri.add(resolved.path);
+                continue;
+            }
             if (resolved.kind === 'unsupported') {
-                accept('error', `Cannot import '${resolved.path}': only state machines ('.hsm') and C/C++ headers ('.h', '.hpp') can be imported.`, target);
+                accept('error', `Cannot import '${resolved.path}': only state machines ('.hsm') and C/C++ headers ('.h', '.hpp'; '<vector>' for headers that are only included) can be imported.`, target);
                 continue;
             }
             const key = resolved.uri?.toString() ?? resolved.path;

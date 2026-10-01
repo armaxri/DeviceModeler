@@ -9,20 +9,17 @@ void Controller::setConfig(const EpicProject::Config& value) {
     config = value;
 }
 
-void Controller::setDriver(EpicProject::Driver* value) {
-    driver = value;
+bool Controller::retryAllowed() const {
+    return errorCnt + 1 < config.maxErrors;
 }
 
 void Controller::setup() {
-    if (driver != nullptr) {
-        driver->powerOn();
-    }
+    driver.powerOn();
 }
 
 void Controller::shutdown() {
-    if (driver != nullptr) {
-        driver->powerOff();
-    }
+    shutdownErrors.push_back(errorCnt);
+    driver.powerOff();
 }
 
 }  // namespace example

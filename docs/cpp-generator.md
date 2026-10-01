@@ -178,14 +178,16 @@ their documentation comments:
 | `var errorCnt : unsigned int = 0` | `unsigned int errorCnt = 0;` (default member initializer: initialized at construction, not reset by `enter()`) |
 | `var config : EpicProject::Config` | `EpicProject::Config config{};` (no initial value: value-initialized) |
 | `const maxErrors : unsigned int = 3` | `const unsigned int maxErrors = 3;` |
-| `operation setConfig(config : const EpicProject::Config&)` | `void setConfig(const EpicProject::Config& config);` |
-| `operation retryAllowed() : bool` | `bool retryAllowed();` |
-| `operation name(prefix : string) : string` | `sc::string name(const sc::string& prefix);` (HSM types like in the rest of the API) |
+| `var driver : EpicProject::Driver&` | `EpicProject::Driver& driver;`, bound by the constructor `explicit Controller(EpicProject::Driver& driver_);` |
+| `operation setConfig(config : const EpicProject::Config&)` | `virtual void setConfig(const EpicProject::Config& config);` |
+| `const operation retryAllowed() : bool` | `virtual bool retryAllowed() const;` |
+| `operation name(prefix : string) : string` | `virtual sc::string name(const sc::string& prefix);` (HSM types like in the rest of the API) |
+| `import "<vector>"` | `#include <vector>` (after the `#include`s of the analyzed headers) |
 
 The C++ types are written as in the model; the model uses data members and member functions directly
 (`errorCnt = static_cast<unsigned int>(int_add(errorCnt, 1));`, `setup();`), without getters, setters or
 callbacks. The member functions are **declared, not defined**: the application implements them in a source
-file of its own (the generated files are not edited), where they have access to all members of the class –
+file of its own (the generated files are not edited), where they have access to all members of the class -
 also to the private data members and to the generated API:
 
 ```cpp
@@ -199,20 +201,17 @@ void Controller::setConfig(const EpicProject::Config& value) {
     config = value;
 }
 
-void Controller::setDriver(EpicProject::Driver* value) {
-    driver = value;
+bool Controller::retryAllowed() const {
+    return errorCnt + 1 < config.maxErrors;
 }
 
 void Controller::setup() {
-    if (driver != nullptr) {
-        driver->powerOn();
-    }
+    driver.powerOn();
 }
 
 void Controller::shutdown() {
-    if (driver != nullptr) {
-        driver->powerOff();
-    }
+    shutdownErrors.push_back(errorCnt);
+    driver.powerOff();
 }
 
 }  // namespace example
@@ -220,8 +219,21 @@ void Controller::shutdown() {
 
 Compile it with the generated source (`g++ -std=c++17 -I. -Igen main.cpp ControllerMethods.cpp gen/Controller.cpp`;
 with CMake, add it to the target of `hsm_generate`). A member function the model calls but the application does
-not define is a linker error. The member functions are not `virtual` (no vtable, no subclass needed); a
-subclass of the generated class can use the `protected` members. Tip: give the parameters of the definitions
-other names than the data members (`value` instead of `config`), otherwise `-Wshadow` warns. The example
-[`examples/cpp-class-sections`](../examples/cpp-class-sections) (model, header, implementation, `main.cpp` and unit
-tests) is compiled and run by `npm test`. The scenario harnesses define the member functions as mocks.
+not define is a linker error. Tip: give the parameters of the definitions other names than the data members
+(`value` instead of `config`), otherwise `-Wshadow` warns.
+
+- **Constructor**: without reference members the class has a default constructor. Reference members are bound by
+  the constructor, which takes them in declaration order (`Controller(const app::Config& settings_, EpicProject::Driver& driver_)`,
+  `explicit` for one parameter); the default constructor is not generated then.
+- **Virtual member functions**: the member functions of the class sections are `virtual` by default, so that a
+  subclass of the generated class can override them (`void setup() override`, see `main.cpp` of the example) and use
+  the `protected` members. The class is polymorphic anyway (it implements `sc::StatemachineInterface`, which has a
+  virtual destructor and virtual `enter()` / `exit()` / `runCycle()`), so this adds only vtable entries and an
+  indirect call per call. For non-virtual member functions set `"virtualMethods": false` in the `cpp` block of
+  `hsm.gen.json` (or `generateCpp(machine, { virtualMethods: false })`, `hsm generate cpp --non-virtual-methods`).
+- **Const member functions** (`const operation`) are declared `const`; the application's definition must be `const`
+  too and cannot modify the data members.
+
+The example [`examples/cpp-class-sections`](../examples/cpp-class-sections) (model, header, implementation,
+`main.cpp` with a subclass, and unit tests) is compiled (C++17 and C++11) and run by `npm test`. The scenario harnesses
+define the member functions as mocks and pass objects of their own to the constructor.
