@@ -99,7 +99,9 @@ export class HsmHoverProvider extends MultilineCommentHoverProvider {
     protected override getAstNodeHoverContent(node: AstNode): MaybePromise<string | undefined> {
         const signature = hoverSignature(node);
         const documentation = super.getAstNodeHoverContent(node);
-        const combine = (doc: string | undefined) => [signature ? '```hsm\n' + signature + '\n```' : undefined, doc].filter(part => part).join('\n\n') || undefined;
+        // the documentation provider starts with a shorter signature of its own: replaced by this one
+        const withoutSignature = (doc: string | undefined) => signature ? doc?.replace(/^```hsm\n[^\n]*\n```(\n\n)?/, '') : doc;
+        const combine = (doc: string | undefined) => [signature ? '```hsm\n' + signature + '\n```' : undefined, withoutSignature(doc)].filter(part => part).join('\n\n') || undefined;
         return documentation instanceof Promise ? documentation.then(combine) : combine(documentation);
     }
 }

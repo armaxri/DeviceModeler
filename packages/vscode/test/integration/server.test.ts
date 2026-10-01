@@ -226,6 +226,8 @@ describe('HSM language server', () => {
         });
         expect(hover.contents.value).toContain('in event toggle');
         expect(hover.contents.value).toContain('Switches the lamp on or off.');
+        // one signature (the documentation provider's own one is replaced)
+        expect(hover.contents.value.match(/```hsm/g)).toHaveLength(1);
     });
 
     it('navigates from a test file to the model (definition) and finds references across files', async () => {

@@ -68,8 +68,27 @@ of the index page and the diagram options of `hsm render`. `npm run docs:example
 [`docs/examples`](examples/index.md).
 
 **Doc comments**: a `/** … */` comment directly before the state machine, an interface, a declaration, a
-state, a pseudo state or a transition documents it (Markdown, JSDoc tags like `@see` are allowed). Plain
-comments (`/* … */`, `// …`) are ignored.
+state, a pseudo state or a transition documents it. Plain comments (`/* … */`, `// …`) are ignored. The text
+is shown as written (line breaks, blank lines, indentation and lists are kept; Markdown is allowed), and the
+common Doxygen / JSDoc commands (`@` or `\` prefix) are rendered (`doc/doxygen.ts`, also used for the doc
+comments of imported C/C++ headers):
+
+| Command | Rendered as |
+| --- | --- |
+| `@brief`, `@details` | paragraph (the command is dropped) |
+| `@param[in] name text`, `@tparam`, `@retval`, `@throws` | list "Parameters" / "Template parameters" / "Return values" / "Throws" with the name as code |
+| `@return`, `@note`, `@warning`, `@attention`, `@deprecated`, `@see` / `@sa`, `@pre`, `@post`, `@since`, `@todo`, … | paragraph with a bold label ("**Note:** …") |
+| `@par Title` | bold title line |
+| `@code{.cpp} … @endcode`, `@verbatim … @endverbatim` | code block |
+| `@c word`, `@p word` / `@a`, `@e`, `@em` / `@b` | code / italic / bold; also `<tt>`, `<code>`, `<i>`, `<em>`, `<b>`, `<strong>` |
+| `{@link Name}`, `{@link Name text}`, `@ref Name "text"` | link to the element (hover: names of the workspace index), otherwise code |
+| `@li` | list item |
+| `@file`, `@class`, `@ingroup`, `@{`, … | dropped (structural commands) |
+
+Other commands stay visible as written. The editors highlight the commands in `/** … */` comments (web app:
+Monarch rules `DOC_COMMENT_RULES` in `doc/doc-comment-highlighting.ts`; VS Code: injection grammar
+`syntaxes/hsm-doc-comments.tmLanguage.json` with the scopes of the C++ grammar, e.g.
+`storage.type.class.doxygen`).
 
 ```
 /** Push button of the pedestrian crossing. */
@@ -81,4 +100,5 @@ interface Pedestrian:
 The language server shows the doc comments on hover together with the signature of the element
 (`HsmDocumentationProvider`). From code: `describeStateMachine(model)` returns the collected information,
 `generateModelDoc(model, { format, svg, svgFile })` and `generateDocIndex(entries, format)` render it,
-`docComment(node)` returns the doc comment of an AST node.
+`docComment(node)` returns the doc comment of an AST node as Markdown, `stripCommentMarkers(comment)` and
+`doxygenToMarkdown(text)` convert any documentation comment.
