@@ -1591,7 +1591,8 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
 
     private renderPropertiesPanel(): void {
         const panel = byId('properties');
-        if (this.simulationSession || panel.contains(document.activeElement)) {
+        // (not while a field of the panel is edited; the header of a collapsible section may keep the focus)
+        if (this.simulationSession || panel.contains(document.activeElement) && !document.activeElement?.closest('.side-section-header')) {
             return;
         }
         const id = this.singleSelection();

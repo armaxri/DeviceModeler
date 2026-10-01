@@ -3,6 +3,7 @@ import 'sprotty/css/sprotty.css';
 import '@hsm-web/styles/app.css';
 import '@hsm-web/styles/diagram-styles.js';
 import '@hsm-web/styles/simulation.css';
+import '@hsm-web/styles/side-panel.css';
 import './webview.css';
 import ElkApi from 'elkjs/lib/elk-api.js';
 import elkWorkerSource from 'elkjs/lib/elk-worker.min.js?raw';

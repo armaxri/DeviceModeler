@@ -3,6 +3,7 @@ import 'sprotty/css/sprotty.css';
 import './styles/app.css';
 import './styles/diagram-styles.js';
 import './styles/simulation.css';
+import './styles/side-panel.css';
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import { HsmApp } from './app.js';
 

@@ -66,16 +66,42 @@ main {
     grid-template-columns: 1fr;
 }
 
-#diagram-pane.hide-properties {
-    grid-template-columns: auto 1fr;
+#side-panel {
+    width: var(--side-panel-width, 260px);
 }
 
-#diagram-pane.hide-properties #properties {
-    display: none;
+#side-panel.collapsed {
+    width: 28px;
 }
 
-#properties {
-    width: 260px;
+#side-panel button.side-section-header {
+    color: var(--vscode-sideBarSectionHeader-foreground, var(--ui-text));
+}
+
+.side-section-heading {
+    background: var(--vscode-sideBarSectionHeader-background, var(--ui-panel));
+}
+
+.side-section {
+    border-bottom-color: var(--vscode-sideBarSectionHeader-border, var(--ui-border));
+}
+
+.side-panel-title {
+    color: var(--vscode-sideBarTitle-foreground, var(--ui-muted));
+}
+
+.side-panel-sash:hover::after,
+.side-panel-sash.dragging::after,
+.side-panel-sash:focus-visible::after {
+    background: var(--vscode-sash-hoverBorder, var(--ui-select));
+}
+
+#side-panel button:focus-visible {
+    outline-color: var(--vscode-focusBorder);
+}
+
+button.side-panel-toggle {
+    width: 28px;
 }
 
 #properties input, #properties select, #properties textarea {
