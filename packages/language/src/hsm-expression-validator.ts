@@ -1,4 +1,9 @@
 import {
+    LAYOUT_ANNOTATIONS, annotationOwner, containerAnnotations, elementAnnotations, isElementAnnotation, semanticAnnotations,
+    type AnnotatedElement, type AnnotationContainer
+} from './model-annotations.js';
+import { annotationNumbers } from './diagram/layout-annotations.js';
+import {
     AstUtils, DefaultDocumentValidator, DocumentValidator, isReference,
     type AstNode, type LangiumDocument, type ValidationAcceptor, type ValidationOptions
 } from 'langium';
@@ -41,12 +46,25 @@ export class HsmExpressionValidator {
 
     checkAnnotation(annotation: ast.Annotation, accept: ValidationAcceptor): void {
         const name = annotation.name;
+        const container = annotation.$container;
+        if (!ast.isStateMachine(container) && !ast.isState(container) && !ast.isRegion(container)) {
+            return;
+        }
+        if (LAYOUT_ANNOTATIONS.includes(name)) {
+            this.checkLayoutAnnotation(annotation, accept);
+            return;
+        }
+        if (!ast.isStateMachine(container) && (SUPPORTED_ANNOTATIONS.includes(name) || UNSUPPORTED_ANNOTATIONS.includes(name))) {
+            accept('error', `@${name} is an annotation of the state machine.`, { node: annotation, property: 'name' });
+            return;
+        }
         if (UNSUPPORTED_ANNOTATIONS.includes(name)) {
             accept('warning', `@${name} is not supported yet and is ignored.`, { node: annotation, property: 'name' });
             return;
         }
         if (!SUPPORTED_ANNOTATIONS.includes(name)) {
-            accept('warning', `Unknown annotation '@${name}'. Known annotations are ${[...SUPPORTED_ANNOTATIONS, ...UNSUPPORTED_ANNOTATIONS].map(a => `@${a}`).join(', ')}.`,
+            const known = ast.isStateMachine(container) ? [...SUPPORTED_ANNOTATIONS, ...UNSUPPORTED_ANNOTATIONS, ...LAYOUT_ANNOTATIONS] : LAYOUT_ANNOTATIONS;
+            accept('warning', `Unknown annotation '@${name}'. Known annotations are ${known.map(a => `@${a}`).join(', ')}.`,
                 { node: annotation, property: 'name' });
             return;
         }
@@ -68,9 +86,78 @@ export class HsmExpressionValidator {
         }
     }
 
+    /** Layout annotations (see model-annotations.ts): the element they belong to and their arguments. */
+    private checkLayoutAnnotation(annotation: ast.Annotation, accept: ValidationAcceptor): void {
+        const name = annotation.name;
+        const owner = annotationOwner(annotation);
+        if (!owner) {
+            accept('error', `@${name} must be written directly before the element it belongs to.`, { node: annotation, property: 'name' });
+            return;
+        }
+        const allowed: Record<string, Array<(node: unknown) => boolean>> = {
+            at: [ast.isState, ast.isPseudoState, ast.isRegion],
+            size: [ast.isState, ast.isRegion],
+            regions: [ast.isState],
+            via: [ast.isTransition],
+            label: [ast.isTransition],
+            initial: [ast.isStateMachine, ast.isState, ast.isRegion],
+            final: [ast.isStateMachine, ast.isState, ast.isRegion],
+            definitions: [ast.isStateMachine]
+        };
+        const elements: Record<string, string> = {
+            at: 'states, pseudo states and regions', size: 'states and regions', regions: 'states', via: 'transitions',
+            label: 'transitions', initial: 'the state machine, states and regions', final: 'the state machine, states and regions',
+            definitions: 'the state machine'
+        };
+        if (!allowed[name].some(is => is(owner))) {
+            accept('error', `@${name} is a layout annotation of ${elements[name]}.`, { node: annotation, property: 'name' });
+            return;
+        }
+        const siblings = isElementAnnotation(annotation) ? elementAnnotations(owner as AnnotatedElement) : containerAnnotations(owner as AnnotationContainer);
+        if (siblings.find(a => a.name === name) !== annotation) {
+            accept('error', `Duplicate annotation '@${name}'.`, { node: annotation, property: 'name' });
+            return;
+        }
+        if (name === 'regions') {
+            const argument = annotation.arguments[0];
+            const value = annotation.arguments.length === 1 && ast.isStringLiteral(argument) ? argument.value : undefined;
+            if (value !== 'vertical' && value !== 'horizontal') {
+                accept('error', '@regions takes one argument: "vertical" or "horizontal".', { node: annotation, property: 'name' });
+            }
+            return;
+        }
+        const numbers = annotationNumbers(annotation);
+        if (!numbers) {
+            const index = annotation.arguments.findIndex(a => annotationNumbers({ ...annotation, arguments: [a] } as ast.Annotation) === undefined);
+            accept('error', `The arguments of @${name} must be numbers.`, { node: annotation, property: 'arguments', index: Math.max(0, index) });
+            return;
+        }
+        const count = numbers.length;
+        if (name === 'via' ? count < 2 || count % 2 !== 0 : name === 'definitions' ? count !== 2 && count !== 4 : count !== 2) {
+            const expected = name === 'via' ? 'the coordinates of one or more waypoints (x1, y1, x2, y2, ...)'
+                : name === 'definitions' ? 'x, y and optionally width and height'
+                    : name === 'size' ? 'width and height' : name === 'label' ? 'the offset dx, dy' : 'x and y';
+            accept('error', `@${name} takes ${expected}.`, { node: annotation, property: 'name' });
+        }
+    }
+
     checkAnnotationCombinations(machine: ast.StateMachine, accept: ValidationAcceptor): void {
+        // the definition section (annotations of the state machine, interfaces, internal scope) comes first
+        const offset = (node: { $cstNode?: { offset: number } }) => node.$cstNode?.offset ?? Number.POSITIVE_INFINITY;
+        const firstElement = Math.min(...[...machine.vertices, ...machine.transitions, ...machine.reactions].map(offset));
+        const firstScope = Math.min(...machine.scopes.map(offset));
+        for (const scope of machine.scopes) {
+            if (offset(scope) > firstElement) {
+                accept('error', 'Interfaces and the internal scope must come before the states and transitions.', { node: scope });
+            }
+        }
+        for (const annotation of semanticAnnotations(machine)) {
+            if (offset(annotation) > Math.min(firstElement, firstScope)) {
+                accept('error', `@${annotation.name} must come before the interfaces, states and transitions.`, { node: annotation, property: 'name' });
+            }
+        }
         const seen = new Map<string, ast.Annotation>();
-        for (const annotation of machine.annotations) {
+        for (const annotation of semanticAnnotations(machine)) {
             if (seen.has(annotation.name)) {
                 accept('warning', `Duplicate annotation '@${annotation.name}'.`, { node: annotation, property: 'name' });
                 continue;

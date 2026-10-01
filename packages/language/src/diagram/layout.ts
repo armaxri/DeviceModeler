@@ -737,7 +737,7 @@ export function containerForElement(element: AstNode | undefined): ScopeContaine
  * in several orthogonal regions of a state (`Outer.failure`) include the region to stay distinguishable
  * (`Outer.r1.failure`, `Outer.region2.failure` for unnamed regions).
  */
-function vertexBaseId(vertex: ast.Vertex): string {
+export function vertexBaseId(vertex: ast.Vertex): string {
     const name = qualifiedName(vertex);
     const region = vertex.$container;
     if (!ast.isPseudoState(vertex) || (vertex.kind !== 'entry' && vertex.kind !== 'exit') || !ast.isRegion(region)) {

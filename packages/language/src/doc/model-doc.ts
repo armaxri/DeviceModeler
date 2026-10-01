@@ -1,4 +1,5 @@
 import { AstUtils, type AstNode } from 'langium';
+import { semanticAnnotations } from '../model-annotations.js';
 import * as ast from '../generated/ast.js';
 import { qualifiedName } from '../hsm-scope.js';
 import { eventDirection, typeName, typeOfAlias, typeOfEvent, typeOfParameter, typeOfVariable, returnTypeOf } from '../hsm-typesystem.js';
@@ -144,7 +145,7 @@ export function describeStateMachine(machine: ast.StateMachine): StateMachineDoc
             mode,
             period: mode === 'cycle' ? (cycleBased?.arguments[0] ? nodeText(cycleBased.arguments[0]) : '200') : undefined,
             order: annotation('ChildFirstExecution') ? 'child-first' : 'parent-first',
-            annotations: machine.annotations.map(a => nodeText(a))
+            annotations: semanticAnnotations(machine).map(a => nodeText(a))
         },
         scopes: machine.scopes.map(describeScope),
         reactions: machine.reactions.map(r => nodeText(r)),

@@ -3,7 +3,7 @@
  *
  * An `.sct` file is an EMF XMI document which contains the statechart (`sgraph:Statechart`) and
  * its diagram (`notation:Diagram`). The statechart is converted into HSM text, the positions and sizes
- * of the diagram are converted into a manual layout (`.hsm.layout`, see `diagram/manual-layout.ts`).
+ * of the diagram into layout annotations in that text (`@at(x, y)`, ..., see `model-annotations.ts`).
  * The definition section and all reactions use the same syntax as the HSM language, so they are
  * copied (re-indented and slightly normalized). The structure is translated as follows:
  *
@@ -37,7 +37,7 @@ export interface SctImportOptions {
     mainStateName?: string;
     /** Indentation unit of the generated text (default four spaces). */
     indent?: string;
-    /** Convert the diagram (`notation:Diagram`) into a manual layout (default true). */
+    /** Convert the diagram (`notation:Diagram`) into layout annotations (default true). */
     layout?: boolean;
     /**
      * Resolves a statechart referenced by a submachine state: `reference` is the referenced file
@@ -61,7 +61,10 @@ export interface SctImportResult {
     text: string;
     /** Everything that could not be imported 1:1 (renamed states, unsupported features, ...). */
     warnings: string[];
-    /** Positions and sizes of the itemis diagram (if the file contains one), to be stored as `<model>.hsm.layout`. */
+    /**
+     * Positions and sizes of the itemis diagram (if the file contains one) as a manual layout; they are part
+     * of `text` as layout annotations already.
+     */
     layout?: ManualLayout;
 }
 
@@ -194,6 +197,9 @@ class SctImporter {
     private statechartName = '';
     private orderCounter = 0;
     private topRegions: XmlElement[] = [];
+    /** The layout of the itemis diagram (written as layout annotations) and the diagram ids of the transitions. */
+    private layout?: ManualLayout;
+    private edgeIds = new Map<TransitionNode, string>();
     private readonly options: SctImportOptions;
     /** Imports (`.hsm` paths) and instance declarations of submachine states. */
     private readonly imports: string[] = [];
@@ -222,6 +228,11 @@ class SctImporter {
         this.assignNames(this.machine);
         this.buildTransitions();
 
+        // the diagram, written as layout annotations
+        const notation = this.options.layout === false ? undefined : new NotationImporter(this.machine, this.implicitById, this.topRegions);
+        this.layout = notation?.run(root);
+        this.edgeIds = notation?.edgeIds ?? new Map();
+
         const lines: string[] = [];
         lines.push(`statemachine ${machineName}${machineName !== this.statechartName && this.statechartName ? ' ' + quote(this.statechartName) : ''} {`);
         const definition = this.convertSpecification(statechart.attributes['specification'] ?? '', statechart.attributes['namespace']);
@@ -238,7 +249,7 @@ class SctImporter {
         }
         lines.push(...this.emitBody(this.machine, 1));
         lines.push('}');
-        const layout = this.options.layout === false ? undefined : new NotationImporter(this.machine, this.implicitById, this.topRegions).run(root);
+        const layout = this.layout;
         return { text: collapseBlankLines(lines).join('\n') + '\n', warnings: this.warnings, ...(layout ? { layout } : {}) };
     }
 
@@ -760,6 +771,10 @@ class SctImporter {
     private emitBody(container: Container, level: number): string[] {
         const indent = this.indentUnit.repeat(level);
         const lines: string[] = [];
+        const own = this.containerAnnotations(container);
+        if (own) {
+            lines.push(indent + own);
+        }
         const initials = container.transitions.filter(t => t.source === 'initial');
         const others = container.transitions.filter(t => t.source !== 'initial')
             .sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1]);
@@ -780,7 +795,8 @@ class SctImporter {
                     lines.push('');
                 }
             } else {
-                lines.push(`${indent}${vertex.kind} ${vertex.name}`);
+                const annotations = this.vertexAnnotations(vertex);
+                lines.push(...(annotations ? [indent + annotations] : []), `${indent}${vertex.kind} ${vertex.name}`);
             }
         }
         if (others.length > 0) {
@@ -808,6 +824,10 @@ class SctImporter {
         if (state.regions.length > 0) {
             for (const region of state.regions) {
                 body.push('');
+                const regionAnnotations = this.regionAnnotations(region);
+                if (regionAnnotations) {
+                    body.push(inner + regionAnnotations);
+                }
                 body.push(`${inner}region${region.name ? ' ' + region.name : ''} {`);
                 body.push(...this.emitBody(region, level + 2));
                 body.push(`${inner}}`);
@@ -824,6 +844,10 @@ class SctImporter {
             body.push(...children);
         }
         const comments = state.comments.map(c => indent + c);
+        const annotations = this.vertexAnnotations(state);
+        if (annotations) {
+            comments.push(indent + annotations);
+        }
         if (body.length === 0) {
             return [...comments, header];
         }
@@ -831,6 +855,70 @@ class SctImporter {
     }
 
     private emitTransition(t: TransitionNode, indent: string): string[] {
+        const annotations = this.transitionAnnotations(t);
+        const lines = this.emitTransitionLines(t, indent);
+        return annotations ? [indent + annotations, ...lines] : lines;
+    }
+
+    // layout annotations (see model-annotations.ts), numbers written as integers
+
+    private vertexAnnotations(vertex: VertexNode): string | undefined {
+        const entry = this.layout?.nodes[diagramId(vertex)];
+        if (!entry) {
+            return undefined;
+        }
+        const result = [`@at(${coordinates(entry.x, entry.y)})`];
+        if (vertex.kind === 'state' && (entry.width !== undefined || entry.height !== undefined)) {
+            result.push(`@size(${coordinates(entry.width ?? 0, entry.height ?? 0)})`);
+        }
+        if (vertex.kind === 'state' && entry.regions) {
+            result.push(`@regions(${quote(entry.regions)})`);
+        }
+        return result.join(' ');
+    }
+
+    private regionAnnotations(region: RegionNode): string | undefined {
+        const entry = this.layout?.nodes[containerId(region)];
+        if (!entry) {
+            return undefined;
+        }
+        const result = [`@at(${coordinates(entry.x, entry.y)})`];
+        if (entry.width !== undefined || entry.height !== undefined) {
+            result.push(`@size(${coordinates(entry.width ?? 0, entry.height ?? 0)})`);
+        }
+        return result.join(' ');
+    }
+
+    /** `@definitions`, `@initial` and `@final` of a container (written at the beginning of its body). */
+    private containerAnnotations(container: Container): string | undefined {
+        const nodes = this.layout?.nodes;
+        if (!nodes) {
+            return undefined;
+        }
+        const id = containerId(container);
+        const result: string[] = [];
+        const definitions = container.kind === 'machine' ? nodes[DEFINITION_ID] : undefined;
+        if (definitions) {
+            result.push(`@definitions(${coordinates(definitions.x, definitions.y)})`);
+        }
+        const initial = container.transitions.some(t => t.source === 'initial') ? nodes[`${id}#initial`] : undefined;
+        if (initial) {
+            result.push(`@initial(${coordinates(initial.x, initial.y)})`);
+        }
+        const final = container.transitions.some(t => t.target === 'final') ? nodes[`${id}#final`] : undefined;
+        if (final) {
+            result.push(`@final(${coordinates(final.x, final.y)})`);
+        }
+        return result.length > 0 ? result.join(' ') : undefined;
+    }
+
+    private transitionAnnotations(t: TransitionNode): string | undefined {
+        const id = this.edgeIds.get(t);
+        const bends = id ? this.layout?.edges[id]?.bends : undefined;
+        return bends?.length ? `@via(${bends.map(p => coordinates(p.x, p.y)).join(', ')})` : undefined;
+    }
+
+    private emitTransitionLines(t: TransitionNode, indent: string): string[] {
         const source = t.source === 'initial' ? '[*]' : this.referenceName(t.source, t.container);
         const target = t.target === 'final' ? '[*]' : this.referenceName(t.target, t.container);
         const spec = this.rewriteReaction(t.spec, t.container);
@@ -1249,6 +1337,8 @@ interface Bounds {
 class NotationImporter {
 
     private readonly layout = createManualLayout('manual', 'DOWN');
+    /** Diagram ids of the transitions (computed by {@link run}). */
+    readonly edgeIds = new Map<TransitionNode, string>();
     /** semantic `xmi:id` -> notation view */
     private readonly views = new Map<string, XmlElement>();
     /** diagram id -> container diagram id, itemis bounds and offset of the container */
@@ -1380,6 +1470,7 @@ class NotationImporter {
                 const count = counts.get(base) ?? 0;
                 counts.set(base, count + 1);
                 const id = count === 0 ? base : `${base}~${count}`;
+                this.edgeIds.set(transition, id);
                 const view = transition.elementId ? edgeViews.get(transition.elementId) : undefined;
                 if (view && transition.entryPoints.length === 0 && transition.exitPoints.length === 0) {
                     this.importEdge(id, source, target, view);
@@ -1439,6 +1530,11 @@ function anchorPoint(bounds: Bounds, pseudo: boolean, anchor: XmlElement | undef
 }
 
 /** Id of a vertex in the HSM diagram: its qualified name. */
+/** Coordinates of a layout annotation (rounded to integers). */
+function coordinates(...values: number[]): string {
+    return values.map(v => Math.round(v) || 0).join(', ');
+}
+
 function diagramId(vertex: VertexNode): string {
     return qualifiedSegments(vertex).join('.');
 }

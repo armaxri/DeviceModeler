@@ -1,6 +1,7 @@
 import type { AstNode } from 'langium';
 import { AbstractFormatter, Formatting } from 'langium/lsp';
 import * as ast from './generated/ast.js';
+import { elementAnnotations, type AnnotatedElement } from './model-annotations.js';
 
 export class HsmFormatter extends AbstractFormatter {
 
@@ -13,6 +14,13 @@ export class HsmFormatter extends AbstractFormatter {
                 open.prepend(Formatting.oneSpace());
                 formatter.interior(open, close).prepend(Formatting.indent({ allowMore: true }));
                 close.prepend(Formatting.newLine());
+            }
+            // the element annotations of an element on one line before it: `@at(10, 20) @size(100, 60)`
+            const elements: AnnotatedElement[] = [...node.vertices, ...node.transitions, ...(ast.isState(node) ? node.regions : [])];
+            for (const element of elements) {
+                elementAnnotations(element).slice(1).forEach(annotation => {
+                    this.getNodeFormatter(annotation).keyword('@').prepend(Formatting.oneSpace());
+                });
             }
             formatter.property('name').prepend(Formatting.oneSpace());
             if (ast.isState(node) || ast.isStateMachine(node)) {
@@ -55,6 +63,12 @@ export class HsmFormatter extends AbstractFormatter {
         } else if (ast.isMemberAccessExpression(node) || ast.isElementReference(node)) {
             // `valueof(e).x`, `pos.x`, `Iface.x`
             this.getNodeFormatter<ast.MemberAccessExpression | ast.ElementReference>(node).keywords('.').surround(Formatting.noSpace());
+        } else if (ast.isAnnotation(node)) {
+            const formatter = this.getNodeFormatter(node);
+            formatter.keyword('@').append(Formatting.noSpace());
+            formatter.keyword('(').prepend(Formatting.noSpace()).append(Formatting.noSpace());
+            formatter.keyword(')').prepend(Formatting.noSpace());
+            formatter.keywords(',').prepend(Formatting.noSpace()).append(Formatting.oneSpace());
         } else if (ast.isReactionSpec(node) || ast.isLocalReaction(node)) {
             const formatter = this.getNodeFormatter(node);
             formatter.keyword('[').prepend(Formatting.oneSpace()).append(Formatting.noSpace());

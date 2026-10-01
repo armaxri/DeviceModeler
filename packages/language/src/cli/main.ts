@@ -6,7 +6,9 @@ import { NodeFileSystem } from 'langium/node';
 import { createHsmServices } from '../hsm-module.js';
 import { HsmModelLoader } from '../hsm-document.js';
 import { generatePlantUml } from '../generator/plantuml.js';
-import { layoutFileName, layoutStateMachineWithLayout, parseManualLayout, serializeManualLayout, type ManualLayout } from '../diagram/manual-layout.js';
+import { layoutFileName, layoutStateMachineWithLayout, parseManualLayout } from '../diagram/manual-layout.js';
+import { layoutTextEdits } from '../diagram/layout-annotations.js';
+import { applyEdits } from '../edit/model-edits.js';
 import { GENERATOR_CONFIG_FILE } from '../generator/config.js';
 import { runGenerateCommand, type GenerateCommandOptions } from '../generator/generate-command.js';
 import { importSct, importSctFiles } from '../importer/sct-importer.js';
@@ -115,18 +117,20 @@ export function createProgram(): Command {
     headerOptions(program.command('layout'))
         .argument('<file>', '.hsm file')
         .option('-d, --direction <direction>', 'DOWN or RIGHT', 'DOWN')
-        .option('-l, --layout <file>', 'manual layout (default: <file>.layout if it exists)')
-        .option('--auto', 'ignore the manual layout')
-        .description('prints the computed diagram layout as JSON')
-        .action(async (file: string, options: { direction: 'DOWN' | 'RIGHT', layout?: string, auto?: boolean } & HeaderCommandOptions) => {
+        .option('--auto', 'lay out automatically, ignoring the layout annotations (@at, ...)')
+        .description('prints the computed diagram layout as JSON (the manual layout of the layout annotations, if any)')
+        .action(async (file: string, options: { direction: 'DOWN' | 'RIGHT', auto?: boolean } & HeaderCommandOptions) => {
             const { parsed } = await load(file, options);
-            let manual: ManualLayout | undefined;
-            const layoutFile = options.layout ?? layoutFileName(file);
-            if (!options.auto && (options.layout || await exists(layoutFile))) {
-                manual = parseManualLayout(await fs.readFile(layoutFile, 'utf-8'));
-            }
-            const { graph } = await layoutStateMachineWithLayout(parsed.model, { direction: options.direction }, manual);
+            const { graph } = await layoutStateMachineWithLayout(parsed.model, { direction: options.direction }, options.auto ? null : undefined);
             console.log(JSON.stringify(graph, undefined, 2));
+        });
+
+    program.command('migrate-layout')
+        .argument('<file>', '.hsm file')
+        .option('-l, --layout <file>', 'layout file of the experimental sidecar format (default: <file>.layout)')
+        .description('writes the manual layout of a .hsm.layout file into the model as layout annotations (@at, @size, @via, ...)')
+        .action(async (file: string, options: { layout?: string }) => {
+            process.exitCode = await migrateLayout(file, options.layout ?? layoutFileName(file));
         });
 
     headerOptions(program.command('simulate'))
@@ -189,8 +193,8 @@ export function createProgram(): Command {
     program.command('import')
         .argument('<files...>', 'itemis CREATE / YAKINDU statecharts (.sct); submachine states referencing one of the other files become submachine instances')
         .option('-o, --out <file>', 'output file for a single statechart (default: <file>.hsm)')
-        .option('--no-layout', 'do not write the diagram layouts (<out>.layout)')
-        .description('converts itemis CREATE (.sct) statecharts into .hsm models (and their diagrams into <out>.layout)')
+        .option('--no-layout', 'do not convert the diagrams into layout annotations (@at, ...)')
+        .description('converts itemis CREATE (.sct) statecharts into .hsm models (their diagrams into layout annotations)')
         .action(async (files: string[], options: { out?: string, layout: boolean }) => {
             if (options.out && files.length > 1) {
                 console.error('--out can only be used with a single statechart');
@@ -208,10 +212,6 @@ export function createProgram(): Command {
                 const out = options.out ?? result.fileName;
                 await fs.writeFile(out, result.text);
                 console.log(`Generated ${out}`);
-                if (result.layout) {
-                    await fs.writeFile(layoutFileName(out), serializeManualLayout(result.layout));
-                    console.log(`Generated ${layoutFileName(out)}`);
-                }
             }
         });
 
@@ -229,6 +229,32 @@ export function createProgram(): Command {
     registerRenderCommands(program);
 
     return program;
+}
+
+/**
+ * `hsm migrate-layout`: writes the manual layout of a layout file of the experimental sidecar format
+ * (`<model>.hsm.layout`) into the model as layout annotations. The layout file is not deleted.
+ */
+async function migrateLayout(file: string, layoutFile: string): Promise<number> {
+    if (!await exists(layoutFile)) {
+        console.error(`${layoutFile}: not found`);
+        return 1;
+    }
+    const layout = parseManualLayout(await fs.readFile(layoutFile, 'utf-8'));
+    if (layout.mode !== 'manual') {
+        console.log(`${layoutFile}: the diagram is laid out automatically (mode "auto"), nothing to migrate.`);
+        return 0;
+    }
+    const { parsed } = await load(file);
+    if (parsed.hasSyntaxErrors) {
+        console.error(`${file}: the model has syntax errors`);
+        return 1;
+    }
+    const text = parsed.document.textDocument.getText();
+    const edits = layoutTextEdits(parsed.model, text, layout);
+    await fs.writeFile(file, applyEdits(text, edits));
+    console.log(`${file}: layout of ${layoutFile} written as layout annotations (${edits.length} changes); ${layoutFile} is no longer used and can be deleted.`);
+    return 0;
 }
 
 async function exists(file: string): Promise<boolean> {

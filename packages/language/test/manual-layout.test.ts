@@ -8,6 +8,7 @@ import {
     renameLayoutElement, serializeManualLayout, type ManualLayout
 } from '../src/diagram/manual-layout.js';
 import { importSct } from '../src/importer/sct-importer.js';
+import { layoutFromModel } from '../src/diagram/layout-annotations.js';
 import { example, parse } from './helpers.js';
 
 interface AbsoluteNode extends DiagramNode {
@@ -483,11 +484,26 @@ describe('manual layout: computation', () => {
 describe('manual layout: import of the itemis CREATE notation model', () => {
     const fixture = (name: string) => fs.readFileSync(path.resolve(__dirname, 'importer/fixtures', name), 'utf-8');
 
+    /** Imports a fixture; the diagram is computed from the layout annotations in the generated text. */
     async function importAndLayout(name: string) {
         const result = importSct(fixture(name));
         expect(result.layout, name).toBeDefined();
         const parsed = await parse(result.text);
-        const diagram = await layoutStateMachineWithLayout(parsed.model, {}, result.layout);
+        // the annotations describe the imported layout (rounded; entries without a diagram element are dropped)
+        const annotated = layoutFromModel(parsed.model)!;
+        expect(annotated, name).toBeDefined();
+        for (const [id, node] of Object.entries(annotated.nodes)) {
+            // (entry points / exit nodes of several regions: the import's key does not contain the region,
+            // the annotation is attached to the element itself)
+            const imported = result.layout!.nodes[id] ?? result.layout!.nodes[id.replace(/\.[^.]+(\.[^.]+)$/, '$1')];
+            expect(imported, id).toBeDefined();
+            expect(node.x, id).toBe(Math.round(imported.x));
+            expect(node.y, id).toBe(Math.round(imported.y));
+        }
+        for (const [id, edge] of Object.entries(annotated.edges)) {
+            expect(edge.bends, id).toEqual(result.layout!.edges[id].bends!.map(p => ({ x: Math.round(p.x), y: Math.round(p.y) })));
+        }
+        const diagram = await layoutStateMachineWithLayout(parsed.model, {});
         return { ...result, layout: result.layout!, diagram, nodes: byId(diagram.graph) };
     }
 
@@ -570,10 +586,13 @@ describe('manual layout: import of the itemis CREATE notation model', () => {
         expect(regions[2].x).toBeCloseTo(regions[1].x + regions[1].width);
     });
 
-    test('the layout can be disabled; files without diagram have no layout', () => {
-        expect(importSct(fixture('SyncJoin.sct'), { layout: false }).layout).toBeUndefined();
+    test('the layout can be disabled; files without diagram have no layout annotations', () => {
+        const disabled = importSct(fixture('SyncJoin.sct'), { layout: false });
+        expect(disabled.layout).toBeUndefined();
+        expect(disabled.text).not.toContain('@at(');
         const xml = fixture('SyncJoin.sct');
         const withoutDiagram = xml.substring(0, xml.indexOf('<notation:Diagram')) + xml.substring(xml.indexOf('</notation:Diagram>') + '</notation:Diagram>'.length);
         expect(importSct(withoutDiagram).layout).toBeUndefined();
+        expect(importSct(withoutDiagram).text).not.toContain('@at(');
     });
 });

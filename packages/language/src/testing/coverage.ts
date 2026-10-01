@@ -1,7 +1,8 @@
 import { AstUtils, type AstNode } from 'langium';
+import { diagramElementIds } from '../diagram/diagram-ids.js';
 import * as ast from '../generated/ast.js';
 import { qualifiedName } from '../hsm-scope.js';
-import { DEFINITION_ID, finalNodeId, initialNodeId, MACHINE_ID } from '../diagram/layout.js';
+import { DEFINITION_ID, finalNodeId, MACHINE_ID } from '../diagram/layout.js';
 import { getStateMachine, nodeText, scopeOf, transitionLabel, type ScopeContainer } from '../model-utils.js';
 import type { SimulationOptions, TraceEntry } from '../simulation/interpreter.js';
 
@@ -127,70 +128,11 @@ export interface DiagramIds {
 
 /**
  * The ids of the diagram elements of a state machine, computed without a layout. They are the same
- * as in `layoutStateMachine(machine).ids` (the algorithm mirrors the diagram builder).
+ * as in `layoutStateMachine(machine).ids` (see `diagramElementIds`).
  */
 export function diagramIds(machine: ast.StateMachine): DiagramIds {
-    const nodes = new Map<AstNode, string>();
-    const initial = new Map<ScopeContainer, string>();
-    const final = new Map<ScopeContainer, string>();
-    const used = new Set<string>([MACHINE_ID, DEFINITION_ID]);
-    const registered = new Set<string>();
-    const unique = (base: string) => {
-        let id = base;
-        let counter = 1;
-        while (used.has(id)) {
-            id = `${base}~${counter++}`;
-        }
-        used.add(id);
-        return id;
-    };
-    const scope = (container: ScopeContainer, scopeId: string) => {
-        if (container.transitions.some(t => t.initial)) {
-            const id = unique(initialNodeId(scopeId));
-            registered.add(id);
-            initial.set(container, id);
-        }
-        for (const vertex of container.vertices) {
-            const id = unique(vertex.name ? qualifiedName(vertex) : '#unnamed');
-            registered.add(id);
-            nodes.set(vertex, id);
-            if (ast.isState(vertex) && (vertex.vertices.length > 0 || vertex.regions.length > 0)) {
-                vertex.regions.forEach((region, index) => {
-                    const regionId = unique(`${id}#region${index + 1}`);
-                    registered.add(regionId);
-                    nodes.set(region, regionId);
-                    scope(region, regionId);
-                });
-                scope(vertex, id);
-            }
-        }
-        if (container.transitions.some(t => t.final)) {
-            const id = unique(finalNodeId(scopeId));
-            registered.add(id);
-            final.set(container, id);
-        }
-    };
-    nodes.set(machine, MACHINE_ID);
-    scope(machine, MACHINE_ID);
-    const visit = (container: ScopeContainer) => {
-        const scopeId = nodes.get(container)!;
-        for (const transition of container.transitions) {
-            const find = (id: string) => registered.has(id) ? id : undefined;
-            const source = transition.initial ? find(initialNodeId(scopeId)) : nodes.get(transition.source?.ref as AstNode);
-            const target = transition.final ? find(finalNodeId(scopeId)) : nodes.get(transition.target?.ref as AstNode);
-            if (source && target) {
-                nodes.set(transition, unique(`${source}->${target}`));
-            }
-        }
-        for (const vertex of container.vertices) {
-            if (ast.isState(vertex)) {
-                visit(vertex);
-                vertex.regions.forEach(visit);
-            }
-        }
-    };
-    visit(machine);
-    return { nodes, initial, final };
+    const { ids, initial, final } = diagramElementIds(machine);
+    return { nodes: ids, initial, final };
 }
 
 // ---------------------------------------------------------------------------------------------

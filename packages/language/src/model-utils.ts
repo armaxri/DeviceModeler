@@ -1,4 +1,5 @@
 import { AstUtils, GrammarUtils, type AstNode, type CstNode } from 'langium';
+import { semanticAnnotations } from './model-annotations.js';
 import {
     isInternalScope, isPseudoState, isRegion, isState, isStateMachine, isTransition, isVertex,
     type Region, type State, type StateMachine, type Transition, type Vertex
@@ -180,7 +181,7 @@ export function transitionPriority(transition: Transition, outgoing?: Transition
 
 /** Whether the state machine has a definition section (namespace, annotations, interfaces, internal scope). */
 export function hasDefinitionSection(machine: StateMachine): boolean {
-    return !!machine.namespace || machine.imports.length > 0 || machine.annotations.length > 0 || machine.scopes.length > 0 || machine.reactions.length > 0;
+    return !!machine.namespace || machine.imports.length > 0 || semanticAnnotations(machine).length > 0 || machine.scopes.length > 0 || machine.reactions.length > 0;
 }
 
 /**
@@ -197,7 +198,7 @@ export function definitionLines(machine: StateMachine): string[] {
     for (const node of machine.imports) {
         lines.push(nodeText(node));
     }
-    for (const annotation of machine.annotations) {
+    for (const annotation of semanticAnnotations(machine)) {
         lines.push(nodeText(annotation));
     }
     for (const scope of machine.scopes) {
@@ -223,7 +224,7 @@ export function definitionRange(machine: StateMachine): { offset: number, end: n
         machine.namespace ? GrammarUtils.findNodeForKeyword(cst, 'namespace') : undefined,
         machine.namespace ? GrammarUtils.findNodeForProperty(cst, 'namespace') : undefined,
         ...machine.imports.map(i => i.$cstNode),
-        ...machine.annotations.map(a => a.$cstNode),
+        ...semanticAnnotations(machine).map(a => a.$cstNode),
         ...machine.scopes.map(s => s.$cstNode),
         ...machine.reactions.map(r => r.$cstNode)
     ].filter((n): n is CstNode => !!n);

@@ -609,7 +609,7 @@ describe('annotations', () => {
             '@SuperSteps is not supported yet and is ignored.',
             '@EventBuffering is not supported yet and is ignored.',
             '@InEventQueue is not supported yet and is ignored.',
-            `Unknown annotation '@Something'. Known annotations are @CycleBased, @EventDriven, @ParentFirstExecution, @ChildFirstExecution, @SuperSteps, @EventBuffering, @InEventQueue.`
+            `Unknown annotation '@Something'. Known annotations are @CycleBased, @EventDriven, @ParentFirstExecution, @ChildFirstExecution, @SuperSteps, @EventBuffering, @InEventQueue, @at, @size, @regions, @via, @label, @initial, @final, @definitions.`
         ]);
     });
 });

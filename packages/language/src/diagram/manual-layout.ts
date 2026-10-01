@@ -23,6 +23,7 @@ import type {
     DiagramEdge, DiagramGraph, DiagramLabel, DiagramNode, DiagramNodeKind, EdgeRouting, LayoutDirection, LayoutOptionsInput, LayoutResult, Point, TextMeasure
 } from './diagram-model.js';
 import { DiagramMetrics, MACHINE_ID, approximateTextMeasure, layoutStateMachine } from './layout.js';
+import { layoutFromModel } from './layout-annotations.js';
 import { POINT_PORT_KINDS, crossesRect, distributePorts, routeOrthogonal, type OrthogonalRoute } from './orthogonal-router.js';
 
 export const MANUAL_LAYOUT_VERSION = 1;
@@ -331,15 +332,20 @@ export interface ManualLayoutOptions {
 }
 
 /**
- * Computes the diagram of a state machine: the automatic layout, adjusted by the manual layout if one is
- * given and its mode is `manual`. Without a manual layout the result is exactly the automatic layout.
+ * Computes the diagram of a state machine: the automatic layout, adjusted by the manual layout. The manual
+ * layout is the one described by the layout annotations of the model ({@link layoutFromModel}) unless
+ * another one is given; `null` (or a layout whose mode is `auto`) means the automatic layout. Without a
+ * manual layout the result is exactly the automatic layout.
  */
-export async function layoutStateMachineWithLayout(machine: ast.StateMachine, options: LayoutOptionsInput = {}, layout?: ManualLayout): Promise<ManualLayoutResult> {
+export async function layoutStateMachineWithLayout(machine: ast.StateMachine, options: LayoutOptionsInput = {}, layout?: ManualLayout | null): Promise<ManualLayoutResult> {
     const auto = await layoutStateMachine(machine, options);
-    if (!isManualLayout(layout)) {
+    if (layout === undefined) {
+        layout = layoutFromModel(machine);
+    }
+    if (!isManualLayout(layout ?? undefined)) {
         return auto;
     }
-    return applyManualLayout(auto, layout, { direction: options.direction, measure: options.measure, routing: options.routing });
+    return applyManualLayout(auto, layout!, { direction: options.direction, measure: options.measure, routing: options.routing });
 }
 
 /** Applies a manual layout to the result of the automatic layout (which is not modified). */
