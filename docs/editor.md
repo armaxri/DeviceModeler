@@ -23,6 +23,26 @@ The web app (`npm run dev`, `packages/web`) edits the text and the diagram side 
 | Undo / redo | `Ctrl+Z` / `Ctrl+Y` (shared with the text editor) |
 | Keep a tool active | hold `Shift` while choosing it, `Esc` to go back to selection |
 
+## Edge routing
+
+The *Edges* setting of the toolbar (`hsm.diagram.edgeRouting` in VS Code, `--routing` of `hsm render` /
+`hsm doc`) chooses how transitions are drawn, from angular to curved:
+
+| Setting | Routes | Drawn as |
+| --- | --- | --- |
+| *Orthogonal* (`ORTHOGONAL`) | horizontal and vertical segments (ELK orthogonal routing) | straight lines with sharp corners |
+| *Rounded* (`ROUNDED`) | the orthogonal routes | circular arcs at the corners (radius 10, smaller where a segment is shorter than 20) – between *Orthogonal* and *Splines* |
+| *Polyline* (`POLYLINE`) | straight segments in any direction (ELK polyline routing) | straight lines |
+| *Smooth* (`SMOOTH`) | the polyline routes | a smooth curve through all bend points (centripetal Catmull-Rom spline) |
+| *Splines* (`SPLINES`, default) | curves computed by ELK | cubic Bézier curves |
+
+*Rounded* and *Smooth* change only the drawing, not the layout: the states are where they are with
+*Orthogonal* resp. *Polyline*, labels stay next to their routes, the arrow heads point along the last
+segment. In a manual layout the rerouted transitions get the same shapes; a *Smooth* route passes through
+its waypoints, a *Rounded* one rounds the corner at a waypoint (the handle stays on the corner, a few pixels
+from the line). The setting is a preference of the viewer (stored in the browser / the VS Code settings), not
+part of the model.
+
 ## Manual layout (experimental)
 
 🧪 By default the diagram is laid out automatically (ELK). As soon as a state is dragged, the diagram

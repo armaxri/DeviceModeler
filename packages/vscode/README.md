@@ -83,7 +83,7 @@ label of a selected transition. The first drag turns the diagram into a manual l
 | `hsm.diagram.theme` | `auto` | `auto`, `classic`, `modern`, `dark` |
 | `hsm.diagram.lightTheme` | `classic` | theme for light color themes with `auto` |
 | `hsm.diagram.direction` | `DOWN` | layout direction (`DOWN`, `RIGHT`) |
-| `hsm.diagram.edgeRouting` | `SPLINES` | `SPLINES`, `ORTHOGONAL`, `POLYLINE` |
+| `hsm.diagram.edgeRouting` | `SPLINES` | `SPLINES`, `ORTHOGONAL`, `ROUNDED` (orthogonal with rounded corners), `POLYLINE`, `SMOOTH` (smooth curve through the polyline) |
 | `hsm.diagram.priorities` | `true` | show transition priorities |
 | `hsm.diagram.showProperties` | `true` | properties panel next to the diagram |
 | `hsm.diagram.autoOpen` | `false` | open the diagram whenever an `.hsm` file is opened |

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'node:path';
 import {
     cppHeaderStore, HsmModelLoader, importSct, layoutFileName, layoutStateMachineWithLayout, layoutTextEdits, parseManualLayout,
-    renderSvg, type ParsedModel
+    parseEdgeRouting, renderSvg, type ParsedModel
 } from 'hsm-language';
 import { runGeneration } from '../../../language/src/generator/generate-command.js';
 import { installNodeHeaderSupport } from '../../../language/src/node/cpp-headers-node.js';
@@ -204,7 +204,7 @@ export async function renderModelSvg(document: vscode.TextDocument): Promise<str
     const config = vscode.workspace.getConfiguration('hsm.diagram', document.uri);
     const { graph } = await layoutStateMachineWithLayout(parsed.model, {
         direction: config.get<string>('direction') === 'RIGHT' ? 'RIGHT' : 'DOWN',
-        routing: (['SPLINES', 'ORTHOGONAL', 'POLYLINE'] as const).find(r => r === config.get<string>('edgeRouting')) ?? 'SPLINES',
+        routing: parseEdgeRouting(config.get<string>('edgeRouting')) ?? 'SPLINES',
         priorities: config.get<boolean>('priorities', true)
     });
     return renderSvg(graph, { theme: effectiveTheme(config.get<string>('theme', 'auto'), config.get<string>('lightTheme', 'classic'), false) });

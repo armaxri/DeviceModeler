@@ -13,7 +13,8 @@ hsm render models/ 'src/**/*.hsm' -o build/diagrams   # directories and glob pat
 ```
 
 Options: `--theme classic|modern|dark` (default `classic`), `--direction DOWN|RIGHT`, `--routing
-SPLINES|ORTHOGONAL|POLYLINE`, `--no-priorities`. Only SVG is supported (no PNG: there is no pure JavaScript
+SPLINES|ORTHOGONAL|ROUNDED|POLYLINE|SMOOTH` (case-insensitive, also `rounded-orthogonal` / `smooth-polyline`;
+see [Edge routing](editor.md#edge-routing)), `--no-priorities`. Only SVG is supported (no PNG: there is no pure JavaScript
 rasterizer; convert with e.g. `rsvg-convert` or a browser if needed). Models with syntax errors are skipped
 (exit code 1), validation errors are printed but the model is rendered.
 

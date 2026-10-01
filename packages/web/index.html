@@ -35,9 +35,11 @@
             </label>
             <label><span class="label-text">Edges</span>
                 <select id="routing-select" title="Edge routing">
-                    <option value="SPLINES">Splines</option>
-                    <option value="ORTHOGONAL">Orthogonal</option>
-                    <option value="POLYLINE">Polyline</option>
+                    <option value="ORTHOGONAL" title="Horizontal and vertical segments">Orthogonal</option>
+                    <option value="ROUNDED" title="Orthogonal segments with rounded corners">Rounded</option>
+                    <option value="POLYLINE" title="Straight segments in any direction">Polyline</option>
+                    <option value="SMOOTH" title="A smooth curve through the bend points of the polyline">Smooth</option>
+                    <option value="SPLINES" title="Curves computed by the layout">Splines</option>
                 </select>
             </label>
             <label class="toggle" title="Show the priorities of transitions leaving a state with several outgoing transitions">

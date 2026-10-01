@@ -75,6 +75,8 @@ export class TransitionEdge extends SChildElementImpl {
     sourceId = '';
     targetId = '';
     routing: DiagramEdge['routing'] = 'polyline';
+    /** How a polyline / orthogonal route is drawn (rounded corners, smooth curve). */
+    curve?: DiagramEdge['curve'];
     points: Point[] = [];
     label?: DiagramEdge['label'];
     issue?: Issue;
@@ -147,6 +149,7 @@ export function toSchema(graph: DiagramGraph, options: SchemaOptions): SModelRoo
         sourceId: edge.source,
         targetId: edge.target,
         routing: edge.routing,
+        curve: edge.curve,
         points: edge.points,
         waypoints: edge.waypoints ?? [],
         label: edge.label,

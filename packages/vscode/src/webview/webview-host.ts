@@ -1,4 +1,4 @@
-import type { DiagramSubmachine, TextEdit } from 'hsm-language';
+import { EDGE_ROUTINGS, type DiagramSubmachine, type TextEdit } from 'hsm-language';
 import type { DiagramController, DiagramHost, StatusSeverity, TextRange } from '@hsm-web/diagram-controller.js';
 import { byId, h } from '@hsm-web/ui/dom.js';
 import { svgToPng } from '@hsm-web/ui/export-svg.js';
@@ -53,7 +53,7 @@ export class WebviewHost implements DiagramHost {
         const direction = h('select', { id: 'direction-select', title: 'Layout direction' },
             h('option', { value: 'DOWN' }, 'Top → bottom'), h('option', { value: 'RIGHT' }, 'Left → right'));
         const routing = h('select', { id: 'routing-select', title: 'Edge routing' },
-            h('option', { value: 'SPLINES' }, 'Splines'), h('option', { value: 'ORTHOGONAL' }, 'Orthogonal'), h('option', { value: 'POLYLINE' }, 'Polyline'));
+            ...EDGE_ROUTINGS.map(r => h('option', { value: r.value, title: r.description }, r.label)));
         const priorities = h('input', { type: 'checkbox', id: 'priorities-toggle' });
         const properties = h('input', { type: 'checkbox', id: 'properties-toggle' });
         direction.addEventListener('change', () => this.post({ type: 'updateSetting', key: 'direction', value: direction.value }));

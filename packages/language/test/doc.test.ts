@@ -211,10 +211,16 @@ describe('CLI render and doc', () => {
         const single = path.join(dir, 'sub', 'door-classic.svg');
         expect(await runRenderCommand([path.join(EXAMPLES_DIR, 'door.hsm')], { out: single }, log)).toBe(0);
         expect(fs.existsSync(single)).toBe(true);
+        // the routing styles drawn by the renderer: curves along the orthogonal routes
+        const rounded = path.join(dir, 'rounded', 'door.svg');
+        expect(await runRenderCommand([path.join(EXAMPLES_DIR, 'door.hsm')], { out: rounded, routing: 'rounded-orthogonal' }, log)).toBe(0);
+        expect(fs.readFileSync(rounded, 'utf-8')).toMatch(/class="transition-line" d="M [^"]* C /);
         expect(log.messages.filter(m => m.startsWith('ERROR'))).toEqual([]);
         // errors
         expect(await runRenderCommand([EXAMPLES_DIR], { theme: 'neon' }, log)).toBe(2);
         expect(await runRenderCommand([EXAMPLES_DIR], { format: 'png' }, log)).toBe(2);
+        expect(await runRenderCommand([EXAMPLES_DIR], { routing: 'zigzag' }, log)).toBe(2);
+        expect(log.messages.some(m => m.includes("Unknown routing 'zigzag'") && m.includes('ROUNDED') && m.includes('SMOOTH'))).toBe(true);
         const broken = path.join(dir, 'broken.hsm');
         fs.writeFileSync(broken, 'statemachine {');
         expect(await runRenderCommand([broken], { out: dir }, log)).toBe(1);

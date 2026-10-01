@@ -7,8 +7,9 @@ import {
 } from '../model-utils.js';
 import { qualifiedName } from '../hsm-scope.js';
 import type {
-    DiagramEdge, DiagramGraph, DiagramNode, DiagramNodeKind, LayoutDirection, LayoutOptionsInput, LayoutResult, Point, TextMeasure, TextStyle
+    DiagramEdge, DiagramGraph, DiagramNode, DiagramNodeKind, EdgeRouting, LayoutDirection, LayoutOptionsInput, LayoutResult, Point, TextMeasure, TextStyle
 } from './diagram-model.js';
+import { edgeCurve, elkEdgeRouting } from './edge-routes.js';
 import { helveticaTextWidth, monospaceTextWidth } from './text-metrics.js';
 
 /** Metrics shared by the layout and the rendering of the diagram. */
@@ -100,7 +101,7 @@ export async function layoutStateMachine(machine: ast.StateMachine, options: Lay
 interface BuildOptions {
     elkOptions?: Record<string, string>;
     direction: LayoutDirection;
-    routing: 'SPLINES' | 'ORTHOGONAL' | 'POLYLINE';
+    routing: EdgeRouting;
     measure: TextMeasure;
     priorities: boolean;
     maxLineLength: number;
@@ -188,7 +189,7 @@ class DiagramBuilder {
             'elk.algorithm': 'layered',
             'elk.direction': this.options.direction,
             'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
-            'elk.edgeRouting': this.options.routing,
+            'elk.edgeRouting': elkEdgeRouting(this.options.routing),
             'elk.json.edgeCoords': 'ROOT',
             'elk.padding': '[top=20,left=20,bottom=20,right=20]',
             'elk.spacing.nodeNode': '30',
@@ -658,9 +659,14 @@ class DiagramBuilder {
             const bends = section.bendPoints ?? [];
             const points: Point[] = [section.startPoint, ...bends, section.endPoint].map(p => ({ x: p.x, y: p.y }));
             edge.points = points;
-            edge.routing = this.options.routing === 'SPLINES' && bends.length > 0 && (bends.length + 1) % 3 === 0
+            const routing = elkEdgeRouting(this.options.routing);
+            edge.routing = routing === 'SPLINES' && bends.length > 0 && (bends.length + 1) % 3 === 0
                 ? 'spline'
-                : this.options.routing === 'ORTHOGONAL' ? 'orthogonal' : 'polyline';
+                : routing === 'ORTHOGONAL' ? 'orthogonal' : 'polyline';
+            const curve = edgeCurve(this.options.routing);
+            if (curve) {
+                edge.curve = curve;
+            }
             const label = elkEdge.labels?.[0];
             if (edge.label && label) {
                 edge.label.x = label.x ?? 0;
