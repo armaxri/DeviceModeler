@@ -15,8 +15,8 @@
  * position (and their size if they were resized, composite states grow if their content does not fit),
  * nodes without a stored position are placed near their siblings without overlapping them. Transitions
  * keep the route of the automatic layout as long as their end points are arranged like in the automatic
- * layout and no moved vertex lies on the route. Otherwise they are routed orthogonally around the other
- * vertices, or drawn through the stored bend points, if any.
+ * layout and no moved vertex lies on the route. Otherwise they are routed around the other vertices in
+ * the shape of the edge routing setting; stored bend points are waypoints the route passes through.
  */
 import type * as ast from '../generated/ast.js';
 import type {
@@ -381,7 +381,7 @@ class ManualLayoutEngine {
     /** Uniform shift of the content of a container (keeps it below the header of the state). */
     private readonly shifts = new Map<string, Point>();
     /** Edge routes relative to their frame node. */
-    private readonly localRoutes = new Map<string, { points: Point[], label?: DiagramLabel }>();
+    private readonly localRoutes = new Map<string, { points: Point[], label?: DiagramLabel, waypoints?: Point[] }>();
 
     constructor(graph: DiagramGraph, private readonly layout: ManualLayout, private readonly options: Required<ManualLayoutOptions>) {
         const clone = (node: DiagramNode): DiagramNode => ({
@@ -423,6 +423,9 @@ class ManualLayoutEngine {
             }
             const origin = this.absolutePosition(this.frames.get(edge.id)!);
             edge.points = route.points.map(p => ({ x: p.x + origin.x, y: p.y + origin.y }));
+            if (route.waypoints) {
+                edge.waypoints = route.waypoints.map(p => ({ x: p.x + origin.x, y: p.y + origin.y }));
+            }
             if (edge.label && route.label) {
                 edge.label = { ...route.label, x: route.label.x + origin.x, y: route.label.y + origin.y };
             }
@@ -706,14 +709,21 @@ class ManualLayoutEngine {
         const straight: DiagramEdge[] = [];
         const pending: DiagramEdge[] = [];
         const placed: Point[][] = [];
+        const waypoints = new Map<string, Point[]>();
         for (const edge of edges) {
             const stored = this.layout.edges[edge.id];
             const label = edge.label ? { ...edge.label } : undefined;
-            let route: { points: Point[], label?: DiagramLabel } | undefined;
+            let route: { points: Point[], label?: DiagramLabel, waypoints?: Point[] } | undefined;
             if (stored?.bends?.length) {
                 const shift = this.shifts.get(frame) ?? { x: 0, y: 0 };
                 const bends = stored.bends.map(p => ({ x: p.x + shift.x, y: p.y + shift.y }));
-                route = { points: this.polyline(edge, frame, bends), label };
+                if (edge.source !== frame && edge.target !== frame) {
+                    // waypoints: the route is computed through them
+                    waypoints.set(edge.id, bends);
+                    pending.push(edge);
+                    continue;
+                }
+                route = { points: this.polyline(edge, frame, bends), label, waypoints: bends };
                 edge.routing = 'polyline';
                 this.placeLabel(route);
             } else if (edge.source === edge.target || edge.source === frame || edge.target === frame) {
@@ -733,8 +743,9 @@ class ManualLayoutEngine {
             this.localRoutes.set(edge.id, route);
             placed.push(route.points);
         }
-        // transitions whose end points were moved: orthogonal routes around the other vertices
-        const routes: Array<{ edge: DiagramEdge } & OrthogonalRoute> = [];
+        // transitions whose end points were moved and transitions with waypoints: orthogonal routes around
+        // the other vertices
+        const routes: Array<{ edge: DiagramEdge, waypoints: Point[], cuts: number[] } & OrthogonalRoute> = [];
         for (const edge of pending) {
             const source = this.boundsIn(edge.source, frame);
             const target = this.boundsIn(edge.target, frame);
@@ -744,32 +755,40 @@ class ManualLayoutEngine {
             const containers = [...new Set([...inner(edge.source), ...inner(edge.target)])]
                 .filter(id => this.nodes.get(id)!.kind !== 'region')
                 .map(id => this.boundsIn(id, frame));
-            const points = routeOrthogonal({
-                source, target, obstacles, containers, placed,
-                sourceFixed: POINT_PORT_KINDS.has(this.nodes.get(edge.source)!.kind),
-                targetFixed: POINT_PORT_KINDS.has(this.nodes.get(edge.target)!.kind),
-                bounds: this.routingBounds(frame, [source, target, ...obstacles])
-            });
-            if (!points) {
-                straight.push(edge);
+            const through = waypoints.get(edge.id) ?? [];
+            const legs = this.routeLegs(edge, source, target, through, obstacles, containers, placed, frame);
+            if (!legs) {
+                if (through.length > 0) {
+                    // no route through the waypoints: straight lines through them
+                    const route = { points: this.polyline(edge, frame, through), label: edge.label ? { ...edge.label } : undefined, waypoints: through };
+                    edge.routing = 'polyline';
+                    this.placeLabel(route);
+                    this.applyLabelOffset(route, this.layout.edges[edge.id]);
+                    this.localRoutes.set(edge.id, route);
+                    placed.push(route.points);
+                } else {
+                    straight.push(edge);
+                }
                 continue;
             }
+            const { points, cuts } = legs;
             placed.push(points);
             routes.push({
-                edge, points,
+                edge, points, waypoints: through, cuts,
                 source: { vertex: edge.source, rect: source, kind: this.nodes.get(edge.source)!.kind },
                 target: { vertex: edge.target, rect: target, kind: this.nodes.get(edge.target)!.kind }
             });
         }
-        distributePorts(routes);
+        // (the ends of routes through waypoints stay where they are: shifting them could move a waypoint)
+        distributePorts(routes.filter(r => r.waypoints.length === 0));
         const taken = edges.map(e => this.localRoutes.get(e.id)?.label).filter((l): l is DiagramLabel => !!l);
         const vertices = this.labelObstacles(frame);
         const orthogonal = new Set(routes.map(r => r.points));
-        const shapes = routes.map(({ edge, points }) => this.shapeRoute(edge, frame, points));
+        const shapes = routes.map(({ edge, points, waypoints: through, cuts }) => this.shapeRoute(edge, frame, points, through, cuts));
         const lines = [...placed.filter(p => !orthogonal.has(p)), ...shapes.map(s => s.outline)];
-        routes.forEach(({ edge }, i) => {
+        routes.forEach(({ edge, waypoints: through }, i) => {
             const shape = shapes[i];
-            const route = { points: shape.points, label: edge.label ? { ...edge.label } : undefined };
+            const route = { points: shape.points, label: edge.label ? { ...edge.label } : undefined, waypoints: through.length > 0 ? through : undefined };
             edge.routing = shape.routing;
             this.placeFreeLabel(route, shape.outline, vertices, taken, lines.filter(l => l !== shape.outline));
             this.applyLabelOffset(route, this.layout.edges[edge.id]);
@@ -839,18 +858,63 @@ class ManualLayoutEngine {
     }
 
     /**
+     * An orthogonal route from the source through the waypoints to the target (each part routed on its
+     * own; it does not turn back at a waypoint). `cuts` are the indices of the waypoints in the route.
+     */
+    private routeLegs(edge: DiagramEdge, source: Rect, target: Rect, waypoints: Point[], obstacles: Rect[], containers: Rect[],
+        placed: Point[][], frame: string): { points: Point[], cuts: number[] } | undefined {
+        const stops: Rect[] = [source, ...waypoints.map(p => ({ x: p.x, y: p.y, width: 0, height: 0 })), target];
+        const fixedKind = (id: string) => POINT_PORT_KINDS.has(this.nodes.get(id)!.kind);
+        const points: Point[] = [];
+        const cuts: number[] = [];
+        let exclude: number | undefined;
+        for (let i = 0; i + 1 < stops.length; i++) {
+            const from = stops[i];
+            const to = stops[i + 1];
+            // a waypoint inside a vertex: that vertex is crossed
+            const legObstacles = obstacles.filter(o => ![from, to].some(r => r.width === 0 && insideRect(r, o)));
+            const leg = routeOrthogonal({
+                source: from, target: to, obstacles: legObstacles, containers, placed,
+                sourceFixed: i > 0 || fixedKind(edge.source),
+                targetFixed: i + 2 < stops.length || fixedKind(edge.target),
+                sourceExclude: exclude,
+                bounds: this.routingBounds(frame, [...stops, ...obstacles])
+            });
+            if (!leg) {
+                return undefined;
+            }
+            if (i > 0) {
+                cuts.push(points.length - 1);
+            }
+            points.push(...(i === 0 ? leg : leg.slice(1)));
+            const a = leg[leg.length - 2];
+            const b = leg[leg.length - 1];
+            // the direction back to where the route arrived
+            exclude = Math.abs(b.x - a.x) >= Math.abs(b.y - a.y) ? (b.x > a.x ? 2 : 0) : (b.y > a.y ? 3 : 1);
+        }
+        return { points, cuts };
+    }
+
+    /**
      * The route in the shape of the edge routing setting: the orthogonal route as it is, a polyline taking
      * the shortcuts which do not cross a vertex, or a spline through the corners of that polyline.
      * `outline` is the polyline the route follows (for the label placement).
      */
-    private shapeRoute(edge: DiagramEdge, frame: string, orthogonal: Point[]): { points: Point[], routing: DiagramEdge['routing'], outline: Point[] } {
+    private shapeRoute(edge: DiagramEdge, frame: string, orthogonal: Point[], waypoints: Point[] = [], cuts: number[] = []): { points: Point[], routing: DiagramEdge['routing'], outline: Point[] } {
         const routing = this.options.routing;
         if (routing === 'ORTHOGONAL') {
             return { points: orthogonal, routing: 'orthogonal', outline: orthogonal };
         }
-        const obstacles = this.obstacles(edge, frame).map(o => o.rect);
+        // (vertices containing a waypoint are crossed anyway)
+        const obstacles = this.obstacles(edge, frame).map(o => o.rect).filter(o => !waypoints.some(w => insideRect(w, o)));
         const ends = [this.boundsIn(edge.source, frame), this.boundsIn(edge.target, frame)];
-        const polyline = shortcut(orthogonal, obstacles, ends);
+        // shortcuts within the parts between the waypoints (the route keeps passing through them)
+        const bounds = [0, ...cuts, orthogonal.length - 1];
+        const polyline: Point[] = [];
+        for (let i = 0; i + 1 < bounds.length; i++) {
+            const part = shortcut(orthogonal.slice(bounds[i], bounds[i + 1] + 1), obstacles, ends);
+            polyline.push(...(i === 0 ? part : part.slice(1)));
+        }
         if (routing === 'SPLINES') {
             const bounds = this.routingBounds(frame, [...ends, ...obstacles]);
             return { ...this.splineRoute(orthogonal, [...polyline], obstacles, ends, bounds), routing: 'spline' };
@@ -1183,6 +1247,10 @@ function separate(nodes: DiagramNode[]): void {
             return;
         }
     }
+}
+
+function insideRect(p: Point, rect: Rect): boolean {
+    return p.x > rect.x && p.x < rect.x + rect.width && p.y > rect.y && p.y < rect.y + rect.height;
 }
 
 function center(rect: Rect): Point {

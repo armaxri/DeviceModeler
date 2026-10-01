@@ -468,14 +468,14 @@ layout is active. Design, format and trade-offs: [docs/manual-layout.md](docs/ma
 - Elements without a stored position (e.g. new states) are placed automatically near their siblings;
   composite states grow when their content does not fit. Transitions keep their automatic route while
   their end points are arranged as in the automatic layout, otherwise they are rerouted around the
-  other states in the shape of the *Edges* setting (or drawn through their bend points, if they have any).
+  other states in the shape of the *Edges* setting, through their bend points (waypoints) if they have any.
 
 | Action (manual layout) | How |
 | --- | --- |
 | Move a state, pseudo state or the definitions box | drag it (attached transitions follow) |
 | Move a state into another state | hold `Shift` while dropping it |
 | Resize a state | select it, drag the handle at the bottom right corner |
-| Add / move / remove a bend point | select the transition; double-click its line / drag the point / double-click the point |
+| Add / move / remove a waypoint (bend point) | select the transition; double-click its line / drag the point / double-click the point |
 | Move a transition label | select the transition, drag its label |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Y` in the diagram – layout changes and text edits in the order they were made |
 

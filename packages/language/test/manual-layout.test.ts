@@ -48,6 +48,11 @@ function expectOrthogonal(points: Array<{ x: number, y: number }>): void {
     }
 }
 
+/** The route passes through the point (a corner of the route / an end point of a Bezier segment). */
+function expectThrough(points: Array<{ x: number, y: number }>, p: { x: number, y: number }): void {
+    expect(points.some(q => Math.hypot(q.x - p.x, q.y - p.y) < 0.5), `${JSON.stringify(p)} on ${JSON.stringify(points)}`).toBe(true);
+}
+
 /** Points on a spline route (start, (control, control, end)*). */
 function sampleSpline(points: Array<{ x: number, y: number }>): Array<{ x: number, y: number }> {
     const result = [points[0]];
@@ -268,8 +273,8 @@ describe('manual layout: computation', () => {
         // bend points are shifted with the content
         const edge = result.graph.edges.find(e => e.id === 'C.C1->C.C2')!;
         const c = nodes.get('C')!;
-        expect(edge.points[1].x - c.ax).toBeCloseTo(50 + c1.x);
-        expect(edge.points).toHaveLength(3);
+        expect(edge.waypoints![0].x - c.ax).toBeCloseTo(50 + c1.x);
+        expectThrough(edge.points, edge.waypoints![0]);
         expect(result.effective!.edges['C.C1->C.C2'].bends![0].x).toBeCloseTo(50 + c1.x);
     });
 
@@ -386,6 +391,41 @@ describe('manual layout: computation', () => {
         });
     }
 
+    for (const [routing, shape] of [['SPLINES', 'spline'], ['POLYLINE', 'polyline'], ['ORTHOGONAL', 'orthogonal']] as const) {
+        test(`transitions are routed through their waypoints: ${routing}`, async () => {
+            const parsed = await parse(example('cd-player.hsm'));
+            const auto = await layoutStateMachine(parsed.model, { routing });
+            const layout = captureLayout(auto.graph);
+            layout.nodes['Open'] = { x: 90, y: layout.nodes['Closed'].y + 820 };
+            layout.edges['Open->#machine#final'] = { bends: [{ x: 300, y: 1060 }] };
+            layout.edges['Open->Closed.H'] = { bends: [{ x: 300, y: 400 }, { x: 320, y: 200 }] };
+            const result = applyManualLayout(auto, layout, { routing });
+            const nodes = byId(result.graph);
+            for (const id of ['Open->#machine#final', 'Open->Closed.H']) {
+                const edge = result.graph.edges.find(e => e.id === id)!;
+                expect(edge.routing, id).toBe(shape);
+                expect(edge.waypoints, id).toEqual(layout.edges[id].bends);
+                // through all waypoints, in their order
+                const indices = edge.waypoints!.map(w => edge.points.findIndex(q => Math.hypot(q.x - w.x, q.y - w.y) < 0.5));
+                expect(indices.every(i => i > 0), id).toBe(true);
+                expect([...indices].sort((a, b) => a - b), id).toEqual(indices);
+                if (shape === 'orthogonal') {
+                    expectOrthogonal(edge.points);
+                }
+                // around the other states
+                const line = shape === 'spline' ? sampleSpline(edge.points) : edge.points;
+                for (const node of nodes.values()) {
+                    const containsEnd = [edge.source, edge.target].some(e => e === node.id || e.startsWith(node.id + '.') || e.startsWith(node.id + '#'));
+                    if (node.kind !== 'region' && !containsEnd) {
+                        expect(crosses(line, node), `${id} crosses ${node.id}`).toBe(false);
+                    }
+                }
+            }
+            // the stored layout keeps the waypoints
+            expect(result.effective!.edges['Open->Closed.H'].bends).toEqual(layout.edges['Open->Closed.H'].bends);
+        });
+    }
+
     test('moving a vertex onto the route of other transitions reroutes them', async () => {
         const parsed = await parse(TEXT);
         const auto = await layoutStateMachine(parsed.model);
@@ -474,7 +514,8 @@ describe('manual layout: import of the itemis CREATE notation model', () => {
         }
         // the transition with bend point is routed through it
         const edge = diagram.graph.edges.find(e => e.id === 'A->B')!;
-        expect(edge.points).toHaveLength(3);
+        expect(edge.waypoints).toHaveLength(1);
+        expectThrough(edge.points, edge.waypoints![0]);
     });
 
     for (const name of ['TrafficLightWaiting.sct', 'state_multiple_entries.sct', 'SyncJoin.sct', 'DeepEntry.sct', 'ShallowHistory.sct', 'Choice.sct']) {

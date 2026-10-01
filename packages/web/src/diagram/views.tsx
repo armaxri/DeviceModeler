@@ -305,10 +305,10 @@ export class TransitionView implements IView {
                     </text>
                 </g>
                 : undefined}
-            {edge.editable && edge.selected && edge.routing !== 'spline'
+            {edge.editable && edge.selected
                 ? <g class-bend-handles={true}>
-                    {...points.slice(1, -1).map(p => <circle class-bend-handle={true} cx={p.x} cy={p.y} r={4.5}>
-                        <title>Drag to move the bend point, double-click to remove it</title>
+                    {...edge.waypoints.map(p => <circle class-bend-handle={true} cx={p.x} cy={p.y} r={4.5}>
+                        <title>Drag to move the waypoint, double-click to remove it</title>
                     </circle>)}
                 </g>
                 : undefined}

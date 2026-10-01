@@ -1283,7 +1283,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             : captureLayout(this.state.auto.graph, this.settings.direction);
         this.setLayout(layout, { record: true });
         this.setStatus('Manual layout: drag states to move them (hold Shift while dropping to move a state into another state), '
-            + 'drag the corner of a selected state to resize it, double-click a transition to add a bend point.');
+            + 'drag the corner of a selected state to resize it, double-click a transition to add a waypoint.');
     }
 
     /** Arranges everything automatically and keeps the result as the manual layout. */
@@ -1377,10 +1377,10 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         });
     }
 
-    /** The bend points of a transition as shown (a spline has none that could be moved). */
+    /** The waypoints of a transition (absolute). */
     private shownBends(edgeId: string): { edge: DiagramEdge, bends: Point[] } | undefined {
         const edge = this.state?.layout.graph.edges.find(e => e.id === edgeId);
-        return edge ? { edge, bends: edge.routing === 'spline' ? [] : edge.points.slice(1, -1).map(p => ({ ...p })) } : undefined;
+        return edge ? { edge, bends: (edge.waypoints ?? []).map(p => ({ ...p })) } : undefined;
     }
 
     private storeBends(edge: DiagramEdge, bends: Point[]): void {
@@ -1416,18 +1416,27 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         if (!shown) {
             return;
         }
-        // insert the point into the segment of the route which is nearest to it
-        const points = [shown.edge.points[0], ...shown.bends, shown.edge.points[shown.edge.points.length - 1]];
-        let best = 0;
-        let bestDistance = Number.POSITIVE_INFINITY;
-        for (let i = 0; i + 1 < points.length; i++) {
-            const d = segmentDistance(point, points[i], points[i + 1]);
-            if (d < bestDistance) {
-                best = i;
-                bestDistance = d;
+        // insert the point between the waypoints of the part of the route which was clicked
+        const route = shown.edge.routing === 'spline' ? sampleSpline(shown.edge.points) : shown.edge.points;
+        const at = (p: Point) => {
+            let best = 0;
+            let bestDistance = Number.POSITIVE_INFINITY;
+            for (let i = 0; i + 1 < route.length; i++) {
+                const d = segmentDistance(p, route[i], route[i + 1]);
+                if (d < bestDistance - 0.01) {
+                    best = i;
+                    bestDistance = d;
+                }
             }
-        }
-        shown.bends.splice(best, 0, point);
+            const a = route[best];
+            const b = route[best + 1];
+            const length = Math.hypot(b.x - a.x, b.y - a.y);
+            const t = length > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (length * length))) : 0;
+            return best + t;
+        };
+        const position = at(point);
+        const index = shown.bends.filter(w => at(w) < position).length;
+        shown.bends.splice(index, 0, point);
         this.storeBends(shown.edge, shown.bends);
     }
 
@@ -1692,6 +1701,23 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         const graph = this.state.layout.graph;
         return exportSvg(byId('sprotty'), graph.width, graph.height, `theme-${this.settings.theme}`);
     }
+}
+
+/** Points on a spline route (start, (control, control, end)*). */
+function sampleSpline(points: Point[]): Point[] {
+    const result = [points[0]];
+    for (let i = 0; i + 3 < points.length; i += 3) {
+        const [a, b, c, d] = [points[i], points[i + 1], points[i + 2], points[i + 3]];
+        for (let k = 1; k <= 8; k++) {
+            const t = k / 8;
+            const u = 1 - t;
+            result.push({
+                x: u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x,
+                y: u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y
+            });
+        }
+    }
+    return result;
 }
 
 /** Distance of a point from the line segment a-b. */

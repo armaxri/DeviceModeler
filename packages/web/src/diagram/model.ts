@@ -80,7 +80,9 @@ export class TransitionEdge extends SChildElementImpl {
     taken = false;
     /** Simulation: a breakpoint is set on the transition. */
     breakpoint = false;
-    /** Manual layout: the bend points can be moved when the transition is selected. */
+    /** Manual layout: the points the route passes through (set by the user, absolute). */
+    waypoints: Point[] = [];
+    /** Manual layout: the waypoints can be moved when the transition is selected. */
     editable = false;
 }
 
@@ -138,6 +140,7 @@ export function toSchema(graph: DiagramGraph, options: SchemaOptions): SModelRoo
         targetId: edge.target,
         routing: edge.routing,
         points: edge.points,
+        waypoints: edge.waypoints ?? [],
         label: edge.label,
         selected: options.selected.has(edge.id),
         issue: options.issues.get(edge.id),

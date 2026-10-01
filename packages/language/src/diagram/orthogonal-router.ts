@@ -3,7 +3,7 @@
  * placed by hand and the routes of the automatic layout no longer fit).
  *
  * A route leaves the source at the middle of one of its sides and enters the target at the middle of one
- * of its sides. In between it runs on a sparse grid made of the lines along the (inflated) borders of the
+ * of its sides (a waypoint is a source / target of size 0). In between it runs on a sparse grid made of the lines along the (inflated) borders of the
  * obstacles and the channels between them; the shortest path with few bends is searched (Dijkstra over
  * grid point and direction). Segments of routes placed before are penalized, so that routes do not run on
  * top of each other. Afterwards the ends of several routes at the same side of a vertex are spread along
@@ -24,6 +24,11 @@ export interface OrthogonalRouteRequest {
     /** The routes start / end in the middle of the sides of the source / target (round shapes). */
     sourceFixed?: boolean;
     targetFixed?: boolean;
+    /**
+     * Direction (east, south, west, north) in which the route must not leave the source (a waypoint: the
+     * route does not turn back where the previous part arrived).
+     */
+    sourceExclude?: number;
     /** Vertices the route must not cross (without the source and the target). */
     obstacles: RouterRect[];
     /** The area the route must stay in. */
@@ -101,7 +106,7 @@ function route(request: OrthogonalRouteRequest, margin: number): Point[] | undef
     }));
     const inside = (p: Point) => p.x >= bounds.minX - 0.01 && p.x <= bounds.maxX + 0.01 && p.y >= bounds.minY - 0.01 && p.y <= bounds.maxY + 0.01;
     const blockedPoint = (p: Point) => blockers.some(b => p.x > b.x1 && p.x < b.x2 && p.y > b.y1 && p.y < b.y2);
-    const sourcePorts = ports(source, margin, target, request.sourceFixed ?? false).filter(p => inside(p.stub) && !blockedPoint(p.stub));
+    const sourcePorts = ports(source, margin, target, request.sourceFixed ?? false).filter(p => p.dir !== request.sourceExclude && inside(p.stub) && !blockedPoint(p.stub));
     const targetPorts = ports(target, margin, source, request.targetFixed ?? false).filter(p => inside(p.stub) && !blockedPoint(p.stub));
     if (sourcePorts.length === 0 || targetPorts.length === 0) {
         return undefined;

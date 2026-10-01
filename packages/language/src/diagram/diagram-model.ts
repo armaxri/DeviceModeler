@@ -85,6 +85,8 @@ export interface DiagramEdge {
     routing: 'spline' | 'polyline' | 'orthogonal';
     /** Absolute coordinates of the route. */
     points: Point[];
+    /** Manual layout: the points the route passes through (set by the user, absolute coordinates). */
+    waypoints?: Point[];
     label?: DiagramLabel;
     /** Priority of the transition among the outgoing transitions of its source (if it has several). */
     priority?: number;

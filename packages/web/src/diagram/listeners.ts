@@ -283,14 +283,16 @@ export class HsmMouseListener extends MouseListener {
             grip?.setAttribute('x', String(w - 9));
             grip?.setAttribute('y', String(h - 9));
         } else if (handle.kind === 'bend' && isTransitionEdge(handle.element)) {
-            const points = handle.element.points.map(p => ({ ...p }));
-            const point = points[handle.index + 1];
+            // straight lines through the waypoints while dragging (the route is computed on drop)
+            const edge = handle.element;
+            const waypoints = edge.waypoints.map(p => ({ ...p }));
+            const point = waypoints[handle.index];
             if (!point) {
                 return;
             }
             point.x += dx;
             point.y += dy;
-            const d = routePath(points, false);
+            const d = routePath([edge.points[0], ...waypoints, edge.points[edge.points.length - 1]], false);
             dom.querySelectorAll('.transition-line, .transition-hit').forEach(path => path.setAttribute('d', d));
             const circle = dom.querySelectorAll('.bend-handle')[handle.index];
             circle?.setAttribute('cx', String(point.x));
@@ -329,13 +331,19 @@ export class HsmMouseListener extends MouseListener {
         // undo the live feedback: the diagram update only patches attributes which changed in the model
         const start = { ...handle, startX: event.clientX, startY: event.clientY };
         this.moveHandle(start, event);
+        if (handle.kind === 'bend' && isTransitionEdge(handle.element)) {
+            const edge = handle.element;
+            const d = routePath(edge.points, edge.routing === 'spline');
+            document.getElementById(`${this.viewerOptions.baseDiv}_${handle.id}`)?.querySelectorAll('.transition-line, .transition-hit')
+                .forEach(path => path.setAttribute('d', d));
+        }
         if (handle.kind === 'label') {
             document.getElementById(`${this.viewerOptions.baseDiv}_${handle.id}`)?.querySelector('.transition-label')?.removeAttribute('transform');
         }
         if (handle.kind === 'resize' && isVertexNode(handle.element)) {
             this.callbacks.resizeEnd(handle.id, Math.max(20, handle.element.size.width + dx), Math.max(20, handle.element.size.height + dy));
         } else if (handle.kind === 'bend' && isTransitionEdge(handle.element)) {
-            const point = handle.element.points[handle.index + 1];
+            const point = handle.element.waypoints[handle.index];
             if (point) {
                 this.callbacks.bendMoved(handle.id, handle.index, { x: point.x + dx, y: point.y + dy });
             }
@@ -370,7 +378,7 @@ export class HsmMouseListener extends MouseListener {
 
     override doubleClick(target: SModelElementImpl, event: MouseEvent): Action[] {
         if (this.callbacks.canEdit() && this.callbacks.isManualLayout() && isTransitionEdge(target) && event.target instanceof Element) {
-            // manual layout: double-click on the line adds a bend point, on a bend point removes it
+            // manual layout: double-click on the line adds a waypoint, on a waypoint removes it
             const handle = event.target.closest('.bend-handle');
             if (handle) {
                 this.callbacks.bendRemoved(target.id, Array.from(handle.parentElement?.children ?? []).indexOf(handle));

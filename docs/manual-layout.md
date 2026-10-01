@@ -90,21 +90,24 @@ automatic layout, which is always computed first:
 2. **Edges, per frame node.** A transition keeps the route of the automatic layout (spline /
    orthogonal) as long as both end points are arranged like in the automatic layout (same size, same
    displacement relative to the frame) and no moved vertex lies on the route, so moving a composite
-   state keeps its inner routes. A transition with stored bend points is a polyline from the border of
-   the source through the bend points to the border of the target (border intersection for rectangles,
-   circles and diamonds). All other transitions are **rerouted around the vertices** of their frame
+   state keeps its inner routes. All other transitions, and all transitions with stored bend points, are
+   **rerouted around the vertices** of their frame
    (`orthogonal-router.ts`): an orthogonal path with few bends on a sparse grid along the inflated
    borders of the vertices and the channels between them; the states containing an end point are
    entered, not run along; running on top of routes placed before is penalized; several ends at the
    same side of a state are spread along the side, and vertices aligned with each other get a straight
-   line. The path is then shaped like the **edge routing setting** (`routing` option, the *Edges*
+   line. Stored bend points are **waypoints**: the route is computed part by part from the source
+   through each waypoint to the target (it does not turn back at a waypoint; a waypoint inside a
+   state lets the route cross that state; the ends of such routes are not spread). The path is then
+   shaped like the **edge routing setting** (`routing` option, the *Edges*
    setting of the web app and `hsm.diagram.edgeRouting` in VS Code): *orthogonal* as it is, *polyline*
-   with the corners removed where the shortcut keeps clear of the vertices, *splines* as a smooth curve
-   through the corners of that polyline which leaves and enters the states perpendicular to their sides
+   with the corners removed where the shortcut keeps clear of the vertices (but not the waypoints),
+   *splines* as a smooth curve through the corners of that polyline which leaves and enters the states perpendicular to their sides
    (like the splines of the automatic layout; flatter, or with only the corners rounded, where a round
    curve would touch a vertex). Their labels are placed
    next to a long segment where they cover no vertex, label or route.
-   Transitions between a composite state and its content start at the nearest border of the state, self
+   Transitions between a composite state and its content start at the nearest border of the state
+   (with waypoints: straight lines through them), self
    transitions become a small loop (and a transition for which no orthogonal route exists becomes a
    straight line). The stored label offset is added to the computed label position.
 3. The result contains the **effective layout** (all nodes pinned at their computed positions). Every
@@ -134,8 +137,10 @@ it sets the layout of an opened model with `loadLayout`. The toolbar buttons (`#
   plain drag and drop for this). Shift was chosen because Alt + drag is taken by several window
   managers and a "dropped completely inside" rule is ambiguous for large states.
 - A selected state shows a resize handle at its bottom right corner.
-- A selected transition shows its bend points: drag them; double-click the line to add one,
-  double-click a bend point to remove it; drag the label of a selected transition to move it.
+- A selected transition shows its bend points (*waypoints*): drag them; double-click the line to add
+  one (it is inserted between the waypoints of the clicked part of the route), double-click a waypoint
+  to remove it (without waypoints the transition is routed automatically again); while dragging, straight
+  lines through the waypoints are shown, the route is computed on drop; drag the label of a selected transition to move it.
 - Undo: `Ctrl+Z` / `Ctrl+Y` in the diagram (and the toolbar buttons) undo layout changes and text
   edits in the order they were made. Layout changes are stored with a key of the text state (web app:
   the `alternativeVersionId` of the Monaco model; VS Code: a hash of the text); a layout change is
@@ -198,8 +203,8 @@ wrapped at the itemis width), overlapping states are pushed apart; the relative 
 
 ## Limitations and risks
 
-- Transitions with stored bend points are not rerouted (they go straight through the bend points and
-  may cross states); remove the bend points to have them routed orthogonally again.
+- A waypoint inside a state lets the route cross that state. If no route through the waypoints is
+  found (e.g. a waypoint very close to a state), straight lines through them are drawn.
 - Text edits outside the diagram do not update keys (see above).
 - No alignment guides, snapping, multi-select resize or region resizing; routing of new edges is
   always a polyline (the *Edges* setting applies to routes of the automatic layout only).
