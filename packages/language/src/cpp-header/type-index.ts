@@ -55,6 +55,10 @@ interface Scope {
 interface EnumState {
     readonly type: CppEnumType;
     readonly values: Map<CppEnumerator, bigint>;
+    /** The types (bits, signed) of the enumerators before the closing brace of the enum. */
+    readonly types: Map<CppEnumerator, readonly [number, boolean]>;
+    /** Enumerators whose value cannot be computed, with the reason. */
+    readonly unknown: Map<CppEnumerator, string>;
     done: boolean;
 }
 
@@ -725,44 +729,76 @@ export class CppTypeIndex {
         const type: CppEnumType = {
             kind: 'enum', cppName: declaration.qualifiedName, declaration, scoped: declaration.scoped, underlying, enumerators
         };
-        const state: EnumState = { type, values: new Map(), done: false };
+        const state: EnumState = { type, values: new Map(), types: new Map(), unknown: new Map(), done: false };
         this.enums.set(declaration, state);
-        let next = 0n;
+        // C++ [dcl.enum]: an enumerator without initializer has the value of the previous one + 1
+        // (0 for the first); before the closing brace each enumerator has the type of its
+        // initializer (the fixed underlying type if there is one), an implicit one the type of the
+        // previous enumerator or a larger type if the incremented value does not fit.
+        let previous: { value: bigint, bits: number, signed: boolean, unknown?: CppResolvedEnumerator['unknown'] } | undefined;
+        const boolUnderlying = fixed && underlying.cppName === 'bool';
+        const fitsUnderlying = (value: bigint) => boolUnderlying ? value === 0n || value === 1n : integerFits(value, underlying.bits, underlying.signed);
         for (const enumerator of declaration.enumerators) {
-            let value = next;
-            let valid = true;
-            if (enumerator.initializer) {
+            let value: bigint;
+            let bits: number = fixed ? underlying.bits : 32;
+            let signed = fixed ? underlying.signed : true;
+            let unknown: CppResolvedEnumerator['unknown'];
+            let error: string | undefined;
+            const initializer = enumerator.initializer;
+            if (initializer) {
+                value = previous ? previous.value + 1n : 0n;
                 try {
-                    const evaluated = this.evaluateNode(enumerator.initializer.node, scope);
+                    const evaluated = this.evaluateNode(initializer.node, scope);
                     if (evaluated.kind !== 'integer' && evaluated.kind !== 'boolean') {
-                        throw new EvaluationError(`the value must be an integer, not a ${evaluated.kind}`, enumerator.initializer.range);
+                        throw new EvaluationError(`the value must be an integer, not a ${evaluated.kind === 'real' ? 'floating point' : evaluated.kind} value`, initializer.range);
+                    }
+                    if (evaluated.kind === 'integer' && evaluated.enumType?.scoped && evaluated.enumType.declaration !== declaration) {
+                        throw new EvaluationError(`a value of the scoped enum '${evaluated.enumType.cppName}' needs a cast (e.g. 'static_cast<int>(…)')`, initializer.range);
                     }
                     value = evaluated.kind === 'boolean' ? (evaluated.value ? 1n : 0n) : evaluated.value;
-                    if (fixed && !integerFits(value, underlying.bits, underlying.signed)) {
-                        this.report('error', `the value ${value} of enumerator '${enumerator.qualifiedName}' does not fit into the underlying type '${underlying.cppName}'`,
-                            enumerator.fileName, enumerator.initializer.range);
+                    if (!fixed && evaluated.kind === 'integer') {
+                        bits = evaluated.bits;
+                        signed = evaluated.signed;
                     }
-                } catch (error) {
-                    if (!(error instanceof EvaluationError)) {
-                        throw error;
+                } catch (caught) {
+                    if (!(caught instanceof EvaluationError)) {
+                        throw caught;
                     }
-                    valid = false;
-                    this.report('error', `cannot evaluate the value of enumerator '${enumerator.qualifiedName}': ${error.message}`,
-                        enumerator.fileName, error.range ?? enumerator.initializer.range);
+                    unknown = { expression: initializer.text, offset: 0n, reason: caught.message };
+                    this.report('error', `cannot evaluate the value of enumerator '${enumerator.qualifiedName}': ${caught.message}`,
+                        enumerator.fileName, caught.range ?? initializer.range);
                 }
-            } else if (fixed && !integerFits(value, underlying.bits, underlying.signed)) {
-                this.report('error', `the value ${value} of enumerator '${enumerator.qualifiedName}' does not fit into the underlying type '${underlying.cppName}'`,
-                    enumerator.fileName, enumerator.nameRange);
+            } else {
+                value = previous ? previous.value + 1n : 0n;
+                if (previous?.unknown) {
+                    unknown = { ...previous.unknown, offset: previous.unknown.offset + 1n };
+                } else if (previous && !fixed) {
+                    [bits, signed] = integerFits(value, previous.bits, previous.signed) ? [previous.bits, previous.signed]
+                        : ([[32, true], [32, false], [64, true], [64, false]] as const).find(([b, s]) => integerFits(value, b, s)) ?? [128, true];
+                }
             }
-            if (fixed) {
-                value = underlying.signed ? BigInt.asIntN(underlying.bits, value) : BigInt.asUintN(underlying.bits, value);
+            if (!unknown && fixed && !fitsUnderlying(value)) {
+                // narrowing to the fixed underlying type is an error (also for the incremented value)
+                error = `the value ${value} does not fit into the underlying type '${underlying.cppName}'`;
+                this.report('error', `the value ${value} of enumerator '${enumerator.qualifiedName}' does not fit into the underlying type '${underlying.cppName}'`,
+                    enumerator.fileName, initializer ? initializer.range : enumerator.nameRange);
             }
             state.values.set(enumerator, value);
-            enumerators.push({ name: enumerator.name, qualifiedName: enumerator.qualifiedName, value, valid, declaration: enumerator });
-            next = value + 1n;
+            state.types.set(enumerator, [bits, signed]);
+            if (unknown) {
+                state.unknown.set(enumerator, unknown.offset === 0n ? unknown.reason : `it follows '${unknown.expression}', whose value is unknown`);
+            }
+            enumerators.push({
+                name: enumerator.name, qualifiedName: enumerator.qualifiedName, value, valid: !unknown,
+                origin: initializer ? 'explicit' : 'implicit',
+                ...(initializer ? { expression: initializer.text } : {}),
+                ...(unknown ? { unknown } : {}), ...(error ? { error } : {}),
+                declaration: enumerator
+            });
+            previous = { value, bits, signed, unknown };
         }
         if (!fixed) {
-            const values = enumerators.map(e => e.value);
+            const values = enumerators.filter(e => e.valid).map(e => e.value);
             const fits = (bits: number, signed: boolean) => values.every(v => integerFits(v, bits, signed));
             const deduced = fits(32, true) ? integer('int', 32, true) : fits(32, false) ? integer('unsigned int', 32, false)
                 : fits(64, true) ? integer('long long', 64, true) : integer('unsigned long long', 64, false);
@@ -869,7 +905,7 @@ export class CppTypeIndex {
             const resolved = state.type.enumerators.find(e => e.declaration === declaration);
             return {
                 declaration, type: state.type, value: resolved?.value,
-                ...(resolved && !resolved.valid ? { error: 'the value cannot be evaluated' } : {})
+                ...(resolved && !resolved.valid ? { error: resolved.unknown?.offset === 0n ? resolved.unknown.reason : 'the value cannot be evaluated' } : {})
             };
         }
         return undefined;
@@ -1133,13 +1169,13 @@ export class CppTypeIndex {
                     if (value === undefined) {
                         throw new EvaluationError(`'${text}' is used before its definition`, range);
                     }
+                    const unknown = state.unknown.get(declaration);
+                    if (unknown !== undefined) {
+                        throw new EvaluationError(`the value of '${text}' is unknown (${unknown})`, range);
+                    }
                     if (!state.done) {
-                        // inside the enum body: the enumerator has the fixed underlying type or `int` (a
-                        // larger type if the value does not fit)
-                        if (enumDeclaration.underlyingType || enumDeclaration.scoped) {
-                            return { kind: 'integer', value, bits: state.type.underlying.bits, signed: state.type.underlying.signed };
-                        }
-                        const [bits, signed] = integerFits(value, 32, true) ? [32, true] : integerFits(value, 64, true) ? [64, true] : [64, false];
+                        // inside the enum body: the enumerator has the type of its initializer (see resolveEnum)
+                        const [bits, signed] = state.types.get(declaration) ?? [32, true];
                         return { kind: 'integer', value, bits, signed };
                     }
                     const underlying = state.type.underlying;

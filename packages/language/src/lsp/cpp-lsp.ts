@@ -1,15 +1,15 @@
 import { AstUtils, CstUtils, type CstNode, type LangiumDocument } from 'langium';
 import { DefaultCompletionProvider, type LangiumServices } from 'langium/lsp';
-import { CompletionItemKind, type CompletionItem, type CompletionList, type Range } from 'vscode-languageserver-types';
+import { CompletionItemKind, MarkupKind, type CompletionItem, type CompletionList, type MarkupContent, type Range } from 'vscode-languageserver-types';
 
 type CompletionParams = Parameters<DefaultCompletionProvider['getCompletion']>[1];
 import * as ast from '../generated/ast.js';
-import type { CppDeclaration, CppRange, CppResolvedField } from '../cpp-header/model.js';
+import type { CppDeclaration, CppEnumType, CppRange, CppResolvedEnumerator, CppResolvedField } from '../cpp-header/model.js';
 import type { CppTypeIndex } from '../cpp-header/type-index.js';
-import { cppValueToJson, describeCppType } from '../cpp-header/report.js';
+import { describeCppType } from '../cpp-header/report.js';
 import { displayPath } from '../cpp-headers.js';
 import { contextMachine, cppIndexAt, cppTypeOfReference, hsmTypeOfCpp, isEnumType, isStructType, memberOf, referenceMembers } from '../cpp-types.js';
-import { enumeratorSpelling } from '../cpp-enums.js';
+import { enumeratorListItem, enumeratorSpelling, enumeratorValueMarkdown, enumeratorValueText } from '../cpp-enums.js';
 import { cppImports, resolvedImports } from '../imports.js';
 import {
     inferType, returnTypeOf, typeAliases, typeName, typeOfAlias, typeOfDeclaration, typeOfEvent, typeOfParameter, type HsmType
@@ -181,7 +181,7 @@ export function describeCppElement(element: CppElementAt, document?: LangiumDocu
                 if (type.kind === 'enum') {
                     lines.push(declaration.opaque
                         ? 'opaque declaration: no enumerators are known (values are written `n as ' + declaration.qualifiedName + '`)'
-                        : type.enumerators.map(e => `\`${e.name} = ${e.value}\``).join(', '));
+                        : type.enumerators.map(e => `- ${enumeratorListItem(e, type)}`).join('\n'));
                     if (!declaration.scoped) {
                         lines.push(`unscoped: the enumerators are also members of ${declaration.qualifiedName.includes('::') ? `\`${declaration.qualifiedName.slice(0, declaration.qualifiedName.lastIndexOf('::'))}\`` : 'the global namespace'} and convert to \`integer\``);
                     }
@@ -190,10 +190,14 @@ export function describeCppElement(element: CppElementAt, document?: LangiumDocu
             }
             case 'enumerator': {
                 const info = index.constant(declaration);
-                signature = `${declaration.qualifiedName}${info?.value !== undefined ? ` = ${formatCppValue(info.value)}` : ''}`;
-                if (info?.type.kind === 'enum') {
-                    const value = typeof info.value === 'bigint' && info.value > 9n ? ` (0x${info.value.toString(16).toUpperCase()})` : '';
-                    lines.push(`enumerator of \`enum ${info.type.scoped ? 'class ' : ''}${info.type.cppName}\` (underlying type \`${info.type.underlying.cppName}\`)${value}`);
+                const type = info?.type.kind === 'enum' ? info.type : undefined;
+                const enumerator = type?.enumerators.find(e => e.declaration === declaration);
+                signature = declaration.qualifiedName;
+                if (type && enumerator) {
+                    // the computed value (unknown values are not shown in the signature)
+                    signature += enumerator.valid ? ` = ${enumerator.value}` : '';
+                    lines.push(enumeratorValueMarkdown(enumerator, type));
+                    lines.push(`enumerator of \`enum ${type.scoped ? 'class ' : ''}${type.cppName}\` (underlying type \`${type.underlying.cppName}\`)`);
                 }
                 break;
             }
@@ -232,8 +236,18 @@ export function describeCppElement(element: CppElementAt, document?: LangiumDocu
     return ['```cpp\n' + signature + '\n```', ...lines, doc, location ? `*${location}*` : undefined].filter(part => part).join('\n\n');
 }
 
+/** A constant value in JSON notation; integers (also beyond 2^53) as plain numbers, e.g. `18446744073709551615`. */
 function formatCppValue(value: unknown): string {
-    return JSON.stringify(cppValueToJson(value as never));
+    if (typeof value === 'bigint') {
+        return value.toString();
+    }
+    if (Array.isArray(value)) {
+        return `[${value.map(formatCppValue).join(',')}]`;
+    }
+    if (value !== null && typeof value === 'object') {
+        return `{${Object.entries(value).map(([key, v]) => `${JSON.stringify(key)}:${formatCppValue(v)}`).join(',')}}`;
+    }
+    return JSON.stringify(value);
 }
 
 /** The location of the C++ declaration at an offset (go to definition into the header). */
@@ -379,9 +393,16 @@ function cppCompletionItem(declaration: CppDeclaration, index: CppTypeIndex): Co
         const info = index.constant(declaration);
         detail = info ? `${info.type.cppName}${info.value !== undefined ? ` = ${formatCppValue(info.value)}` : ''}` : undefined;
         if (declaration.kind === 'enumerator' && info?.type.kind === 'enum') {
-            // enumerators in declaration order
-            const position = info.type.enumerators.findIndex(e => e.declaration === declaration);
-            sortText = `0${String(position).padStart(5, '0')}`;
+            // enumerators in declaration order, with their computed values
+            const enumType = info.type;
+            const position = enumType.enumerators.findIndex(e => e.declaration === declaration);
+            const enumerator = enumType.enumerators[position];
+            if (enumerator) {
+                return {
+                    label: declaration.name, kind: CompletionItemKind.EnumMember, sortText: `0${String(position).padStart(5, '0')}`,
+                    ...enumeratorCompletionDetails(enumerator, enumType)
+                };
+            }
         }
     } else if (declaration.kind === 'alias') {
         detail = index.typeOf(declaration).cppName;
@@ -461,11 +482,23 @@ function findDeclaration<T extends ast.Declaration>(machine: ast.StateMachine, p
 }
 
 /**
- * The documentation of an enumerator in completion items (the doc comment of the header). Kept in
- * one place so that it can be rendered like the other documentation comments (e.g. Doxygen to Markdown).
+ * The documentation of an enumerator in completion items: its computed value (see
+ * {@link enumeratorValueMarkdown}) and the doc comment of the header. Kept in one place so that the
+ * doc comment can be rendered like the other documentation comments (e.g. Doxygen to Markdown).
  */
-function enumeratorDocumentation(doc: string | undefined): string | undefined {
-    return doc;
+function enumeratorDocumentation(enumerator: CppResolvedEnumerator, type: CppEnumType): MarkupContent {
+    const doc = enumerator.declaration.doc;
+    return { kind: MarkupKind.Markdown, value: [enumeratorValueMarkdown(enumerator, type), doc].filter(part => part).join('\n\n') };
+}
+
+/**
+ * Detail, label description (shown next to the label) and documentation of the completion item of an
+ * enumerator: `motor::Mode = 3 (0x3)`, `= 3 (0x3)`, the value with its derivation and the doc comment.
+ */
+function enumeratorCompletionDetails(enumerator: CppResolvedEnumerator, type: CppEnumType): Pick<CompletionItem, 'detail' | 'labelDetails' | 'documentation'> {
+    const value = enumeratorValueText(enumerator, type);
+    const text = enumerator.valid ? `= ${value}` : `value ${value}`;
+    return { detail: `${type.cppName} ${text}`, labelDetails: { description: text }, documentation: enumeratorDocumentation(enumerator, type) };
 }
 
 /**
@@ -482,8 +515,7 @@ export function enumeratorCompletionItems(type: HsmType, range: Range, typed: st
         return {
             label: spelling,
             kind: CompletionItemKind.EnumMember,
-            detail: `${enumType.cppName} = ${enumerator.value}`,
-            documentation: enumeratorDocumentation(enumerator.declaration.doc),
+            ...enumeratorCompletionDetails(enumerator, enumType),
             sortText: `!${String(position).padStart(5, '0')}`,
             filterText: typed && !spelling.startsWith(typed) ? enumerator.name : spelling,
             textEdit: { range, newText: spelling }

@@ -7,7 +7,9 @@ import type {
  * Evaluation of C++ constant expressions with C++ semantics: integers carry their type (width and
  * signedness), the usual arithmetic conversions and integral promotions are applied and results
  * wrap around like in C++ (e.g. `0u - 1` is `0xFFFFFFFF`, `(0u - 1) / 2` is `0x7FFFFFFF`).
- * Division by zero and out of range shifts are errors (they are not constant expressions in C++).
+ * Division by zero, signed overflow (`INT_MAX + 1`) and out of range shifts are errors (they are
+ * not constant expressions in C++). Shifts of signed values follow C++20 (`1 << 31` is `INT_MIN`,
+ * `-16 >> 2` is `-4`).
  *
  * @module
  * @internal
@@ -234,20 +236,32 @@ function binary(operator: CppBinaryOperator, left: EvalValue, right: EvalValue, 
     const x = wrapInteger(a.value, bits, signed);
     const y = wrapInteger(b.value, bits, signed);
     switch (operator) {
-        case '+': return int(x + y, bits, signed);
-        case '-': return int(x - y, bits, signed);
-        case '*': return int(x * y, bits, signed);
+        case '+': return arithmetic(x + y, bits, signed, range);
+        case '-': return arithmetic(x - y, bits, signed, range);
+        case '*': return arithmetic(x * y, bits, signed, range);
         case '/':
         case '%':
             if (y === 0n) {
                 throw new EvaluationError(operator === '/' ? 'division by zero' : 'remainder by zero', range);
             }
-            return int(operator === '/' ? x / y : x % y, bits, signed);
+            // BigInt division truncates toward zero and the remainder has the sign of the dividend, like C++
+            return arithmetic(operator === '/' ? x / y : x % y, bits, signed, range);
         case '&': return int(x & y, bits, signed);
         case '|': return int(x | y, bits, signed);
         case '^': return int(x ^ y, bits, signed);
         default: return { kind: 'boolean', value: compare(operator, x, y) };
     }
+}
+
+/**
+ * The result of an arithmetic operation: unsigned results wrap around (modulo 2^bits); signed
+ * overflow is undefined behavior and thus not a constant expression (GCC / Clang report an error).
+ */
+function arithmetic(value: bigint, bits: number, signed: boolean, range: CppRange): IntValue {
+    if (signed && !integerFits(value, bits, true)) {
+        throw new EvaluationError(`signed integer overflow: ${value} does not fit into a ${bits} bit signed type`, range);
+    }
+    return int(value, bits, signed);
 }
 
 function compare(operator: string, a: bigint, b: bigint): boolean {
@@ -435,7 +449,7 @@ export function evaluateExpression(node: CppExpressionNode, context: EvaluationC
             }
             const value = promote(operand, node.range, node.operator);
             switch (node.operator) {
-                case '-': return int(-value.value, value.bits, value.signed);
+                case '-': return arithmetic(-value.value, value.bits, value.signed, node.range);
                 case '~': return int(~value.value, value.bits, value.signed);
                 default: return value;
             }

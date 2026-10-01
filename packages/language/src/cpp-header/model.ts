@@ -363,10 +363,29 @@ export interface CppStringType {
 export interface CppResolvedEnumerator {
     readonly name: string;
     readonly qualifiedName: string;
-    /** The value (for enumerators that cannot be evaluated: the previous value + 1, or 0). */
+    /**
+     * The value computed like a C++ compiler does. For enumerators whose value cannot be computed
+     * (`valid: false`) this is only a placeholder (the previous value + 1, or 0) that keeps the
+     * values of the enum distinct in the simulation; it must not be displayed (see `unknown`).
+     */
     readonly value: bigint;
     /** Whether the value could be computed. */
     readonly valid: boolean;
+    /** `explicit`: the enumerator has an initializer (`A = 5`); `implicit`: previous value + 1, or 0 for the first. */
+    readonly origin: 'explicit' | 'implicit';
+    /** The initializer as written in the header (`A | B`, `FLAG(3)`), for explicit values. */
+    readonly expression?: string;
+    /**
+     * Values that cannot be computed (`valid: false`): the initializer that cannot be evaluated (of
+     * this or the last explicit enumerator), the distance to it (`FOO(3)` + 2 for the second implicit
+     * successor of `X = FOO(3)`) and the reason.
+     */
+    readonly unknown?: { readonly expression: string; readonly offset: bigint; readonly reason: string };
+    /**
+     * An error of the value in C++ (the program is ill-formed), e.g. a value that does not fit into
+     * the fixed underlying type (`enum class E : uint8_t { A = 256 }`). `value` is the computed value.
+     */
+    readonly error?: string;
     readonly declaration: CppEnumerator;
 }
 

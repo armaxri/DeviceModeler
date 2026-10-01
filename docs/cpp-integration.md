@@ -165,11 +165,13 @@ literals concatenated), `true`/`false` literals; unary `+ - ! ~`; binary `* / % 
 constants of other headers); macros.
 
 The semantics are those of C++: integers carry their type (width, signedness), the integral
-promotions and usual arithmetic conversions apply and results wrap around (`0u - 1` is
-`4294967295`, `(0u - 1) / 2` is `2147483647`, `1 << 31` is `-2147483648`); integer literal types
-follow the suffix and value rules; division truncates toward zero. Division by zero, shift counts
-out of range, function calls, `nullptr`, member access and arithmetic on scoped enums without a
-cast are errors (they are not constant expressions or not supported). Implicit conversions of
+promotions and usual arithmetic conversions apply and unsigned results wrap around (`0u - 1` is
+`4294967295`, `(0u - 1) / 2` is `2147483647`); shifts follow C++20 (`1 << 31` is `-2147483648`,
+`-16 >> 2` is `-4`); integer literal types follow the suffix and value rules; division truncates
+toward zero (`-7 / 2` is `-3`, `-7 % 2` is `-1`). Division by zero, signed overflow
+(`2147483647 + 1`), shift counts out of range, function calls, `nullptr`, member access and
+arithmetic on scoped enums without a cast are errors (they are not constant expressions or not
+supported). Implicit conversions of
 constants and default member initializers wrap with a warning if the value changes. Default member
 initializers may use the preceding members (`int b = a * 2;`).
 
@@ -209,10 +211,60 @@ The widths of `long`, `size_t` etc. depend on the target: `CppTypeIndex` uses LP
 
 Values: explicit values are constant expressions (negative, hex, character literals `'a'`, earlier
 enumerators `kExpr = kHex << 1 | 1`, enumerators of other enums with casts, macros); without value
-the previous value + 1. The values must fit into the fixed underlying type (error otherwise); without
+the previous value + 1 (see §3.5). The values must fit into the fixed underlying type (error otherwise); without
 fixed type the underlying type is deduced from the values (`int`, `unsigned int`, `long long`, …).
 Comments and doc comments (`///`, `/** */` before, `///<` after an enumerator), `#if` branches, attributes
 (`[[deprecated]]`, `__attribute__`) and a trailing comma inside the enumerator list are handled.
+
+### 3.5 Enumerator values
+
+The analyzer computes the value of every enumerator like a C++ compiler (`resolveEnum` in
+`cpp-header/type-index.ts` with the constant expressions of §3.2). The tests check the values against
+g++ and clang++ with `static_assert`s generated from the analyzer's values (`test/cpp-enum-values.test.ts`).
+Example: [`examples/cpp-enum-values`](../examples/cpp-enum-values) (`sensor_codes.h`, a model and its
+unit tests).
+
+| rule | example | values |
+| --- | --- | --- |
+| implicit numbering: the first enumerator is 0, every other one the previous value + 1 (also after explicit and negative values) | `enum E { A, B, C = 10, D, X = -2, Y };` | 0, 1, 10, 11, -2, -1 |
+| integer literals: decimal, hex, **octal** (leading `0`), binary, digit separators, suffixes | `010`, `0x1F`, `0b101`, `1'000`, `7u`, `8ull` | 8, 31, 5, 1000, 7, 8 |
+| character literals (escapes, prefixes), `true` / `false` | `'A'`, `'\n'`, `'\x41'`, `'\0'`, `u8'a'`, `L'z'` | 65, 10, 65, 0, 97, 122 |
+| operators with C++ precedence; `/` and `%` truncate toward zero | `1 << 2 + 1`, `1 \| 2 ^ 3 & 4`, `-7 / 2`, `-7 % 3`, `~0` | 8, 3, -3, -1, -1 |
+| earlier enumerators, enumerators of other enums (qualified, with casts), constants, macros, `sizeof` of types | `C = A \| B`, `static_cast<int>(Other::V)`, `(int)x`, `kBase + 1`, `BIT(3)`, `sizeof(std::uint32_t)` | |
+| unsigned arithmetic wraps around, signed overflow is an error | `enum class F : std::uint32_t { M = ~0u };` | 4294967295 |
+| before the closing brace an enumerator has the type of its initializer | `enum { A = 0u - 1, B = A + 1 };` | 4294967295, 0 (`A` is an `unsigned int`) |
+| 64-bit values are exact (`bigint`) | `enum class W : std::uint64_t { Big = ~0ull };` | 18446744073709551615 |
+
+**Errors** as in C++ (the header would not compile): a value that does not fit into the fixed underlying
+type (`enum class E : std::uint8_t { A = 255, B };` – `B` is 256; narrowing is ill-formed, also for `bool`),
+signed overflow, division by zero, a floating point value, a value of a scoped enum without cast. Such an
+enumerator keeps the computed value and is shown with the error (`CppResolvedEnumerator.error`).
+
+**Unknown values**: a value that cannot be computed (an unknown macro `FOO(3)`, a function call, a
+`constexpr` function, `sizeof` of an expression or a class, …) is **not guessed**: the enumerator is
+marked as unknown (`valid: false`, `unknown: { expression, offset, reason }` of `CppResolvedEnumerator`),
+the header import shows the error, and the implicit successors are unknown **relative** to it
+(`FOO(3) + 1`, `FOO(3) + 2`); values computed from unknown ones (`B = A + 1`, constants) are unknown too.
+In the simulation such enumerators get distinct placeholder values (which are never displayed).
+
+**Display** (`enumeratorValueText`, `enumeratorValueMarkdown`, `enumeratorListItem` in `cpp-enums.ts`):
+the value in decimal; in hexadecimal too for values greater than 9 and for flag-like initializers (bit
+operators, hex or binary literals; negative ones in the two's complement of the underlying type); the
+initializer if the value is derived from it; whether the value is implicit.
+
+- Hover of an enumerator: the signature `sensor::Status::kReady = 3`, then ``value `3` (`0x3`) = `kPowered | kCalibrated` ``,
+  ``value `11` (`0xB`) (implicit: `Measuring` + 1)`` or ``value unknown: `FOO(3) + 1` (implicit: `X` + 1)``.
+- Hover of an enum: one line per enumerator, e.g. ``- `kReady = 3` (`0x3`, from `kPowered | kCalibrated`)``,
+  ``- `kOctal = 8` (from `010`)``, ``- `Calibrating = 11` (`0xB`, implicit)``, ``- `Y`: value unknown (`FOO(3) + 1`)``.
+- Completion: the detail `sensor::State = 11 (0xB, implicit)`, the label description `= 11 (0xB, implicit)`
+  and, as documentation, the value sentence of the hover followed by the doc comment.
+- The value editor of the web simulator (tooltip of the enumerators) and `hsm cpp-header` (`implicit`,
+  `expression`, `unknown`, `error` of the enumerators).
+
+Not supported (the value is unknown): `constexpr` functions and other function calls, macros that are not
+defined in the header itself (or passed in `defines`, §3.1), `sizeof` of classes and expressions, templates
+(`std::underlying_type_t<E>`), `std::numeric_limits` of enums. The data model decides the width of `long`
+and `size_t` (§3.2); `char` is signed.
 
 ## 4. Language integration (implemented)
 
@@ -350,8 +402,9 @@ Event payloads, operation parameters and return values may use all these types.
 - Messages: an unknown enumerator lists the enumerators of the enum (`'motor::Mode' has no enumerator 'Fsat'
   (enumerators: Off, Slow, Fast)`); an unqualified enumerator name suggests the qualified one (`Could not
   resolve reference to Declaration named 'Fast'. (Did you mean 'motor::Mode::Fast'? …)`).
-- Hover of enumerators shows the value (also hexadecimal), the enum and its underlying type; hover of enums
-  the enumerators, the underlying type, whether the enum is unscoped or an opaque declaration.
+- Hover of enumerators shows the computed value (also hexadecimal, its derivation, implicit or unknown, see
+  §3.5), the enum and its underlying type; hover of enums the enumerators with their values, the underlying
+  type, whether the enum is unscoped or an opaque declaration.
 - Semantic highlighting (VS Code): C++ types (enum types as enums), enumerators and constants.
 - The definitions box of the diagram lists the imports.
 

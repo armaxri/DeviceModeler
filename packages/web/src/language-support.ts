@@ -68,10 +68,12 @@ export class HsmLanguageSupport extends HsmModelService {
                     suggestions: (list?.items ?? []).map(item => {
                         const edit = item.textEdit && 'range' in item.textEdit ? item.textEdit : undefined;
                         return {
-                            label: item.label,
+                            // the label description shows e.g. the values of enumerators (`= 3 (0x3)`)
+                            label: item.labelDetails?.description ? { label: item.label, description: item.labelDetails.description } : item.label,
                             kind: completionKind(item.kind),
                             detail: item.detail,
-                            documentation: typeof item.documentation === 'string' ? item.documentation : item.documentation?.value,
+                            documentation: typeof item.documentation === 'string' || !item.documentation ? item.documentation
+                                : item.documentation.kind === 'markdown' ? { value: item.documentation.value } : item.documentation.value,
                             sortText: item.sortText,
                             filterText: item.filterText,
                             insertText: edit?.newText ?? item.insertText ?? item.label,
