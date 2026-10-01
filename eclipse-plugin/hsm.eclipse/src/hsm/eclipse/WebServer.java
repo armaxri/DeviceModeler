@@ -38,6 +38,7 @@ public final class WebServer {
     public static final int DEFAULT_PORT = 47913;
 
     private static final String SESSION_PREFIX = "/s/";
+    private static final String JSON = "application/json; charset=utf-8";
     private static final Map<String, String> CONTENT_TYPES = Map.ofEntries(
             Map.entry("html", "text/html; charset=utf-8"),
             Map.entry("js", "text/javascript; charset=utf-8"),
@@ -165,18 +166,11 @@ public final class WebServer {
     private void handleApi(HttpExchange exchange, HostSession session, String operation) throws IOException {
         String method = exchange.getRequestMethod();
         switch (method + " " + operation) {
-            case "GET document" -> {
-                StringBuilder json = new StringBuilder();
-                json.append("{\"fileName\":").append(Json.string(session.fileName()));
-                json.append(",\"text\":").append(Json.string(session.text()));
-                json.append(",\"files\":{");
-                boolean first = true;
-                for (Map.Entry<String, String> file : session.importableFiles().entrySet()) {
-                    json.append(first ? "" : ",").append(Json.string(file.getKey())).append(':').append(Json.string(file.getValue()));
-                    first = false;
-                }
-                json.append("}}");
-                send(exchange, 200, "application/json; charset=utf-8", json.toString());
+            case "GET document" -> send(exchange, 200, JSON, Json.write(session.document()));
+            case "GET file" -> {
+                String path = query(exchange.getRequestURI(), "path");
+                String text = path == null ? null : session.file(path);
+                send(exchange, text == null ? 404 : 200, "text/plain; charset=utf-8", text == null ? "Not found" : text);
             }
             case "POST changed" -> {
                 session.changed(readText(exchange));
@@ -184,6 +178,16 @@ public final class WebServer {
             }
             case "POST save" -> {
                 session.save(readText(exchange));
+                send(exchange, 204, null, null);
+            }
+            case "POST model" -> {
+                session.model(Json.object(Json.parse(readText(exchange))));
+                send(exchange, 204, null, null);
+            }
+            case "POST settings" -> {
+                String json = readText(exchange);
+                Json.parse(json);
+                session.settings(json);
                 send(exchange, 204, null, null);
             }
             case "POST open" -> {
@@ -197,7 +201,11 @@ public final class WebServer {
                     content = in.readAllBytes();
                 }
                 String message = session.export(fileName == null ? "diagram" : fileName, content);
-                send(exchange, 200, "application/json; charset=utf-8", "{\"message\":" + Json.string(message) + "}");
+                send(exchange, 200, JSON, Json.write(Map.of("message", message)));
+            }
+            case "POST generate" -> {
+                String message = session.generated(Json.object(Json.parse(readText(exchange))));
+                send(exchange, 200, JSON, Json.write(Map.of("message", message)));
             }
             default -> send(exchange, 404, "text/plain", "Unknown operation " + method + " " + operation);
         }
@@ -256,34 +264,6 @@ public final class WebServer {
         exchange.sendResponseHeaders(status, bytes.length);
         try (OutputStream out = exchange.getResponseBody()) {
             out.write(bytes);
-        }
-    }
-
-    /** Minimal JSON encoding of strings. */
-    static final class Json {
-        private Json() {
-        }
-
-        static String string(String value) {
-            StringBuilder result = new StringBuilder(value.length() + 16).append('"');
-            for (int i = 0; i < value.length(); i++) {
-                char c = value.charAt(i);
-                switch (c) {
-                    case '"' -> result.append("\\\"");
-                    case '\\' -> result.append("\\\\");
-                    case '\n' -> result.append("\\n");
-                    case '\r' -> result.append("\\r");
-                    case '\t' -> result.append("\\t");
-                    default -> {
-                        if (c < 0x20 || c == ' ' || c == ' ') {
-                            result.append(String.format("\\u%04x", (int) c));
-                        } else {
-                            result.append(c);
-                        }
-                    }
-                }
-            }
-            return result.append('"').toString();
         }
     }
 }
