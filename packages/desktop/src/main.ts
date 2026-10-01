@@ -527,6 +527,15 @@ async function smokeTest(model: string, resultFile: string | undefined): Promise
         if (states === 0) {
             throw new Error('the diagram shows no states');
         }
+        // the validation in the page (with the imports of the folder) reports no errors
+        const session = sessionOf(win)!;
+        for (let i = 0; i < 100 && !session.problems; i++) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        const errors = (session.problems ?? [{ severity: 'error', message: 'no validation report', line: 0, column: 0 }]).filter(problem => problem.severity === 'error');
+        if (errors.length > 0) {
+            throw new Error(`problems: ${errors.map(problem => `${problem.line}:${problem.column} ${problem.message}`).join('; ')}`);
+        }
         // an edit in the page and Save (button of the page → api/save)
         const marker = `// smoke test ${Date.now()}`;
         await inPage(contents, `window.hsmApp.editor.setValue(window.hsmApp.editor.getValue() + ${JSON.stringify(`\n${marker}\n`)}); document.getElementById('btn-save').click();`);

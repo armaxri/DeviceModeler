@@ -144,9 +144,9 @@ If `npm ci` did not download Electron (`node_modules/electron/dist` missing), ru
   not notarized), NSIS installer + `.zip` (Windows), AppImage + `.deb` + `.tar.gz` (Linux), with the file
   association for `.hsm`. Everything is bundled, the app contains no `node_modules`.
 - `scripts/smoke-test.mjs` starts the packaged app (or Electron with `dist/` in development) with
-  `--smoke-test <copy of examples/cd-player.hsm>`: a hidden window opens the model, waits until the diagram
-  shows its states, edits the text and saves it through the page, then the app exits (on Linux CI under
-  `xvfb-run`).
+  `--smoke-test <copy of examples/door-with-motor/gate.hsm>`: a hidden window opens the model, waits until
+  the diagram shows its states and the page reports no errors (the import of `motor.hsm` is resolved from
+  the folder), edits the text and saves it through the page, then the app exits (on Linux CI under `xvfb-run`).
 
 Why Electron: the editor is a static web app (Langium, ELK and the simulator run in the page), which
 Electron shows unchanged; the main process is Node.js like the rest of the tool chain, so the file access

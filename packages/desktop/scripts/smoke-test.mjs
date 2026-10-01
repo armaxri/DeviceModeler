@@ -1,6 +1,7 @@
 // Smoke test of the desktop app (used by CI on every platform; on Linux under xvfb-run): starts the app with
-// `--smoke-test <copy of an example model>`, which opens the model in a hidden window, waits until the diagram
-// shows its states, edits the text and saves it through the page (api/save) and exits with 0.
+// `--smoke-test <copy of examples/door-with-motor/gate.hsm>`, which opens the model in a hidden window, waits
+// until the diagram shows its states and the page validated it without errors (the import of motor.hsm is
+// resolved from the folder), edits the text, saves it through the page (api/save) and exits with 0.
 // Usage: node scripts/smoke-test.mjs [app executable]
 //   default: the unpacked app of scripts/package.mjs in release/, else Electron with dist/ (development)
 import { spawn } from 'node:child_process';
@@ -40,9 +41,9 @@ const prefix = app ? [] : [root];
 console.log(`testing ${app ?? `Electron (development) with ${root}`}`);
 
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'hsm-desktop-smoke-'));
-const model = path.join(tmp, 'cd-player.hsm');
+const model = path.join(tmp, 'models', 'gate.hsm');
 const result = path.join(tmp, 'result.json');
-await fs.copyFile(path.join(repo, 'examples', 'cd-player.hsm'), model);
+await fs.cp(path.join(repo, 'examples', 'door-with-motor'), path.join(tmp, 'models'), { recursive: true });
 
 const args = [...prefix, '--smoke-test', model, '--smoke-result', result];
 if (process.platform === 'linux') {

@@ -41,6 +41,8 @@ export interface Session {
     diskText?: string;
     /** The page has unsaved changes. */
     dirty: boolean;
+    /** The problems of the last validation in the page (`api/model`). */
+    problems?: Array<{ severity: string, message: string, line: number, column: number }>;
 }
 
 /** Notifications of the host to the app (all optional). */
@@ -270,8 +272,9 @@ export class FileHost {
                 return;
             }
             case 'POST model': {
-                // problems and outline of the model: the page shows them itself
-                await readBody(request, 'utf-8');
+                // problems and outline of the model: the page shows them itself (kept for the smoke test)
+                const report = JSON.parse(await readBody(request, 'utf-8')) as { problems?: Session['problems'] };
+                session.problems = report.problems ?? [];
                 sendEmpty(response);
                 return;
             }
