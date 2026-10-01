@@ -3,7 +3,7 @@ import {
     MouseListener, MoveMouseListener, ScrollMouseListener, SelectMouseListener, TYPES, findParentByFeature, isMoveable,
     type IActionHandler, type SModelElementImpl, type SModelRootImpl, type ViewerOptions
 } from 'sprotty';
-import { BringToFrontAction, SelectAction, SelectAllAction, type Action } from 'sprotty-protocol';
+import { BringToFrontAction, MoveAction, SelectAction, SelectAllAction, type Action } from 'sprotty-protocol';
 import { borderPoint, type Point } from 'hsm-language';
 import { isTransitionEdge, isVertexNode, type TransitionEdge, type VertexNode } from './model.js';
 import { arrowHead, routePath } from './views.js';
@@ -496,6 +496,15 @@ export class HsmMoveMouseListener extends MoveMouseListener {
             return [];
         }
         return super.mouseDown(target, event);
+    }
+
+    /**
+     * Without Sprotty's final move to the drop position: the application updates the diagram on drop
+     * (the position may differ from the drop position, e.g. it is kept inside the canvas); the final move
+     * could be applied after that update and leave the vertex where it was dropped.
+     */
+    override mouseUp(target: SModelElementImpl, event: MouseEvent): (Action | Promise<Action>)[] {
+        return super.mouseUp(target, event).filter(action => action instanceof Promise || action.kind !== MoveAction.KIND);
     }
 }
 

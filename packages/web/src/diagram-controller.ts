@@ -1,6 +1,6 @@
 import type { Container } from 'inversify';
 import { LocalModelSource, TYPES, type IActionDispatcher, type SModelElementImpl } from 'sprotty';
-import { FitToScreenAction, SelectAction, SelectAllAction, CenterAction } from 'sprotty-protocol';
+import { FitToScreenAction, SelectAction, SelectAllAction, CenterAction, UpdateModelAction } from 'sprotty-protocol';
 import type { AstNode } from 'langium';
 import {
     EditError, ModelEditor, allVertices, applyEdits, definitionRange, isEventDeclaration, isInterfaceScope, isOperationDeclaration,
@@ -171,6 +171,8 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     readonly settings: DiagramSettings;
     private container!: Container;
     private modelSource!: LocalModelSource;
+    /** Vertices were dragged: the next diagram update is not animated (see {@link render}). */
+    private dragged = false;
     private actionDispatcher!: IActionDispatcher;
 
     private state?: ModelState;
@@ -498,6 +500,16 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             this.rendered = true;
             await this.modelSource.setModel(schema);
             requestAnimationFrame(() => this.fit(false));
+        } else if (this.isManualLayout() || this.dragged) {
+            // no animation in the manual layout and after dragging: an animation from the dragged positions
+            // can be interrupted and leave vertices where they were dropped
+            this.dragged = false;
+            (this.modelSource as unknown as { currentRoot: typeof schema }).currentRoot = schema;
+            await this.actionDispatcher.dispatch(UpdateModelAction.create(schema, { animate: false }));
+            if (this.fitOnNextRender) {
+                this.fitOnNextRender = false;
+                requestAnimationFrame(() => this.fit(false));
+            }
         } else {
             await this.modelSource.updateModel(schema);
             if (this.fitOnNextRender) {
@@ -973,6 +985,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
      * vertices keep their new positions; with Shift held, the vertex is moved into the state below the mouse.
      */
     dragEnd(draggedId: string, dropTargetId: string | undefined, info: DragInfo): void {
+        this.dragged = true;
         if (this.simulationSession) {
             this.render();
             return;
