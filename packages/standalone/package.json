@@ -1,0 +1,21 @@
+{
+  "name": "hsm-standalone",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-contained hsm executable: the web app (local server) and the command line tool in one file, no Node.js installation needed",
+  "type": "module",
+  "scripts": {
+    "bundle": "node scripts/build.mjs",
+    "build:exe": "node scripts/build.mjs && node scripts/sea.mjs",
+    "smoke-test": "node scripts/smoke-test.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "esbuild": "~0.28.2",
+    "postject": "1.0.0-alpha.6",
+    "vite": "~7.3.6",
+    "vitest": "~3.2.7"
+  }
+}

@@ -57,6 +57,11 @@ packages/
     src/webview/                diagram webview: the DiagramController of packages/web with a VS Code DiagramHost
     src/common/protocol.ts      messages between extension host and webview
     scripts/                    esbuild / Vite bundling and packaging of the .vsix
+  standalone/   self-contained `hsm` executable (Node.js single executable application, docs/standalone.md)
+    src/main.ts                 entry point: no arguments / `ui` -> web app server, otherwise the CLI of packages/language
+    src/ui-server.ts            local HTTP server of the embedded web app (127.0.0.1 only, Host header check)
+    src/web-files.ts            the web app files: SEA assets of the executable, or a directory (development)
+    scripts/                    build.mjs (Vite + esbuild bundle), sea.mjs (executable), smoke-test.mjs
 examples/       sample state machines; tests: their unit tests; door-with-motor: imports and submachines;
                 cpp-types: C++ header types; cmake: CMake example
 cmake/          CMake integration (HsmGenerate.cmake: hsm_generate, hsm_add_tests; HsmConfig.cmake)

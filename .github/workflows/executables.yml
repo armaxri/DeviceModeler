@@ -1,0 +1,94 @@
+# Self-contained `hsm` executables (web app + command line tool, no Node.js installation needed), see
+# docs/standalone.md. Built natively on every platform (so that each executable can be smoke tested and
+# the macOS ones can be signed), uploaded as workflow artifacts and, for version tags (v1.2.3), attached
+# to a GitHub release.
+name: Executables
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: executables-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            runner: ubuntu-latest
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+          - target: macos-arm64
+            runner: macos-latest
+          - target: macos-x64
+            runner: macos-15-intel
+          - target: windows-x64
+            runner: windows-latest
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Version of a release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: echo "HSM_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - run: npm ci
+      - name: Cache the Node.js binaries of the executables
+        uses: actions/cache@v4
+        with:
+          path: packages/standalone/.cache
+          key: node-binaries-${{ matrix.target }}-${{ hashFiles('packages/standalone/scripts/sea.mjs') }}
+      - name: Bundle (web app + command line tool)
+        run: node packages/standalone/scripts/build.mjs
+      - name: Build the executable
+        run: node packages/standalone/scripts/sea.mjs --target ${{ matrix.target }} --archive
+      - name: Smoke test
+        run: node packages/standalone/scripts/smoke-test.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hsm-${{ matrix.target }}
+          path: packages/standalone/dist/release/*
+          if-no-files-found: error
+
+  release:
+    name: GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: hsm-*
+          path: release
+          merge-multiple: true
+      - name: Checksums
+        working-directory: release
+        run: sha256sum hsm-* > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release/* --title "HSM Modeler $GITHUB_REF_NAME" --generate-notes --verify-tag
+          fi
