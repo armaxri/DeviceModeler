@@ -1,6 +1,6 @@
-// Creates the self-contained `hsm` executable from the bundle of scripts/build.mjs as a Node.js single
-// executable application (https://nodejs.org/api/single-executable-applications.html): the bundle and the
-// web app are injected into an official Node.js binary (downloaded from nodejs.org, checksum verified,
+// Creates the self-contained `hsm` command line executable from the bundle of scripts/build.mjs as a Node.js
+// single executable application (https://nodejs.org/api/single-executable-applications.html): the bundle is
+// injected into an official Node.js binary (downloaded from nodejs.org, checksum verified,
 // cached in .cache/). Official binaries are needed: Node.js of package managers (e.g. Homebrew) links
 // shared libraries that users do not have.
 //
@@ -85,7 +85,7 @@ async function main() {
         overwrite: true
     });
     if (signOnMac) {
-        // ad-hoc signature: required to run on Apple silicon (not a Developer ID signature, see docs/standalone.md)
+        // ad-hoc signature: required to run on Apple silicon (not a Developer ID signature, see docs/installation.md)
         execFileSync('codesign', ['--sign', '-', '--force', exe], { stdio: 'inherit' });
     } else if (targetOs === 'darwin') {
         console.warn('warning: the macOS executable is not signed (codesign is only available on macOS); it will not start on Apple silicon');
