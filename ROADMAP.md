@@ -90,8 +90,8 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
   [docs/improvements.md](docs/improvements.md#differences-to-itemis-create)
 - 📋 Import test suite based on real-world models from users
 - 🧪 Keep manual layout from `.sct` notation models (saved positions): experimental on the branch
-  `claude/manual-layout` – positions, sizes, region orientation and bend points are imported into
-  `<model>.hsm.layout` ([docs/manual-layout.md](docs/manual-layout.md))
+  `claude/layout-annotations` – positions, sizes, region orientation and bend points are imported as
+  layout annotations into the model ([docs/manual-layout.md](docs/manual-layout.md))
 
 ## Phase 4 – Execution ✅
 
@@ -160,19 +160,24 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
 - 🚧 Multi-file projects in the web editor: a virtual file list (examples, opened and edited files) against
   which imports are resolved; several files can be opened at once; 💭 real workspaces (folders, saving
   several files)
-- 🧪 Manual layout adjustments: experimental on the branch `claude/manual-layout` – stored in a sidecar
-  file `<model>.hsm.layout` instead of the model; move / resize states, waypoints, label offsets,
-  auto-arrange / reset, undo shared with the text ([docs/manual-layout.md](docs/manual-layout.md))
+- 🧪 Manual layout adjustments: experimental on the branch `claude/layout-annotations` (based on
+  `claude/manual-layout`) – stored as layout annotations in the model (`@at`, `@size`, `@via`, …; a model
+  with annotations has a manual layout, no mode switch); move / resize states, waypoints, label offsets,
+  auto-arrange / reset; layout changes are text edits (one undo history, saved with the model)
+  ([docs/manual-layout.md](docs/manual-layout.md))
   - 🧪 transitions of moved states are rerouted around the other states in the shape of the edge routing
     setting (orthogonal router, polyline shortcuts, splines); bend points are waypoints the route passes
     through
-  - 🧪 in the VS Code extension of the branch (`hsm-vscode-0.1.0-manual-layout.vsix`, *HSM Modeler
-    (manual layout)*): the webview uses the shared diagram controller; the extension reads / writes /
-    watches the `.hsm.layout` file next to the model, moves it along on renames, the `.sct` import
-    writes it and the SVG export applies it; layout-only changes are undone in the diagram, layout
-    changes of diagram edits together with the text (VS Code undo)
-  - 📋 open: layout file not tied to saving the model (written immediately, also for unsaved models);
-    renames typed in the text (or via *Rename Symbol*) do not update the keys
+  - 🧪 web app and VS Code extension of the branch (`hsm-vscode-0.1.0-manual-layout.vsix`, *HSM Modeler
+    (manual layout)*) share the diagram controller; the `.sct` import writes annotations, the SVG export,
+    `hsm layout|render|doc` and test coverage diagrams apply them; `hsm migrate-layout` converts the
+    `.hsm.layout` files of the earlier sidecar experiment
+  - ✅ resolved by the annotations: renames typed in the text (or via *Rename Symbol*) keep the layout;
+    no second file and no separate layout undo history
+  - 📋 open: the formatter puts container annotations on lines of their own while the layout writer
+    appends to an existing annotation line; container annotations (`@initial`, `@final`) of elements
+    deleted in the text stay until the next layout change; models with annotations need a build of
+    this branch
 - ✅ Model coverage of unit tests (`hsm test --coverage`): states, transitions, local reactions and guard
   decisions with per-test attribution; text, JSON, LCOV, Cobertura and HTML reports, thresholds for CI;
   `CoverageCollector` attachable to any interpreter
@@ -184,8 +189,9 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
 
 - **C++ is the only code generation target in use.** The C++ generator (itemis CREATE style) is the
   primary target and verified against the complete conformance suite; the C generator stays available.
-- **Hand-arranged layouts are evaluated on the separate branch `claude/manual-layout`** (sidecar
-  layout files, dragging / resizing, positions imported from `.sct` notation models). The main branch
+- **Hand-arranged layouts are evaluated on separate branches** (`claude/manual-layout`: sidecar layout
+  files; `claude/layout-annotations`: layout annotations in the model; dragging / resizing, positions
+  imported from `.sct` notation models). The main branch
   keeps the automatic layout; the experiment is merged only if it proves worthwhile.
 - **No exchange with itemis is planned.** HSM replaces itemis CREATE for our own models; remaining
   differences to the itemis language are only closed if our models need them.
@@ -195,4 +201,5 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
 ## Open questions
 
 - Is simulation or SCTUnit-style testing used in current projects?
-- Does hand-arranged layout (branch `claude/manual-layout`) prove worthwhile in daily use?
+- Does hand-arranged layout (branch `claude/layout-annotations`) prove worthwhile in daily use, and are
+  layout annotations in the model acceptable in reviews and merges?

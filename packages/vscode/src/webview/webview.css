@@ -98,14 +98,3 @@ main {
     border-radius: 2px;
 }
 
-/* ---- manual layout (experimental): Positions Auto | Manual ---- */
-
-.toolbar .segmented button.active {
-    color: var(--vscode-button-foreground);
-    background: var(--vscode-button-background);
-    border-color: var(--vscode-button-background);
-}
-
-.toolbar .segmented button.active:hover {
-    background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
-}

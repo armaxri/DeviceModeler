@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
 import {
-    cppHeaderStore, generatePlantUml, HsmModelLoader, importSct, layoutFileName, layoutStateMachineWithLayout, parseManualLayout, renderSvg,
-    serializeManualLayout, type ManualLayout, type ParsedModel
+    cppHeaderStore, generatePlantUml, HsmModelLoader, importSct, layoutFileName, layoutStateMachineWithLayout, layoutTextEdits, parseManualLayout,
+    renderSvg, type ParsedModel
 } from 'hsm-language';
 import { runGeneration } from '../../../language/src/generator/generate-command.js';
 import { installNodeHeaderSupport } from '../../../language/src/node/cpp-headers-node.js';
@@ -11,8 +11,7 @@ import type { HsmTestController } from './test-controller.js';
 import { effectiveTheme } from './logic/webview.js';
 import { resolveGeneration, type CppSettings } from './logic/generator-config.js';
 import type { LayoutCommand } from '../common/protocol.js';
-import { hasLayoutFile, workspaceLayoutFs } from './layout-files.js';
-import { layoutPathOf } from './logic/layout-file.js';
+import { toRangeEdits } from './logic/edits.js';
 
 export interface CommandContext {
     diagrams: DiagramManager;
@@ -105,10 +104,9 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
         }
     });
 
-    // manual layout (experimental): commands of the diagram (also buttons in its toolbar)
+    // manual layout (experimental, layout annotations in the model): commands of the diagram (also
+    // buttons in its toolbar)
     const layoutCommands: Record<string, LayoutCommand> = {
-        'hsm.layoutManual': 'manual',
-        'hsm.layoutAuto': 'auto',
         'hsm.autoArrange': 'arrange',
         'hsm.resetLayout': 'reset'
     };
@@ -124,6 +122,19 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
             }
         });
     }
+
+    register('hsm.convertLayoutFile', async (arg?: unknown) => {
+        const uri = modelUri(arg, commands.diagrams);
+        if (!uri) {
+            vscode.window.showWarningMessage('HSM: Open an .hsm file to convert its layout file.');
+            return;
+        }
+        const layoutFile = await convertLayoutFile(uri);
+        if (layoutFile) {
+            vscode.window.showInformationMessage(`The layout of ${path.basename(layoutFile.path)} was written into ${path.basename(uri.path)} as annotations; `
+                + `${path.basename(layoutFile.path)} is no longer used and can be deleted.`);
+        }
+    });
 
     register('hsm.exportPlantUml', async (arg?: unknown) => {
         const uri = modelUri(arg, commands.diagrams);
@@ -161,26 +172,41 @@ function modelUri(arg: unknown, diagrams: DiagramManager): vscode.Uri | undefine
 }
 
 /**
- * The manual layout of a model (experimental): the sidecar file `<model>.hsm.layout`, undefined if
- * there is none or it is invalid.
+ * `HSM: Convert Layout File to Annotations`: writes the layout of the sidecar file `<model>.hsm.layout`
+ * (of earlier builds of the manual layout) into the model as layout annotations (one undoable edit of
+ * the document, not saved). The file is left in place. Returns the layout file, undefined if there is none.
  */
-export async function readManualLayout(uri: vscode.Uri): Promise<ManualLayout | undefined> {
-    if (!hasLayoutFile(uri)) {
-        return undefined;
-    }
-    const content = await workspaceLayoutFs(uri).read(layoutPathOf(uri.path));
+export async function convertLayoutFile(uri: vscode.Uri): Promise<vscode.Uri | undefined> {
+    const layoutFile = uri.with({ path: layoutFileName(uri.path) });
+    let content: string;
     try {
-        return content === undefined ? undefined : parseManualLayout(content);
+        content = new TextDecoder().decode(await vscode.workspace.fs.readFile(layoutFile));
     } catch {
+        vscode.window.showWarningMessage(`HSM: There is no layout file ${path.basename(layoutFile.path)} next to ${path.basename(uri.path)}.`);
         return undefined;
     }
+    const layout = parseManualLayout(content);
+    const document = await vscode.workspace.openTextDocument(uri);
+    const parsed = await parseModel(document);
+    if (parsed.hasSyntaxErrors || !parsed.model?.name) {
+        throw new Error(`${path.basename(uri.path)} contains syntax errors.`);
+    }
+    const text = document.getText();
+    const edit = new vscode.WorkspaceEdit();
+    for (const e of toRangeEdits(layoutTextEdits(parsed.model, text, layout), text.length, offset => document.positionAt(offset))) {
+        edit.replace(uri, new vscode.Range(e.start, e.end), e.text);
+    }
+    if (!await vscode.workspace.applyEdit(edit)) {
+        throw new Error(`The layout could not be written into ${path.basename(uri.path)}.`);
+    }
+    return layoutFile;
 }
 
 /**
  * The diagram of a model as SVG document (`renderSvg` of the language package: the same look as the
  * diagram view, styles embedded). Layout options follow the `hsm.diagram.*` settings; with the theme
- * `auto` the light theme is used (exported files are usually embedded in light documents). A manual
- * layout (`<model>.hsm.layout` in the mode `manual`) is applied.
+ * `auto` the light theme is used (exported files are usually embedded in light documents). The layout
+ * annotations of the model (manual layout) are applied.
  */
 export async function renderModelSvg(document: vscode.TextDocument): Promise<string> {
     const parsed = await parseModel(document);
@@ -192,7 +218,7 @@ export async function renderModelSvg(document: vscode.TextDocument): Promise<str
         direction: config.get<string>('direction') === 'RIGHT' ? 'RIGHT' : 'DOWN',
         routing: (['SPLINES', 'ORTHOGONAL', 'POLYLINE'] as const).find(r => r === config.get<string>('edgeRouting')) ?? 'SPLINES',
         priorities: config.get<boolean>('priorities', true)
-    }, await readManualLayout(document.uri));
+    });
     return renderSvg(graph, { theme: effectiveTheme(config.get<string>('theme', 'auto'), config.get<string>('lightTheme', 'classic'), false) });
 }
 
@@ -247,7 +273,7 @@ export async function generateCppFor(uri: vscode.Uri, output: vscode.LogOutputCh
 
 /**
  * `HSM: Import itemis CREATE model`: converts an `.sct` file into an `.hsm` file next to it. The
- * arrangement of the itemis diagram becomes the manual layout `<model>.hsm.layout` (experimental).
+ * arrangement of the itemis diagram becomes the manual layout (layout annotations in the model, experimental).
  */
 export async function importSctFile(uri: vscode.Uri, output: vscode.LogOutputChannel): Promise<vscode.Uri | undefined> {
     const xml = new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
@@ -266,13 +292,6 @@ export async function importSctFile(uri: vscode.Uri, output: vscode.LogOutputCha
             return undefined;
         }
     }
-    // the layout first: a diagram opened for the model reads it
-    const layoutTarget = target.with({ path: layoutFileName(target.path) });
-    if (layout) {
-        await vscode.workspace.fs.writeFile(layoutTarget, new TextEncoder().encode(serializeManualLayout(layout)));
-    } else {
-        await workspaceLayoutFs(target).delete(layoutTarget.path);
-    }
     await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(text));
     for (const warning of warnings) {
         output.warn(`${path.basename(uri.path)}: ${warning}`);
@@ -283,7 +302,7 @@ export async function importSctFile(uri: vscode.Uri, output: vscode.LogOutputCha
             .then(choice => choice && output.show());
     } else {
         vscode.window.showInformationMessage(`Imported ${path.basename(uri.path)} as ${path.basename(target.path)}`
-            + (layout ? ` (arrangement of the itemis diagram in ${path.basename(layoutTarget.path)}).` : '.'));
+            + (layout ? ' (with the arrangement of the itemis diagram).' : '.'));
     }
     return target;
 }

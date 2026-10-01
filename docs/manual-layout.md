@@ -1,81 +1,97 @@
 # Manual layout (experimental)
 
-Status: 🧪 experiment on the branch `claude/manual-layout`. The automatic layout (ELK) stays the
-default and is not affected: without a layout file, or with the layout mode `auto`, the diagram is
-exactly the one computed by `layoutStateMachine`.
+Status: 🧪 experiment on the branch `claude/layout-annotations` (based on `claude/manual-layout`, which
+stored the layout in a sidecar file `<model>.hsm.layout`). The automatic layout (ELK) stays the default:
+a model without layout annotations is exactly the diagram computed by `layoutStateMachine`.
 
 This note describes how hand-arranged diagrams are stored and computed, and the trade-offs behind the
 design, so the experiment can be evaluated (and removed again) easily.
 
 ## Where the layout lives
 
-**Decision:** in a sidecar file `<model>.hsm.layout` (JSON), not in the `.hsm` text.
+**Decision:** in **layout annotations** in the `.hsm` text. A model with at least one layout annotation
+has a manual layout, a model without has the automatic one – there is no separate mode switch.
 
 | Option | Pro | Contra |
 | --- | --- | --- |
-| Sidecar file (chosen) | the text stays free of layout noise; layout diffs do not disturb model reviews; tools that only need the model ignore it | two files to keep together; renames in a plain text editor do not update the layout |
-| Annotations in the text (`@pos(10, 20)`) | one file, travels with the model | noisy text, every drag changes the model, merge conflicts in the model, the grammar and formatter would need to know about it |
-| Separate section at the end of the text | one file | still noise in the text, fragile when editing by hand |
+| Annotations in the text (chosen) | one file; renames (also typed in the text or via *Rename Symbol*) keep the layout, because the annotation belongs to the element; layout changes are text edits: one undo history, dirty marker and *Save* as for any other change; travels with the model through git, copy & paste, the web app | coordinates in the text and in diffs / reviews; rearranging the same diagram in two branches gives merge conflicts in the model; every drag changes the model text |
+| Sidecar file `<model>.hsm.layout` (previous experiment) | the text stays free of layout information | two files to keep together; renames in the text lose the position; a second undo history and file synchronization in the editors |
+| Separate section at the end of the text | one file | still noise in the text, fragile when editing by hand, keys by name like the sidecar |
 
-In the web editor the layout is kept per file name in the local storage (`hsm-modeler.layout:<file>`).
-*Save* downloads the model and, if a layout exists, the `.hsm.layout` file; *Open…* accepts both
-files at once (or a `.hsm.layout` alone, which is applied to the current model). The VS Code extension
-reads and writes the `.hsm.layout` file next to the model in the workspace (see
-[VS Code extension](#vs-code-extension)). The CLI uses the
-`.hsm.layout` next to the model (`hsm layout model.hsm`, `--layout <file>`, `--auto`), and
-`hsm import model.sct` writes `model.hsm.layout` from the itemis diagram (`--no-layout` to skip it).
+Compatibility: models with layout annotations cannot be opened by builds of the main branch (the
+grammar there does not accept annotations in front of states and transitions) until the experiment
+is merged. Generated code does not depend on the annotations (`hsm generate --check` stays stable when
+only the layout changes).
 
-### Format
+### Syntax
 
-```json
-{
-  "version": 1,
-  "mode": "manual",
-  "direction": "DOWN",
-  "nodes": {
-    "#definitions": { "x": 20, "y": 20 },
-    "#machine#initial": { "x": 330, "y": 24 },
-    "Closed": { "x": 300, "y": 80, "width": 420, "height": 380 },
-    "Closed.Active": { "x": 14, "y": 120 },
-    "Active": { "x": 40, "y": 500, "regions": "horizontal" },
-    "Active#region1": { "x": 0, "y": 26, "width": 300, "height": 120 }
-  },
-  "edges": {
-    "Closed.Stopped->Closed.HasDisc": { "bends": [{ "x": 120, "y": 60 }], "label": { "x": 10, "y": -4 } }
-  }
+```
+statemachine CdPlayer {
+    interface:
+        in event play
+    @definitions(20, 20)                    // position (and optionally width, height) of the definition box
+    @initial(330, 24)                       // the initial state [*] of the state machine
+    [*] -> Closed
+
+    @at(300, 80) @size(420, 380)
+    state Closed {
+        @initial(60, 10) @final(200, 300)   // the [*] states of Closed
+        [*] -> Stopped
+        @at(14, 40)
+        state Stopped
+        @at(14, 120)
+        choice HasDisc
+        @via(120, 60) @label(10, -4)
+        Stopped -> HasDisc : play
+    }
+    @at(40, 500) @regions("horizontal")
+    state Active {
+        @size(300, 120)
+        region {
+            ...
+        }
+    }
 }
 ```
 
-- **Identity keys** are the diagram ids, which are derived from the model and stable while other
-  elements are added or removed: vertices use their qualified name (`Closed.Active.Playing`), regions
-  `<state>#region<n>`, initial / final pseudo states `<container>#initial` / `#final`
-  (`#machine#initial` on the top level), the definition box `#definitions`, transitions
-  `<source>-><target>` plus `~<n>` for the n-th duplicate of the same pair.
-- **Nodes:** `x`, `y` relative to the parent node (composite state or region). `width` / `height` only
-  if the user resized the state (or the size was imported); they are minimum sizes, a state never
-  becomes smaller than its text or content. `regions` stores whether the regions of a state are
-  stacked vertically or placed side by side (default: by layout direction).
-- **Edges:** `bends` relative to the edge's *frame* node (the innermost node containing both end
-  points, so bend points move with a composite state), `label` is an offset from the computed label
-  position.
-- Keys are sorted and numbers rounded to one decimal, so the file produces small, stable diffs.
+| Annotation | Written before / in | Meaning |
+| --- | --- | --- |
+| `@at(x, y)` | state, pseudo state, region | position relative to the content area of the parent (composite state or region; the canvas on the top level) |
+| `@size(width, height)` | state, region | explicit (minimum) size, only if the user resized it – a state never becomes smaller than its text or content |
+| `@regions("vertical" \| "horizontal")` | state | whether the regions are stacked or side by side (default: by layout direction) |
+| `@via(x1, y1, x2, y2, …)` | transition | waypoints, relative to the transition's *frame* (the innermost node containing both end points, so waypoints move with a composite state) |
+| `@label(dx, dy)` | transition | offset of the label from its computed position |
+| `@initial(x, y)`, `@final(x, y)` | in the body of the state machine, a state or a region | position of the implicit `[*]` initial / final state of that container |
+| `@definitions(x, y[, width, height])` | in the body of the state machine | position (and size) of the definition box |
 
-### Keeping keys in sync
+- **Element annotations** (`@at`, `@size`, `@regions`, `@via`, `@label`) belong to the state, pseudo
+  state, region or transition that follows them; only other annotations may come in between.
+  **Container annotations** (`@initial`, `@final`, `@definitions`) belong to the body they are written
+  in. Annotations are members of the bodies in the grammar, so there is no ambiguity with the
+  annotations of the state machine (`@CycleBased`, …) – those, and the definition section, must come
+  before the states and transitions (validation).
+- Numbers are written as integers (rounded); the reader also accepts reals and a sign. The validator
+  checks the element an annotation belongs to, the number and kind of arguments and duplicates.
+  `@size` / `@regions` of a state without `@at` are ignored.
+- The annotations belong to the transition itself, so duplicates between the same vertices
+  (`A -> B : e1`, `A -> B : e2`) keep their own waypoints.
 
-Diagram operations go through a `TrackingModelEditor` (`packages/web/src/diagram/manual-layout-support.ts`,
-used by the shared `DiagramController`, so web app and VS Code webview behave the same), which records how ids change:
-renaming a vertex renames its key and all keys inside it (sub states, regions, `#initial`, transitions);
-moving a vertex into another state renames the keys to the new qualified name and stores the drop
-position relative to the new parent; deleting removes the keys (regions after a deleted region are
-renumbered); reconnecting a transition drops its bend points. The layout change is recorded together
-with the text edit and undone / redone with it.
+### Writing the annotations
 
-Not tracked: edits in the text editor (including *Rename symbol* of the language service). A renamed
-state then loses its position and is placed automatically near its old neighbours; unused keys stay
-in the file until the next change in the diagram, which writes only existing elements.
+`layoutTextEdits(machine, text, layout)` computes the minimal text edits that make the annotations of
+a model equal to a layout (`undefined` removes all layout annotations; other annotations are kept):
+values are updated in place, new annotations are added on a line before the element (with its
+indentation) or appended to an existing annotation line of the element, removed annotations take their
+line with them if it becomes empty. Applying the same layout again yields no edits. Structural diagram
+edits (`ModelEditor`) delete and move elements together with their element annotations; a renamed
+element keeps them. A vertex moved into another state keeps its `@at` (relative to the old parent);
+the diagram editor writes the drop position relative to the new parent in a second step, computed on
+the re-parsed text.
 
 ## Layout computation
 
+`layoutFromModel(machine)` (`packages/language/src/diagram/layout-annotations.ts`) collects the layout
+annotations into a `ManualLayout` (undefined: no annotations, automatic layout).
 `applyManualLayout(auto, layout)` (`packages/language/src/diagram/manual-layout.ts`) runs on top of the
 automatic layout, which is always computed first:
 
@@ -84,7 +100,7 @@ automatic layout, which is always computed first:
    overlap the name / body compartment of their state, the whole content is shifted down (this
    happens when an entry action is added, or for imported diagrams); pinned nodes that overlap each
    other (a state became wider, or the layout comes from a tool with other fonts) are pushed right or
-   down. Nodes without a key are placed at their position in the automatic layout, translated like
+   down. Nodes without `@at` are placed at their position in the automatic layout, translated like
    their nearest pinned sibling, and moved to the nearest free spot if that position is taken.
    Composite states grow to fit their content; regions are stacked in their state and fill it.
 2. **Edges, per frame node.** A transition keeps the route of the automatic layout (spline /
@@ -111,42 +127,36 @@ automatic layout, which is always computed first:
    transitions become a small loop (and a transition for which no orthogonal route exists becomes a
    straight line). The stored label offset is added to the computed label position.
 3. The result contains the **effective layout** (all nodes pinned at their computed positions). Every
-   change in the diagram starts from it, so new elements become pinned once the user touches the
-   layout, and shifts / pushes are materialized.
+   change in the diagram starts from it and writes it back as annotations, so new elements get an `@at`
+   once the user touches the layout, and shifts / pushes are materialized.
 
 The automatic layout is cached by the diagram controller, so dragging only re-runs the (synchronous,
 cheap) manual step.
 
 ## Diagram editor (web app and VS Code)
 
-The logic lives in the shared `DiagramController` (`packages/web/src/diagram-controller.ts`): layout
-state, *Auto | Manual*, *Auto-arrange*, *Reset*, dragging, re-parenting, resize handles, bend points,
-labels, key tracking and the layout undo history. The host (`DiagramHost`) only persists the layout
-(`layoutChanged`), provides a key of the text state for the undo history (`textStateKey`, default: a
-hash of the text) and reports text changes with `DiagramController.textChanged('edit' | 'undo' | 'redo')`;
-it sets the layout of an opened model with `loadLayout`. The toolbar buttons (`#btn-layout-auto`,
-`#btn-layout-manual`, `#btn-arrange`, `#btn-reset-layout`) are bound by the controller if present.
+The logic lives in the shared `DiagramController` (`packages/web/src/diagram-controller.ts`). It reads
+the layout of every parsed model with `layoutFromModel` and turns every layout change into text edits
+(`layoutTextEdits`), which the host applies like any other diagram edit (`DiagramHost.applyTextEdits`).
 
-- Toolbar *Positions: Auto | Manual*. Switching to *Manual* the first time pins the current automatic
-  layout, so nothing jumps. *Auto* keeps the manual layout for later; *Reset* discards it;
-  *Auto-arrange* re-runs ELK and stores the result as the new manual layout.
+- No *Auto | Manual* toggle: the diagram is manual as soon as the model has a layout annotation.
+  *Auto-arrange* writes the automatic layout as annotations, *Reset* removes all layout annotations.
+  The first drag in an automatic diagram writes the annotations of all elements (the current automatic
+  layout plus the move), so nothing jumps.
 - Drag a vertex (also initial / final states and the definition box) to move it; the transitions
   attached to it follow as straight lines (through their waypoints) while dragging or resizing and are
-  routed on drop. Positions are kept
-  inside the parent's content area; the parent grows.
-- **Shift + drop** moves the state into the state / region below the mouse (the automatic mode keeps
-  plain drag and drop for this). Shift was chosen because Alt + drag is taken by several window
-  managers and a "dropped completely inside" rule is ambiguous for large states.
+  routed on drop. Positions are kept inside the parent's content area; the parent grows.
+- **Shift + drop** moves the state into the state / region below the mouse; a plain drop only moves
+  it. Shift was chosen because Alt + drag is taken by several window managers and a "dropped
+  completely inside" rule is ambiguous for large states.
 - A selected state shows a resize handle at its bottom right corner.
-- A selected transition shows its bend points (*waypoints*): drag them; double-click the line to add
-  one (it is inserted between the waypoints of the clicked part of the route), double-click a waypoint
-  to remove it (without waypoints the transition is routed automatically again); while dragging, straight
-  lines through the waypoints are shown, the route is computed on drop; drag the label of a selected transition to move it.
-- Undo: `Ctrl+Z` / `Ctrl+Y` in the diagram (and the toolbar buttons) undo layout changes and text
-  edits in the order they were made. Layout changes are stored with a key of the text state (web app:
-  the `alternativeVersionId` of the Monaco model; VS Code: a hash of the text); a layout change is
-  undone first if the text is still in the state it had then, and layout changes caused by a text edit
-  are undone together with it (also with `Ctrl+Z` in the text editor). The history is not persisted.
+- A selected transition shows its waypoints: drag them; double-click the line to add one (it is
+  inserted between the waypoints of the clicked part of the route), double-click a waypoint to remove
+  it (without waypoints the transition is routed automatically again); drag the label of a selected
+  transition to move it.
+- **Undo** is the undo of the text: layout changes are text edits, so `Ctrl+Z` / `Ctrl+Y` (in the text
+  editor or the diagram) undo them in order with all other edits, they mark the document as modified
+  and are saved with it.
 - The simulation shows the same (manual) layout.
 
 ## VS Code extension
@@ -155,59 +165,54 @@ The extension of this branch is packaged as `hsm-vscode-0.1.0-manual-layout.vsix
 *HSM Modeler (manual layout)*). It has the same extension id as the build of the main branch, so only
 one of them can be installed at a time (uninstall the other one first, or install with `--force`).
 
-- **Toolbar and commands:** the diagram webview shows *Positions: Auto | Manual*, *Auto-arrange* and
-  *Reset* like the web app; the same actions are commands (**HSM: Diagram Positions: Manual
-  (experimental)**, **HSM: Diagram Positions: Automatic**, **HSM: Auto-arrange Diagram (keep as manual
-  layout)**, **HSM: Reset Manual Diagram Layout**) in the command palette and in the *…* menu of the
-  diagram panel.
-- **File handling** (`src/extension/logic/layout-file.ts`, `LayoutFileSync`): when the diagram is
-  opened, the extension reads `<model>.hsm.layout` and sends it to the webview before the first text,
-  so the first diagram already uses it. Layout changes in the webview are sent to the extension
-  (serialized, with the mode) and written after 300 ms without further changes: a layout in the manual
-  mode is always written; in the automatic mode only if the file exists already (the manual layout is
-  kept for later), so merely opening or looking at a diagram never creates a file; *Reset* deletes the
-  file. Unchanged content is not rewritten. A file system watcher reports changes by other tools (git
-  checkout, another editor, the CLI); they are applied to the diagram unless they are our own writes.
-  When a model is renamed or moved in VS Code, a pending change is written first and the layout file is
-  moved along (not if the layout file was renamed in the same operation or the target exists).
-  Untitled models keep their layout in the webview only.
-- **Undo:** the text belongs to the VS Code document – diagram edits are `WorkspaceEdit`s, undone with
-  VS Code's undo (in the text editor, or `Ctrl+Z` in the diagram, which runs VS Code's *Undo* on the
-  document). Layout-only changes are kept in the undo history of the webview: `Ctrl+Z` / `Ctrl+Y` with
-  the diagram focused undo them if the text has not been changed since, otherwise the text is undone.
-  The extension sends text changes caused by *Undo* / *Redo* immediately and marked as such
-  (`TextDocumentChangeReason`), so layout changes of diagram edits (renamed / moved / deleted keys,
-  the drop position of a re-parented state) follow the text – also when the undo is triggered in the
-  text editor. Layout changes do not make the model dirty; the layout file is written independently of
-  saving the model.
-- **Import and export:** **HSM: Import itemis CREATE Model** writes `<model>.hsm.layout` with the
-  arrangement of the itemis diagram next to the imported model (an old layout file is removed if the
-  `.sct` file has no diagram). **HSM: Export Diagram as SVG** applies a manual layout (mode `manual`).
+- **Toolbar and commands:** the diagram webview shows *Auto-arrange* and *Reset* like the web app; the
+  same actions are the commands **HSM: Auto-arrange Diagram** and **HSM: Reset Diagram Layout** (command
+  palette and the *…* menu of the diagram panel).
+  **HSM: Convert Layout File to Annotations** writes an old `<model>.hsm.layout` into the model.
+- The layout is part of the document: diagram edits and layout changes are `WorkspaceEdit`s, undone
+  with VS Code's undo, they make the model dirty and are saved with it. The extension no longer reads,
+  writes or watches `.hsm.layout` files.
+- **Import and export:** **HSM: Import itemis CREATE Model** writes the arrangement of the itemis
+  diagram as layout annotations into the imported model; **HSM: Export Diagram as SVG** applies them.
 
-Limitations in VS Code: the layout file is written even if the model has unsaved changes (keys of
-renamed states then refer to the unsaved text; *Revert File* does not revert the layout); a hash of
-the text identifies text states for the layout undo, so a layout change can become undoable again when
-the text returns to exactly the same content in another way; no tests in a real VS Code instance (the
-webview bundle was checked in Chromium with a mocked VS Code API, the panel's file handling with a
-`vscode` mock).
+Limitation: no tests in a real VS Code instance (the webview bundle is checked in Chromium with a
+mocked VS Code API, the extension code with a `vscode` mock).
+
+## Command line
+
+`hsm layout`, `hsm render`, `hsm doc` and the coverage diagrams of `hsm test` use the layout annotations
+(`--auto` ignores them for `layout`, `render` and `doc`). `hsm import model.sct` writes the itemis
+diagram as annotations (`--no-layout` to skip them).
+
+## Migration from `.hsm.layout`
+
+`hsm migrate-layout model.hsm [--layout <file>]` reads the layout file of the previous experiment
+(default `model.hsm.layout`) and writes it into the model as layout annotations (the keys are the same
+diagram ids: qualified names, `<state>#region<n>`, `<container>#initial` / `#final`, `#definitions`,
+`<source>-><target>~<n>`). The layout file is kept; delete it once the model looks right.
+In VS Code, **HSM: Convert Layout File to Annotations** does the same for the model of the active editor.
 
 ## Import from itemis CREATE
 
-`importSct(xml)` returns `{ text, warnings, layout }`: the bounds of the notation model
-(`notation:Diagram`) become node positions (itemis positions are relative to the compartment of their
-region; the HSM positions are offset by the padding of the container, the layout engine moves the
-content below the state's name), explicit state sizes become minimum sizes, `isHorizontal` of a state
-becomes the region orientation, the bounds of several top-level regions define the generated `Main`
-state and its regions, and GMF relative bend points of transitions between vertices of the same
-container become bend points. Since HSM states are usually wider than in itemis (the text is not
-wrapped at the itemis width), overlapping states are pushed apart; the relative arrangement is kept.
+`importSct(xml)` writes the diagram (`notation:Diagram`) into the generated text as layout annotations
+(option `layout: false` to skip them; the result still contains the `layout`): the bounds become
+positions (itemis positions are relative to the compartment of their region; the HSM positions are
+offset by the padding of the container, the layout engine moves the content below the state's name),
+explicit state sizes become `@size`, `isHorizontal` of a state becomes `@regions`, the bounds of several
+top-level regions define the generated `Main` state and its regions, and GMF relative bend points of
+transitions between vertices of the same container become `@via` waypoints. Since HSM states are
+usually wider than in itemis (the text is not wrapped at the itemis width), overlapping states are
+pushed apart; the relative arrangement is kept.
 
 ## Limitations and risks
 
+- Coordinate noise: every drag changes the model; reviews and merges see the numbers.
+- Models with layout annotations need a build of this branch (see *Compatibility* above).
 - A waypoint inside a state lets the route cross that state. If no route through the waypoints is
   found (e.g. a waypoint very close to a state), straight lines through them are drawn.
-- Text edits outside the diagram do not update keys (see above).
-- No alignment guides, snapping, multi-select resize or region resizing; routing of new edges is
-  always a polyline (the *Edges* setting applies to routes of the automatic layout only).
-- The layout file is a second artifact that can get out of sync with the model (e.g. edited by
-  another tool); unknown keys are ignored, missing ones are placed automatically.
+- The formatter puts container annotations (and `@CycleBased`) each on a line of their own, while the
+  layout writer appends to an existing annotation line: formatting can change the annotation lines
+  (not the layout).
+- A container annotation whose element disappears (e.g. `@initial` after the initial transition was
+  deleted in the text) stays until the next layout change in the diagram removes it; it is ignored.
+- No alignment guides, snapping, multi-select resize or region resizing.

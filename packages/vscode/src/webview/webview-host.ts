@@ -1,8 +1,7 @@
-import { parseManualLayout, serializeManualLayout, type DiagramSubmachine, type ManualLayout, type TextEdit } from 'hsm-language';
+import type { DiagramSubmachine, TextEdit } from 'hsm-language';
 import type { DiagramController, DiagramHost, StatusSeverity, TextRange } from '@hsm-web/diagram-controller.js';
-import { textKey } from '@hsm-web/diagram/manual-layout-support.js';
 import { byId, h } from '@hsm-web/ui/dom.js';
-import type { FromWebview, LayoutCommand, TextChange, ToWebview, WebviewSettings } from '../common/protocol.js';
+import type { FromWebview, LayoutCommand, ToWebview, WebviewSettings } from '../common/protocol.js';
 
 export interface VsCodeApi {
     postMessage(message: unknown): void;
@@ -13,8 +12,8 @@ export interface VsCodeApi {
 /**
  * The text side of the diagram in the webview: a copy of the document text, kept up to date by the
  * extension. Diagram operations are sent to the extension as text edits, which applies them to the
- * real document. The manual layout (experimental) is read and written by the extension as the sidecar
- * file `<model>.hsm.layout`; layout-only changes are undone in the diagram (see `DiagramController.undo`).
+ * real document. The manual layout (experimental) consists of layout annotations in the text, so layout
+ * changes are text edits as well (undone with the document).
  */
 export class WebviewHost implements DiagramHost {
 
@@ -70,12 +69,8 @@ export class WebviewHost implements DiagramHost {
                 h('label', { class: 'toggle', title: 'Show the priorities of transitions leaving a state with several outgoing transitions' }, priorities, h('span', {}, 'Priorities')),
                 h('label', { class: 'toggle', title: 'Show the properties panel' }, properties, h('span', {}, 'Properties'))),
             h('div', { class: 'group', id: 'layout-group' },
-                h('span', { class: 'label-text layout-label' }, 'Positions'),
-                h('span', { class: 'segmented', role: 'group', 'aria-label': 'Layout mode' },
-                    h('button', { id: 'btn-layout-auto', title: 'Automatic layout (ELK): positions are computed from the model' }, 'Auto'),
-                    h('button', { id: 'btn-layout-manual', title: 'Manual layout (experimental): states keep the positions they are dragged to (saved as .hsm.layout next to the model)' }, 'Manual')),
-                h('button', { id: 'btn-arrange', title: 'Arrange all elements automatically and keep the result as manual layout', hidden: true }, 'Auto-arrange'),
-                h('button', { id: 'btn-reset-layout', title: 'Discard the manual layout (deletes the .hsm.layout file) and return to the automatic layout', hidden: true }, 'Reset')),
+                h('button', { id: 'btn-arrange', title: 'Arrange all elements automatically and write the positions into the model (layout annotations)' }, 'Auto-arrange'),
+                h('button', { id: 'btn-reset-layout', title: 'Remove all layout annotations from the model and return to the automatic layout' }, 'Reset')),
             h('div', { class: 'spacer' }),
             h('div', { class: 'group' },
                 h('button', { id: 'btn-svg', title: 'Export the diagram as SVG', onClick: () => this.post({ type: 'command', command: 'exportSvg' }) }, 'SVG'),
@@ -140,12 +135,9 @@ export class WebviewHost implements DiagramHost {
                     this.filesKey = key;
                     this.controller.language.setWorkspace(message.uri, files, message.headers);
                 }
-                this.textChanged(message.text, message.version, message.fileName, message.change, filesChanged);
+                this.textChanged(message.text, message.version, message.fileName, filesChanged);
                 break;
             }
-            case 'layout':
-                this.layoutLoaded(message.content);
-                break;
             case 'layoutCommand':
                 this.layoutCommand(message.command);
                 break;
@@ -173,19 +165,13 @@ export class WebviewHost implements DiagramHost {
         }
     }
 
-    private textChanged(text: string, version: number, fileName: string, change: TextChange = 'edit', filesChanged = false): void {
+    private textChanged(text: string, version: number, fileName: string, filesChanged = false): void {
         this.version = version;
         byId('file-name').textContent = fileName;
         if (this.received && text === this.text && !filesChanged) {
             return;
         }
-        const previousKey = textKey(this.text);
-        const textDiffers = text !== this.text;
         this.text = text;
-        if (this.received && textDiffers) {
-            // layout changes of an undone / redone diagram edit are undone / redone with it
-            this.controller.textChanged(change, previousKey);
-        }
         if (!this.received) {
             this.received = true;
             this.controller.update(true);
@@ -198,29 +184,9 @@ export class WebviewHost implements DiagramHost {
         this.controller.scheduleUpdate(100);
     }
 
-    /** The layout file was read (on open) or changed by another tool. */
-    private layoutLoaded(content: string | undefined): void {
-        let layout: ManualLayout | undefined;
-        if (content !== undefined) {
-            try {
-                layout = parseManualLayout(content);
-            } catch (error) {
-                this.setStatus(`The layout file is invalid and is ignored: ${error instanceof Error ? error.message : String(error)}`, 'error');
-            }
-        }
-        this.controller.loadLayout(layout);
-    }
-
     private layoutCommand(command: LayoutCommand): void {
         switch (command) {
-            case 'auto':
-            case 'manual':
-                this.controller.setLayoutMode(command);
-                break;
             case 'arrange':
-                if (!this.controller.isManualLayout()) {
-                    this.controller.setLayoutMode('manual');
-                }
                 this.controller.autoArrange();
                 break;
             case 'reset':
@@ -259,11 +225,6 @@ export class WebviewHost implements DiagramHost {
     textHasFocus(): boolean {
         // the text editor can only have the focus if the webview does not
         return !document.hasFocus();
-    }
-
-    /** Manual layout: the extension writes the layout file (debounced). */
-    layoutChanged(layout: ManualLayout | undefined): void {
-        this.post(layout ? { type: 'layout', content: serializeManualLayout(layout), mode: layout.mode } : { type: 'layout' });
     }
 
     undo(): void {

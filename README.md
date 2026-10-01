@@ -127,7 +127,7 @@ node packages/language/bin/cli.js generate --check          # exit 1 if generate
 | [The language](docs/language.md) | syntax of the models: definition section, reactions, expressions, states, regions, pseudo states; imports and submachines; C/C++ header imports |
 | [Execution semantics](docs/semantics.md) | how a state machine executes – the specification implemented by the interpreter and the code generators |
 | [Web editor](docs/editor.md) | editing in the diagram, 🧪 manual layout, simulation |
-| [Manual layout](docs/manual-layout.md) | 🧪 experimental (branch `claude/manual-layout`): the `.hsm.layout` file, layout computation, routing, editor integration |
+| [Manual layout](docs/manual-layout.md) | 🧪 experimental (branch `claude/layout-annotations`): layout annotations in the model, layout computation, routing, editor integration, migration |
 | [VS Code extension](docs/vscode.md) | language server, diagram, generation, Test Explorer (details in [packages/vscode/README.md](packages/vscode/README.md)) |
 | [Rendering and model documentation](docs/rendering.md) | `hsm render` (SVG diagrams), `hsm doc` (Markdown / HTML documentation), doc comments |
 | [Unit tests and coverage](docs/testing.md) | the `.hsmtest` language, `hsm test`, model coverage, CI examples |

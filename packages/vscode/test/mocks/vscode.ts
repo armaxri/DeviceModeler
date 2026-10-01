@@ -1,6 +1,8 @@
 /*
- * A minimal stand-in for the `vscode` module (only what the diagram panel uses), for unit tests of the
- * extension host code outside VS Code. `workspace.fs` works on the real file system (file URIs).
+ * A minimal stand-in for the `vscode` module (only what the diagram panel and the commands under test
+ * use), for unit tests of the extension host code outside VS Code. `workspace.fs` works on the real file
+ * system (file URIs); documents are read from it, positions are plain offsets and `applyEdit` writes the
+ * edited text back to the file.
  */
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -38,13 +40,13 @@ export class Range {
     constructor(readonly start: unknown, readonly end: unknown) { }
 }
 
-export class RelativePattern {
-    constructor(readonly base: Uri, readonly pattern: string) { }
-}
+/** Collects replacements (ranges of offsets, see `openTextDocument`). */
+export class WorkspaceEdit {
+    readonly replacements: Array<{ uri: Uri, range: Range, text: string }> = [];
 
-export enum TextDocumentChangeReason {
-    Undo = 1,
-    Redo = 2
+    replace(uri: Uri, range: Range, text: string): void {
+        this.replacements.push({ uri, range, text });
+    }
 }
 
 export enum ViewColumn {
@@ -58,11 +60,6 @@ export enum ColorThemeKind {
     Dark = 2,
     HighContrast = 3
 }
-
-type Listener = () => void;
-
-/** File system watchers created by the panel (tests trigger their events). */
-export const watchers: Array<{ pattern: RelativePattern, fire(): void, disposed: boolean }> = [];
 
 export const workspace = {
     textDocuments: [] as unknown[],
@@ -78,35 +75,28 @@ export const workspace = {
         },
         async stat(uri: Uri): Promise<unknown> {
             return fs.stat(uri.fsPath);
-        },
-        async delete(uri: Uri): Promise<void> {
-            await fs.rm(uri.fsPath);
-        },
-        async rename(from: Uri, to: Uri): Promise<void> {
-            await fs.rename(from.fsPath, to.fsPath);
         }
     },
-    createFileSystemWatcher(pattern: RelativePattern) {
-        const listeners: Listener[] = [];
-        const watcher = {
-            pattern,
-            disposed: false,
-            fire: () => listeners.forEach(l => l()),
-            onDidCreate: (l: Listener) => listeners.push(l),
-            onDidChange: (l: Listener) => listeners.push(l),
-            onDidDelete: (l: Listener) => listeners.push(l),
-            dispose: () => {
-                watcher.disposed = true;
-            }
-        };
-        watchers.push(watcher);
-        return watcher;
-    },
     getConfiguration: () => ({ get: <T>(_key: string, fallback?: T) => fallback, update: async () => undefined }),
-    openTextDocument: async () => {
-        throw new Error('not available in the mock');
+    async openTextDocument(uri: Uri) {
+        const text = await fs.readFile(uri.fsPath, 'utf-8');
+        return { uri, version: 1, isDirty: false, getText: () => text, positionAt: (offset: number) => offset };
     },
-    applyEdit: async () => true
+    /** Applies the replacements of each file to its content on disk (from the end, ranges are offsets). */
+    async applyEdit(edit: WorkspaceEdit): Promise<boolean> {
+        const byFile = new Map<string, Array<{ start: number, end: number, text: string }>>();
+        for (const { uri, range, text } of edit.replacements) {
+            byFile.set(uri.fsPath, [...byFile.get(uri.fsPath) ?? [], { start: range.start as number, end: range.end as number, text }]);
+        }
+        for (const [file, replacements] of byFile) {
+            let content = await fs.readFile(file, 'utf-8');
+            for (const r of replacements.sort((a, b) => b.start - a.start)) {
+                content = content.slice(0, r.start) + r.text + content.slice(r.end);
+            }
+            await fs.writeFile(file, content);
+        }
+        return true;
+    }
 };
 
 export const window = {

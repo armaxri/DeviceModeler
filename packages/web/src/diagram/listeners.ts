@@ -1,6 +1,6 @@
 import { inject, injectable } from 'inversify';
 import {
-    MouseListener, MoveMouseListener, ScrollMouseListener, SelectMouseListener, TYPES, findParentByFeature, isMoveable,
+    MouseListener, MoveMouseListener, ScrollMouseListener, SelectMouseListener, TYPES,
     type IActionHandler, type SModelElementImpl, type SModelRootImpl, type ViewerOptions
 } from 'sprotty';
 import { BringToFrontAction, MoveAction, SelectAction, SelectAllAction, type Action } from 'sprotty-protocol';
@@ -18,7 +18,7 @@ export interface MovedVertex {
 }
 
 export interface DragInfo {
-    /** Shift was held when the vertex was dropped (manual layout: move it into the state below the mouse). */
+    /** Shift was held when the vertex was dropped (move it into the state below the mouse). */
     shiftKey: boolean;
     /** All vertices moved by the drag (the selection). */
     moved: MovedVertex[];
@@ -35,8 +35,6 @@ export interface DiagramCallbacks {
     allSelected(select: boolean): void;
     /** Whether the diagram can be edited (not while simulating). */
     canEdit(): boolean;
-    /** Whether the manual layout mode is active (nodes keep the position they are dragged to). */
-    isManualLayout(): boolean;
     /** Manual layout: a state was resized. */
     resizeEnd(id: string, width: number, height: number): void;
     /** Manual layout: bend point `index` (0 = first bend point) of a transition was moved to `point` (absolute). */
@@ -51,16 +49,13 @@ export interface DiagramCallbacks {
 
 export const DiagramCallbacks = Symbol('DiagramCallbacks');
 
-/** Kinds of vertices which can only be moved in the manual layout mode (they cannot be nested elsewhere). */
-const LAYOUT_ONLY_KINDS = ['initial', 'final', 'definition'];
-
-/** Vertices which can be dragged into other states (or moved in the manual layout mode). */
-function movableVertex(target: SModelElementImpl, manual: boolean): VertexNode | undefined {
+/** The vertex (not a region) which is dragged when the drag starts on `target`. */
+function movableVertex(target: SModelElementImpl): VertexNode | undefined {
     let current: SModelElementImpl | undefined = target;
     while (current && !isVertexNode(current)) {
         current = 'parent' in current ? (current as { parent?: SModelElementImpl }).parent : undefined;
     }
-    if (current && isVertexNode(current) && current.kind !== 'region' && (manual || !LAYOUT_ONLY_KINDS.includes(current.kind))) {
+    if (current && isVertexNode(current) && current.kind !== 'region') {
         return current;
     }
     return undefined;
@@ -146,18 +141,16 @@ export class HsmMouseListener extends MouseListener {
         this.callbacks.mouseDown(target, event);
         this.drag = undefined;
         this.handle = undefined;
-        const editable = this.callbacks.canEdit();
-        const manual = editable && this.callbacks.isManualLayout();
-        if (event.button !== 0 || !editable) {
+        if (event.button !== 0 || !this.callbacks.canEdit()) {
             return [];
         }
-        if (manual && this.startHandleDrag(target, event)) {
+        if (this.startHandleDrag(target, event)) {
             return [];
         }
-        const vertex = movableVertex(target, manual);
+        const vertex = movableVertex(target);
         this.drag = vertex ? { id: vertex.id, x: event.clientX, y: event.clientY, moved: false } : undefined;
         this.startPositions = undefined;
-        if (vertex && manual) {
+        if (vertex) {
             this.startPositions = new Map();
             for (const element of target.root.index.all()) {
                 if (isVertexNode(element)) {
@@ -173,7 +166,7 @@ export class HsmMouseListener extends MouseListener {
         const handle = handleElement(event);
         const base = { startX: event.clientX, startY: event.clientY, zoom: zoomOf(target.root), moved: false };
         if (handle?.classList.contains('resize-handle')) {
-            const vertex = movableVertex(target, true);
+            const vertex = movableVertex(target);
             if (vertex) {
                 this.handle = { ...base, kind: 'resize', id: vertex.id, index: 0, element: vertex };
                 return true;
@@ -422,7 +415,7 @@ export class HsmMouseListener extends MouseListener {
     }
 
     override doubleClick(target: SModelElementImpl, event: MouseEvent): Action[] {
-        if (this.callbacks.canEdit() && this.callbacks.isManualLayout() && isTransitionEdge(target) && event.target instanceof Element) {
+        if (this.callbacks.canEdit() && isTransitionEdge(target) && event.target instanceof Element) {
             // manual layout: double-click on the line adds a waypoint, on a waypoint removes it
             const handle = event.target.closest('.bend-handle');
             if (handle) {
@@ -478,8 +471,7 @@ function isWithin(element: SModelElementImpl, ancestor: SModelElementImpl | unde
 }
 
 /**
- * Moving elements is disabled while the diagram cannot be edited (simulation). Initial and final states
- * and the definition section can only be moved in the manual layout mode; handles (resize, bend points)
+ * Moving elements is disabled while the diagram cannot be edited (simulation); handles (resize, waypoints)
  * are dragged by the `HsmMouseListener`.
  */
 @injectable()
@@ -488,9 +480,7 @@ export class HsmMoveMouseListener extends MoveMouseListener {
     @inject(DiagramCallbacks) protected callbacks!: DiagramCallbacks;
 
     override mouseDown(target: SModelElementImpl, event: MouseEvent): (Action | Promise<Action>)[] {
-        const moveable = findParentByFeature(target, isMoveable);
-        const layoutOnly = isVertexNode(moveable) && LAYOUT_ONLY_KINDS.includes(moveable.kind);
-        if (!this.callbacks.canEdit() || handleElement(event) || (layoutOnly && !this.callbacks.isManualLayout())) {
+        if (!this.callbacks.canEdit() || handleElement(event)) {
             this.startDragPosition = undefined;
             this.hasDragged = false;
             return [];
@@ -515,7 +505,7 @@ export class HsmScrollMouseListener extends ScrollMouseListener {
     @inject(DiagramCallbacks) protected callbacks!: DiagramCallbacks;
 
     override mouseDown(target: SModelElementImpl, event: MouseEvent): (Action | Promise<Action>)[] {
-        if (this.callbacks.isManualLayout() && startsHandleDrag(target, event)) {
+        if (this.callbacks.canEdit() && startsHandleDrag(target, event)) {
             this.lastScrollPosition = undefined;
             this.scrollbar = undefined;
             return [];

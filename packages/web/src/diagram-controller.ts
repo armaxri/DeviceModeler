@@ -11,12 +11,12 @@ import {
     type NewVertexKind, type ParsedModel, type ScopeContainer, type TextEdit, type Transition, type TransitionSource, type TransitionTarget, type Vertex
 } from 'hsm-language';
 import {
-    applyManualLayout, captureLayout, cloneManualLayout, contentOrigin, createManualLayout, toFrameCoordinates, type ManualLayout, type Point
+    applyManualLayout, captureLayout, cloneManualLayout, contentOrigin, diagramElementIds, layoutFromModel, layoutTextEdits, toFrameCoordinates,
+    type ManualLayout, type Point
 } from 'hsm-language';
 import { describeSyntaxProblem, type HsmModelService } from './model-service.js';
 import { createDiagramContainer } from './diagram/di.config.js';
 import type { DiagramCallbacks, DragInfo } from './diagram/listeners.js';
-import { LayoutHistory, TrackingModelEditor, applyKeyChanges, movedId, textKey } from './diagram/manual-layout-support.js';
 import { toSchema, type Issue } from './diagram/model.js';
 import { canvasTextMeasure } from './diagram/text-measure.js';
 import { byId, h } from './ui/dom.js';
@@ -65,7 +65,10 @@ export interface ModelState {
     auto: LayoutResult;
     /** The diagram shown: the automatic layout or the manual layout applied to it. */
     layout: LayoutResult;
-    /** Manual layout mode: all nodes pinned at their current positions (the base of layout changes). */
+    /**
+     * Manual layout (the model has layout annotations): all nodes pinned at their current positions
+     * (the base of layout changes). Undefined: automatic layout.
+     */
     effective?: ManualLayout;
     nodes: Map<string, DiagramNode>;
     /** diagram id -> id of the parent node (MACHINE_ID for top-level nodes) */
@@ -73,11 +76,8 @@ export interface ModelState {
     issues: Map<string, Issue>;
 }
 
-/** How a text change came about (for the combined undo history of text and layout). */
-export type TextChangeKind = 'edit' | 'undo' | 'redo';
-
-/** Buttons of the layout mode (optional, bound if present): Auto | Manual, Auto-arrange, Reset. */
-const LAYOUT_CONTROLS = ['btn-layout-auto', 'btn-layout-manual', 'btn-arrange', 'btn-reset-layout'];
+/** Buttons of the layout (optional, bound if present): Auto-arrange, Reset. */
+const LAYOUT_CONTROLS = ['btn-arrange', 'btn-reset-layout'];
 
 export type DiagramTheme = 'classic' | 'modern' | 'dark';
 
@@ -131,17 +131,6 @@ export interface DiagramHost {
      */
     openStateMachine?(submachine: DiagramSubmachine): boolean;
     setStatus(message: string, severity?: StatusSeverity): void;
-    /**
-     * Manual layout (experimental): the layout of the model was changed in the diagram (including undo /
-     * redo and key updates of diagram edits); the host persists it (undefined: no manual layout any more).
-     * Not called for layouts set by the host with {@link DiagramController.loadLayout}.
-     */
-    layoutChanged?(layout: ManualLayout | undefined): void;
-    /**
-     * A key of the current state of the text for the combined text / layout undo history; it must return
-     * to the previous value when an edit is undone. Default: {@link textKey} of the text.
-     */
-    textStateKey?(): string;
 }
 
 export interface DiagramControllerOptions {
@@ -171,8 +160,8 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     readonly settings: DiagramSettings;
     private container!: Container;
     private modelSource!: LocalModelSource;
-    /** Vertices were dragged: the next diagram update is not animated (see {@link render}). */
-    private dragged = false;
+    /** The next update follows a change of the layout annotations only (the automatic layout is reused). */
+    private layoutOnlyChange = false;
     private actionDispatcher!: IActionDispatcher;
 
     private state?: ModelState;
@@ -198,10 +187,6 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     /** Key of the simulation flags last rendered (to skip identical diagram updates). */
     private renderedFlags = '';
     private flagTimer?: ReturnType<typeof setTimeout>;
-
-    /** The manual layout of the model (sidecar `.hsm.layout`); undefined: automatic layout only. */
-    private layoutData?: ManualLayout;
-    private readonly layoutHistory = new LayoutHistory();
 
     constructor(options: DiagramControllerOptions) {
         this.host = options.host;
@@ -392,9 +377,10 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         if (!forceLayout && this.state?.parsed === parsed) {
             return;
         }
-        let auto: LayoutResult;
+        let auto = this.layoutOnlyChange && !forceLayout && this.state ? reuseAutoLayout(this.state, parsed) : undefined;
+        this.layoutOnlyChange = false;
         try {
-            auto = await layoutStateMachine(parsed.model, {
+            auto ??= await layoutStateMachine(parsed.model, {
                 direction: this.settings.direction,
                 routing: this.settings.routing,
                 measure: canvasTextMeasure,
@@ -444,12 +430,16 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         }
     }
 
-    /** The diagram of the model: the automatic layout, adjusted by the manual layout in the manual layout mode. */
+    /**
+     * The diagram of the model: the automatic layout, adjusted by the layout annotations of the model
+     * (manual layout) if it has any.
+     */
     private createState(parsed: ParsedModel, auto: LayoutResult): ModelState {
         let layout: LayoutResult = auto;
         let effective: ManualLayout | undefined;
-        if (this.layoutData?.mode === 'manual') {
-            const result = applyManualLayout(auto, this.layoutData, {
+        const manual = layoutFromModel(parsed.model);
+        if (manual) {
+            const result = applyManualLayout(auto, manual, {
                 direction: this.settings.direction, measure: canvasTextMeasure, routing: this.settings.routing
             });
             layout = result;
@@ -466,24 +456,11 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         return { parsed, auto, layout, effective, nodes, parents, issues: this.computeIssues(parsed, layout, nodes) };
     }
 
-    /** Applies a changed manual layout (the automatic layout of the unchanged text is reused). */
-    private applyLayoutChange(): void {
-        if (!this.state) {
-            return;
-        }
-        this.state = this.createState(this.state.parsed, this.state.auto);
-        for (const id of [...this.selection]) {
-            if (!this.state.layout.elements.has(id)) {
-                this.selection.delete(id);
-            }
-        }
-        this.render();
-    }
-
     private async render(): Promise<void> {
         if (!this.state) {
             return;
         }
+        this.updateLayoutControls();
         const flags = this.simulationFlags();
         this.renderedFlags = flags?.key ?? '';
         const schema = toSchema(this.state.layout.graph, {
@@ -493,25 +470,19 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             activeStates: flags?.active,
             recentTransitions: flags?.recent,
             breakpoints: flags?.breakpoints,
-            manualLayout: this.isManualLayout(),
+            layoutEditable: !this.simulationSession,
             instanceTexts: flags?.instanceTexts
         });
         if (!this.rendered) {
             this.rendered = true;
             await this.modelSource.setModel(schema);
             requestAnimationFrame(() => this.fit(false));
-        } else if (this.isManualLayout() || this.dragged) {
-            // no animation in the manual layout and after dragging: an animation from the dragged positions
-            // can be interrupted and leave vertices where they were dropped
-            this.dragged = false;
+        } else {
+            // not animated: an animated update can be interrupted (e.g. by the selection or a drag) and
+            // leave vertices at their previous or dragged positions while their transitions are routed to
+            // the new ones
             (this.modelSource as unknown as { currentRoot: typeof schema }).currentRoot = schema;
             await this.actionDispatcher.dispatch(UpdateModelAction.create(schema, { animate: false }));
-            if (this.fitOnNextRender) {
-                this.fitOnNextRender = false;
-                requestAnimationFrame(() => this.fit(false));
-            }
-        } else {
-            await this.modelSource.updateModel(schema);
             if (this.fitOnNextRender) {
                 this.fitOnNextRender = false;
                 requestAnimationFrame(() => this.fit(false));
@@ -582,12 +553,12 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
 
     /**
      * Computes text edits based on the current model and applies them to the text (undoable),
-     * then updates the diagram. If there is a manual layout, its keys follow renamed, moved and deleted
-     * elements (`layoutChange` may adjust it further, e.g. the position of a moved state); the layout
-     * change is undone together with the text edit.
+     * then updates the diagram. The layout annotations follow renamed, moved and deleted elements
+     * (ModelEditor). `layoutChange` adjusts the layout of the changed model further (e.g. the position of
+     * a moved state); its annotation edits are applied together with the edit as one undoable step.
      */
     async applyEdit(producer: (editor: ModelEditor, state: ModelState) => EditResult | undefined,
-        layoutChange?: (layout: ManualLayout) => ManualLayout): Promise<boolean> {
+        layoutChange?: (layout: ManualLayout | undefined, model: ParsedModel) => ManualLayout | undefined): Promise<boolean> {
         if (this.simulationSession) {
             this.setStatus('Stop the simulation to edit the model.', 'warning');
             return false;
@@ -600,7 +571,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             return false;
         }
         let result: EditResult | undefined;
-        const editor = new TrackingModelEditor(this.state.parsed.text, this.state.parsed.model, this.state.layout.ids);
+        const editor = new ModelEditor(this.state.parsed.text, this.state.parsed.model);
         try {
             result = producer(editor, this.state);
         } catch (error) {
@@ -618,19 +589,35 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         if (focused instanceof HTMLButtonElement && byId('properties').contains(focused)) {
             focused.blur();
         }
-        const layoutBase = this.layoutData && (this.state.effective ? { ...this.state.effective, mode: this.layoutData.mode } : this.layoutData);
-        if (!await this.host.applyTextEdits(result.edits)) {
+        let edits = result.edits;
+        if (layoutChange) {
+            edits = await this.withLayoutChange(this.state.parsed.text, edits, layoutChange);
+        }
+        if (!await this.host.applyTextEdits(edits)) {
             this.pendingRename = false;
             return false;
-        }
-        if (layoutBase && (editor.changes.length > 0 || layoutChange)) {
-            let layout = applyKeyChanges(layoutBase, editor.changes);
-            layout = layoutChange ? layoutChange(layout) : layout;
-            this.setLayout(layout, { record: true, linked: true, relayout: false });
         }
         this.pendingSelectOffset = result.selectOffset;
         await this.update();
         return true;
+    }
+
+    /**
+     * The structural `edits` followed by the layout annotation edits of `layoutChange` (computed on the
+     * changed text, so that their ranges do not overlap), as one edit of the original text.
+     */
+    private async withLayoutChange(text: string, edits: TextEdit[],
+        layoutChange: (layout: ManualLayout | undefined, model: ParsedModel) => ManualLayout | undefined): Promise<TextEdit[]> {
+        const changed = applyEdits(text, edits);
+        const parsed = await this.language.parse(changed);
+        if (parsed.hasSyntaxErrors) {
+            return edits;
+        }
+        const layoutEdits = layoutTextEdits(parsed.model, changed, layoutChange(layoutFromModel(parsed.model), parsed));
+        if (layoutEdits.length === 0) {
+            return edits;
+        }
+        return [replacementEdit(text, applyEdits(changed, layoutEdits))];
     }
 
     /**
@@ -693,32 +680,15 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         return result;
     }
 
-    /**
-     * Undo in the diagram: layout changes made after the last text edit (the text still has the state it
-     * had then) are undone here, everything else by the text editor of the host.
-     */
+    /** Undo in the diagram: the text editor of the host undoes (layout changes are text edits, too). */
     undo(): void {
-        this.undoRedo('undo');
+        if (!this.simulationSession) {
+            this.host.undo();
+        }
     }
 
     redo(): void {
-        this.undoRedo('redo');
-    }
-
-    private undoRedo(command: 'undo' | 'redo'): void {
-        if (this.simulationSession) {
-            return;
-        }
-        const key = this.currentTextKey();
-        const entry = command === 'undo' ? this.layoutHistory.layoutUndo(key) : this.layoutHistory.layoutRedo(key);
-        if (entry) {
-            this.setLayout(command === 'undo' ? entry.before : entry.after, { record: false });
-            this.setStatus(`${command === 'undo' ? 'Undid' : 'Redid'} the layout change.`);
-            return;
-        }
-        if (command === 'undo') {
-            this.host.undo();
-        } else {
+        if (!this.simulationSession) {
             this.host.redo();
         }
     }
@@ -980,51 +950,43 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     }
 
     /**
-     * A vertex was dragged. Automatic layout: dropping it onto another state (or region, or the canvas)
-     * moves it there in the model, otherwise the computed layout is restored. Manual layout: the moved
-     * vertices keep their new positions; with Shift held, the vertex is moved into the state below the mouse.
+     * A vertex was dragged: the moved vertices keep their new positions (written as layout annotations;
+     * the first move of a model without annotations writes the whole current layout). With Shift held,
+     * the vertex is moved into the state (or region, or the canvas) below the mouse.
      */
     dragEnd(draggedId: string, dropTargetId: string | undefined, info: DragInfo): void {
-        this.dragged = true;
         if (this.simulationSession) {
             this.render();
             return;
         }
-        const manual = this.isManualLayout();
-        if (manual && !info.shiftKey) {
+        if (!info.shiftKey) {
             this.moveNodes(info);
             return;
         }
         const vertex = this.astOf(draggedId);
         const container = this.containerAt(dropTargetId);
         const dropNode = dropTargetId ? this.astOf(dropTargetId) : undefined;
-        if (!isVertex(vertex) || !container) {
-            this.render();
-            return;
-        }
         const targetContainer = isState(dropNode) && dropNode.regions.length === 0 ? dropNode : container;
-        if (targetContainer === vertex.$container) {
-            // no structural change: restore the computed layout (manual layout: keep the new position)
-            if (manual) {
-                this.moveNodes(info);
-            } else {
-                this.render();
-            }
+        if (!isVertex(vertex) || !targetContainer || targetContainer === vertex.$container) {
+            // no structural change (or a vertex which cannot be nested elsewhere, e.g. an initial state): it
+            // keeps its new position
+            this.moveNodes(info);
             return;
         }
         const moved = info.moved.find(m => m.id === draggedId);
-        const layoutChange = (layout: ManualLayout): ManualLayout => {
-            const id = movedId(vertex, targetContainer);
-            const nodes = { ...layout.nodes };
-            delete nodes[id];
-            const parent = this.state?.layout.ids.get(isState(targetContainer) && targetContainer.regions.length > 0 ? targetContainer.regions[0] : targetContainer);
-            if (manual && moved && parent) {
-                // the position where it was dropped, relative to the new parent
+        const parent = this.state?.layout.ids.get(isState(targetContainer) && targetContainer.regions.length > 0 ? targetContainer.regions[0] : targetContainer);
+        // manual layout: the moved vertex is placed where it was dropped, relative to the new parent
+        const layoutChange = this.isManualLayout() && moved && parent
+            ? (layout: ManualLayout | undefined): ManualLayout | undefined => {
+                if (!layout) {
+                    return layout;
+                }
                 const origin = this.absolutePosition(parent);
-                nodes[id] = this.clampToParent(parent, { x: moved.absoluteX - origin.x, y: moved.absoluteY - origin.y });
+                const id = movedId(vertex, targetContainer);
+                const nodes = { ...layout.nodes, [id]: { ...layout.nodes[id], ...this.clampToParent(parent, { x: moved.absoluteX - origin.x, y: moved.absoluteY - origin.y }) } };
+                return { ...layout, nodes };
             }
-            return { ...layout, nodes };
-        };
+            : undefined;
         this.applyEdit(editor => editor.moveVertex(vertex, targetContainer), layoutChange).then(done => {
             if (!done) {
                 this.render();
@@ -1205,157 +1167,92 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     }
 
     // -----------------------------------------------------------------------------------------
-    // Manual layout (experimental): positions stored in a sidecar file, see docs/manual-layout.md
+    // Manual layout (experimental): positions stored as layout annotations in the model, see docs/manual-layout.md
 
-    /** The manual layout of the model (undefined: none, the automatic layout is shown). */
-    get manualLayout(): ManualLayout | undefined {
-        return this.layoutData;
-    }
-
+    /** Whether the model has layout annotations (manual layout); otherwise the layout is computed automatically. */
     isManualLayout(): boolean {
-        return this.layoutData?.mode === 'manual' && !this.simulationSession;
-    }
-
-    /**
-     * Sets the layout of the model loaded by the host (opening a model, an external change of the layout
-     * file). Clears the layout history; {@link DiagramHost.layoutChanged} is not called. `show`: update
-     * the diagram now (false if the host loads a new text and updates the diagram anyway).
-     */
-    loadLayout(layout: ManualLayout | undefined, show = true): void {
-        this.layoutHistory.clear();
-        this.layoutData = layout;
-        this.updateLayoutControls();
-        if (show) {
-            this.applyLayoutChange();
-        }
-    }
-
-    /** Replaces the manual layout as an undoable change (e.g. a layout file opened for the current model). */
-    replaceLayout(layout: ManualLayout | undefined): void {
-        this.setLayout(layout, { record: true });
-    }
-
-    /**
-     * The text of the host changed (typing, undo / redo in the text editor, or a diagram edit):
-     * `previousKey` is the text state key before the change. Layout changes belonging to an undone /
-     * redone diagram edit are undone / redone with it. Call it before the diagram is updated.
-     */
-    textChanged(kind: TextChangeKind, previousKey: string): void {
-        let entry;
-        if (kind === 'undo') {
-            entry = this.layoutHistory.textUndone(previousKey);
-        } else if (kind === 'redo') {
-            entry = this.layoutHistory.textRedone(this.currentTextKey());
-        } else {
-            this.layoutHistory.textEdited();
-        }
-        if (entry) {
-            this.setLayout(kind === 'undo' ? entry.before : entry.after, { record: false, relayout: false });
-        }
-    }
-
-    /** The key of the current text state (see {@link DiagramHost.textStateKey}). */
-    currentTextKey(): string {
-        return this.host.textStateKey?.() ?? textKey(this.host.getText());
-    }
-
-    /** The layout direction setting changed: new elements of a manual layout are placed in this direction. */
-    directionChanged(): void {
-        if (this.layoutData) {
-            this.layoutData = { ...this.layoutData, direction: this.settings.direction };
-            this.host.layoutChanged?.(this.layoutData);
-        }
+        return this.state?.effective !== undefined;
     }
 
     private bindLayoutControls(): void {
         const bind = (id: string, action: () => void) => document.getElementById(id)?.addEventListener('click', action);
-        bind('btn-layout-auto', () => this.setLayoutMode('auto'));
-        bind('btn-layout-manual', () => this.setLayoutMode('manual'));
         bind('btn-arrange', () => this.autoArrange());
         bind('btn-reset-layout', () => this.resetLayout());
         this.updateLayoutControls();
     }
 
     private updateLayoutControls(): void {
-        const manual = this.layoutData?.mode === 'manual';
-        document.getElementById('btn-layout-auto')?.classList.toggle('active', !manual);
-        document.getElementById('btn-layout-manual')?.classList.toggle('active', manual);
-        const arrange = document.getElementById('btn-arrange');
-        if (arrange) {
-            arrange.hidden = !manual;
-        }
+        const manual = this.isManualLayout();
         const reset = document.getElementById('btn-reset-layout');
         if (reset) {
-            reset.hidden = !this.layoutData;
+            reset.hidden = !manual;
         }
         byId('diagram-area').classList.toggle('manual-layout', manual);
     }
 
-    /** Switches between the automatic and the manual layout; the manual layout starts with the current diagram. */
-    setLayoutMode(mode: 'auto' | 'manual'): void {
-        if (!this.state || this.simulationSession || (this.layoutData?.mode ?? 'auto') === mode) {
-            return;
-        }
-        if (mode === 'auto') {
-            this.setLayout({ ...this.layoutData!, mode: 'auto' }, { record: true });
-            this.setStatus('Automatic layout. The manual layout is kept: switch back to Manual to use it again.');
-            return;
-        }
-        const layout = this.layoutData && Object.keys(this.layoutData.nodes).length > 0
-            ? { ...this.layoutData, mode: 'manual' as const }
-            : captureLayout(this.state.auto.graph, this.settings.direction);
-        this.setLayout(layout, { record: true });
-        this.setStatus('Manual layout: drag states to move them (hold Shift while dropping to move a state into another state), '
-            + 'drag the corner of a selected state to resize it, double-click a transition to add a waypoint.');
-    }
-
-    /** Arranges everything automatically and keeps the result as the manual layout. */
+    /** Arranges everything automatically and writes the result as layout annotations. */
     autoArrange(): void {
         if (!this.state || this.simulationSession) {
             return;
         }
-        this.setLayout(captureLayout(this.state.auto.graph, this.settings.direction), { record: true });
-        this.setStatus('Arranged automatically – the positions can be adjusted by hand (Ctrl+Z restores the previous layout).');
+        this.writeLayout(captureLayout(this.state.auto.graph, this.settings.direction)).then(changed => {
+            if (changed) {
+                this.setStatus('Arranged automatically – the positions can be adjusted by hand (Ctrl+Z restores the previous layout).');
+            }
+        });
     }
 
-    /** Discards the manual layout. */
+    /** Removes all layout annotations: the diagram is laid out automatically. */
     resetLayout(): void {
-        if (!this.layoutData || this.simulationSession) {
+        if (!this.state || this.simulationSession || !this.isManualLayout()) {
             return;
         }
-        this.setLayout(undefined, { record: true });
-        this.setStatus('Automatic layout – the manual layout was discarded (Ctrl+Z restores it).');
+        this.writeLayout(undefined).then(changed => {
+            if (changed) {
+                this.setStatus('Automatic layout – the layout annotations were removed (Ctrl+Z restores them).');
+            }
+        });
     }
 
     /**
-     * Replaces the manual layout. `record`: add the change to the undo history (`linked`: it belongs to
-     * the text edit just made); `relayout`: show it now (not necessary if the text changes as well).
+     * Changes the layout: `change` modifies the current layout with all nodes pinned at their current
+     * positions (in a model without layout annotations: the automatic layout, so that the first change
+     * writes the whole layout).
      */
-    private setLayout(layout: ManualLayout | undefined, options: { record: boolean, linked?: boolean, relayout?: boolean }): void {
-        if (options.record) {
-            this.layoutHistory.push({
-                before: this.layoutData,
-                after: layout,
-                textKey: this.currentTextKey(),
-                linked: options.linked ?? false
-            });
-        }
-        this.layoutData = layout;
-        this.host.layoutChanged?.(layout);
-        this.updateLayoutControls();
-        if (options.relayout ?? true) {
-            this.applyLayoutChange();
-        }
-    }
-
-    /** Changes the current manual layout (all nodes pinned at their current positions). */
     private changeLayout(change: (layout: ManualLayout) => void): void {
-        if (!this.state || !this.isManualLayout()) {
+        if (!this.state || this.simulationSession) {
             return;
         }
-        const layout = cloneManualLayout(this.state.effective ?? this.layoutData ?? createManualLayout());
+        const layout = cloneManualLayout(this.state.effective ?? captureLayout(this.state.auto.graph, this.settings.direction));
         change(layout);
-        this.setLayout(layout, { record: true });
+        this.writeLayout(layout);
+    }
+
+    /**
+     * Writes the layout as annotations into the text (one undoable edit; undefined removes all layout
+     * annotations) and updates the diagram. Resolves to false if the text did not change.
+     */
+    private async writeLayout(layout: ManualLayout | undefined): Promise<boolean> {
+        if (!this.state || this.state.parsed.text !== this.host.getText()) {
+            await this.update();
+        }
+        const state = this.state;
+        if (!state || this.syntaxErrors || state.parsed.text !== this.host.getText()) {
+            this.setStatus('Please fix the syntax errors in the text first.', 'error');
+            this.render();
+            return false;
+        }
+        const edits = layoutTextEdits(state.parsed.model, state.parsed.text, layout);
+        // only annotations change: the automatic layout can be reused (see update)
+        this.layoutOnlyChange = true;
+        if (edits.length === 0 || !await this.host.applyTextEdits(edits)) {
+            this.layoutOnlyChange = false;
+            // restores the positions of the dragged vertices
+            this.render();
+            return false;
+        }
+        await this.update();
+        return true;
     }
 
     private absolutePosition(id: string): Point {
@@ -1761,4 +1658,54 @@ function segmentDistance(p: Point, a: Point, b: Point): number {
     const length = dx * dx + dy * dy;
     const t = length > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / length)) : 0;
     return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+/** The id (qualified name) of a vertex after moving it into `target`. */
+function movedId(vertex: Vertex, target: ScopeContainer): string {
+    const owner = isRegion(target) ? target.$container : target;
+    return isStateMachine(owner) || !isState(owner) ? vertex.name : `${qualifiedName(owner)}.${vertex.name}`;
+}
+
+/** One edit which turns `text` into `changed` (the differing middle part). */
+function replacementEdit(text: string, changed: string): TextEdit {
+    let start = 0;
+    while (start < text.length && start < changed.length && text[start] === changed[start]) {
+        start++;
+    }
+    let end = 0;
+    while (end < text.length - start && end < changed.length - start && text[text.length - 1 - end] === changed[changed.length - 1 - end]) {
+        end++;
+    }
+    return { offset: start, length: text.length - start - end, text: changed.substring(start, changed.length - end) };
+}
+
+/** The model text without layout annotations (the input of the automatic layout). */
+function withoutLayoutAnnotations(parsed: ParsedModel): string {
+    return applyEdits(parsed.text, layoutTextEdits(parsed.model, parsed.text, undefined));
+}
+
+/**
+ * The automatic layout of the previous state for the new parse result if the texts differ only in their
+ * layout annotations (the diagram elements are mapped to the new AST); undefined otherwise.
+ */
+function reuseAutoLayout(previous: ModelState, parsed: ParsedModel): LayoutResult | undefined {
+    if (withoutLayoutAnnotations(previous.parsed) !== withoutLayoutAnnotations(parsed)) {
+        return undefined;
+    }
+    const { ids, initial, final, definitions } = diagramElementIds(parsed.model);
+    const elements = new Map<string, AstNode>();
+    for (const [node, id] of ids) {
+        elements.set(id, node);
+    }
+    for (const [container, id] of [...initial, ...final]) {
+        elements.set(id, container);
+    }
+    if (definitions) {
+        elements.set(DEFINITION_ID, parsed.model);
+    }
+    const old = previous.auto.elements;
+    if (elements.size !== old.size || [...old.keys()].some(id => !elements.has(id))) {
+        return undefined;
+    }
+    return { graph: previous.auto.graph, elements, ids };
 }

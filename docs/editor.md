@@ -18,44 +18,44 @@ The web app (`npm run dev`, `packages/web`) edits the text and the diagram side 
 | Final state | *Final* tool (`F`), click on the state that should get a transition to the final state |
 | Add a transition | *Transition* tool (`T`), click the source, then the target, then type the label (`Tab` completes names) |
 | Rename / edit label | double-click or `F2` |
-| Move into another state | drag and drop |
+| Move into another state | hold `Shift` while dropping it (a plain drop only moves it, see [Manual layout](#manual-layout-experimental)) |
 | Delete | `Del` / `Backspace` or the trash button |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Y` (shared with the text editor) |
 | Keep a tool active | hold `Shift` while choosing it, `Esc` to go back to selection |
 
 ## Manual layout (experimental)
 
-🧪 By default the diagram is laid out automatically (ELK). With *Positions: Manual* in the toolbar the
-diagram can be arranged by hand instead; the automatic layout is not affected as long as no manual
-layout is active. Design, format and trade-offs: [Manual layout](manual-layout.md).
+🧪 By default the diagram is laid out automatically (ELK). As soon as a state is dragged, the diagram
+is arranged by hand: the positions are stored as **layout annotations** in the model text (`@at(x, y)`
+before a state, `@via(…)` before a transition, …, see [the language](language.md#diagram-layout-annotations)).
+A model with layout annotations has a manual layout, one without the automatic layout – there is no
+mode switch. Design and trade-offs: [Manual layout](manual-layout.md).
 
-- The positions are stored next to the model in `<model>.hsm.layout` (JSON, keyed by qualified names),
-  the `.hsm` text stays free of layout information. The web editor keeps the layout per file in the
-  browser; *Save* downloads the model and its `.hsm.layout`, *Open…* accepts both files together.
-  The VS Code extension of this branch reads and writes the `.hsm.layout` file next to the model in
-  the workspace (see [VS Code extension](vscode.md)).
-- Switching to *Manual* starts from the current automatic layout. *Auto-arrange* re-runs the automatic
-  layout and keeps it as manual layout, *Reset* discards the manual layout, *Auto* shows the automatic
-  layout but keeps the manual one for later.
-- Elements without a stored position (e.g. new states) are placed automatically near their siblings;
-  composite states grow when their content does not fit. Transitions keep their automatic route while
-  their end points are arranged as in the automatic layout, otherwise they are rerouted around the
-  other states in the shape of the *Edges* setting, through their bend points (waypoints) if they have any.
+- The first drag writes the annotations of all elements (the current automatic layout plus the move).
+  *Auto-arrange* replaces them with the automatic layout, *Reset* removes all layout annotations
+  (automatic layout again).
+- Layout changes are text edits: they are undone with `Ctrl+Z` like every other edit, mark the model as
+  modified and are saved with it. Renames (also typed in the text) keep the position, because the
+  annotation belongs to the element.
+- Elements without `@at` (e.g. new states) are placed automatically near their siblings; composite
+  states grow when their content does not fit. Transitions keep their automatic route while their end
+  points are arranged as in the automatic layout, otherwise they are rerouted around the other states
+  in the shape of the *Edges* setting, through their waypoints if they have any.
 
 | Action (manual layout) | How |
 | --- | --- |
 | Move a state, pseudo state or the definitions box | drag it (attached transitions follow) |
 | Move a state into another state | hold `Shift` while dropping it |
 | Resize a state | select it, drag the handle at the bottom right corner |
-| Add / move / remove a waypoint (bend point) | select the transition; double-click its line / drag the point / double-click the point |
+| Add / move / remove a waypoint | select the transition; double-click its line / drag the point / double-click the point |
 | Move a transition label | select the transition, drag its label |
-| Undo / redo | `Ctrl+Z` / `Ctrl+Y` in the diagram – layout changes and text edits in the order they were made |
+| Arrange automatically / back to the automatic layout | *Auto-arrange* / *Reset* in the toolbar |
 
-Renames, moves and deletions done in the diagram update the layout; renames typed in the text editor do
-not (the element is then placed automatically). Importing an itemis CREATE `.sct` file keeps the
-arrangement of its diagram (also when several statecharts are imported together). On the command line,
-`hsm layout model.hsm` uses `model.hsm.layout` if it exists (`--layout <file>`, `--auto`), and
-`hsm import` writes the `.hsm.layout` next to each model (`--no-layout` to skip it).
+Importing an itemis CREATE `.sct` file keeps the arrangement of its diagram (also when several
+statecharts are imported together). On the command line, `hsm layout`, `hsm render` and `hsm doc` use
+the annotations (`--auto` ignores them), `hsm import` writes them (`--no-layout` to skip them), and
+`hsm migrate-layout model.hsm` converts a `model.hsm.layout` file of the earlier sidecar experiment
+into annotations.
 
 ## Simulation
 

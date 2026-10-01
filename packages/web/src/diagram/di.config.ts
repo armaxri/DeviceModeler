@@ -26,7 +26,6 @@ export function createDiagramContainer(baseDiv: string, callbacks: DiagramCallba
         configureModelElement(context, DiagramTypes.graph, StateMachineGraph, SGraphView);
         configureModelElement(context, DiagramTypes.state, VertexNode, StateView);
         configureModelElement(context, DiagramTypes.region, VertexNode, RegionView, { disable: [moveFeature] });
-        // initial / final states and the definition section can be moved in the manual layout mode only (see HsmMoveMouseListener)
         configureModelElement(context, DiagramTypes.initial, VertexNode, InitialView);
         configureModelElement(context, DiagramTypes.final, VertexNode, FinalView);
         configureModelElement(context, DiagramTypes.choice, VertexNode, ChoiceView);

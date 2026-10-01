@@ -1,12 +1,10 @@
 import { monaco } from './monaco.js';
 import {
-    LAYOUT_FILE_EXTENSION, generatePlantUml, importSct, importSctFiles, layoutFileName, parseManualLayout, serializeManualLayout,
-    type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ManualLayout, type ParsedModel, type TextEdit
+    generatePlantUml, importSct, importSctFiles, type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ParsedModel, type TextEdit
 } from 'hsm-language';
 import { EDITOR_THEMES, HsmLanguageSupport, LANGUAGE_ID } from './language-support.js';
 import { DiagramController, type DiagramHost, type DiagramSettings, type StatusSeverity, type TextRange } from './diagram-controller.js';
 import { createWorkerElk } from './diagram/elk.js';
-import { loadStoredLayout, storeLayout } from './diagram/manual-layout-support.js';
 import { byId, download, h } from './ui/dom.js';
 import { plantUmlServerUrl } from './ui/plantuml.js';
 import type { SimulationSession } from './simulation/session.js';
@@ -39,8 +37,6 @@ export class HsmApp implements DiagramHost {
     private cursorTimer?: ReturnType<typeof setTimeout>;
     private applyingEdit = false;
     private fileName = 'statemachine.hsm';
-    /** `alternativeVersionId` of the text model after the last change (for the combined text / layout undo). */
-    private textVersion = 1;
     /**
      * The virtual workspace: opened files and edited files by file name (flat, all in one directory).
      * Imports (`import "motor.hsm"`) are resolved against these files and the examples.
@@ -55,8 +51,6 @@ export class HsmApp implements DiagramHost {
         this.language.registerLanguage();
         this.createEditor();
         this.diagram.start();
-        // manual layout (experimental): kept per file name in the local storage
-        this.diagram.loadLayout(loadStoredLayout(this.fileName));
         this.bindToolbar();
         this.bindKeyboard();
         this.bindSplitter();
@@ -124,18 +118,13 @@ export class HsmApp implements DiagramHost {
         });
         this.decorations = this.editor.createDecorationsCollection();
         byId('file-name').textContent = this.fileName;
-        this.textVersion = this.editor.getModel()!.getAlternativeVersionId();
         this.updateWorkspace();
-        this.editor.onDidChangeModelContent(event => {
+        this.editor.onDidChangeModelContent(() => {
             try {
                 localStorage.setItem(STORAGE_TEXT, this.editor.getValue());
             } catch {
                 // storage is not available
             }
-            // keeps the layout history in sync with undo / redo in the text editor
-            const previous = String(this.textVersion);
-            this.textVersion = this.editor.getModel()!.getAlternativeVersionId();
-            this.diagram?.textChanged(event.isUndoing ? 'undo' : event.isRedoing ? 'redo' : 'edit', previous);
             if (!this.applyingEdit) {
                 this.diagram.scheduleUpdate();
             }
@@ -167,21 +156,14 @@ export class HsmApp implements DiagramHost {
                 this.loadText(example.text, example.fileName);
             }
         });
-        byId('btn-new').addEventListener('click', () => this.loadText(EMPTY_MODEL, 'statemachine.hsm', null));
+        byId('btn-new').addEventListener('click', () => this.loadText(EMPTY_MODEL, 'statemachine.hsm'));
         const fileInput = byId<HTMLInputElement>('file-input');
         byId('btn-open').addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', async () => {
             const all = [...fileInput.files ?? []];
-            // a layout file (`model.hsm.layout`) can be opened together with its model or alone (for the current model)
-            const layoutFile = all.find(f => f.name.endsWith(LAYOUT_FILE_EXTENSION));
             // C/C++ headers: added to the virtual workspace (models import them), not edited
             const headers = all.filter(f => isHeaderFile(f.name));
-            const selected = all.filter(f => !isHeaderFile(f.name) && f !== layoutFile);
-            if (layoutFile && selected.length === 0 && headers.length === 0) {
-                await this.openLayoutFile(layoutFile);
-                fileInput.value = '';
-                return;
-            }
+            const selected = all.filter(f => !isHeaderFile(f.name));
             for (const header of headers) {
                 this.files.set(header.name, await header.text());
             }
@@ -201,13 +183,12 @@ export class HsmApp implements DiagramHost {
                 // several itemis CREATE statecharts: submachine states referencing each other become instances
                 try {
                     const results = importSctFiles(await Promise.all(statecharts.map(async f => ({ fileName: f.name, xml: await f.text() }))));
+                    // (the diagrams are imported as layout annotations)
                     for (const result of results) {
                         this.files.set(result.fileName, result.text);
-                        // the diagrams become the manual layouts of the models
-                        storeLayout(result.fileName, result.layout);
                     }
                     this.saveFiles();
-                    this.loadText(results[0].text, results[0].fileName, results[0].layout ?? null);
+                    this.loadText(results[0].text, results[0].fileName);
                     const warnings = results.flatMap(r => r.warnings);
                     this.setStatus(`Imported ${statecharts.map(f => f.name).join(', ')}${warnings.length > 0 ? ` with ${warnings.length} warning(s): ${warnings.join(' ')}` : '.'}`,
                         warnings.length > 0 ? 'warning' : 'info');
@@ -231,10 +212,10 @@ export class HsmApp implements DiagramHost {
             }
             const file = selected[0];
             if (file && /\.sct$/i.test(file.name)) {
-                // itemis CREATE / YAKINDU statechart: convert to HSM text (and the diagram into a manual layout)
+                // itemis CREATE / YAKINDU statechart: convert to HSM text (the diagram into layout annotations)
                 try {
-                    const { text, warnings, layout } = importSct(await file.text());
-                    this.loadText(text, file.name.replace(/\.sct$/i, '.hsm'), layout ?? null);
+                    const { text, warnings } = importSct(await file.text());
+                    this.loadText(text, file.name.replace(/\.sct$/i, '.hsm'));
                     warnings.forEach(warning => console.warn(`${file.name}: ${warning}`));
                     this.setStatus(warnings.length > 0 ? `Imported ${file.name} with ${warnings.length} warning(s): ${warnings.join(' ')}` : `Imported ${file.name}.`,
                         warnings.length > 0 ? 'warning' : 'info');
@@ -242,28 +223,13 @@ export class HsmApp implements DiagramHost {
                     this.setStatus(`Import of ${file.name} failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
                 }
             } else if (file) {
-                let layout: ManualLayout | undefined;
-                if (layoutFile) {
-                    try {
-                        layout = parseManualLayout(await layoutFile.text());
-                    } catch (error) {
-                        this.setStatus(`${layoutFile.name}: ${error instanceof Error ? error.message : String(error)}`, 'error');
-                    }
-                }
                 this.files.set(file.name, await file.text());
                 this.saveFiles();
-                this.loadText(this.files.get(file.name)!, file.name, layout);
+                this.loadText(this.files.get(file.name)!, file.name);
             }
             fileInput.value = '';
         });
-        byId('btn-save').addEventListener('click', () => {
-            download(this.fileName, this.editor.getValue(), 'text/plain');
-            const layout = this.diagram.manualLayout;
-            if (layout) {
-                // the layout is saved next to the model (sidecar file)
-                setTimeout(() => download(layoutFileName(this.fileName), serializeManualLayout(layout), 'application/json'), 300);
-            }
-        });
+        byId('btn-save').addEventListener('click', () => download(this.fileName, this.editor.getValue(), 'text/plain'));
         byId('btn-undo').addEventListener('click', () => this.diagram.undo());
         byId('btn-redo').addEventListener('click', () => this.diagram.redo());
         byId('btn-format').addEventListener('click', () => this.editor.getAction('editor.action.formatDocument')?.run());
@@ -273,7 +239,6 @@ export class HsmApp implements DiagramHost {
         direction.addEventListener('change', () => {
             this.settings.direction = direction.value as LayoutDirection;
             this.saveSettings();
-            this.diagram.directionChanged();
             this.diagram.relayout(true);
         });
         const routing = byId<HTMLSelectElement>('routing-select');
@@ -353,10 +318,8 @@ export class HsmApp implements DiagramHost {
         monaco.editor.setTheme(this.settings.theme === 'dark' ? EDITOR_THEMES.dark : EDITOR_THEMES.light);
     }
 
-    /**
-     * Loads a model. `layout`: its manual layout (undefined: the layout stored for the file name, null: none).
-     */
-    private loadText(text: string, fileName: string, layout?: ManualLayout | null): void {
+    /** Loads a model (its layout annotations, if any, are its manual layout). */
+    private loadText(text: string, fileName: string): void {
         if (this.diagram.simulation) {
             this.diagram.stopSimulation();
         }
@@ -371,11 +334,6 @@ export class HsmApp implements DiagramHost {
         this.diagram.reset();
         this.fileName = fileName;
         this.updateWorkspace();
-        const manual = layout === undefined ? loadStoredLayout(fileName) : layout ?? undefined;
-        if (layout !== undefined) {
-            storeLayout(fileName, manual);
-        }
-        this.diagram.loadLayout(manual, false);
         byId('file-name').textContent = fileName;
         try {
             localStorage.setItem(STORAGE_FILE, fileName);
@@ -384,15 +342,6 @@ export class HsmApp implements DiagramHost {
         }
         this.editor.setValue(text);
         this.diagram.update(true);
-    }
-
-    private async openLayoutFile(file: File): Promise<void> {
-        try {
-            this.diagram.replaceLayout(parseManualLayout(await file.text()));
-            this.setStatus(`Layout ${file.name} applied to ${this.fileName}.`);
-        } catch (error) {
-            this.setStatus(`${file.name}: ${error instanceof Error ? error.message : String(error)}`, 'error');
-        }
     }
 
     private selectElementAtCursor(): void {
@@ -530,15 +479,6 @@ export class HsmApp implements DiagramHost {
 
     textHasFocus(): boolean {
         return this.editor.hasTextFocus();
-    }
-
-    /** Manual layout: kept per file name in the local storage (Save downloads it as `.hsm.layout`). */
-    layoutChanged(layout: ManualLayout | undefined): void {
-        storeLayout(this.fileName, layout);
-    }
-
-    textStateKey(): string {
-        return String(this.editor.getModel()!.getAlternativeVersionId());
     }
 
     undo(): void {

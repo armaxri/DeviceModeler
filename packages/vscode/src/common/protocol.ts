@@ -32,25 +32,19 @@ export interface TextRange {
 
 export type StatusSeverity = 'info' | 'warning' | 'error';
 
-/** How a text change came about (`undo` / `redo` in VS Code): layout changes of diagram edits follow it. */
-export type TextChange = 'edit' | 'undo' | 'redo';
-
-/** Commands of the manual layout (experimental). */
-export type LayoutCommand = 'auto' | 'manual' | 'arrange' | 'reset';
+/**
+ * Commands of the manual layout (experimental): `arrange` writes the automatic layout as layout
+ * annotations into the model, `reset` removes all layout annotations.
+ */
+export type LayoutCommand = 'arrange' | 'reset';
 
 /** Messages from the extension to the webview. */
 export type ToWebview =
     /**
-     * The document text (on open and after every change, debounced; undo / redo immediately) and the texts
-     * of the `.hsm` files it imports (transitively) by URI, so that the webview can resolve the imports.
-     * `change`: how the text was changed (missing: initial text, imported files changed or unknown).
+     * The document text (on open and after every change, debounced) and the texts of the `.hsm` files it
+     * imports (transitively) by URI, so that the webview can resolve the imports.
      */
-    | { type: 'text', text: string, version: number, fileName: string, uri: string, files?: Record<string, string>, headers?: CppHeaderSettings, change?: TextChange }
-    /**
-     * Manual layout (experimental): the content of the layout file `<model>.hsm.layout` (sent before the
-     * first text and when the file is changed by another tool); `content` undefined: there is no file.
-     */
-    | { type: 'layout', content?: string }
+    | { type: 'text', text: string, version: number, fileName: string, uri: string, files?: Record<string, string>, headers?: CppHeaderSettings }
     /** Runs a command of the manual layout (commands of the extension). */
     | { type: 'layoutCommand', command: LayoutCommand }
     | { type: 'settings', settings: WebviewSettings }
@@ -80,9 +74,4 @@ export type FromWebview =
     | { type: 'command', command: 'exportSvg' | 'exportPlantUml' | 'generateCpp' }
     | { type: 'simulation', running: boolean }
     /** Opens a file and its diagram (double-click on a submachine state). */
-    | { type: 'openFile', uri: string }
-    /**
-     * Manual layout (experimental): the layout was changed in the diagram; the extension writes the
-     * layout file. `content` undefined: the manual layout was discarded (Reset).
-     */
-    | { type: 'layout', content?: string, mode?: 'auto' | 'manual' };
+    | { type: 'openFile', uri: string };

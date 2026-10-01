@@ -194,7 +194,9 @@ function machinePanel(model: StateMachine | undefined, host: PropertiesHost): HT
             h('li', {}, 'Double-click a state or transition to rename it or to edit its label (', h('code', {}, 'trigger [guard] / effect'), ').'),
             h('li', {}, 'Double-click the canvas to add a state.'),
             h('li', {}, 'Click the definitions box to see the interfaces and to add events, variables or operations.'),
-            h('li', {}, 'Drag a state onto another state to nest it, onto the canvas to move it to the top level.'),
+            h('li', {}, 'Drag a state to move it (the positions are stored as layout annotations in the model; ', h('i', {}, 'Reset'),
+                ' returns to the automatic layout). Hold ', h('kbd', {}, 'Shift'), ' while dropping to move it into the state below the mouse.'),
+            h('li', {}, 'Drag the corner of a selected state to resize it; double-click a transition to add a waypoint, double-click a waypoint to remove it.'),
             h('li', {}, h('kbd', {}, 'Del'), ' deletes, ', h('kbd', {}, 'F2'), ' renames, ', h('kbd', {}, 'Ctrl'), '+', h('kbd', {}, 'Z'), ' undoes.'),
             h('li', {}, 'Text and diagram are always in sync – edit whichever you prefer.'))
     ];

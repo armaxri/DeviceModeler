@@ -108,8 +108,8 @@ export interface SchemaOptions {
     recentTransitions?: ReadonlySet<string>;
     /** Simulation: ids of the elements with a breakpoint. */
     breakpoints?: ReadonlySet<string>;
-    /** Manual layout mode: states can be resized, bend points of transitions moved. */
-    manualLayout?: boolean;
+    /** The layout can be edited (not while simulating): states can be resized, waypoints of transitions moved. */
+    layoutEditable?: boolean;
     /** Simulation: the active states of the submachine instances by the id of their state (`motor: Running`). */
     instanceTexts?: ReadonlyMap<string, string>;
 }
@@ -131,7 +131,7 @@ export function toSchema(graph: DiagramGraph, options: SchemaOptions): SModelRoo
         composite: node.composite ?? false,
         regionIndex: node.index ?? 0,
         separator: node.separator ?? separator,
-        resizable: (options.manualLayout ?? false) && node.kind === 'state',
+        resizable: (options.layoutEditable ?? false) && node.kind === 'state',
         selected: options.selected.has(node.id),
         issue: options.issues.get(node.id),
         pendingSource: options.pendingSource === node.id,
@@ -154,7 +154,7 @@ export function toSchema(graph: DiagramGraph, options: SchemaOptions): SModelRoo
         issue: options.issues.get(edge.id),
         taken: options.recentTransitions?.has(edge.id) ?? false,
         breakpoint: options.breakpoints?.has(edge.id) ?? false,
-        editable: options.manualLayout ?? false,
+        editable: options.layoutEditable ?? false,
         children: []
     } as SModelElement);
     return {

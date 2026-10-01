@@ -1,6 +1,6 @@
 # HSM Modeler for VS Code
 
-> 🧪 This is the build of the branch `claude/manual-layout` (version `0.1.0-manual-layout`, display name
+> 🧪 This is the build of the branch `claude/layout-annotations` (version `0.1.0-manual-layout`, display name
 > *HSM Modeler (manual layout)*) with hand-arranged diagrams, see [Manual layout](#manual-layout-experimental).
 > It has the same extension id as the regular build (`hsm-modeler.hsm-vscode`), so only one of them can
 > be installed at a time: uninstall the other one first (`code --uninstall-extension hsm-modeler.hsm-vscode`)
@@ -54,31 +54,26 @@ the Test Explorer and the import of itemis CREATE models.
 
 ## Manual layout (experimental)
 
-The diagram is laid out automatically by default. With **Positions: Manual** in the toolbar of the
-diagram it can be arranged by hand, as in the web app: drag states, pseudo states and the definitions
-box (`Shift` while dropping moves a state into the state below the mouse), resize a selected state with
-the handle at its bottom right corner, double-click a selected transition to add a waypoint the route
-passes through (drag it, double-click it to remove it), drag the label of a selected transition. **Auto-arrange** re-runs the
-automatic layout and keeps it as manual layout, **Reset** discards the manual layout, **Auto** shows the
-automatic layout but keeps the manual one. The same actions are available as commands (**HSM: Diagram
-Positions: Manual / Automatic**, **HSM: Auto-arrange Diagram**, **HSM: Reset Manual Diagram Layout**)
-and in the *…* menu of the diagram.
+The diagram is laid out automatically by default. It can be arranged by hand, as in the web app: drag
+states, pseudo states and the definitions box (`Shift` while dropping moves a state into the state below
+the mouse), resize a selected state with the handle at its bottom right corner, double-click a selected
+transition to add a waypoint the route passes through (drag it, double-click it to remove it), drag the
+label of a selected transition. The first drag turns the diagram into a manual layout.
 
-- **Storage:** `<model>.hsm.layout` next to the model (JSON keyed by qualified names; format in
-  `docs/manual-layout.md` of the repository). It is read when the diagram is opened and written 300 ms
-  after a change in the diagram – only in the manual mode or if the file exists already, so opening a
-  diagram never creates a file. *Reset* deletes it. Changes by other tools (git, another editor) are
-  picked up by a file watcher. Renaming or moving the model in VS Code moves the layout file along.
-  **HSM: Import itemis CREATE Model** writes the arrangement of the itemis diagram as `.hsm.layout`;
-  **HSM: Export Diagram as SVG** applies the manual layout.
-- **Undo:** text edits (including those made in the diagram) belong to the document and are undone by
-  VS Code. Layout-only changes (move, resize, bend points, labels, Auto / Manual, Auto-arrange, Reset)
-  are undone with `Ctrl+Z` / `Ctrl+Y` **while the diagram has the focus**: the diagram undoes the most
-  recent change – a layout change if the text has not been changed since, otherwise the text (via VS
-  Code's undo). Layout changes that belong to a diagram edit (renamed or moved states keep their
-  position, deleted ones lose it) are undone and redone together with the text edit, also with `Ctrl+Z`
-  in the text editor. Layout changes do not mark the model as dirty; the layout file is written
-  independently of saving the model.
+- **Storage:** the layout is part of the model – layout annotations before the elements (`@at(x, y)`,
+  `@size(w, h)`, `@via(x1, y1, …)`, `@label(dx, dy)`, `@regions(…)`) and in their bodies (`@initial`,
+  `@final`, `@definitions`); syntax in `docs/manual-layout.md` of the repository. A model with layout
+  annotations has a manual layout, one without the automatic layout.
+- **Auto-arrange** writes the automatic layout as annotations, **Reset** removes all layout annotations;
+  both are also commands (**HSM: Auto-arrange Diagram**, **HSM: Reset Diagram Layout**) and in the *…*
+  menu of the diagram.
+  **HSM: Convert Layout File to Annotations** writes a `<model>.hsm.layout` of the earlier sidecar
+  experiment into the model (the file is kept).
+- **Undo and saving:** layout changes are edits of the document like all diagram edits – undone with
+  `Ctrl+Z` (text editor or diagram), they mark the model as dirty and are saved with it. Renames, also
+  typed in the text or via *Rename Symbol*, keep the layout.
+- **HSM: Import itemis CREATE Model** writes the arrangement of the itemis diagram as annotations;
+  **HSM: Export Diagram as SVG** applies them.
 
 ## Settings
 
@@ -124,9 +119,8 @@ rebuilds the extension and the server on changes).
 
 ## Limitations
 
-- Manual layout (experimental): the layout file is written also while the model has unsaved changes,
-  and *Revert File* does not revert it; renames typed in the text (or via *Rename Symbol*) do not update
-  the layout keys (the renamed state is placed automatically).
+- Manual layout (experimental): models with layout annotations cannot be opened by the regular build
+  (syntax errors); every drag changes the model text (coordinates appear in diffs).
 - Generate C++ generates the model on disk (unsaved changes are saved first); the `c` target of a
   generator configuration is not generated by the extension (use `hsm generate`).
 - Tests run in the extension host on the interpreter of the language package (no compiled C++).

@@ -1,9 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
-import type { FromWebview, LayoutCommand, OffsetEdit, TextChange, TextRange, ToWebview, WebviewSettings } from '../common/protocol.js';
+import type { FromWebview, LayoutCommand, OffsetEdit, TextRange, ToWebview, WebviewSettings } from '../common/protocol.js';
 import { canApplyEdit, toRangeEdits } from './logic/edits.js';
-import { LAYOUT_SUFFIX, LayoutFileSync } from './logic/layout-file.js';
-import { hasLayoutFile, moveLayoutFiles, workspaceLayoutFs } from './layout-files.js';
 import { effectiveTheme, webviewHtml } from './logic/webview.js';
 import { collectImportedFiles } from './logic/imports.js';
 import type { CppHeaderSettings } from 'hsm-language';
@@ -66,7 +64,7 @@ export class DiagramManager implements vscode.Disposable {
             }),
             vscode.workspace.onDidChangeTextDocument(event => {
                 const uri = event.document.uri.toString();
-                this.panels.get(uri)?.documentChanged(event.document, event.reason);
+                this.panels.get(uri)?.documentChanged(event.document);
                 // diagrams of models importing the changed file
                 for (const panel of this.panels.values()) {
                     if (panel.imports(uri)) {
@@ -88,9 +86,18 @@ export class DiagramManager implements vscode.Disposable {
             }),
             vscode.window.onDidChangeActiveColorTheme(() => this.broadcastSettings()),
             vscode.window.onDidChangeActiveTextEditor(editor => this.autoOpen(editor)),
-            vscode.workspace.onDidRenameFiles(event => this.filesRenamed(event.files).catch(error => {
-                vscode.window.showWarningMessage(`HSM: the layout file could not be moved with the model: ${error instanceof Error ? error.message : String(error)}`);
-            }))
+            vscode.workspace.onDidRenameFiles(event => {
+                for (const { oldUri, newUri } of event.files) {
+                    const panel = this.panels.get(oldUri.toString());
+                    if (panel) {
+                        this.panels.delete(oldUri.toString());
+                        vscode.workspace.openTextDocument(newUri).then(document => {
+                            panel.setDocument(document);
+                            this.panels.set(newUri.toString(), panel);
+                        });
+                    }
+                }
+            })
         );
         this.autoOpen(vscode.window.activeTextEditor);
     }
@@ -100,28 +107,6 @@ export class DiagramManager implements vscode.Disposable {
             panel.dispose();
         }
         this.disposables.forEach(d => d.dispose());
-    }
-
-    /**
-     * Models were renamed / moved: the diagrams follow their documents, and the layout files
-     * (`<model>.hsm.layout`, manual layout) are moved along (pending layout changes are written first).
-     */
-    private async filesRenamed(files: ReadonlyArray<{ oldUri: vscode.Uri, newUri: vscode.Uri }>): Promise<void> {
-        const moved: Array<{ panel: DiagramPanel, newUri: vscode.Uri }> = [];
-        for (const { oldUri, newUri } of files) {
-            const panel = this.panels.get(oldUri.toString());
-            if (panel) {
-                this.panels.delete(oldUri.toString());
-                await panel.flushLayout();
-                moved.push({ panel, newUri });
-            }
-        }
-        await moveLayoutFiles(files);
-        for (const { panel, newUri } of moved) {
-            const document = await vscode.workspace.openTextDocument(newUri);
-            await panel.setDocument(document);
-            this.panels.set(newUri.toString(), panel);
-        }
     }
 
     /** The diagram of the document, if open. */
@@ -179,7 +164,7 @@ export class DiagramManager implements vscode.Disposable {
         }
     }
 
-    /** Runs a command of the manual layout in the active diagram. */
+    /** Runs a layout command (auto-arrange, reset) in the active diagram. */
     layoutCommand(uri: vscode.Uri | undefined, command: LayoutCommand): boolean {
         const panel = uri ? this.panels.get(uri.toString()) : this.active;
         panel?.post({ type: 'layoutCommand', command });
@@ -209,11 +194,6 @@ export class DiagramPanel {
     private importedUris = new Set<string>();
     private sendQueue: Promise<void> = Promise.resolve();
     private readonly readyWaiters: Array<() => void> = [];
-    /** How the text changes collected for the next text message came about. */
-    private pendingChange?: TextChange;
-    /** Manual layout (experimental): the sidecar file `<model>.hsm.layout` and a watcher for external changes. */
-    private layoutSync?: LayoutFileSync;
-    private layoutWatcher?: vscode.Disposable;
 
     constructor(private readonly manager: DiagramManager, readonly panel: vscode.WebviewPanel, private document: vscode.TextDocument) {
         panel.iconPath = vscode.Uri.joinPath(manager.context.extensionUri, 'media', 'diagram.svg');
@@ -225,7 +205,6 @@ export class DiagramPanel {
         panel.webview.onDidReceiveMessage((message: FromWebview) => this.receive(message).catch(error => {
             vscode.window.showErrorMessage(`HSM diagram: ${error instanceof Error ? error.message : String(error)}`);
         }));
-        this.createLayoutSync();
     }
 
     static title(document: vscode.TextDocument): string {
@@ -240,14 +219,10 @@ export class DiagramPanel {
         return this.document.uri;
     }
 
-    /** The document was renamed / moved (its layout file has been moved along already). */
-    async setDocument(document: vscode.TextDocument): Promise<void> {
+    /** The document was renamed / moved. */
+    setDocument(document: vscode.TextDocument): void {
         this.document = document;
         this.panel.title = DiagramPanel.title(document);
-        this.createLayoutSync();
-        if (this.ready) {
-            await this.sendLayout();
-        }
         this.sendText();
     }
 
@@ -258,8 +233,6 @@ export class DiagramPanel {
     disposeResources(): void {
         clearTimeout(this.textTimer);
         clearTimeout(this.cursorTimer);
-        this.layoutSync?.dispose();
-        this.layoutWatcher?.dispose();
         for (const editor of this.textEditors()) {
             editor.setDecorations(this.manager.highlight, []);
         }
@@ -274,19 +247,13 @@ export class DiagramPanel {
         return this.ready ? Promise.resolve() : new Promise(resolve => this.readyWaiters.push(resolve));
     }
 
-    documentChanged(document: vscode.TextDocument, reason?: vscode.TextDocumentChangeReason): void {
+    documentChanged(document: vscode.TextDocument): void {
         this.document = document;
         if (this.applyingEdit) {
             // the result of the edit is sent with the answer to the edit request
             return;
         }
         clearTimeout(this.textTimer);
-        if (reason === vscode.TextDocumentChangeReason.Undo || reason === vscode.TextDocumentChangeReason.Redo) {
-            // sent immediately: the webview undoes / redoes the layout change of a diagram edit with it
-            this.sendText(reason === vscode.TextDocumentChangeReason.Undo ? 'undo' : 'redo');
-            return;
-        }
-        this.pendingChange = 'edit';
         this.textTimer = setTimeout(() => this.sendText(), TEXT_DEBOUNCE_MS);
     }
 
@@ -306,21 +273,15 @@ export class DiagramPanel {
         this.cursorTimer = setTimeout(() => this.post({ type: 'cursor', offset }), CURSOR_DEBOUNCE_MS);
     }
 
-    private sendText(change?: TextChange): void {
+    private sendText(): void {
         clearTimeout(this.textTimer);
-        if (change && this.pendingChange) {
-            // typing collected for the debounced message is sent first
-            this.sendText();
-        }
         const document = this.document;
         const text = document.getText();
         const version = document.version;
-        const textChange = change ?? this.pendingChange;
-        this.pendingChange = undefined;
         // the texts of the imported state machines (open documents with their unsaved changes, else the files)
         const headers = headerSettingsFor(document.uri);
         const files = collectImportedFiles(document.uri.toString(), text, readText, 100, headers).catch(() => ({}));
-        // posted in order: an undo / redo must not overtake the typing before it
+        // posted in order (an older text must not overwrite a newer one)
         this.sendQueue = this.sendQueue.then(() => files).then(imported => {
             this.importedUris = new Set(Object.keys(imported));
             this.post({
@@ -330,55 +291,9 @@ export class DiagramPanel {
                 fileName: path.basename(document.uri.path),
                 uri: document.uri.toString(),
                 files: imported,
-                headers,
-                change: textChange
+                headers
             });
         });
-    }
-
-    // -----------------------------------------------------------------------------------------
-    // Manual layout (experimental): `<model>.hsm.layout` next to the model
-
-    private createLayoutSync(): void {
-        this.layoutSync?.dispose();
-        this.layoutWatcher?.dispose();
-        this.layoutSync = undefined;
-        this.layoutWatcher = undefined;
-        const uri = this.document.uri;
-        if (!hasLayoutFile(uri)) {
-            return;
-        }
-        const sync = new LayoutFileSync(workspaceLayoutFs(uri), uri.path, {
-            onError: error => vscode.window.showErrorMessage(`HSM: the layout file could not be written: ${error instanceof Error ? error.message : String(error)}`)
-        });
-        this.layoutSync = sync;
-        const folder = vscode.Uri.joinPath(uri, '..');
-        const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, path.posix.basename(uri.path) + LAYOUT_SUFFIX));
-        const changed = () => {
-            if (!this.ready || this.layoutSync !== sync) {
-                return;
-            }
-            sync.externalChange().then(change => {
-                if (change && this.layoutSync === sync) {
-                    this.post({ type: 'layout', content: change.content });
-                }
-            });
-        };
-        watcher.onDidCreate(changed);
-        watcher.onDidChange(changed);
-        watcher.onDidDelete(changed);
-        this.layoutWatcher = watcher;
-    }
-
-    /** Reads the layout file and sends it to the webview. */
-    private async sendLayout(): Promise<void> {
-        const content = await this.layoutSync?.load();
-        this.post({ type: 'layout', content });
-    }
-
-    /** Writes a pending change of the layout file now. */
-    async flushLayout(): Promise<void> {
-        await this.layoutSync?.flush();
     }
 
     private async currentDocument(): Promise<vscode.TextDocument> {
@@ -393,8 +308,6 @@ export class DiagramPanel {
             case 'ready':
                 this.ready = true;
                 this.post({ type: 'settings', settings: this.manager.settings() });
-                // the layout first: the first diagram of the text uses it
-                await this.sendLayout();
                 this.sendText();
                 this.readyWaiters.splice(0).forEach(resolve => resolve());
                 break;
@@ -429,9 +342,6 @@ export class DiagramPanel {
                 await vscode.commands.executeCommand(`hsm.${message.command}`, this.document.uri);
                 break;
             case 'simulation':
-                break;
-            case 'layout':
-                this.layoutSync?.update(message.content === undefined ? undefined : { content: message.content, mode: message.mode ?? 'manual' });
                 break;
             case 'openFile': {
                 // double-click on a submachine state: the file of its state machine and its diagram
