@@ -132,6 +132,7 @@ npm start -w packages/desktop   # the desktop app from the sources
 ```bash
 npm run build -w packages/language
 node packages/language/bin/cli.js validate examples/cd-player.hsm
+node packages/language/bin/cli.js validate --json examples/*.hsm     # problems as JSON (IDE integrations)
 node packages/language/bin/cli.js layout examples/keyboard.hsm --direction RIGHT
 node packages/language/bin/cli.js render examples -o out --theme modern     # SVG diagrams, see below
 node packages/language/bin/cli.js doc examples -o docs/models --format html  # documentation, see below

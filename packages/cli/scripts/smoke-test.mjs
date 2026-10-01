@@ -51,6 +51,10 @@ await check('validate (error exit code)', () => {
     }
     assert(status === 1, `exit code ${status}`);
 });
+await check('validate --json (several files)', () => {
+    const result = JSON.parse(run('validate', '--json', 'examples/cd-player.hsm', 'examples/door-with-motor/gate.hsm'));
+    assert(result.files.length === 2 && result.files.every(file => file.problems.length === 0), JSON.stringify(result));
+});
 await check('simulate', () => assert(run('simulate', 'examples/cd-player.hsm', '-e', 'play').includes('active:'), 'no trace'));
 await check('generate cpp', async () => {
     run('generate', 'cpp', 'examples/traffic-light.hsm', '-o', path.join(tmp, 'gen'));

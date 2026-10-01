@@ -15,6 +15,7 @@ import { StatechartInterpreter } from '../simulation/interpreter.js';
 import { formatTraceEntry, runScenario, validateScenario, type ScenarioStep } from '../simulation/scenario.js';
 import { runTestCommand, type TestCommandOptions } from '../testing/test-command.js';
 import { registerRenderCommands } from './render-commands.js';
+import { validateJson } from './validate-json.js';
 import { CppTypeIndex, cppHeaderReport } from '../cpp-header/index.js';
 import { cliHeaderSettings, dataModelNamed, installNodeHeaderSupport, parseDefines, type NodeHeaderOptions } from '../node/cpp-headers-node.js';
 
@@ -69,14 +70,25 @@ export function createProgram(): Command {
     const program = new Command('hsm').description('Tools for hierarchical state machine models (.hsm)');
 
     headerOptions(program.command('validate'))
-        .argument('<file>', '.hsm file to validate')
-        .description('parses and validates a model')
-        .action(async (file: string, options: HeaderCommandOptions) => {
-            const { errors } = await load(file, options);
-            if (errors > 0) {
-                process.exitCode = 1;
-            } else {
-                console.log(`${file}: OK`);
+        .argument('<files...>', '.hsm files to validate')
+        .option('--json', 'machine readable output on stdout (for IDE integrations): {"files":[{"file","path","problems":[…]}]}')
+        .description('parses and validates models')
+        .action(async (files: string[], options: HeaderCommandOptions & { json?: boolean }) => {
+            if (options.json) {
+                const result = await validateJson(files, options);
+                process.stdout.write(`${JSON.stringify(result)}\n`);
+                if (result.files.some(file => file.problems.some(problem => problem.severity === 'error'))) {
+                    process.exitCode = 1;
+                }
+                return;
+            }
+            for (const file of files) {
+                const { errors } = await load(file, options);
+                if (errors > 0) {
+                    process.exitCode = 1;
+                } else {
+                    console.log(`${file}: OK`);
+                }
             }
         });
 
