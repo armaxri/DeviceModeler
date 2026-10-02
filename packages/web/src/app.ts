@@ -7,6 +7,7 @@ import { DiagramController, type DiagramHost, type DiagramSettings, type StatusS
 import { createWorkerElk } from './diagram/elk.js';
 import { byId, download, h } from './ui/dom.js';
 import type { SimulationSession } from './simulation/session.js';
+import { SidePanel, type SidePanelState } from './ui/side-panel.js';
 import { EMPTY_MODEL, EXAMPLE_HEADERS, EXAMPLES } from './examples.js';
 import { HttpHost, type HostDocument } from './host.js';
 import { generateCppForHost, hostHeaderSettings } from './host-generate.js';
@@ -16,6 +17,7 @@ export type { Tool } from './diagram-controller.js';
 
 interface Settings extends DiagramSettings {
     editorWidth?: string;
+    sidePanel?: SidePanelState;
 }
 
 const STORAGE_TEXT = 'hsm-modeler.text';
@@ -70,6 +72,7 @@ export class HsmApp implements DiagramHost {
         this.bindToolbar();
         this.bindKeyboard();
         this.bindSplitter();
+        this.createSidePanel();
         this.applyTheme();
         await this.diagram.update();
     }
@@ -531,6 +534,22 @@ export class HsmApp implements DiagramHost {
             splitter.addEventListener('pointermove', move);
             splitter.addEventListener('pointerup', up);
         });
+    }
+
+    /** The collapsible side panel right of the diagram; its state is kept in the settings. */
+    private createSidePanel(): void {
+        const panel = new SidePanel(byId('properties'), {
+            shortcut: true,
+            store: {
+                load: () => this.settings.sidePanel,
+                save: state => {
+                    this.settings.sidePanel = state;
+                    this.saveSettings();
+                }
+            }
+        });
+        // the toggle at the right end of the toolbar (like the layout controls of VS Code)
+        document.querySelector('.toolbar > .group:last-child')!.append(panel.toggleButton);
     }
 
     private applyTheme(): void {

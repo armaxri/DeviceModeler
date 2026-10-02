@@ -319,12 +319,11 @@ main {
 
 /* ---- properties ---- */
 
+/* the content of the side panel (see side-panel.css) */
 #properties {
-    width: 280px;
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
-    background: var(--ui-panel);
-    border-left: 1px solid var(--ui-border);
-    padding: 12px 14px;
 }
 
 #properties h2 {
@@ -653,7 +652,7 @@ body.ui-dark #properties .problems li.error { background: #3d1f1f; color: #ffb4b
         grid-template-rows: 35% 5px 1fr;
     }
     #splitter { cursor: row-resize; }
-    #properties { display: none; }
+    #side-panel, #btn-side-panel { display: none; }
 }
 
 /* ---- manual layout (experimental) ---- */

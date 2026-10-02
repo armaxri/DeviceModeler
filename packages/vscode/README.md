@@ -85,7 +85,7 @@ label of a selected transition. The first drag turns the diagram into a manual l
 | `hsm.diagram.direction` | `DOWN` | layout direction (`DOWN`, `RIGHT`) |
 | `hsm.diagram.edgeRouting` | `SPLINES` | `SPLINES`, `ORTHOGONAL`, `POLYLINE` |
 | `hsm.diagram.priorities` | `true` | show transition priorities |
-| `hsm.diagram.showProperties` | `true` | properties panel next to the diagram |
+| `hsm.diagram.showProperties` | `true` | side panel (properties, simulation) next to the diagram; also toggled by the panel button of the diagram's toolbar |
 | `hsm.diagram.autoOpen` | `false` | open the diagram whenever an `.hsm` file is opened |
 | `hsm.cpp.outputDirectory` | `""` | relative to the model; `${workspaceFolder}` and absolute paths work |
 | `hsm.cpp.namespace` | `null` | `null`: namespace of the model, `""`: global namespace |

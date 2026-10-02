@@ -288,7 +288,7 @@
         "hsm.diagram.showProperties": {
           "type": "boolean",
           "default": true,
-          "description": "Show the properties panel next to the diagram."
+          "description": "Show the side panel (properties of the selection, simulation) next to the diagram. Also toggled by the panel button in the toolbar of the diagram."
         },
         "hsm.cpp.outputDirectory": {
           "type": "string",

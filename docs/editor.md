@@ -23,6 +23,24 @@ The web app (`npm run dev`, `packages/web`) edits the text and the diagram side 
 | Undo / redo | `Ctrl+Z` / `Ctrl+Y` (shared with the text editor) |
 | Keep a tool active | hold `Shift` while choosing it, `Esc` to go back to selection |
 
+## Side panel
+
+The panel right of the diagram shows the properties of the selection (and the simulation while
+simulating). It behaves like the side bars of VS Code; the same panel is used by the standalone app,
+the Eclipse plugin and the diagram of the VS Code extension.
+
+| Action | How |
+| --- | --- |
+| Hide / show the panel | panel button at the right end of the toolbar, the `›` button in the panel's title row or the strip of the hidden panel, `Ctrl+Alt+B` (`⌥⌘B` on macOS; not in VS Code, where this shortcut toggles VS Code's own secondary side bar) |
+| Change its width | drag its left edge; with the edge focused (`Tab`) `←` / `→` (`Shift`: larger steps); double-click or `Home` restores the default width |
+| Collapse / expand a section | click its header (*State*, *Actions*, *How to edit*, *Variables*, …) or press `Enter` / `Space` on it |
+
+All sections are expanded at first. Collapsed sections stay collapsed for every element of the same
+kind (e.g. *Actions* for all elements, *State* for all states) and across sessions: the web app keeps
+the state in its settings (browser storage, in Eclipse the settings of the host), the VS Code
+extension in the state of the diagram view; whether the panel is shown there is the setting
+`hsm.diagram.showProperties`.
+
 ## Manual layout (experimental)
 
 🧪 By default the diagram is laid out automatically (ELK). As soon as a state is dragged, the diagram
