@@ -131,9 +131,26 @@ button.primary {
     max-width: 130px;
 }
 
-@media (max-width: 1600px) {
+/* narrower windows: the toolbar stays one row as long as possible – first without the labels of the selects
+   (their tooltips name them), then without the name of the app */
+@media (max-width: 1800px) {
     .toolbar label .label-text {
         display: none;
+    }
+}
+
+@media (max-width: 1600px) {
+    .toolbar {
+        column-gap: 10px;
+    }
+    .toolbar .brand span {
+        display: none;
+    }
+    .toolbar select {
+        max-width: 140px;
+    }
+    #example-select {
+        max-width: 104px;
     }
 }
 
