@@ -1,5 +1,6 @@
 import {
-    defaultValueOf, fromHost, formatValue as formatRuntimeValue, isCppType, runtimeTypeOfCpp, toHost, type HostValue, type RuntimeType
+    defaultValueOf, enumeratorValueText, fromHost, formatValue as formatRuntimeValue, isCppType, runtimeTypeOfCpp, toHost, type HostValue,
+    type RuntimeType
 } from 'hsm-language';
 import { h } from './dom.js';
 
@@ -140,7 +141,7 @@ function readInput(input: HTMLInputElement, base: string, type: EditorType): Hos
 function enumEditor(type: Extract<RuntimeType, { resolved: unknown }>, initial: HostValue | undefined): ValueEditor {
     const resolved = type.resolved.kind === 'enum' ? type.resolved : undefined;
     const select = h('select', { class: 'sim-input sim-enum' },
-        ...(resolved?.enumerators ?? []).map(e => h('option', { value: `${type.cppName}::${e.name}`, title: `${e.qualifiedName} = ${e.value}` }, e.name)));
+        ...(resolved?.enumerators ?? []).map(e => h('option', { value: `${type.cppName}::${e.name}`, title: `${e.qualifiedName} = ${enumeratorValueText(e, resolved!)}` }, e.name)));
     const editor: ValueEditor = {
         element: select,
         set: value => {

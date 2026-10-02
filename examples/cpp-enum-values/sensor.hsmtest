@@ -1,0 +1,52 @@
+// Unit tests of the sensor (hsm test examples/cpp-enum-values/sensor.hsmtest): the enumerator values
+// of sensor_codes.h are those a C++ compiler computes.
+testclass SensorTest for statemachine Sensor {
+
+    @SetUp
+    operation init() {
+        enter
+    }
+
+    @Test
+    operation enumeratorValuesFollowTheCppRules() {
+        // unscoped enums convert to integer
+        assert sensor::kReady == 3 message "kPowered | kCalibrated"
+        assert sensor::kOverTemperature == 0x10
+        assert sensor::kVendor == 2048 message "SENSOR_VENDOR_BASE << 4"
+        assert sensor::kAll == 65535
+        assert sensor::kLow == -2 && sensor::kZero == 0 message "implicit values after a negative value"
+        assert sensor::kOctal == 8 message "010 is octal"
+        assert sensor::kMaxLevel == 25 message "'z' - 'a'"
+        assert ::SENSOR_BUSY == -109 && ::SENSOR_LAST_ERROR == ::SENSOR_BUSY
+        // values of enum classes need a cast
+        assert (sensor::State::Booting as integer) == 1
+        assert (sensor::State::Calibrating as integer) == 11 message "previous + 1 after an explicit value"
+        assert (sensor::State::Fatal as integer) == 241
+        assert (sensor::Command::Start as integer) == 83 message "'S'"
+        assert (sensor::Command::Newline as integer) == 10 message "'\\n'"
+    }
+
+    @Test
+    operation measuresOnQuery() {
+        assert current == sensor::State::Off
+        raise command : sensor::Command::Start
+        assert active(On.Ready)
+        assert status == sensor::kReady
+        raise command : sensor::Command::Query
+        assert active(Measuring) && current == sensor::State::Measuring
+        raise measured : 95
+        assert active(Ready)
+        assert (status & sensor::kOverTemperature) != 0
+        assert level == sensor::kMaxLevel
+    }
+
+    @Test
+    operation reportsATimeout() {
+        raise command : sensor::Command::Start
+        raise command : sensor::Command::Query
+        raise timeout
+        assert result == ::SENSOR_TIMEOUT
+        raise command : sensor::Command::Stop
+        assert active(Off) && status == sensor::kNone
+    }
+}

@@ -37,6 +37,7 @@ export * from './doc/hsm-documentation-provider.js';
 export * from './cpp-header/index.js';
 export * from './cpp-headers.js';
 export * from './cpp-types.js';
+export * from './cpp-enums.js';
 export * from './cpp-storage.js';
 export * from './lsp/cpp-lsp.js';
 export * from './class-members.js';

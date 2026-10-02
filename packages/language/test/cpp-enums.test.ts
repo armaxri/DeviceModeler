@@ -388,10 +388,10 @@ describe('C++ enums: language server', () => {
         expect(level).toContain('enumerator of `enum class app::io::Level` (underlying type `std::int8_t`)');
         const hex = cppHover(doc, text.indexOf('::kHex') + 3)!;
         expect(hex).toContain('Flags::kHex = 255');
-        expect(hex).toContain('(0xFF)');
+        expect(hex).toContain('value `255` (`0xFF`)');
         const color = cppHover(doc, text.indexOf('var color : Color') + 'var color : '.length + 1)!;
         expect(color).toContain('enum Color');
-        expect(color).toContain('`Red = 0`, `Green = 2`, `Blue = 3`');
+        expect(color).toContain('- `Red = 0` (implicit)\n- `Green = 2`\n- `Blue = 3` (implicit)');
         expect(color).toContain('unscoped: the enumerators are also members of the global namespace');
         expect(color).toContain('Colors of the status LED');
         const handle = cppHover(doc, text.indexOf('app::Handle') + 'app::'.length)!;
