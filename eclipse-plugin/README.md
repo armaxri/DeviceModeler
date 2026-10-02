@@ -112,9 +112,12 @@ npm run build:exe
 
 # the plugin, the fragments with the executables, the feature and a p2 update site
 cd eclipse-plugin
-mvn verify               # fragments without executable stay empty; -Dhsm.cli.optional=false requires all five
+mvn verify               # fragments without executable stay empty (and installable); -Dhsm.cli.optional=false requires all five
 # → hsm.eclipse.site/target/hsm.eclipse.site-0.1.0-SNAPSHOT.zip (update site archive)
 ```
+
+A fragment with the executable gets the p2 instruction that makes `bin/hsm` executable when it is installed
+(`META-INF/p2.inf`, generated from `p2-chmod.inf` by the build only if `bin/hsm` is there).
 
 The Maven build copies `packages/web/dist` into the bundle (`hsm.eclipse/webapp/`, not committed); rebuild
 the web app before the plugin to get its latest version.

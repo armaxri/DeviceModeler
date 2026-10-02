@@ -222,8 +222,8 @@ function assertNotRunning(layout) {
 
 function buildPlugin(options) {
     ensureDependencies(options);
-    // the fragment of this platform needs the executable: without it p2 fails to install the feature (its
-    // chmod instruction finds no bin/hsm), so it is built if missing
+    // the executable for the fragment of this platform (validation of closed models with the bundled hsm);
+    // without it the fragment is empty and the plugin uses hsm of the PATH, so it is built if missing
     ensureCliExecutable(options, { rebuild: options['rebuild-cli'] });
     step('Building the web app (packages/web/dist)');
     run(npm(), ['run', 'build', '-w', 'packages/language'], options);
