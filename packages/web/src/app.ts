@@ -539,7 +539,8 @@ export class HsmApp implements DiagramHost {
     /** The collapsible side panel right of the diagram; its state is kept in the settings. */
     private createSidePanel(): void {
         const panel = new SidePanel(byId('properties'), {
-            shortcut: true,
+            // not in the embedded app: Ctrl+Alt+B (⌥⌘B) is a command of the host (Eclipse: Skip All Breakpoints)
+            shortcut: !this.host,
             store: {
                 load: () => this.settings.sidePanel,
                 save: state => {
