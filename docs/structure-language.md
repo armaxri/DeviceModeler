@@ -194,7 +194,10 @@ A thread groups instances that run in the same thread of execution. Instances ar
   own structure (the parts of `DriveUnit` run in `MotorTask`); a composite instance inside a thread runs
   those of its parts that are not assigned to a thread of their own structure in that thread.
 - A connection between two instances of different threads crosses threads: an info diagnostic (the
-  diagram draws it dashed). Connections to passive instances are not reported.
+  diagram draws it dashed). For a composite instance outside of any thread, the threads of the component
+  ports the connection leads to inside the composite count (`door.motor -> drive.ctrl` crosses from
+  `ControlTask` to `MotorTask`, see `connectionThreads` in dmf-routes.ts). Connections to passive instances
+  are not reported.
 
 ## Route analysis
 
@@ -214,6 +217,47 @@ of a composite instance with the same port seen from inside the composite.
 | `routeEndpointsOf(node, { root? })`, `endpointsOfPort(root, port)`, `structureContexts(root)` | endpoints of model elements, the instance tree |
 | `endpointLabel(endpoint)`, `endpointKey(endpoint)`, `sameEndpoint(a, b)` | names (`drive.motor.ctrl`) and identity of endpoints |
 
+## Diagram
+
+The diagram of a structure file is an internal block diagram (IBD) in the style of SysML, in the themes of
+the state machine diagrams (PlantUML classic / modern, dark). It is shown by the web editor (read only: the
+text is edited, the diagram follows) and rendered by `hsm render` ([rendering](rendering.md)):
+
+![The garage door system](examples/GarageDoor.svg)
+
+| Element | Notation |
+|---|---|
+| structure / system | a frame with the tab `ibd [system] GarageDoor`; its boundary ports on the border, labels outside |
+| thread | a rounded, tinted frame `«thread» ControlTask` with its settings (`priority 5 · period 10 ms`) enclosing its instances |
+| instance | a box `«component»` / `«structure»` and `name : Type`; an icon of two linked states: the component has a behavior state machine; the rake icon: a composite (a structure with an internal diagram of its own) |
+| port | a small square on the border, the name inside the box: **filled** = provided, **hollow** = required |
+| async / sync | async ports (events) show a chevron pointing in the direction the events flow – into the box for provided ports, out of it for required ports; sync ports (data) are plain squares |
+| connection, delegation | solid orthogonal lines between the ports (no arrow heads: the port symbols show the direction); **dashed** if the connection crosses threads |
+
+Instances outside of threads (passive instances, composites) are drawn directly in the frame. Ports are on
+the side facing the ports they are connected to (by default provided ports left, required ports right),
+ordered by the position of their partners, so a reply (`drive.status -> door.status`) needs no detour.
+
+**Choosing what is shown.** The diagram shows the first `system` of the file, else its first
+`structure`; a file with component types only shows them all as blocks with their ports (or one of
+them). If the file declares several elements, a selector at the top of the diagram chooses the shown one;
+moving the text cursor into another structure shows that one.
+
+**Routes.** Selecting a port, a connection or an instance highlights the route of its signals
+(`ibdRouteElements`, based on `routeOf` / `portRoute` of the route analysis): the ports, connectors and
+instances on the route are drawn in orange, everything else is dimmed. The properties panel lists the
+providers of a required port (the requirers of a provided port). Diagnostics are shown as markers at the
+element (or at the tab of the frame).
+
+**Diagram model** (`layoutStructure` in `src/diagram/ibd-layout.ts`, types in `ibd-model.ts`): stable ids
+derived from the names – frame `GarageDoor`, boundary port `GarageDoor.remote`, thread
+`GarageDoor/thread:ControlTask`, instance `GarageDoor/door`, port of an instance `GarageDoor/door.cmd`,
+connection `GarageDoor/door.motor->drive.ctrl`, delegation `GarageDoor/remote->door.cmd`; the result maps
+ids to AST nodes and back (`elements`, `ids`; ports of instances also to their instance, `instances`). The
+layout uses ELK (layered, left to right, orthogonal routing, threads and the frame as compound nodes with
+hierarchy handling, ports with fixed positions). Not supported yet: graphical editing, layout annotations
+(manual layout) and navigation into the state machine or structure of an instance.
+
 ## Editor support
 
 The structure language shares the services of the state machine languages (`createHsmServices` returns
@@ -223,6 +267,10 @@ type names), go to definition (component types, instances, ports, type names –
 import paths and the behavior file), go to implementation = go to the provider of a required port, hover
 (signature and documentation comment) and document symbols. `DmfModelLoader` (hsm-document.ts) loads a
 structure file with everything it imports outside of a language server.
+
+The web app highlights `.dmf` files (generated Monarch grammar), offers completion, hover, formatting and
+go to definition, and shows their diagram (see [Diagram](#diagram)); all files of `examples/device` are in
+its list of examples and resolve their imports against each other.
 
 Not (yet) supported: simulation and code generation of structures; state machines cannot use the structs
 of structure files (share C/C++ headers instead).

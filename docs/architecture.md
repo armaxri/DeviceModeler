@@ -28,9 +28,10 @@ packages/
     src/dmf-*.ts                structure language: module, imports, types, scoping / linking, validation,
                                 port <-> state machine mapping (dmf-behavior.ts), route analysis (dmf-routes.ts),
                                 formatter; src/lsp/dmf-lsp.ts: definition, "go to provider", hover, completion
-    src/diagram/                AST -> PlantUML-like diagram model (layout.ts), laid out with ELK; font metrics
+    src/diagram/                AST -> PlantUML-like diagram model (layout.ts), laid out with ELK; font metrics;
+                                structures: internal block diagram (ibd-model.ts, ibd-layout.ts)
     src/edit/model-edits.ts     ModelEditor: structural edits (add, move, rename, delete, …) as text edits
-    src/render/                 SVG renderer without DOM (renderSvg), diagram style sheet shared with the web app
+    src/render/                 SVG renderer without DOM (renderSvg, renderIbdSvg), diagram style sheet shared with the web app
     src/doc/                    model documentation (Markdown / HTML), doc comments, hover documentation
     src/simulation/             interpreter (docs/semantics.md) with virtual clock, scenario runner
     src/testing/                unit test language: scoping, validation, runner, workspace, JUnit XML, coverage reports
@@ -47,10 +48,12 @@ packages/
     src/app.ts                  the web app: Monaco editor, toolbar, files; host of the diagram controller
     src/examples.ts             virtual file list (examples, imported models and headers)
     src/diagram-controller.ts   graphical editor: text -> Langium -> ELK (web worker) -> Sprotty, diagram edits -> text
-                                (independent of Monaco: also used by the VS Code webview via the DiagramHost interface)
+                                (independent of Monaco: also used by the VS Code webview via the DiagramHost interface);
+                                structure files (.dmf): structure-diagram.ts (read only, route highlighting)
     src/model-service.ts        Langium parsing / validation of the model text (and its imports) in the browser
     src/language-support.ts     Langium services wired into Monaco (markers, completion, hover, formatting, …)
-    src/diagram/                Sprotty model, views (PlantUML look), ELK worker, mouse / selection listeners
+    src/diagram/                Sprotty model, views (PlantUML look), ELK worker, mouse / selection listeners;
+                                ibd-model.ts / ibd-views.tsx: internal block diagrams of structures
     src/simulation/             simulation session: interpreter, real-time clock, logs, operation mocks, breakpoints
     src/ui/                     properties and simulation panels, value editor, inline editor, SVG / PNG export
     src/styles/                 style sheets of the app, the diagram and the simulation

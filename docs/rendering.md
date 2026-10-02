@@ -12,6 +12,12 @@ hsm render model.hsm -o diagram.svg --theme dark --direction RIGHT --routing ORT
 hsm render models/ 'src/**/*.hsm' -o build/diagrams   # directories and glob patterns (also when not expanded by the shell)
 ```
 
+Structure files (`.dmf`, see [the structure language](structure-language.md#diagram)) are rendered as internal
+block diagrams: `hsm render system.dmf` shows the first system (else the first structure, else all component
+types of the file), `--element DriveUnit` another structure or a component type. If a directory contains
+`drive.dmf` and `drive.hsm`, the structure is written to `drive.dmf.svg`. The layout options do not apply to
+structures (always left to right, orthogonal).
+
 Options: `--theme classic|modern|dark` (default `classic`), `--direction DOWN|RIGHT`, `--routing
 SPLINES|ORTHOGONAL|POLYLINE`, `--no-priorities`. Only SVG is supported (no PNG: there is no pure JavaScript
 rasterizer; convert with e.g. `rsvg-convert` or a browser if needed). Models with syntax errors are skipped

@@ -14,7 +14,7 @@
     "dev": "npm run langium:generate && npm run dev -w packages/web",
     "test": "npm run test -w packages/language && npm run test -w packages/vscode",
     "typecheck": "npm run typecheck -w packages/language && npm run typecheck -w packages/web && npm run typecheck -w packages/vscode",
-    "docs:examples": "npm run build -w packages/language && node packages/language/bin/cli.js doc examples -o docs/examples --title \"Example state machines\"",
+    "docs:examples": "npm run build -w packages/language && node packages/language/bin/cli.js doc examples -o docs/examples --title \"Example state machines\" && node packages/language/bin/cli.js render examples/device/system.dmf -o docs/examples/GarageDoor.svg && node packages/language/bin/cli.js render examples/device/drive.dmf -o docs/examples/DriveUnit.svg",
     "package:vscode": "npm run package -w packages/vscode"
   },
   "devDependencies": {
