@@ -116,8 +116,10 @@ automatic layout, which is always computed first:
    through each waypoint to the target (it does not turn back at a waypoint; a waypoint inside a
    state lets the route cross that state; the ends of such routes are not spread). The path is then
    shaped like the **edge routing setting** (`routing` option, the *Edges*
-   setting of the web app and `hsm.diagram.edgeRouting` in VS Code): *orthogonal* as it is, *polyline*
-   with the corners removed where the shortcut keeps clear of the vertices (but not the waypoints),
+   setting of the web app and `hsm.diagram.edgeRouting` in VS Code): *orthogonal* as it is (*rounded*: drawn
+   with rounded corners), *polyline*
+   with the corners removed where the shortcut keeps clear of the vertices (but not the waypoints; *smooth*:
+   drawn as a smooth curve through its corners),
    *splines* as a smooth curve through the corners of that polyline which leaves and enters the states perpendicular to their sides
    (like the splines of the automatic layout; flatter, or with only the corners rounded, where a round
    curve would touch a vertex). Their labels are placed

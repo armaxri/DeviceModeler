@@ -1,4 +1,4 @@
-import type { CppHeaderSettings } from 'hsm-language';
+import type { CppHeaderSettings, EdgeRouting } from 'hsm-language';
 
 /**
  * Messages between the extension and the diagram webview. The webview holds a copy of the document
@@ -11,7 +11,7 @@ export type DiagramTheme = 'classic' | 'modern' | 'dark';
 
 export interface WebviewSettings {
     direction: 'DOWN' | 'RIGHT';
-    routing: 'SPLINES' | 'ORTHOGONAL' | 'POLYLINE';
+    routing: EdgeRouting;
     priorities: boolean;
     /** The effective theme (`auto` is resolved by the extension). */
     theme: DiagramTheme;

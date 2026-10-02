@@ -11,7 +11,7 @@ import {
     type NewVertexKind, type ParsedModel, type ScopeContainer, type TextEdit, type Transition, type TransitionSource, type TransitionTarget, type Vertex
 } from 'hsm-language';
 import {
-    applyManualLayout, captureLayout, cloneManualLayout, contentOrigin, diagramElementIds, layoutFromModel, layoutTextEdits, toFrameCoordinates,
+    applyManualLayout, captureLayout, cloneManualLayout, contentOrigin, diagramElementIds, layoutFromModel, layoutTextEdits, routeOutline, toFrameCoordinates,
     type ManualLayout, type Point
 } from 'hsm-language';
 import { describeSyntaxProblem, type HsmModelService } from './model-service.js';
@@ -1374,7 +1374,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             return;
         }
         // insert the point between the waypoints of the part of the route which was clicked
-        const route = shown.edge.routing === 'spline' ? sampleSpline(shown.edge.points) : shown.edge.points;
+        const route = routeOutline(shown.edge);
         const at = (p: Point) => {
             let best = 0;
             let bestDistance = Number.POSITIVE_INFINITY;
@@ -1676,23 +1676,6 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         const svg = this.exportSvg();
         return svg ? svgToPng(svg, scale) : undefined;
     }
-}
-
-/** Points on a spline route (start, (control, control, end)*). */
-function sampleSpline(points: Point[]): Point[] {
-    const result = [points[0]];
-    for (let i = 0; i + 3 < points.length; i += 3) {
-        const [a, b, c, d] = [points[i], points[i + 1], points[i + 2], points[i + 3]];
-        for (let k = 1; k <= 8; k++) {
-            const t = k / 8;
-            const u = 1 - t;
-            result.push({
-                x: u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x,
-                y: u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y
-            });
-        }
-    }
-    return result;
 }
 
 /** Distance of a point from the line segment a-b. */

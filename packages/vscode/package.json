@@ -275,7 +275,16 @@
           "enum": [
             "SPLINES",
             "ORTHOGONAL",
-            "POLYLINE"
+            "ROUNDED",
+            "POLYLINE",
+            "SMOOTH"
+          ],
+          "enumDescriptions": [
+            "Curves computed by the layout",
+            "Horizontal and vertical segments",
+            "Orthogonal segments with rounded corners",
+            "Straight segments in any direction",
+            "A smooth curve through the bend points of the polyline"
           ],
           "default": "SPLINES",
           "description": "Routing of the transitions in the diagram."

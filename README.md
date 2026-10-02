@@ -47,7 +47,7 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
   itemis CREATE. **Transition priorities** are shown like in itemis CREATE: if a vertex has several
   outgoing transitions, their labels are prefixed with the priority (`1: ev [g] / a`; toggle
   *Priorities* in the toolbar). Themes: *PlantUML classic* (yellow/red), *PlantUML modern* (gray) and
-  *Dark*. Top-down or left-right layout, spline / orthogonal / polyline edges.
+  *Dark*. Top-down or left-right layout, orthogonal, rounded, polyline, smooth or spline edges.
 - **Graphical editing** – every diagram operation is translated into a minimal text edit, so comments
   and formatting are preserved and everything is undoable with `Ctrl+Z`:
   - palette tools for states, regions, choice, junction, history, synchronization, entry points, exit

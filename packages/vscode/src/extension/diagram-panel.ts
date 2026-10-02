@@ -4,7 +4,7 @@ import type { FromWebview, LayoutCommand, OffsetEdit, TextRange, ToWebview, Webv
 import { canApplyEdit, toRangeEdits } from './logic/edits.js';
 import { effectiveTheme, webviewHtml } from './logic/webview.js';
 import { collectImportedFiles } from './logic/imports.js';
-import type { CppHeaderSettings } from 'hsm-language';
+import { parseEdgeRouting, type CppHeaderSettings } from 'hsm-language';
 // Node-only part of the language package (not exported from its index because the web app bundles the index)
 import {
     HeaderConfigFinder, headerSettingsForModel, headerSettingsFromSection, type HeaderSettingsSection
@@ -24,7 +24,7 @@ function readSettings(): WebviewSettings {
     const config = vscode.workspace.getConfiguration('hsm.diagram');
     return {
         direction: config.get<string>('direction') === 'RIGHT' ? 'RIGHT' : 'DOWN',
-        routing: (['SPLINES', 'ORTHOGONAL', 'POLYLINE'] as const).find(r => r === config.get<string>('edgeRouting')) ?? 'SPLINES',
+        routing: parseEdgeRouting(config.get<string>('edgeRouting')) ?? 'SPLINES',
         priorities: config.get<boolean>('priorities', true),
         showProperties: config.get<boolean>('showProperties', true),
         theme: effectiveTheme(config.get<string>('theme', 'auto'), config.get<string>('lightTheme', 'classic'), isDarkColorTheme(vscode.window.activeColorTheme.kind))

@@ -4,7 +4,7 @@ import {
     type IActionHandler, type SModelElementImpl, type SModelRootImpl, type ViewerOptions
 } from 'sprotty';
 import { BringToFrontAction, MoveAction, SelectAction, SelectAllAction, type Action } from 'sprotty-protocol';
-import { borderPoint, type Point } from 'hsm-language';
+import { arrowDirection, borderPoint, displayRoute, type Point } from 'hsm-language';
 import { isTransitionEdge, isVertexNode, type TransitionEdge, type VertexNode } from './model.js';
 import { arrowHead, routePath } from './views.js';
 
@@ -236,7 +236,8 @@ export class HsmMouseListener extends MouseListener {
                 continue;
             }
             if (Math.hypot(ds.x - dt.x, ds.y - dt.y) < 0.5) {
-                this.showPreview(element, element.points.map(p => ({ x: p.x + ds.x, y: p.y + ds.y })), element.routing === 'spline');
+                const moved = displayRoute({ routing: element.routing, curve: element.curve, points: element.points.map(p => ({ x: p.x + ds.x, y: p.y + ds.y })) });
+                this.showPreview(element, moved.points, moved.spline);
             } else {
                 this.showPreview(element, previewLine(element, s, source.kind, t, target.kind), false);
             }
@@ -278,7 +279,8 @@ export class HsmMouseListener extends MouseListener {
         }
         const d = routePath(points, spline);
         dom.querySelectorAll('.transition-line, .transition-hit').forEach(path => path.setAttribute('d', d));
-        dom.querySelector('.transition-arrow')?.setAttribute('d', arrowHead(points[points.length - 2], points[points.length - 1]));
+        const arrow = arrowDirection(points);
+        dom.querySelector('.transition-arrow')?.setAttribute('d', arrowHead(arrow.from, arrow.to));
         dom.querySelector('.transition-label')?.setAttribute('visibility', 'hidden');
         this.changedEdges.add(element);
     }
@@ -291,9 +293,11 @@ export class HsmMouseListener extends MouseListener {
         }
         for (const edge of this.changedEdges) {
             const dom = document.getElementById(`${this.viewerOptions.baseDiv}_${edge.id}`);
-            const d = routePath(edge.points, edge.routing === 'spline');
+            const route = displayRoute(edge);
+            const d = routePath(route.points, route.spline);
             dom?.querySelectorAll('.transition-line, .transition-hit').forEach(path => path.setAttribute('d', d));
-            dom?.querySelector('.transition-arrow')?.setAttribute('d', arrowHead(edge.points[edge.points.length - 2], edge.points[edge.points.length - 1]));
+            const arrow = arrowDirection(route.points);
+            dom?.querySelector('.transition-arrow')?.setAttribute('d', arrowHead(arrow.from, arrow.to));
             dom?.querySelector('.transition-label')?.removeAttribute('visibility');
         }
         this.changedEdges.clear();
@@ -371,7 +375,8 @@ export class HsmMouseListener extends MouseListener {
         this.restoreEdges();
         if (handle.kind === 'bend' && isTransitionEdge(handle.element)) {
             const edge = handle.element;
-            const d = routePath(edge.points, edge.routing === 'spline');
+            const route = displayRoute(edge);
+            const d = routePath(route.points, route.spline);
             document.getElementById(`${this.viewerOptions.baseDiv}_${handle.id}`)?.querySelectorAll('.transition-line, .transition-hit')
                 .forEach(path => path.setAttribute('d', d));
         }

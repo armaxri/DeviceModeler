@@ -23,6 +23,7 @@ import type {
     DiagramEdge, DiagramGraph, DiagramLabel, DiagramNode, DiagramNodeKind, EdgeRouting, LayoutDirection, LayoutOptionsInput, LayoutResult, Point, TextMeasure
 } from './diagram-model.js';
 import { DiagramMetrics, MACHINE_ID, approximateTextMeasure, layoutStateMachine } from './layout.js';
+import { applyEdgeCurves, elkEdgeRouting, roundedCorners, sampleSpline } from './edge-routes.js';
 import { layoutFromModel } from './layout-annotations.js';
 import { POINT_PORT_KINDS, crossesRect, distributePorts, routeOrthogonal, type OrthogonalRoute } from './orthogonal-router.js';
 
@@ -443,6 +444,7 @@ class ManualLayoutEngine {
             children: this.root.children,
             edges: this.edges
         };
+        applyEdgeCurves(graph, this.options.routing);
         return { graph, elements: auto.elements, ids: auto.ids, effective: this.effectiveLayout() };
     }
 
@@ -907,7 +909,8 @@ class ManualLayoutEngine {
      * `outline` is the polyline the route follows (for the label placement).
      */
     private shapeRoute(edge: DiagramEdge, frame: string, orthogonal: Point[], waypoints: Point[] = [], cuts: number[] = []): { points: Point[], routing: DiagramEdge['routing'], outline: Point[] } {
-        const routing = this.options.routing;
+        // (rounded / smooth routes are orthogonal / polyline routes drawn differently)
+        const routing = elkEdgeRouting(this.options.routing);
         if (routing === 'ORTHOGONAL') {
             return { points: orthogonal, routing: 'orthogonal', outline: orthogonal };
         }
@@ -974,12 +977,12 @@ class ManualLayoutEngine {
         }
         // round the corners of the route as much as possible
         for (const radius of [60, 30, 15]) {
-            const spline = toSpline(polyline, radius);
+            const spline = roundedCorners(polyline, radius, false);
             if (clear(spline)) {
                 return result(spline);
             }
         }
-        return result(toSpline(orthogonal, 10));
+        return result(roundedCorners(orthogonal, 10, false));
     }
 
     /** All vertices within the frame (relative to it) and whether they contain other vertices. */
@@ -1324,31 +1327,6 @@ function shortcut(points: Point[], obstacles: Rect[], ends: Rect[]): Point[] {
 }
 
 /**
- * The polyline with rounded corners (up to `radius` along each segment, at most half of it) as cubic
- * Bezier segments in the form of the spline routes of the automatic layout: start, (control, control, end)*.
- */
-function toSpline(points: Point[], radius: number): Point[] {
-    const lerp = (a: Point, b: Point, t: number) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
-    const result = [points[0]];
-    const line = (to: Point) => {
-        const from = result[result.length - 1];
-        result.push(lerp(from, to, 1 / 3), lerp(from, to, 2 / 3), to);
-    };
-    for (let i = 1; i + 1 < points.length; i++) {
-        const [prev, corner, next] = [points[i - 1], points[i], points[i + 1]];
-        const inLength = Math.hypot(corner.x - prev.x, corner.y - prev.y);
-        const outLength = Math.hypot(next.x - corner.x, next.y - corner.y);
-        const before = lerp(corner, prev, inLength > 0 ? Math.min(radius, inLength / 2) / inLength : 0);
-        const after = lerp(corner, next, outLength > 0 ? Math.min(radius, outLength / 2) / outLength : 0);
-        line(before);
-        // quadratic curve with the corner as control point
-        result.push(lerp(before, corner, 2 / 3), lerp(after, corner, 2 / 3), after);
-    }
-    line(points[points.length - 1]);
-    return result;
-}
-
-/**
  * Cubic Bezier segments through the points: the tangents at the ends are the given directions (scaled by
  * the length of the first / last segment and `stiffness`), inside Catmull-Rom tangents.
  */
@@ -1375,23 +1353,6 @@ function hermiteSpline(points: Point[], startDirection: Point, endDirection: Poi
             { x: points[i + 1].x - t1.x / 3, y: points[i + 1].y - t1.y / 3 },
             points[i + 1]
         );
-    }
-    return result;
-}
-
-/** Points on the spline (to check it against obstacles). */
-function sampleSpline(points: Point[]): Point[] {
-    const result = [points[0]];
-    for (let i = 0; i + 3 < points.length; i += 3) {
-        const [a, b, c, d] = [points[i], points[i + 1], points[i + 2], points[i + 3]];
-        for (let k = 1; k <= 8; k++) {
-            const t = k / 8;
-            const u = 1 - t;
-            result.push({
-                x: u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x,
-                y: u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y
-            });
-        }
     }
     return result;
 }
