@@ -390,8 +390,26 @@ Event payloads, operation parameters and return values may use all these types.
   of models, see [rendering.md](rendering.md#model-documentation)) and the location in the header; also for each segment of a
   qualified name (`motor` → namespace), for struct members in names and member accesses and for header import
   paths.
-- Go to definition (`cppDefinition`): into the header (`fileName` + `nameRange` of the declaration); the
-  import path opens the header.
+- Navigation (`cppLocations` in `lsp/cpp-navigation.ts`; the VS Code language server registers definition,
+  declaration, type definition and document link providers): into the header (`fileName` – the URI of the
+  header, also of headers found through `#include`s and include paths – plus `nameRange` of the
+  declaration). The origin of a link is the segment of the qualified name at the position, so `app`,
+  `Mode` and `Fast` of `app::Mode::Fast` lead to the namespace, the enum and the enumerator (and VS Code
+  underlines only that segment on `Ctrl`/`Cmd`+hover); struct members in names and member accesses lead
+  to the fields, the variable name of `cfg.limits.low` to the variable.
+  - *Go to Definition* (`F12`, `Ctrl`/`Cmd`+Click, Peek): the definition – the enum definition rather than
+    an opaque declaration, the target of a using-declaration (`using hw::Channel;`), the first block of a
+    namespace; the import path opens the header.
+  - *Go to Declaration*: all declarations, the definition first (opaque enum declarations, all blocks of a
+    namespace, using-declarations and their target).
+  - *Go to Type Definition*: from a constant, enumerator or struct member to its enum or struct (for aliases
+    of built-in types: the alias); from a variable, event, parameter, operation or type alias of the model
+    (declaration or reference) to its C++ type.
+  - Document links on header (and model) import paths.
+  - Name ranges: the name of a using-declaration is its last segment, an anonymous enum / struct named by
+    `typedef` (`typedef enum { … } color_t;`) has the range of the typedef name. Declarations produced by
+    macro expansions have the range of the macro invocation. Forward declarations of classes are not
+    recorded (the definition is the only target).
 - Completion (`HsmCompletionProvider`, both languages, the VS Code language server and the web app): after
   `ns::` the members of the namespace / class / enum (in type positions – `var x : `, `in event e : `,
   parameters, return types, `alias`, `x as ` – only namespaces and types, in expressions values and scopes;
@@ -458,4 +476,5 @@ Unsaved changes of a header open in VS Code are not seen (headers are read from 
   arithmetic, like in the generated code; host values are JS numbers (exact up to 2^53).
 - The C generator does not support header types; the C++ generator does not support submachine instances
   (independent of headers).
-- The web editor cannot open or navigate into headers (hover works).
+- The web editor cannot open or navigate into headers (hover works); navigation is a feature of the VS
+  Code language server (`packages/vscode/src/server/hsm-lsp.ts`).

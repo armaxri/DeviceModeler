@@ -27,8 +27,16 @@ the Test Explorer and the import of itemis CREATE models.
   git work as usual. The simulation of the web app is available in the diagram (**▶ Simulate**).
 - **C/C++ header imports** (`import "motor_types.h"`, see [docs/language.md](../../docs/language.md#cc-header-imports)): models use the enums, structs,
   aliases and constants of headers. Headers are read from disk and re-read when they change (the models
-  importing them are validated again); hover shows declarations with their documentation comments, go to
-  definition opens the header, completion after `ns::` and `var.`. Include paths, defines and the data
+  importing them are validated again); hover shows declarations with their documentation comments,
+  completion after `ns::` and `var.`. **Navigation into the headers** works with the usual keys: Go to
+  Definition (`F12`, `Ctrl`/`Cmd`+Click), Peek Definition (`Alt+F12`), Go to Declaration and Go to Type
+  Definition. Each segment of a qualified name leads to its own declaration (`app` → the namespace,
+  `Mode` → the enum, `Fast` → the enumerator in `app::Mode::Fast`), struct members (`cfg.limits.low`)
+  lead to the fields, the definition is preferred (the enum definition over an opaque declaration, the
+  target of `using ns::Name;`; Go to Declaration lists all of them), Go to Type Definition leads from a
+  variable, event, parameter, constant, enumerator or member to its C++ enum or struct (or the alias of a
+  built-in type); the path in `import "header.h"` is a link that opens the header (also headers found
+  through include paths and `#include`s). Include paths, defines and the data
   model come from the `headers` block of the nearest `hsm.gen.json` and the settings
   `hsm.headers.includePaths`, `hsm.headers.defines` and `hsm.headers.dataModel` (also used by the diagram,
   its simulation – enum drop-downs and struct editors – and the Test Explorer).
