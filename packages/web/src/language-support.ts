@@ -1,11 +1,19 @@
 import { monaco } from './monaco.js';
-import { cppHover, HsmMonarchSyntax } from 'hsm-language';
+import { cppHover, DmfMonarchSyntax, HsmMonarchSyntax } from 'hsm-language';
+import type { DmfServices, HsmServices } from 'hsm-language';
 import { HsmModelService } from './model-service.js';
 import type { Diagnostic, Range, TextEdit } from 'vscode-languageserver-types';
 
 export { describeSyntaxProblem, type SyntaxProblem } from './model-service.js';
 
 export const LANGUAGE_ID = 'hsm';
+/** Language id of structure files (`.dmf`, Device Modeling Framework). */
+export const DMF_LANGUAGE_ID = 'dmf';
+
+/** The language id of a file name. */
+export function languageOf(fileName: string): string {
+    return /\.dmf$/i.test(fileName) ? DMF_LANGUAGE_ID : LANGUAGE_ID;
+}
 export const EDITOR_THEMES = { light: 'hsm-light', dark: 'hsm-dark' } as const;
 
 /**
@@ -15,12 +23,16 @@ export const EDITOR_THEMES = { light: 'hsm-light', dark: 'hsm-dark' } as const;
 export class HsmLanguageSupport extends HsmModelService {
 
     private async document(model: monaco.editor.ITextModel) {
-        return (await this.parse(model.getValue())).document;
+        return model.getLanguageId() === DMF_LANGUAGE_ID
+            ? (await this.parseStructure(model.getValue())).document
+            : (await this.parse(model.getValue())).document;
     }
 
     registerLanguage(): void {
         monaco.languages.register({ id: LANGUAGE_ID, extensions: ['.hsm'], aliases: ['HSM', 'hsm'] });
-        monaco.languages.setMonarchTokensProvider(LANGUAGE_ID, monarchSyntax());
+        monaco.languages.setMonarchTokensProvider(LANGUAGE_ID, monarchSyntax(HsmMonarchSyntax, ['integer', 'real', 'boolean', 'string', 'void']));
+        monaco.languages.register({ id: DMF_LANGUAGE_ID, extensions: ['.dmf'], aliases: ['DMF', 'dmf'] });
+        monaco.languages.setMonarchTokensProvider(DMF_LANGUAGE_ID, monarchSyntax(DmfMonarchSyntax, ['integer', 'real', 'boolean', 'string']));
         monaco.editor.defineTheme(EDITOR_THEMES.light, {
             base: 'vs', inherit: true, colors: {},
             rules: [
@@ -37,7 +49,15 @@ export class HsmLanguageSupport extends HsmModelService {
                 { token: 'operator', foreground: 'c8c8c8' }
             ]
         });
-        monaco.languages.setLanguageConfiguration(LANGUAGE_ID, {
+        for (const id of [LANGUAGE_ID, DMF_LANGUAGE_ID]) {
+            this.configureLanguage(id);
+        }
+        this.registerProviders(LANGUAGE_ID, this.loader.services.Hsm);
+        this.registerProviders(DMF_LANGUAGE_ID, this.structureServices);
+    }
+
+    private configureLanguage(languageId: string): void {
+        monaco.languages.setLanguageConfiguration(languageId, {
             comments: { lineComment: '//', blockComment: ['/*', '*/'] },
             brackets: [['{', '}'], ['[', ']']],
             autoClosingPairs: [
@@ -51,10 +71,11 @@ export class HsmLanguageSupport extends HsmModelService {
                 decreaseIndentPattern: /^\s*\}/
             }
         });
+    }
 
-        const services = this.loader.services.Hsm;
-
-        monaco.languages.registerCompletionItemProvider(LANGUAGE_ID, {
+    /** Completion, hover, formatting, go to definition, references and rename with the Langium services of a language. */
+    private registerProviders(languageId: string, services: HsmServices | DmfServices): void {
+        monaco.languages.registerCompletionItemProvider(languageId, {
             triggerCharacters: ['>', ' ', '/', '.', '(', ':'],
             provideCompletionItems: async (model, position) => {
                 const document = await this.document(model);
@@ -83,7 +104,7 @@ export class HsmLanguageSupport extends HsmModelService {
             }
         });
 
-        monaco.languages.registerHoverProvider(LANGUAGE_ID, {
+        monaco.languages.registerHoverProvider(languageId, {
             provideHover: async (model, position) => {
                 const document = await this.document(model);
                 const offset = model.getOffsetAt(position);
@@ -99,7 +120,7 @@ export class HsmLanguageSupport extends HsmModelService {
             }
         });
 
-        monaco.languages.registerDocumentFormattingEditProvider(LANGUAGE_ID, {
+        monaco.languages.registerDocumentFormattingEditProvider(languageId, {
             provideDocumentFormattingEdits: async (model, options) => {
                 const document = await this.document(model);
                 const edits = await services.lsp.Formatter?.formatDocument(document, {
@@ -110,7 +131,7 @@ export class HsmLanguageSupport extends HsmModelService {
             }
         });
 
-        monaco.languages.registerDefinitionProvider(LANGUAGE_ID, {
+        monaco.languages.registerDefinitionProvider(languageId, {
             provideDefinition: async (model, position) => {
                 const document = await this.document(model);
                 const links = await services.lsp.DefinitionProvider?.getDefinition(document, {
@@ -124,7 +145,7 @@ export class HsmLanguageSupport extends HsmModelService {
             }
         });
 
-        monaco.languages.registerReferenceProvider(LANGUAGE_ID, {
+        monaco.languages.registerReferenceProvider(languageId, {
             provideReferences: async (model, position, context) => {
                 const document = await this.document(model);
                 const locations = await services.lsp.ReferencesProvider?.findReferences(document, {
@@ -136,7 +157,7 @@ export class HsmLanguageSupport extends HsmModelService {
             }
         });
 
-        monaco.languages.registerRenameProvider(LANGUAGE_ID, {
+        monaco.languages.registerRenameProvider(languageId, {
             provideRenameEdits: async (model, position, newName) => {
                 const document = await this.document(model);
                 const edit = await services.lsp.RenameProvider?.rename(document, {
@@ -175,8 +196,8 @@ type MonarchRule = { regex?: RegExp, include?: string, action?: { token?: string
  * The generated Monarch grammar, adjusted for nicer highlighting: numbers, annotations (`@EventDriven`),
  * built-in type names and the `[*]` pseudo state.
  */
-function monarchSyntax(): monaco.languages.IMonarchLanguage {
-    const generated = HsmMonarchSyntax as unknown as { tokenizer: Record<string, MonarchRule[]> };
+function monarchSyntax(syntax: object, typeNames: string[]): monaco.languages.IMonarchLanguage {
+    const generated = syntax as unknown as { tokenizer: Record<string, MonarchRule[]> };
     const rename: Record<string, string> = { HEX: 'number.hex', REAL: 'number.float', ID: 'identifier' };
     const initial = generated.tokenizer.initial.map((rule): MonarchRule => {
         const action = rule.action;
@@ -192,8 +213,8 @@ function monarchSyntax(): monaco.languages.IMonarchLanguage {
         return rule;
     });
     return {
-        ...HsmMonarchSyntax,
-        typeNames: ['integer', 'real', 'boolean', 'string', 'void'],
+        ...syntax,
+        typeNames,
         tokenizer: {
             ...generated.tokenizer,
             initial: [

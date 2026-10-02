@@ -8,7 +8,7 @@ import {
     qualifiedName, scopeOf, siblingVertices, transitionLabel, finalNodeId, DEFINITION_ID, MACHINE_ID,
     nodeText as nodeTextOf, type DeletionTarget, type DiagramEdge, type DiagramNode, type DiagramNodeKind, type DiagramSubmachine, type EdgeRouting, type EditResult,
     type LayoutDirection, type LayoutResult,
-    type NewVertexKind, type ParsedModel, type ScopeContainer, type TextEdit, type Transition, type TransitionSource, type TransitionTarget, type Vertex
+    type NewVertexKind, type ParsedDmfModel, type ParsedModel, type ScopeContainer, type TextEdit, type Transition, type TransitionSource, type TransitionTarget, type Vertex
 } from 'hsm-language';
 import {
     applyManualLayout, captureLayout, cloneManualLayout, contentOrigin, diagramElementIds, layoutFromModel, layoutTextEdits, toFrameCoordinates,
@@ -26,6 +26,8 @@ import { exportSvg, svgToPng } from './ui/export-svg.js';
 import { renderProperties, type PropertiesHost, type SelectionInfo } from './ui/properties.js';
 import { SimulationPanel } from './ui/simulation-panel.js';
 import { SimulationSession, canHaveBreakpoint } from './simulation/session.js';
+import { StructureDiagram } from './structure-diagram.js';
+import type { SModelRoot } from 'sprotty-protocol';
 
 export type Tool = 'select' | 'state' | 'choice' | 'junction' | 'history' | 'deephistory' | 'sync' | 'entry' | 'exit' | 'initial' | 'final'
     | 'transition' | 'region';
@@ -112,7 +114,7 @@ export interface DiagramHost {
      */
     applyTextEdits(edits: readonly TextEdit[]): Promise<boolean>;
     /** Called after the text has been parsed (e.g. to show markers and the number of problems). */
-    modelParsed?(parsed: ParsedModel): void;
+    modelParsed?(parsed: ParsedModel | ParsedDmfModel): void;
     /** Highlights (and reveals) the text of the selected diagram element; undefined removes the highlight. */
     highlightText(range: TextRange | undefined): void;
     /** Selects and reveals a text range (e.g. an element of the simulation trace). */
@@ -188,11 +190,53 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     private renderedFlags = '';
     private flagTimer?: ReturnType<typeof setTimeout>;
 
+    /**
+     * The diagram of structure files (`.dmf`): shown instead of the state machine diagram when the
+     * edited document is a structure file (read only).
+     */
+    readonly structure: StructureDiagram;
+
     constructor(options: DiagramControllerOptions) {
         this.host = options.host;
         this.language = options.language;
         this.settings = options.settings;
         this.elk = options.elk;
+        this.structure = new StructureDiagram({
+            host: this.host,
+            language: this.language,
+            elk: this.elk,
+            selection: this.selection,
+            show: schema => this.showSchema(schema),
+            select: id => this.select(id),
+            fitOnNextUpdate: () => {
+                this.fitOnNextRender = true;
+            }
+        });
+    }
+
+    /** Whether the edited document is a structure file (`.dmf`): the structure diagram is shown. */
+    get structureMode(): boolean {
+        return this.language.isStructure;
+    }
+
+    /** Switches between the state machine and the structure diagram (palette, layout controls). */
+    private updateMode(): void {
+        const structure = this.structureMode;
+        if (structure) {
+            // the state machine operations do not apply to the structure diagram
+            this.state = undefined;
+            this.pendingSource = undefined;
+            this.tool = 'select';
+        } else {
+            this.structure.deactivate();
+        }
+        document.body.classList.toggle('structure-mode', structure);
+        for (const id of LAYOUT_CONTROLS) {
+            const control = document.getElementById(id);
+            if (control instanceof HTMLButtonElement && !this.simulationSession) {
+                control.disabled = structure;
+            }
+        }
     }
 
     /** Creates the diagram and the palette and registers the keyboard handlers. */
@@ -358,6 +402,11 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     async update(forceLayout = false): Promise<void> {
         clearTimeout(this.updateTimer);
         const version = ++this.updateVersion;
+        this.updateMode();
+        if (this.structureMode) {
+            await this.structure.update(forceLayout);
+            return;
+        }
         const text = this.host.getText();
         const parsed = await this.language.parse(text);
         if (version !== this.updateVersion) {
@@ -473,6 +522,12 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             layoutEditable: !this.simulationSession,
             instanceTexts: flags?.instanceTexts
         });
+        await this.showSchema(schema);
+        this.renderPropertiesPanel();
+    }
+
+    /** Shows the diagram: the first time with `setModel`, then with model updates (fits it to the screen if requested). */
+    private async showSchema(schema: SModelRoot): Promise<void> {
         if (!this.rendered) {
             this.rendered = true;
             await this.modelSource.setModel(schema);
@@ -488,7 +543,6 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
                 requestAnimationFrame(() => this.fit(false));
             }
         }
-        this.renderPropertiesPanel();
     }
 
     private computeIssues(parsed: ParsedModel, layout: LayoutResult, nodes: Map<string, DiagramNode>): Map<string, Issue> {
@@ -561,6 +615,10 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         layoutChange?: (layout: ManualLayout | undefined, model: ParsedModel) => ManualLayout | undefined): Promise<boolean> {
         if (this.simulationSession) {
             this.setStatus('Stop the simulation to edit the model.', 'warning');
+            return false;
+        }
+        if (this.structureMode) {
+            this.setStatus('The structure diagram is read only – edit the text.', 'info');
             return false;
         }
         if (!this.state || this.state.parsed.text !== this.host.getText()) {
@@ -698,7 +756,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
 
     setTool(tool: Tool, sticky = false): void {
         closeInlineEditor();
-        if (this.simulationSession) {
+        if (this.simulationSession || this.structureMode) {
             tool = 'select';
         }
         this.tool = tool;
@@ -817,7 +875,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         if (!byId('diagram-area').contains(document.activeElement) && !document.querySelector('.inline-editor')) {
             this.focusDiagram();
         }
-        if (event.button !== 0 || this.tool === 'select') {
+        if (event.button !== 0 || this.tool === 'select' || this.structureMode) {
             return;
         }
         const id = this.diagramId(target);
@@ -926,7 +984,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     }
 
     doubleClick(target: SModelElementImpl): void {
-        if (this.tool !== 'select' || this.simulationSession) {
+        if (this.tool !== 'select' || this.simulationSession || this.structureMode) {
             return;
         }
         const id = this.diagramId(target);
@@ -997,6 +1055,10 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     selectionChanged(selected: string[], deselected: string[]): void {
         deselected.forEach(id => this.selection.delete(id));
         selected.forEach(id => this.selection.add(id));
+        if (this.structureMode) {
+            this.structure.selectionChanged();
+            return;
+        }
         const single = this.singleSelection();
         if (single && selected.includes(single)) {
             this.revealInEditor(single);
@@ -1008,6 +1070,10 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
 
     allSelected(select: boolean): void {
         this.selection.clear();
+        if (this.structureMode) {
+            this.structure.selectionChanged();
+            return;
+        }
         if (select && this.state) {
             for (const id of this.state.layout.elements.keys()) {
                 if (id !== MACHINE_ID) {
@@ -1041,6 +1107,10 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
      * text) and removes the highlight of the text.
      */
     selectElementAtOffset(offset: number): void {
+        if (this.structureMode) {
+            this.structure.selectAtOffset(offset);
+            return;
+        }
         if (!this.state || this.state.parsed.text !== this.host.getText()) {
             return;
         }
@@ -1057,7 +1127,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
 
     /** Moves the cursor of the text editor to the element and focuses the editor. */
     editInText(id: string): void {
-        const range = this.rangeOf(id);
+        const range = this.structureMode ? this.structure.rangeOf(id) : this.rangeOf(id);
         if (range) {
             this.host.editTextAt(range.end);
         }
@@ -1071,11 +1141,11 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     }
 
     canEdit(): boolean {
-        return !this.simulationSession;
+        return !this.simulationSession && !this.structureMode;
     }
 
     deleteSelection(): void {
-        if (this.simulationSession) {
+        if (this.simulationSession || this.structureMode) {
             return;
         }
         const targets = [...this.selection].flatMap((id): DeletionTarget[] => {
@@ -1104,7 +1174,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
 
     /** Opens an inline editor to rename a vertex / region or to edit the label of a transition. */
     startRename(id: string): void {
-        if (this.simulationSession) {
+        if (this.simulationSession || this.structureMode) {
             return;
         }
         const node = this.astOf(id);
@@ -1384,6 +1454,10 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         if (this.simulationSession) {
             return;
         }
+        if (this.structureMode) {
+            this.setStatus('Structures cannot be simulated (yet) – open the state machine of a component to simulate it.', 'warning');
+            return;
+        }
         closeInlineEditor();
         await this.update();
         const state = this.state;
@@ -1594,6 +1668,10 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         if (this.simulationSession || panel.contains(document.activeElement)) {
             return;
         }
+        if (this.structureMode) {
+            this.structure.renderProperties();
+            return;
+        }
         const id = this.singleSelection();
         const info: SelectionInfo = {
             id,
@@ -1626,10 +1704,10 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
 
     /** The rendered diagram as a standalone SVG document (undefined if nothing has been rendered yet). */
     exportSvg(): string | undefined {
-        if (!this.state) {
+        const graph = this.structureMode ? this.structure.size : this.state?.layout.graph;
+        if (!graph) {
             return undefined;
         }
-        const graph = this.state.layout.graph;
         return exportSvg(byId('sprotty'), graph.width, graph.height, `theme-${this.settings.theme}`);
     }
 

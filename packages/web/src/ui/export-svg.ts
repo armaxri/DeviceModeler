@@ -20,8 +20,8 @@ export function exportSvg(container: HTMLElement, width: number, height: number,
     svg.classList.add(themeClass, 'hsm-export');
     const viewport = svg.querySelector(':scope > g');
     viewport?.removeAttribute('transform');
-    for (const element of svg.querySelectorAll('.selected, .mouseover, .pending-source')) {
-        element.classList.remove('selected', 'mouseover', 'pending-source');
+    for (const element of svg.querySelectorAll('.selected, .mouseover, .pending-source, .on-route')) {
+        element.classList.remove('selected', 'mouseover', 'pending-source', 'on-route');
     }
     for (const element of svg.querySelectorAll('[id]')) {
         element.removeAttribute('id');

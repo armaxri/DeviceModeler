@@ -1,4 +1,4 @@
-import { cppHeaderStore, HsmModelLoader, importKind, type CppHeaderSettings, type ParsedModel } from 'hsm-language';
+import { createHsmServices, cppHeaderStore, DmfModelLoader, HsmModelLoader, importKind, type CppHeaderSettings, type DmfServices, type ParsedDmfModel, type ParsedModel } from 'hsm-language';
 
 export interface SyntaxProblem {
     message: string;
@@ -40,9 +40,16 @@ const DOCUMENT_URI = 'memory:///model.hsm';
  */
 export class HsmModelService {
 
-    readonly loader = new HsmModelLoader();
+    private readonly services = createHsmServices();
+    readonly loader = new HsmModelLoader(this.services);
+    /** Loads structure files (`.dmf`, the Device Modeling Framework); shares the services (and documents) of {@link loader}. */
+    readonly structureLoader = new DmfModelLoader(this.services);
     private latest?: ParsedModel;
     private latestVersion = -1;
+    private latestStructure?: ParsedDmfModel;
+    private latestStructureVersion = -1;
+    private latestUri?: string;
+    private latestStructureUri?: string;
     private queue: Promise<unknown> = Promise.resolve();
     private documentUri = DOCUMENT_URI;
     private files: Record<string, string> = {};
@@ -78,16 +85,45 @@ export class HsmModelService {
         this.workspaceVersion++;
     }
 
+    /** The services of the structure language. */
+    get structureServices(): DmfServices {
+        return this.services.Dmf;
+    }
+
+    /** Whether the edited document is a structure file (`.dmf`) instead of a state machine. */
+    get isStructure(): boolean {
+        return isStructureFile(this.documentUri);
+    }
+
+    /** Parses, links and validates the text of a structure file (`.dmf`). Calls are serialized (also with {@link parse}). */
+    parseStructure(text: string): Promise<ParsedDmfModel> {
+        const result = this.queue.then(async () => {
+            if (this.latestStructure?.text === text && this.latestStructureVersion === this.workspaceVersion
+                && this.latestStructureUri === this.documentUri) {
+                return this.latestStructure;
+            }
+            const version = this.workspaceVersion;
+            const parsed = await this.structureLoader.load(text, this.documentUri, { files: this.files });
+            this.latestStructure = parsed;
+            this.latestStructureVersion = version;
+            this.latestStructureUri = this.documentUri;
+            return parsed;
+        });
+        this.queue = result.catch(() => undefined);
+        return result;
+    }
+
     /** Parses, links and validates the text. Calls are serialized. */
     parse(text: string): Promise<ParsedModel> {
         const result = this.queue.then(async () => {
-            if (this.latest?.text === text && this.latestVersion === this.workspaceVersion) {
+            if (this.latest?.text === text && this.latestVersion === this.workspaceVersion && this.latestUri === this.documentUri) {
                 return this.latest;
             }
             const version = this.workspaceVersion;
             const parsed = await this.loader.load(text, this.documentUri, { files: this.files });
             this.latest = parsed;
             this.latestVersion = version;
+            this.latestUri = this.documentUri;
             return parsed;
         });
         this.queue = result.catch(() => undefined);
@@ -99,7 +135,8 @@ export class HsmModelService {
      * Only the parser is used: no document is created and the linked model is not affected.
      */
     syntaxErrors(text: string): SyntaxProblem[] {
-        const result = this.loader.services.Hsm.parser.LangiumParser.parse(text);
+        const parser = this.isStructure ? this.services.Dmf.parser.LangiumParser : this.loader.services.Hsm.parser.LangiumParser;
+        const result = parser.parse(text);
         return [
             ...result.lexerErrors.map(e => ({ message: e.message, offset: e.offset })),
             ...result.parserErrors.map(e => {
@@ -109,4 +146,9 @@ export class HsmModelService {
             })
         ];
     }
+}
+
+/** Whether a file name or URI is a structure file (`.dmf`). */
+export function isStructureFile(name: string): boolean {
+    return /\.dmf$/i.test(name);
 }

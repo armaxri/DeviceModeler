@@ -2,7 +2,7 @@ import { monaco } from './monaco.js';
 import {
     importSct, importSctFiles, type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ParsedModel, type TextEdit
 } from 'hsm-language';
-import { EDITOR_THEMES, HsmLanguageSupport, LANGUAGE_ID } from './language-support.js';
+import { EDITOR_THEMES, HsmLanguageSupport, languageOf } from './language-support.js';
 import { DiagramController, type DiagramHost, type DiagramSettings, type StatusSeverity, type TextRange } from './diagram-controller.js';
 import { createWorkerElk } from './diagram/elk.js';
 import { byId, download, h } from './ui/dom.js';
@@ -104,7 +104,7 @@ export class HsmApp implements DiagramHost {
         }
         this.editor = monaco.editor.create(byId('editor'), {
             value: initial,
-            language: LANGUAGE_ID,
+            language: languageOf(this.fileName),
             automaticLayout: true,
             minimap: { enabled: false },
             fontSize: 13,
@@ -118,6 +118,7 @@ export class HsmApp implements DiagramHost {
         this.decorations = this.editor.createDecorationsCollection();
         byId('file-name').textContent = this.fileName;
         this.updateWorkspace();
+        this.updateFileControls();
         this.editor.onDidChangeModelContent(() => {
             try {
                 localStorage.setItem(STORAGE_TEXT, this.editor.getValue());
@@ -325,7 +326,7 @@ export class HsmApp implements DiagramHost {
         if (this.editor && fileName !== this.fileName && this.files.has(this.fileName)) {
             this.files.set(this.fileName, this.editor.getValue());
         }
-        if (!this.files.has(fileName) && (/\.hsm$/i.test(fileName))) {
+        if (!this.files.has(fileName) && (/\.(hsm|dmf)$/i.test(fileName))) {
             this.files.set(fileName, text);
         }
         this.saveFiles();
@@ -338,8 +339,29 @@ export class HsmApp implements DiagramHost {
         } catch {
             // storage is not available
         }
+        const model = this.editor.getModel()!;
+        if (model.getLanguageId() !== languageOf(fileName)) {
+            monaco.editor.setModelLanguage(model, languageOf(fileName));
+        }
         this.editor.setValue(text);
+        this.updateFileControls();
         this.diagram.update(true);
+    }
+
+    /**
+     * The controls that do not apply to structure files (`.dmf`: no layout settings, simulation and
+     * layout annotations yet) are disabled.
+     */
+    private updateFileControls(): void {
+        const structure = languageOf(this.fileName) !== 'hsm';
+        for (const id of ['direction-select', 'routing-select', 'priorities-toggle', 'btn-simulate', 'btn-arrange']) {
+            const control = document.getElementById(id) as HTMLButtonElement | null;
+            if (control) {
+                control.disabled = structure;
+            }
+        }
+        byId('btn-simulate').title = structure ? 'Structures cannot be simulated – open the state machine of a component'
+            : 'Simulate the state machine (the model must not contain errors)';
     }
 
     private selectElementAtCursor(): void {

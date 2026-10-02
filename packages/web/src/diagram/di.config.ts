@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { Container, ContainerModule } from 'inversify';
 import {
     configureActionHandler, configureModelElement, configureViewerOptions, labelEditUiModule, loadDefaultModules,
-    moveFeature, MoveMouseListener, ScrollMouseListener, SelectMouseListener, SGraphView, TYPES, LocalModelSource, undoRedoModule, selectFeature
+    moveFeature, MoveMouseListener, SGraphImpl, SNodeImpl, ScrollMouseListener, SelectMouseListener, SGraphView, TYPES, LocalModelSource, undoRedoModule, selectFeature
 } from 'sprotty';
 import { SelectAction, SelectAllAction } from 'sprotty-protocol';
 import { DiagramTypes, StateMachineGraph, TransitionEdge, VertexNode } from './model.js';
@@ -10,6 +10,8 @@ import {
     ChoiceView, DefinitionView, EntryPointView, ExitPointView, FinalView, HistoryView, InitialView, JunctionView, RegionView, StateView, SyncView,
     TransitionView
 } from './views.js';
+import { IbdConnectorElement, IbdNodeElement, IbdPortElement, IbdTypes } from './ibd-model.js';
+import { IbdCanvasView, IbdConnectorView, IbdFrameView, IbdInstanceView, IbdPortView, IbdThreadView } from './ibd-views.js';
 import { DiagramCallbacks, HsmMouseListener, HsmMoveMouseListener, HsmScrollMouseListener, HsmSelectMouseListener, SelectionTracker } from './listeners.js';
 
 export function createDiagramContainer(baseDiv: string, callbacks: DiagramCallbacks): Container {
@@ -37,6 +39,16 @@ export function createDiagramContainer(baseDiv: string, callbacks: DiagramCallba
         configureModelElement(context, DiagramTypes.exit, VertexNode, ExitPointView);
         configureModelElement(context, DiagramTypes.definition, VertexNode, DefinitionView);
         configureModelElement(context, DiagramTypes.transition, TransitionEdge, TransitionView, { enable: [selectFeature] });
+
+        // internal block diagrams of structures (.dmf)
+        configureModelElement(context, IbdTypes.graph, SGraphImpl, SGraphView);
+        configureModelElement(context, IbdTypes.frame, IbdNodeElement, IbdFrameView);
+        configureModelElement(context, IbdTypes.thread, IbdNodeElement, IbdThreadView);
+        configureModelElement(context, IbdTypes.instance, IbdNodeElement, IbdInstanceView);
+        configureModelElement(context, IbdTypes.block, IbdNodeElement, IbdInstanceView);
+        configureModelElement(context, IbdTypes.port, IbdPortElement, IbdPortView);
+        configureModelElement(context, IbdTypes.canvas, SNodeImpl, IbdCanvasView, { disable: [selectFeature, moveFeature] });
+        configureModelElement(context, IbdTypes.connector, IbdConnectorElement, IbdConnectorView);
 
         configureViewerOptions(context, {
             needsClientLayout: false,
