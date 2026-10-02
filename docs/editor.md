@@ -78,7 +78,7 @@ mode switch. Design and trade-offs: [Manual layout](manual-layout.md).
 | Resize a state | select it, drag the handle at the bottom right corner |
 | Add / move / remove a waypoint | select the transition; double-click its line / drag the point / double-click the point |
 | Move a transition label | select the transition, drag its label |
-| Arrange automatically / back to the automatic layout | *Auto-arrange* / *Automatic layout* in the toolbar |
+| Arrange automatically / back to the automatic arrangement | *Store positions* or *Re-arrange* / *Clear positions* in the toolbar |
 
 Importing an itemis CREATE `.sct` file keeps the arrangement of its diagram (also when several
 statecharts are imported together). On the command line, `hsm layout`, `hsm render` and `hsm doc` use
