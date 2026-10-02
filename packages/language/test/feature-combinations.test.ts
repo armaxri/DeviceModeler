@@ -61,9 +61,10 @@ describe('C++ class sections with C++ enums and Doxygen comments', () => {
         const items = cppContextCompletionItems(document, source.indexOf('|'));
         expect(items.map(i => i.label)).toEqual(['dev::Mode::Off', 'dev::Mode::Slow', 'dev::Mode::Fast']);
         expect(items.map(i => i.documentation)).toEqual([
-            { kind: 'markdown', value: 'switched off' },
-            { kind: 'markdown', value: 'slow, see `Fast`' },
-            { kind: 'markdown', value: 'fast' }
+            // the value (C++ enum values) and the Doxygen-rendered doc comment
+            { kind: 'markdown', value: 'value `0` (implicit: first enumerator)\n\nswitched off' },
+            { kind: 'markdown', value: 'value `4`\n\nslow, see `Fast`' },
+            { kind: 'markdown', value: 'value `5` (implicit: `Slow` + 1)\n\nfast' }
         ]);
         const unscoped = MODEL.replace('status = dev::Device::Busy;', 'status = |;');
         const parsed = await parse(unscoped.replace('|', ''), FILES);
