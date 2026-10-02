@@ -587,4 +587,259 @@ export const DIAGRAM_CSS = `
     stroke: var(--hsm-def-stroke);
     stroke-width: 1px;
 }
+
+/* ---- internal block diagrams of structures (.dmf, ibd-layout.ts) ---- */
+
+.theme-classic {
+    --ibd-thread-fill: #f4f7fb;
+    --ibd-thread-stroke: #7f95ab;
+    --ibd-frame-stroke: #a80036;
+    --ibd-tab-fill: #fbf3dd;
+}
+
+.theme-modern {
+    --ibd-thread-fill: #f6f8fa;
+    --ibd-thread-stroke: #8a96a3;
+    --ibd-frame-stroke: #181818;
+    --ibd-tab-fill: #ececec;
+}
+
+.theme-dark {
+    --ibd-thread-fill: #252b32;
+    --ibd-thread-stroke: #66727f;
+    --ibd-frame-stroke: #9fb3c8;
+    --ibd-tab-fill: #2d333b;
+}
+
+.theme-classic, .theme-modern {
+    --ibd-route: #e8590c;
+    --ibd-route-fill: #fff0e6;
+}
+
+.theme-dark {
+    --ibd-route: #ffa94d;
+    --ibd-route-fill: #4a3220;
+}
+
+.ibd-frame-shape {
+    fill: none;
+    stroke: var(--ibd-frame-stroke);
+    stroke-width: 1.5px;
+}
+
+.ibd-frame-tab {
+    fill: var(--ibd-tab-fill);
+    stroke: var(--ibd-frame-stroke);
+    stroke-width: 1.2px;
+}
+
+.ibd-frame-title {
+    font-size: 13px;
+}
+
+.ibd-frame-kind,
+.ibd-frame-name {
+    font-weight: bold;
+}
+
+.ibd-thread-shape {
+    fill: var(--ibd-thread-fill);
+    stroke: var(--ibd-thread-stroke);
+    stroke-width: 1.3px;
+}
+
+.ibd-thread-title {
+    font-size: 13px;
+}
+
+.ibd-thread-name {
+    font-weight: bold;
+}
+
+.sprotty-graph .ibd-thread-details {
+    font-size: 11px;
+    fill: var(--hsm-muted);
+}
+
+.sprotty-graph .ibd-stereotype {
+    font-size: 11px;
+    font-style: italic;
+    font-weight: normal;
+}
+
+.ibd-block-stereotype,
+.ibd-instance-name {
+    text-anchor: middle;
+}
+
+.ibd-instance-name {
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.ibd-instance-shape {
+    fill: var(--hsm-state-fill);
+    stroke: var(--hsm-state-stroke);
+    stroke-width: 1.5px;
+}
+
+.ibd-instance-separator {
+    stroke: var(--hsm-state-stroke);
+    stroke-width: 0.8px;
+    stroke-opacity: 0.45;
+}
+
+.ibd-icon rect,
+.ibd-icon path {
+    fill: none;
+    stroke: var(--hsm-state-stroke);
+    stroke-width: 1.2px;
+}
+
+/* ports: filled = provided, hollow = required; the chevron of async ports shows the event direction */
+.ibd-port-shape {
+    stroke: var(--hsm-state-stroke);
+    stroke-width: 1.3px;
+}
+
+.ibd-port.provided .ibd-port-shape {
+    fill: var(--hsm-state-stroke);
+}
+
+.ibd-port.required .ibd-port-shape {
+    fill: var(--hsm-bg);
+}
+
+.ibd-port-chevron {
+    fill: none;
+    stroke-width: 1.5px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.ibd-port.provided .ibd-port-chevron {
+    stroke: var(--hsm-bg);
+}
+
+.ibd-port.required .ibd-port-chevron {
+    stroke: var(--hsm-state-stroke);
+}
+
+.ibd-port-label {
+    font-size: 11px;
+}
+
+.ibd-connector-line {
+    fill: none;
+    stroke: var(--hsm-edge);
+    stroke-width: 1.3px;
+    stroke-linejoin: round;
+}
+
+.ibd-connector.cross-thread .ibd-connector-line {
+    stroke-dasharray: 6 4;
+}
+
+.ibd-connector-hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 10px;
+}
+
+/* selection and hover */
+
+.ibd-node.mouseover > .ibd-instance-shape,
+.ibd-node.mouseover > .ibd-thread-shape {
+    stroke-width: 2.5px;
+}
+
+.ibd-node.selected > .ibd-instance-shape,
+.ibd-node.selected > .ibd-thread-shape,
+.ibd-node.selected > .ibd-frame-shape {
+    stroke: var(--hsm-select);
+    stroke-width: 2.5px;
+}
+
+.ibd-port.mouseover .ibd-port-shape {
+    stroke-width: 2.2px;
+}
+
+.ibd-port.selected .ibd-port-shape {
+    stroke: var(--hsm-select);
+    stroke-width: 2.5px;
+}
+
+.ibd-connector.mouseover .ibd-connector-line {
+    stroke-width: 2.2px;
+}
+
+.ibd-connector.selected .ibd-connector-line {
+    stroke: var(--hsm-select);
+    stroke-width: 2.5px;
+}
+
+/* route highlighting: the elements of the route of the selection (class on-route), the others dimmed */
+
+.ibd-connector.on-route .ibd-connector-line {
+    stroke: var(--ibd-route);
+    stroke-width: 2.6px;
+}
+
+.ibd-port.on-route .ibd-port-shape {
+    stroke: var(--ibd-route);
+    stroke-width: 2px;
+}
+
+.ibd-port.provided.on-route .ibd-port-shape {
+    fill: var(--ibd-route);
+}
+
+.ibd-port.required.on-route .ibd-port-chevron {
+    stroke: var(--ibd-route);
+}
+
+.sprotty-graph .ibd-port.on-route .ibd-port-label {
+    fill: var(--ibd-route);
+    font-weight: bold;
+}
+
+.ibd-node.on-route > .ibd-instance-shape {
+    stroke: var(--ibd-route);
+    stroke-width: 2.2px;
+}
+
+.ibd-node.on-route.selected > .ibd-instance-shape,
+.ibd-connector.on-route.selected .ibd-connector-line {
+    stroke: var(--hsm-select);
+}
+
+.ibd-port.on-route.selected .ibd-port-shape {
+    stroke: var(--hsm-select);
+    stroke-width: 2.5px;
+}
+
+.route-highlight .ibd-instance:not(.on-route),
+.route-highlight .ibd-connector:not(.on-route),
+.route-highlight .ibd-port:not(.on-route) {
+    opacity: 0.4;
+}
+
+.route-highlight .ibd-instance:not(.on-route) .ibd-port:not(.on-route) {
+    opacity: 1;
+}
+
+/* problems */
+
+.ibd-node.has-error > .ibd-instance-shape,
+.ibd-node.has-error > .ibd-thread-shape {
+    stroke: var(--hsm-error);
+}
+
+.ibd-connector.has-error .ibd-connector-line {
+    stroke: var(--hsm-error);
+}
+
+.ibd-port.has-error .ibd-port-shape {
+    stroke: var(--hsm-error);
+}
 `;
