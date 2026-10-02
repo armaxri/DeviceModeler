@@ -4,7 +4,8 @@ import { AstUtils, type AstNode } from 'langium';
 import { describe, expect, test } from 'vitest';
 import * as ast from '../src/generated/ast.js';
 import { generateCpp } from '../src/generator/cpp/index.js';
-import { cppContextCompletionItems, cppHover } from '../src/lsp/cpp-lsp.js';
+import { cppContextCompletionItems, cppDefinition, cppHover } from '../src/lsp/cpp-lsp.js';
+import { cppLocations } from '../src/lsp/cpp-navigation.js';
 import { scenarioFiles, scenarioText, validateScenario } from '../src/simulation/index.js';
 import { errors, loader, parse } from './helpers.js';
 
@@ -92,5 +93,34 @@ describe('C++ class sections with C++ enums and Doxygen comments', () => {
             '    dev::Mode mode = dev::Mode::Off;'
         ].join('\n'));
         expect(header).toContain('    dev::Device::State status = dev::Device::Idle;');
+    });
+
+    test('hover and navigation on the C++ types of class section members (const, references, pointers, template arguments)', async () => {
+        const header = 'namespace app {\nstruct Config { int retries = 0; };\nenum class Mode { Off, On };\n}\n';
+        const model = [
+            'statemachine M {',
+            '    import "app.h"',
+            '    public:',
+            '        operation setConfig(config : const app::Config&) : app::Mode',
+            '    private:',
+            '        var settings : const app::Config&',
+            '        var modes : std::array<app::Mode, 4>',
+            '    [*] -> A',
+            '    state A',
+            '}'
+        ].join('\n');
+        const { document } = await parse(model, { 'app.h': header });
+        const text = document.textDocument.getText();
+        const config = text.indexOf('var settings : const app::Config&') + 'var settings : const app::'.length + 1;
+        expect(cppHover(document, config)).toContain('struct app::Config');
+        expect(cppDefinition(document, config)?.selection.start).toEqual({ line: 1, character: 7 });
+        expect(cppLocations(document, config, 'typeDefinition')).toHaveLength(1);
+        const parameter = text.indexOf('const app::Config&)') + 'const app::'.length + 1;
+        expect(cppHover(document, parameter)).toContain('struct app::Config');
+        const namespace = text.indexOf('var settings : const app::Config&') + 'var settings : const '.length + 1;
+        expect(cppHover(document, namespace)).toContain('namespace app');
+        const argument = text.indexOf('app::Mode, 4') + 'app::'.length + 1;
+        expect(cppHover(document, argument)).toContain('enum class app::Mode');
+        expect(cppHover(document, text.indexOf('const app::Config&\n') + 1)).toBeUndefined();
     });
 });

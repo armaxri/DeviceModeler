@@ -76,12 +76,16 @@ function qualifiedNameAt(node: ast.TypeReference | ast.CppReference, leaf: CstNo
     if (!cst || !/^\w+$/.test(leaf.text)) {
         return undefined;
     }
-    const prefix = cst.text.slice(0, leaf.end - cst.offset).replace(/\s+/g, '');
-    if (ast.isTypeReference(node) && prefix.includes('.')) {
+    // the qualified name ending at the leaf; the C++ types of the class sections have more around it
+    // (`const app::Config&`, `hal::Driver*`, `std::array<app::Mode, 4>`)
+    const before = cst.text.slice(0, leaf.end - cst.offset);
+    const prefix = (/(?:::\s*)?[A-Za-z_]\w*(?:\s*(?:::|\.)\s*[A-Za-z_]\w*)*$/.exec(before)?.[0] ?? '').replace(/\s+/g, '');
+    if (!prefix || (ast.isTypeReference(node) && prefix.includes('.'))) {
         return undefined;
     }
     const index = cppIndexAt(node);
-    if (ast.isTypeReference(node) && !prefix.includes('::') && !cppTypeOfReference(node)) {
+    // an unqualified type name: only a C++ type (not an HSM type or alias)
+    if (ast.isTypeReference(node) && !prefix.includes('::') && prefix === node.name && !cppTypeOfReference(node)) {
         return undefined;
     }
     const declaration = index.lookup(prefix);
