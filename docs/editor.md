@@ -23,6 +23,45 @@ The web app (`npm run dev`, `packages/web`) edits the text and the diagram side 
 | Undo / redo | `Ctrl+Z` / `Ctrl+Y` (shared with the text editor) |
 | Keep a tool active | hold `Shift` while choosing it, `Esc` to go back to selection |
 
+## Structure diagrams (`.dmf`)
+
+The internal block diagram of a structure file ([the structure language](structure-language.md#diagram))
+is edited like the state machine diagrams: every action is a minimal text edit of the `.dmf` file
+(comments and formatting are kept, `Ctrl+Z` undoes it, the text editor shows the change at once).
+
+| Action | How |
+| --- | --- |
+| Add a thread | *Thread* tool (`T`), click into the structure – then type its name |
+| Add an instance (part) | *Instance* tool (`I`), click on a thread (or on the frame for a part outside of threads), choose the component type from the list of the types visible in the file (type to filter) – then type its name |
+| Add a port | *Port* tools: provided sync `1`, provided async `2`, required sync `3`, required async `4`; click on the frame (a boundary port of the structure), a component block or an instance whose type is declared in the file. New ports are `integer` (sync) or typed by the first interface of the file (async) – change the type in the properties panel |
+| Connect two ports | *Connector* tool (`C`): press on a port and drag to the other port (or click both). While drawing, the ports that can be connected turn green, ports with incompatible types orange, the others fade; the hint shows the statement or the reason. Two ports of parts become `connect required -> provided` (drawn the other way round, the ends are swapped), a boundary port and a port of a part a `delegate` (`delegate p -> part.q` for provided, `delegate part.r -> r` for required ports). Incompatible ports are connected with a warning (the validator reports the error) |
+| Move an instance into another thread | drag it onto the thread; onto the frame: out of its thread (a passive part). An assignment by name (`thread T { door }`) is replaced |
+| Rename | double-click the name (of an instance: on its name, not on its type) or `F2`; also in the properties panel. Component types and ports are renamed in all structure files of the workspace that use them (Langium references); in the web app those other files are changed in the workspace (not undone with `Ctrl+Z` of the edited file) |
+| Edit a port | properties panel: name, direction, kind, type (with completion of the built-in types, structs and interfaces) |
+| Edit a thread | properties panel: name, priority, period (`10 ms`), stack size – the annotations `@priority(5) @period(10 ms) @stack(4096)` on the line before the thread |
+| Change the type or the thread of an instance | properties panel |
+| Set the behavior of a component | properties panel of the component (`behavior "door.hsm"`, completion of the state machine files) |
+| Add a component type | properties panel of the overview (*Add component / structure / system*) |
+| Delete | `Del` / the trash button: an instance with its connections, delegations and assignments; a port with the connections and delegations of the file using it; a thread keeps its instances (they become passive parts of the structure); connections, delegations, component types. Ports shown at an instance belong to its type: they are edited and deleted in the type |
+
+### Navigation
+
+| From | Action | Shows |
+| --- | --- | --- |
+| an instance with a behavior | double-click it, click its behavior icon or *Open state machine* | the state machine (`.hsm`) of its component |
+| a composite instance | double-click it, click its rake icon or *Open DriveUnit* | the internal block diagram of its structure, as the part of the shown structure (breadcrumb *Part of GarageDoor › drive : DriveUnit*) |
+| the type name of an instance | double-click it or *Go to type* | the definition of the component type (its file, the type shown and selected) |
+| a selected port, connection or instance | *Follow into drive ▸* (properties panel) | the structure of a composite part the highlighted route continues into – the route stays highlighted there, also across files |
+| the same, inside a composite | *◂ Follow out to GarageDoor* | the structure using it, the route highlighted |
+| a required (provided) port | the *Providers* (*Requirers*) links, *Go to provider* | the port at the end of the route – also in another file (e.g. from `drive.dmf` to the door controller in `system.dmf`) |
+| a state machine | *Used by* (breadcrumb at the top of the diagram, properties panel) | the instances of the components implemented by the state machine, in the diagram of their structure |
+| anywhere | *◀* / *▶* in the toolbar, `Alt+←` / `Alt+→` | back / forward in the navigation history |
+
+Routes are followed through the levels of the hierarchy and the files of the workspace: a structure
+shown on its own is seen as part of the first system that contains it (its breadcrumb), so the
+providers of a required port of the drive unit are found in the system. The target of a navigation is
+selected in the diagram and its text highlighted.
+
 ## Manual layout (experimental)
 
 🧪 By default the diagram is laid out automatically (ELK). As soon as a state is dragged, the diagram

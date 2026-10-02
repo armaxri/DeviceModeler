@@ -220,8 +220,10 @@ of a composite instance with the same port seen from inside the composite.
 ## Diagram
 
 The diagram of a structure file is an internal block diagram (IBD) in the style of SysML, in the themes of
-the state machine diagrams (PlantUML classic / modern, dark). It is shown by the web editor (read only: the
-text is edited, the diagram follows) and rendered by `hsm render` ([rendering](rendering.md)):
+the state machine diagrams (PlantUML classic / modern, dark). It is shown and edited by the web editor
+(palette, rename in place, drag & drop into threads, connectors, properties, navigation into the state
+machines and structures of the instances – see [the editor](editor.md#structure-diagrams-dmf)) and
+rendered by `hsm render` ([rendering](rendering.md)):
 
 ![The garage door system](examples/GarageDoor.svg)
 
@@ -255,8 +257,25 @@ derived from the names – frame `GarageDoor`, boundary port `GarageDoor.remote`
 connection `GarageDoor/door.motor->drive.ctrl`, delegation `GarageDoor/remote->door.cmd`; the result maps
 ids to AST nodes and back (`elements`, `ids`; ports of instances also to their instance, `instances`). The
 layout uses ELK (layered, left to right, orthogonal routing, threads and the frame as compound nodes with
-hierarchy handling, ports with fixed positions). Not supported yet: graphical editing, layout annotations
-(manual layout) and navigation into the state machine or structure of an instance.
+hierarchy handling, ports with fixed positions). Not supported yet: layout annotations (manual layout).
+
+**Editing** (`src/edit/dmf-edits.ts`): `DmfEditor` turns the diagram operations into minimal text edits
+(add threads, instances, ports, connections and component types; move instances between threads; edit
+ports, thread annotations and the behavior of components; rename; delete), `planConnection` decides
+between `connect` and `delegate` and the order of the ends of two chosen ports (and reports
+incompatibilities with `portIncompatibilities`), `dmfRenameEdits` renames an element and its references
+in all loaded files (Langium references; qualified references keep their qualifier). Deleting a thread
+keeps its instances: they become passive parts of the structure.
+
+**Workspace** (`src/dmf-workspace.ts`): `DmfWorkspace` loads all structure files of a workspace (with
+their imports) into Langium services of its own for questions across files: `behaviorUsages(uri)` (the
+instances implemented by a state machine), `contextsOf(structure)` (where a structure is used in the
+systems), `endpoint` / `route` / `routeEnds` (routes and providers through all levels and files),
+`routeIdsAt` / `routeContinuations` (the diagram ids of a route at a level of the instance tree, the
+composite parts it continues into), `renameEdits` (renames updating the files that use an element).
+Elements are identified across the separately parsed files by URI and names: a `StructureContext`
+(`{ rootUri, root, path }`, the shown structure as the part `path` of the root) and a
+`StructureLocation` (`{ uri, element, id, context }`, what navigation opens and selects).
 
 ## Editor support
 
@@ -269,8 +288,10 @@ import paths and the behavior file), go to implementation = go to the provider o
 structure file with everything it imports outside of a language server.
 
 The web app highlights `.dmf` files (generated Monarch grammar), offers completion, hover, formatting and
-go to definition, and shows their diagram (see [Diagram](#diagram)); all files of `examples/device` are in
-its list of examples and resolve their imports against each other.
+go to definition, and shows and edits their diagram (see [Diagram](#diagram) and
+[the editor](editor.md#structure-diagrams-dmf)); all files of `examples/device` are in its list of
+examples and resolve their imports against each other. State machines used as the behavior of components
+link back to the instances (*Used by*).
 
 Not (yet) supported: simulation and code generation of structures; state machines cannot use the structs
 of structure files (share C/C++ headers instead).
