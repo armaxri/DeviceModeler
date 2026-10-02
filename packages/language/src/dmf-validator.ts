@@ -5,9 +5,10 @@ import { behaviorMapping } from './dmf-behavior.js';
 import { dmfCppImports, resolvedBehavior, resolvedDmfImports, visibleElements } from './dmf-imports.js';
 import type { DmfServices } from './dmf-module.js';
 import {
-    argumentNumber, DURATION_UNITS, enclosingStructure, instanceType, isCompositeType, portReferenceText, structureInstances, threadOf, threadsOf
+    argumentNumber, DURATION_UNITS, enclosingStructure, instanceType, isCompositeType, portReferenceText, structureInstances, threadsOf
 } from './dmf-model.js';
 import { portIncompatibilities, resolveDataType } from './dmf-types.js';
+import { connectionThreads } from './dmf-routes.js';
 import { resolveTypeName } from './hsm-typesystem.js';
 
 export function registerDmfValidationChecks(services: DmfServices): void {
@@ -361,10 +362,8 @@ export class DmfValidator {
             return;
         }
         this.checkCompatibility(connection, from, to, accept);
-        const a = source.instance.ref;
-        const b = target.instance.ref;
-        const threadA = a && threadOf(a);
-        const threadB = b && threadOf(b);
+        // (a composite outside of threads: the threads of the component ports inside it)
+        const { source: threadA, target: threadB } = connectionThreads(connection);
         if (threadA && threadB && threadA !== threadB) {
             accept('info', `The connection crosses threads ('${threadA.name}' -> '${threadB.name}').`, { node: connection });
         }

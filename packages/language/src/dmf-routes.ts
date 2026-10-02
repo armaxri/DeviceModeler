@@ -410,3 +410,39 @@ export function effectiveThread(endpoint: PortEndpoint): ast.Thread | undefined 
     }
     return undefined;
 }
+
+/**
+ * The threads on both sides of a connection, `undefined` for a passive side: the thread of the
+ * instance, and for a composite instance outside of any thread the thread of the component ports the
+ * connection leads to inside the composite (its requirers for the source side, its providers for the
+ * target side), if they all run in the same thread. A connection crosses threads if both sides have a
+ * thread and they differ (reported by the validator, drawn dashed in the diagram).
+ */
+export function connectionThreads(connection: ast.Connection): { source?: ast.Thread, target?: ast.Thread } {
+    const side = (reference: ast.PortReference | undefined, direction: 'forward' | 'backward'): ast.Thread | undefined => {
+        const instance = reference?.instance?.ref;
+        if (!reference || !instance) {
+            return undefined;
+        }
+        const own = threadOf(instance);
+        if (own || !isCompositeType(instanceType(instance))) {
+            return own;
+        }
+        const start = referenceEndpoint(reference);
+        if (!start) {
+            return undefined;
+        }
+        // the component ports inside the composite: follow the boundary hop (and further) away from the connection
+        const ends = (direction === 'forward' ? findProviders(start) : findRequirers(start))
+            .filter(e => e.path.length > 0 && isComponentEndpoint(e));
+        const threads = new Set(ends.map(effectiveThread));
+        return threads.size === 1 ? [...threads][0] : undefined;
+    };
+    return { source: side(connection.source, 'backward'), target: side(connection.target, 'forward') };
+}
+
+/** Whether the connection crosses threads (see {@link connectionThreads}). */
+export function crossesThreads(connection: ast.Connection): boolean {
+    const { source, target } = connectionThreads(connection);
+    return !!source && !!target && source !== target;
+}

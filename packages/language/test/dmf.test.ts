@@ -127,7 +127,10 @@ describe('structure language: the example', () => {
             expect(imported.hasErrors, imported.uri).toBe(false);
         }
         if (file === 'system.dmf') {
+            // (drive is a composite outside of threads: its parts run in the MotorTask)
             expect(infos(parsed)).toEqual([
+                "The connection crosses threads ('ControlTask' -> 'MotorTask').",
+                "The connection crosses threads ('MotorTask' -> 'ControlTask').",
                 "The connection crosses threads ('ControlTask' -> 'IoTask').",
                 "The connection crosses threads ('IoTask' -> 'ControlTask')."
             ]);
