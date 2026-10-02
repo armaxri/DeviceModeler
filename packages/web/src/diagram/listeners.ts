@@ -6,6 +6,7 @@ import {
 import { BringToFrontAction, MoveAction, SelectAction, SelectAllAction, type Action } from 'sprotty-protocol';
 import { borderPoint, type Point } from 'hsm-language';
 import { isTransitionEdge, isVertexNode, type TransitionEdge, type VertexNode } from './model.js';
+import { IbdNodeElement } from './ibd-model.js';
 import { arrowHead, routePath } from './views.js';
 
 /** Position of a vertex after it was dragged (relative to its parent and absolute). */
@@ -28,6 +29,10 @@ export interface DragInfo {
 export interface DiagramCallbacks {
     /** A mouse button was pressed on a diagram element (or the canvas, i.e. the root). */
     mouseDown(target: SModelElementImpl, event: MouseEvent): void;
+    /** The mouse button was released over a diagram element (e.g. the end of a connector dragged from a port). */
+    mouseUp?(target: SModelElementImpl, event: MouseEvent): void;
+    /** Whether the element may be dragged (e.g. not while a tool of the palette is active in a structure diagram). */
+    canMove?(target: SModelElementImpl): boolean;
     doubleClick(target: SModelElementImpl, event: MouseEvent): void;
     /** A vertex was dragged and dropped onto the given container element (undefined: no valid drop target). */
     dragEnd(draggedId: string, dropTargetId: string | undefined, info: DragInfo): void;
@@ -59,6 +64,15 @@ function movableVertex(target: SModelElementImpl): VertexNode | undefined {
         return current;
     }
     return undefined;
+}
+
+/** The instance of an internal block diagram (structure) which is dragged when the drag starts on `target`. */
+function movableInstance(target: SModelElementImpl): IbdNodeElement | undefined {
+    let current: SModelElementImpl | undefined = target;
+    while (current && !(current instanceof IbdNodeElement)) {
+        current = 'parent' in current ? (current as { parent?: SModelElementImpl }).parent : undefined;
+    }
+    return current instanceof IbdNodeElement && current.kind === 'instance' ? current : undefined;
 }
 
 /** Straight lines from the border of the source through the waypoints to the border of the target. */
@@ -145,6 +159,16 @@ export class HsmMouseListener extends MouseListener {
             return [];
         }
         if (this.startHandleDrag(target, event)) {
+            return [];
+        }
+        if (this.callbacks.canMove && !this.callbacks.canMove(target)) {
+            return [];
+        }
+        const instance = movableInstance(target);
+        if (instance) {
+            // structure diagrams: an instance is dropped into a thread (or the frame)
+            this.drag = { id: instance.id, x: event.clientX, y: event.clientY, moved: false };
+            this.startPositions = undefined;
             return [];
         }
         const vertex = movableVertex(target);
@@ -340,6 +364,7 @@ export class HsmMouseListener extends MouseListener {
     }
 
     override mouseUp(target: SModelElementImpl, event: MouseEvent): Action[] {
+        this.callbacks.mouseUp?.(target, event);
         const handle = this.handle;
         this.handle = undefined;
         if (handle) {
@@ -454,6 +479,9 @@ export class HsmMouseListener extends MouseListener {
             if (isVertexNode(element) && (element.kind === 'state' || element.kind === 'region')) {
                 return element.id;
             }
+            if (element instanceof IbdNodeElement && (element.kind === 'thread' || element.kind === 'frame')) {
+                return element.id;
+            }
         }
         return undefined;
     }
@@ -480,7 +508,7 @@ export class HsmMoveMouseListener extends MoveMouseListener {
     @inject(DiagramCallbacks) protected callbacks!: DiagramCallbacks;
 
     override mouseDown(target: SModelElementImpl, event: MouseEvent): (Action | Promise<Action>)[] {
-        if (!this.callbacks.canEdit() || handleElement(event)) {
+        if (!this.callbacks.canEdit() || handleElement(event) || (this.callbacks.canMove && !this.callbacks.canMove(target))) {
             this.startDragPosition = undefined;
             this.hasDragged = false;
             return [];

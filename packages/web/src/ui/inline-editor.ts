@@ -166,3 +166,126 @@ export function closeInlineEditor(): void {
     active = undefined;
     element?.remove();
 }
+
+export interface ChooserItem {
+    value: string;
+    label: string;
+    /** Second line (e.g. the file declaring the item). */
+    detail?: string;
+}
+
+export interface ChooserOptions {
+    /** Client coordinates of the point the chooser is shown at. */
+    x: number;
+    y: number;
+    title: string;
+    items: ChooserItem[];
+    placeholder?: string;
+    commit: (value: string) => void;
+    cancel?: () => void;
+}
+
+/**
+ * Shows a list to choose from (filtered by typing), e.g. the component type of a new instance.
+ * `Enter` or a click chooses, `Esc` or a click outside cancels.
+ */
+export function showChooser(options: ChooserOptions): void {
+    closeInlineEditor();
+    const container = document.createElement('div');
+    container.className = 'inline-editor chooser';
+    const title = document.createElement('div');
+    title.className = 'chooser-title';
+    title.textContent = options.title;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = options.placeholder ?? 'type to filter';
+    input.spellcheck = false;
+    input.autocomplete = 'off';
+    const list = document.createElement('ul');
+    list.className = 'inline-editor-completions chooser-list';
+    container.append(title, input, list);
+    container.style.left = `${Math.max(4, Math.min(options.x, window.innerWidth - 270))}px`;
+    container.style.top = `${Math.max(4, Math.min(options.y, window.innerHeight - 300))}px`;
+    container.style.width = '260px';
+    document.body.append(container);
+    active = container;
+
+    let done = false;
+    let shown: ChooserItem[] = [];
+    let selected = 0;
+    const finish = (value: string | undefined) => {
+        if (done) {
+            return;
+        }
+        done = true;
+        closeInlineEditor();
+        document.removeEventListener('mousedown', outside, true);
+        if (value !== undefined) {
+            options.commit(value);
+        } else {
+            options.cancel?.();
+        }
+    };
+    const outside = (event: MouseEvent) => {
+        if (active !== container) {
+            // closed by someone else
+            document.removeEventListener('mousedown', outside, true);
+            return;
+        }
+        if (!container.contains(event.target as Node)) {
+            finish(undefined);
+        }
+    };
+    const render = () => {
+        const filter = input.value.trim().toLowerCase();
+        shown = options.items.filter(item => !filter || item.label.toLowerCase().includes(filter));
+        selected = Math.min(selected, Math.max(0, shown.length - 1));
+        list.replaceChildren(...shown.map((item, i) => {
+            const element = document.createElement('li');
+            element.classList.toggle('selected', i === selected);
+            element.textContent = item.label;
+            if (item.detail) {
+                const detail = document.createElement('span');
+                detail.className = 'chooser-detail';
+                detail.textContent = item.detail;
+                element.append(detail);
+            }
+            element.addEventListener('mousedown', event => {
+                event.preventDefault();
+                finish(item.value);
+            });
+            return element;
+        }));
+        if (shown.length === 0) {
+            const empty = document.createElement('li');
+            empty.className = 'chooser-empty';
+            empty.textContent = options.items.length === 0 ? 'nothing to choose from' : 'no match';
+            list.append(empty);
+        }
+    };
+    input.addEventListener('input', () => {
+        selected = 0;
+        render();
+    });
+    input.addEventListener('keydown', event => {
+        event.stopPropagation();
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            if (shown.length > 0) {
+                selected = (selected + (event.key === 'ArrowDown' ? 1 : shown.length - 1)) % shown.length;
+                render();
+            }
+            event.preventDefault();
+        } else if (event.key === 'Enter') {
+            if (shown[selected]) {
+                finish(shown[selected].value);
+            }
+            event.preventDefault();
+        } else if (event.key === 'Escape') {
+            finish(undefined);
+            event.preventDefault();
+        }
+    });
+    render();
+    document.addEventListener('mousedown', outside, true);
+    requestAnimationFrame(() => input.focus());
+}

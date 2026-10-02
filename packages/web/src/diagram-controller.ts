@@ -26,11 +26,15 @@ import { exportSvg, svgToPng } from './ui/export-svg.js';
 import { renderProperties, type PropertiesHost, type SelectionInfo } from './ui/properties.js';
 import { SimulationPanel } from './ui/simulation-panel.js';
 import { SimulationSession, canHaveBreakpoint } from './simulation/session.js';
-import { StructureDiagram } from './structure-diagram.js';
+import { StructureDiagram, type DiagramLocation, type StructureTool } from './structure-diagram.js';
+import { renderBreadcrumb } from './ui/breadcrumb.js';
 import type { SModelRoot } from 'sprotty-protocol';
+import { normalizeUri, type BehaviorUsage } from 'hsm-language';
+
+export type { DiagramLocation, StructureTool } from './structure-diagram.js';
 
 export type Tool = 'select' | 'state' | 'choice' | 'junction' | 'history' | 'deephistory' | 'sync' | 'entry' | 'exit' | 'initial' | 'final'
-    | 'transition' | 'region';
+    | 'transition' | 'region' | StructureTool;
 
 /** Tools which add a vertex to the container that is clicked. */
 const VERTEX_TOOLS: ReadonlySet<Tool> = new Set<Tool>(['state', 'choice', 'junction', 'history', 'deephistory', 'sync', 'entry', 'exit']);
@@ -59,6 +63,21 @@ const TOOLS: Array<ToolDescription | 'separator'> = [
     { tool: 'initial', label: 'Initial state', key: 'I', icon: Icons.initial, hint: 'Click on the state that should be the initial state of its parent' },
     { tool: 'final', label: 'Final state', key: 'F', icon: Icons.final, hint: 'Click on a state to add a transition to the final state' },
     { tool: 'transition', label: 'Transition', key: 'T', icon: Icons.transition, hint: 'Click on the source, then on the target of the transition' }
+];
+
+/** The palette of structure diagrams (.dmf). */
+const STRUCTURE_TOOLS: Array<ToolDescription | 'separator'> = [
+    { tool: 'select', label: 'Select / move', key: 'V', icon: Icons.select, hint: '' },
+    'separator',
+    { tool: 'thread', label: 'Thread', key: 'T', icon: Icons.thread, hint: 'Click into the structure to add a thread' },
+    { tool: 'instance', label: 'Instance (part)', key: 'I', icon: Icons.instance, hint: 'Click on a thread or the frame, then choose the component type' },
+    'separator',
+    { tool: 'port-provides-sync', label: 'Provided sync port (data)', key: '1', icon: Icons.providedSync, hint: 'Click on the frame, a component or an instance to add a provided sync port' },
+    { tool: 'port-provides-async', label: 'Provided async port (events in)', key: '2', icon: Icons.providedAsync, hint: 'Click on the frame, a component or an instance to add a provided async port' },
+    { tool: 'port-requires-sync', label: 'Required sync port (data)', key: '3', icon: Icons.requiredSync, hint: 'Click on the frame, a component or an instance to add a required sync port' },
+    { tool: 'port-requires-async', label: 'Required async port (events out)', key: '4', icon: Icons.requiredAsync, hint: 'Click on the frame, a component or an instance to add a required async port' },
+    'separator',
+    { tool: 'connector', label: 'Connector (connect / delegate)', key: 'C', icon: Icons.connector, hint: 'Press on a port and drag to the port to connect it with' }
 ];
 
 export interface ModelState {
@@ -133,6 +152,21 @@ export interface DiagramHost {
      */
     openStateMachine?(submachine: DiagramSubmachine): boolean;
     setStatus(message: string, severity?: StatusSeverity): void;
+    /**
+     * Applies edits to other files of the workspace (by URI, offsets relative to their texts as passed to
+     * the language service), e.g. a rename in a structure file that updates the files referencing the
+     * element. Without it such renames are refused.
+     */
+    applyWorkspaceEdits?(edits: ReadonlyMap<string, readonly TextEdit[]>): Promise<boolean>;
+    /**
+     * Navigation from the diagram to another file (open the state machine of an instance, the structure of
+     * a composite, a type definition, a provider in another file, back to the structure using a state
+     * machine): the host opens the file (and records the navigation history) and calls
+     * {@link DiagramController.revealLocation} so that the diagram shows and selects the target once the
+     * file is loaded. Returns false if the file is not available. Locations in the edited file are shown
+     * by the controller itself (but are passed to the host as well, for its history).
+     */
+    openLocation?(location: DiagramLocation): boolean | Promise<boolean>;
 }
 
 export interface DiagramControllerOptions {
@@ -195,6 +229,14 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
      * edited document is a structure file (read only).
      */
     readonly structure: StructureDiagram;
+    /** The palette shown: of the state machines or of the structures. */
+    private paletteMode?: 'hsm' | 'structure';
+    /** A hint replacing the hint of the tool (e.g. while drawing a connector). */
+    private hintOverride?: string;
+    /** Shown after the next update of a state machine (navigation). */
+    private pendingLocation?: DiagramLocation;
+    /** The instances using the state machine (from the structure files of the workspace), by state machine URI. */
+    private usages?: { uri: string, text: string, usages: BehaviorUsage[] };
 
     constructor(options: DiagramControllerOptions) {
         this.host = options.host;
@@ -207,10 +249,19 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             elk: this.elk,
             selection: this.selection,
             show: schema => this.showSchema(schema),
-            select: id => this.select(id),
+            select: (id, center) => this.select(id, center),
             fitOnNextUpdate: () => {
                 this.fitOnNextRender = true;
-            }
+            },
+            tool: () => this.tool === 'select' || this.isStructureTool(this.tool) ? this.tool as StructureTool | 'select' : 'select',
+            setTool: tool => this.setTool(tool),
+            toolDone: () => this.toolDone(),
+            setHint: hint => {
+                this.hintOverride = hint;
+                this.updatePalette();
+            },
+            setStatus: (message, severity) => this.setStatus(message, severity),
+            navigate: location => this.navigate(location)
         });
     }
 
@@ -222,13 +273,18 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     /** Switches between the state machine and the structure diagram (palette, layout controls). */
     private updateMode(): void {
         const structure = this.structureMode;
+        const mode = structure ? 'structure' : 'hsm';
         if (structure) {
             // the state machine operations do not apply to the structure diagram
             this.state = undefined;
             this.pendingSource = undefined;
-            this.tool = 'select';
         } else {
             this.structure.deactivate();
+        }
+        if (this.paletteMode !== undefined && this.paletteMode !== mode) {
+            this.tool = 'select';
+            this.stickyTool = false;
+            this.buildPalette();
         }
         document.body.classList.toggle('structure-mode', structure);
         for (const id of LAYOUT_CONTROLS) {
@@ -276,8 +332,23 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     }
 
     private createPalette(): void {
+        this.buildPalette();
+    }
+
+    /** The tools of the palette of the current mode. */
+    private get tools(): Array<ToolDescription | 'separator'> {
+        return this.structureMode ? STRUCTURE_TOOLS : TOOLS;
+    }
+
+    private isStructureTool(tool: Tool): tool is StructureTool {
+        return STRUCTURE_TOOLS.some(t => t !== 'separator' && t.tool === tool && tool !== 'select');
+    }
+
+    private buildPalette(): void {
         const palette = byId('palette');
-        for (const entry of TOOLS) {
+        palette.replaceChildren();
+        this.paletteMode = this.structureMode ? 'structure' : 'hsm';
+        for (const entry of this.tools) {
             if (entry === 'separator') {
                 palette.append(h('div', { class: 'separator' }));
                 continue;
@@ -294,6 +365,9 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         palette.append(h('button', { title: 'Delete selection (Del)', 'aria-label': 'Delete', html: Icons.delete, onClick: () => this.deleteSelection() }));
         palette.append(h('button', { title: 'Re-layout diagram', 'aria-label': 'Re-layout', html: Icons.relayout, onClick: () => this.update(true) }));
         palette.append(h('button', { title: 'Fit to screen', 'aria-label': 'Fit to screen', html: Icons.fit, onClick: () => this.fit() }));
+        if (this.simulationSession) {
+            this.setPaletteEnabled(false);
+        }
         this.updatePalette();
     }
 
@@ -323,7 +397,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             } else if (event.key === 'Escape') {
                 this.setTool('select');
             } else if (!ctrl && !event.altKey) {
-                const entry = TOOLS.find((t): t is ToolDescription => t !== 'separator' && t.key.toLowerCase() === event.key.toLowerCase());
+                const entry = this.tools.find((t): t is ToolDescription => t !== 'separator' && t.key.toLowerCase() === event.key.toLowerCase());
                 if (entry) {
                     this.setTool(entry.tool, event.shiftKey);
                     event.preventDefault();
@@ -395,6 +469,8 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         this.stopSimulation();
         this.selection.clear();
         this.pendingSource = undefined;
+        this.structure.cancelConnector();
+        closeInlineEditor();
         this.fitOnNextRender = true;
     }
 
@@ -459,6 +535,13 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             this.pendingSource = undefined;
         }
         let createdId: string | undefined;
+        const location = this.pendingLocation && normalizeUri(this.pendingLocation.uri) === normalizeUri(this.language.uri) ? this.pendingLocation : undefined;
+        if (location) {
+            this.pendingLocation = undefined;
+            if (location.offset !== undefined && this.pendingSelectOffset === undefined) {
+                this.pendingSelectOffset = location.offset;
+            }
+        }
         if (this.pendingSelectOffset !== undefined) {
             createdId = this.elementAtOffset(this.pendingSelectOffset, true);
             this.pendingSelectOffset = undefined;
@@ -469,6 +552,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             }
         }
         await this.render();
+        this.refreshUsages();
         if (this.pendingRename) {
             // rename the created vertex: it is identified by its offset in the text (names need not be unique)
             this.pendingRename = false;
@@ -618,7 +702,6 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             return false;
         }
         if (this.structureMode) {
-            this.setStatus('The structure diagram is read only – edit the text.', 'info');
             return false;
         }
         if (!this.state || this.state.parsed.text !== this.host.getText()) {
@@ -756,8 +839,12 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
 
     setTool(tool: Tool, sticky = false): void {
         closeInlineEditor();
-        if (this.simulationSession || this.structureMode) {
+        if (this.simulationSession || !this.tools.some(t => t !== 'separator' && t.tool === tool)) {
             tool = 'select';
+        }
+        if (this.structureMode) {
+            this.structure.cancelConnector();
+            this.hintOverride = undefined;
         }
         this.tool = tool;
         this.stickyTool = sticky;
@@ -787,8 +874,8 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             button.classList.toggle('active', button.dataset.tool === this.tool);
         }
         byId('diagram-area').classList.toggle('tool-active', this.tool !== 'select');
-        const description = TOOLS.find((t): t is ToolDescription => t !== 'separator' && t.tool === this.tool);
-        let hint = description?.hint ?? '';
+        const description = this.tools.find((t): t is ToolDescription => t !== 'separator' && t.tool === this.tool);
+        let hint = this.hintOverride ?? description?.hint ?? '';
         if (this.tool === 'transition' && this.pendingSource) {
             hint = 'Now click on the target (Esc to cancel)';
         }
@@ -875,7 +962,13 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         if (!byId('diagram-area').contains(document.activeElement) && !document.querySelector('.inline-editor')) {
             this.focusDiagram();
         }
-        if (event.button !== 0 || this.tool === 'select' || this.structureMode) {
+        if (this.structureMode) {
+            if (!this.simulationSession) {
+                this.structure.mouseDown(target, event);
+            }
+            return;
+        }
+        if (event.button !== 0 || this.tool === 'select') {
             return;
         }
         const id = this.diagramId(target);
@@ -983,8 +1076,25 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         });
     }
 
-    doubleClick(target: SModelElementImpl): void {
-        if (this.tool !== 'select' || this.simulationSession || this.structureMode) {
+    mouseUp(target: SModelElementImpl, event: MouseEvent): void {
+        if (this.structureMode && !this.simulationSession) {
+            this.structure.mouseUp(target, event);
+        }
+    }
+
+    /** Elements are not dragged while a tool of the structure palette is active (a connector starts at a port). */
+    canMove(_target: SModelElementImpl): boolean {
+        return !this.structureMode || this.tool === 'select';
+    }
+
+    doubleClick(target: SModelElementImpl, event?: MouseEvent): void {
+        if (this.tool !== 'select' || this.simulationSession) {
+            return;
+        }
+        if (this.structureMode) {
+            if (event) {
+                this.structure.doubleClick(target, event);
+            }
             return;
         }
         const id = this.diagramId(target);
@@ -1013,6 +1123,10 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
      * the vertex is moved into the state (or region, or the canvas) below the mouse.
      */
     dragEnd(draggedId: string, dropTargetId: string | undefined, info: DragInfo): void {
+        if (this.structureMode) {
+            this.structure.dragEnd(draggedId, dropTargetId);
+            return;
+        }
         if (this.simulationSession) {
             this.render();
             return;
@@ -1141,11 +1255,15 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     }
 
     canEdit(): boolean {
-        return !this.simulationSession && !this.structureMode;
+        return !this.simulationSession;
     }
 
     deleteSelection(): void {
-        if (this.simulationSession || this.structureMode) {
+        if (this.simulationSession) {
+            return;
+        }
+        if (this.structureMode) {
+            this.structure.deleteSelection();
             return;
         }
         const targets = [...this.selection].flatMap((id): DeletionTarget[] => {
@@ -1174,7 +1292,11 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
 
     /** Opens an inline editor to rename a vertex / region or to edit the label of a transition. */
     startRename(id: string): void {
-        if (this.simulationSession || this.structureMode) {
+        if (this.simulationSession) {
+            return;
+        }
+        if (this.structureMode) {
+            this.structure.startRename(id);
             return;
         }
         const node = this.astOf(id);
@@ -1680,16 +1802,89 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             issue: id ? this.state?.issues.get(id) : undefined,
             count: this.selection.size,
             model: this.state?.parsed.model,
-            syntaxErrors: this.syntaxErrors
+            syntaxErrors: this.syntaxErrors,
+            usages: this.usages?.uri === this.language.uri ? this.usages.usages : undefined
         };
         renderProperties(panel, info, this);
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Navigation between files (structures, state machines)
+
+    /**
+     * Shows a location: in the edited file directly, in another file through the host
+     * ({@link DiagramHost.openLocation}, which records the history and calls {@link revealLocation}).
+     */
+    navigate(location: DiagramLocation): void {
+        closeInlineEditor();
+        // (a focused button of the properties panel prevents its update)
+        const focused = document.activeElement;
+        if (focused instanceof HTMLElement && byId('properties').contains(focused)) {
+            focused.blur();
+        }
+        if (this.host.openLocation) {
+            Promise.resolve(this.host.openLocation(location)).then(opened => {
+                if (!opened) {
+                    this.setStatus(`${decodeURIComponent(location.uri.replace(/^.*\//, ''))} is not available.`, 'warning');
+                }
+            });
+            return;
+        }
+        if (normalizeUri(location.uri) === normalizeUri(this.language.uri)) {
+            this.revealLocation(location);
+            this.update(true);
+        } else {
+            this.setStatus('Opening other files is not supported here.', 'warning');
+        }
+    }
+
+    /**
+     * Shows and selects the location once the diagram of its file is updated (the host calls this when
+     * it opens the file of a navigation, before the update; for the edited file it updates the diagram).
+     */
+    revealLocation(location: DiagramLocation): void {
+        this.pendingLocation = location;
+        this.structure.reveal(location);
+        this.fitOnNextRender = normalizeUri(location.uri) !== normalizeUri(this.language.uri) || this.fitOnNextRender;
+    }
+
+    /** The shown file, element and selection (for the navigation history of the host). */
+    currentLocation(): DiagramLocation {
+        if (this.structureMode) {
+            return this.structure.currentLocation();
+        }
+        const id = this.singleSelection();
+        const range = id ? this.rangeOf(id) : undefined;
+        return { uri: this.language.uri, offset: range?.offset };
+    }
+
+    /** The structures using the state machine ("used by" links and breadcrumb), computed from the structure files of the workspace. */
+    private async refreshUsages(): Promise<void> {
+        const uri = this.language.uri;
+        const text = this.host.getText();
+        if (this.usages?.uri !== uri || this.usages.text !== text) {
+            const workspace = await this.language.structureWorkspace(text);
+            if (uri !== this.language.uri || this.structureMode) {
+                return;
+            }
+            this.usages = { uri, text, usages: workspace.behaviorUsages(uri) };
+            this.renderPropertiesPanel();
+        }
+        const items = this.usages.usages.flatMap(usage => usage.instances.map(instance => ({
+            label: `${instance.structure}/${instance.instance}`,
+            title: `Show the instance ${instance.instance} : ${usage.component} in ${instance.structure}`,
+            onClick: () => this.navigate(instance.location)
+        })));
+        renderBreadcrumb(items, 'Used by', ',');
     }
 
     // -----------------------------------------------------------------------------------------
     // Viewport, export
 
     fit(animate = true): void {
-        this.actionDispatcher.dispatch(FitToScreenAction.create([], { padding: 24, maxZoom: 1.3, animate }));
+        // (without element ids, Sprotty fits the selected elements: structure diagrams fit the invisible canvas node covering everything)
+        const graph = this.structureMode ? this.structure.model?.layout.graph : undefined;
+        this.actionDispatcher.dispatch(FitToScreenAction.create(graph ? [`${graph.id}#canvas`] : [], { padding: 24, maxZoom: 1.3, animate }));
     }
 
     private lastSize?: { width: number, height: number };

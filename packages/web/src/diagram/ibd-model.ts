@@ -1,4 +1,7 @@
 import { SChildElementImpl, SNodeImpl, SShapeElementImpl, boundsFeature, hoverFeedbackFeature, selectFeature } from 'sprotty';
+
+/** Ports while drawing a connector: can be connected (`ok`), with incompatible types (`problem`), not at all (`invalid`). */
+export type ConnectStatus = 'ok' | 'problem' | 'invalid';
 import type { SModelElement, SModelRoot } from 'sprotty-protocol';
 import type { DiagramLabel, IbdBehavior, IbdComposite, IbdEdge, IbdGraph, IbdNode, IbdNodeKind, IbdPort, Point } from 'hsm-language';
 import type { Issue } from './model.js';
@@ -54,6 +57,10 @@ export class IbdPortElement extends SShapeElementImpl {
     hoverFeedback = false;
     issue?: Issue;
     onRoute = false;
+    /** Drawing a connector: whether the port can be connected with the start port. */
+    connect?: ConnectStatus;
+    /** The start port of the connector being drawn. */
+    connectSource = false;
 }
 
 export class IbdConnectorElement extends SChildElementImpl {
@@ -74,6 +81,10 @@ export interface IbdSchemaOptions {
     issues: ReadonlyMap<string, Issue>;
     /** Ids of the elements on the highlighted route. */
     route?: ReadonlySet<string>;
+    /** Drawing a connector: the status of the ports (see {@link ConnectStatus}). */
+    connect?: ReadonlyMap<string, ConnectStatus>;
+    /** Drawing a connector: its start port. */
+    pendingPort?: string;
 }
 
 /** Converts the laid out internal block diagram into the Sprotty model schema. */
@@ -92,6 +103,8 @@ export function toIbdSchema(graph: IbdGraph, options: IbdSchemaOptions): SModelR
         selected: options.selected.has(port.id),
         issue: options.issues.get(port.id),
         onRoute: options.route?.has(port.id) ?? false,
+        connect: options.connect?.get(port.id),
+        connectSource: options.pendingPort === port.id,
         children: []
     } as SModelElement);
     const convertNode = (node: IbdNode): SModelElement => ({

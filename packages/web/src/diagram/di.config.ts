@@ -44,7 +44,8 @@ export function createDiagramContainer(baseDiv: string, callbacks: DiagramCallba
         configureModelElement(context, IbdTypes.graph, SGraphImpl, SGraphView);
         configureModelElement(context, IbdTypes.frame, IbdNodeElement, IbdFrameView);
         configureModelElement(context, IbdTypes.thread, IbdNodeElement, IbdThreadView);
-        configureModelElement(context, IbdTypes.instance, IbdNodeElement, IbdInstanceView);
+        // instances are dragged into threads (structure edits, see StructureDiagram.dragEnd)
+        configureModelElement(context, IbdTypes.instance, IbdNodeElement, IbdInstanceView, { enable: [moveFeature] });
         configureModelElement(context, IbdTypes.block, IbdNodeElement, IbdInstanceView);
         configureModelElement(context, IbdTypes.port, IbdPortElement, IbdPortView);
         configureModelElement(context, IbdTypes.canvas, SNodeImpl, IbdCanvasView, { disable: [selectFeature, moveFeature] });

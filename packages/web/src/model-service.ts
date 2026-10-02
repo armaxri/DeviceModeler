@@ -1,4 +1,8 @@
-import { createHsmServices, cppHeaderStore, DmfModelLoader, HsmModelLoader, importKind, type CppHeaderSettings, type DmfServices, type ParsedDmfModel, type ParsedModel } from 'hsm-language';
+import { URI, UriUtils } from 'langium';
+import {
+    createHsmServices, cppHeaderStore, DmfModelLoader, DmfWorkspace, HsmModelLoader, importKind,
+    type CppHeaderSettings, type DmfServices, type ParsedDmfModel, type ParsedModel
+} from 'hsm-language';
 
 export interface SyntaxProblem {
     message: string;
@@ -54,6 +58,9 @@ export class HsmModelService {
     private documentUri = DOCUMENT_URI;
     private files: Record<string, string> = {};
     private workspaceVersion = 0;
+    /** All structure files of the workspace, loaded together (separate services): queries across files. */
+    private readonly structures = new DmfWorkspace();
+    private structuresQueue: Promise<unknown> = Promise.resolve();
 
     /** The URI of the edited document. */
     get uri(): string {
@@ -83,6 +90,36 @@ export class HsmModelService {
             store.updateSettings(headers);
         }
         this.workspaceVersion++;
+    }
+
+    /**
+     * The structure files (`.dmf`) of the workspace – the files given with {@link setWorkspace} and the
+     * edited file with the given text – loaded together, for queries across files (navigation, renames,
+     * the structures using a state machine). The hosts pass all structure files of the workspace for this.
+     */
+    structureWorkspace(currentText: string): Promise<DmfWorkspace> {
+        const files: Record<string, string> = {};
+        const base = URI.parse(this.documentUri);
+        for (const [key, text] of Object.entries(this.files)) {
+            const uri = /^[a-zA-Z][\w+.-]*:/.test(key) && !/^[a-zA-Z]:[\\/]/.test(key) ? URI.parse(key) : UriUtils.resolvePath(UriUtils.dirname(base), key);
+            files[uri.toString()] = text;
+        }
+        files[base.toString()] = currentText;
+        const result = this.structuresQueue.then(async () => {
+            await this.structures.update(files);
+            return this.structures;
+        });
+        this.structuresQueue = result.catch(() => undefined);
+        return result;
+    }
+
+    /** The names of the other files of the workspace (relative to the edited file if they are in its directory). */
+    workspaceFileNames(): string[] {
+        const base = UriUtils.dirname(URI.parse(this.documentUri)).toString();
+        return Object.keys(this.files).map(key => {
+            const uri = /^[a-zA-Z][\w+.-]*:/.test(key) ? URI.parse(key).toString() : key;
+            return uri.startsWith(base + '/') ? decodeURIComponent(uri.substring(base.length + 1)) : uri;
+        }).sort();
     }
 
     /** The services of the structure language. */

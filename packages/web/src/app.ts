@@ -1,9 +1,9 @@
 import { monaco } from './monaco.js';
 import {
-    importSct, importSctFiles, type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ParsedModel, type TextEdit
+    applyEdits, importSct, importSctFiles, type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ParsedModel, type TextEdit
 } from 'hsm-language';
 import { EDITOR_THEMES, HsmLanguageSupport, languageOf } from './language-support.js';
-import { DiagramController, type DiagramHost, type DiagramSettings, type StatusSeverity, type TextRange } from './diagram-controller.js';
+import { DiagramController, type DiagramHost, type DiagramLocation, type DiagramSettings, type StatusSeverity, type TextRange } from './diagram-controller.js';
 import { createWorkerElk } from './diagram/elk.js';
 import { byId, download, h } from './ui/dom.js';
 import type { SimulationSession } from './simulation/session.js';
@@ -43,6 +43,9 @@ export class HsmApp implements DiagramHost {
     private readonly files = new Map<string, string>();
     private settings: Settings = { direction: 'DOWN', routing: 'SPLINES', theme: 'classic', priorities: true };
     diagram!: DiagramController;
+    /** The navigation history (locations of the diagram, see {@link openLocation}). */
+    private readonly back: DiagramLocation[] = [];
+    private readonly forward: DiagramLocation[] = [];
 
     async start(): Promise<void> {
         this.loadSettings();
@@ -113,6 +116,8 @@ export class HsmApp implements DiagramHost {
             scrollBeyondLastLine: false,
             renderWhitespace: 'none',
             fixedOverflowWidgets: true,
+            // the sticky scroll of Monaco 0.52 throws when the text is replaced by a shorter one (opening a file)
+            stickyScroll: { enabled: false },
             theme: this.settings.theme === 'dark' ? EDITOR_THEMES.dark : EDITOR_THEMES.light
         });
         this.decorations = this.editor.createDecorationsCollection();
@@ -230,6 +235,9 @@ export class HsmApp implements DiagramHost {
             fileInput.value = '';
         });
         byId('btn-save').addEventListener('click', () => download(this.fileName, this.editor.getValue(), 'text/plain'));
+        byId('btn-back').addEventListener('click', () => this.goBack());
+        byId('btn-forward').addEventListener('click', () => this.goForward());
+        this.updateHistoryButtons();
         byId('btn-undo').addEventListener('click', () => this.diagram.undo());
         byId('btn-redo').addEventListener('click', () => this.diagram.redo());
         byId('btn-format').addEventListener('click', () => this.editor.getAction('editor.action.formatDocument')?.run());
@@ -280,6 +288,15 @@ export class HsmApp implements DiagramHost {
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape' && !byId('modal').hidden) {
                 this.closeModal();
+                event.stopImmediatePropagation();
+            }
+            if (event.altKey && !event.ctrlKey && !event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+                if (event.key === 'ArrowLeft') {
+                    this.goBack();
+                } else {
+                    this.goForward();
+                }
+                event.preventDefault();
                 event.stopImmediatePropagation();
             }
         }, { capture: true });
@@ -434,6 +451,83 @@ export class HsmApp implements DiagramHost {
         } catch {
             // storage is not available
         }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Navigation (from the diagram to other files) and its history
+
+    /**
+     * Opens the file of a location (a file of the virtual workspace or an example) and lets the diagram
+     * show and select the target; the current location is recorded for Back (unless `record` is false).
+     */
+    openLocation(location: DiagramLocation, record = true): boolean {
+        const fileName = fileNameOf(location.uri);
+        const available = fileName === this.fileName || this.files.has(fileName) || EXAMPLES.some(e => e.fileName === fileName);
+        if (!available) {
+            return false;
+        }
+        if (record) {
+            this.back.push(this.diagram.currentLocation());
+            this.forward.length = 0;
+        }
+        this.diagram.revealLocation(location);
+        if (fileName === this.fileName) {
+            this.diagram.update(true);
+        } else {
+            this.openFile(fileName);
+        }
+        this.updateHistoryButtons();
+        return true;
+    }
+
+    private goBack(): void {
+        const location = this.back.pop();
+        if (location) {
+            this.forward.push(this.diagram.currentLocation());
+            this.openLocation(location, false);
+        }
+    }
+
+    private goForward(): void {
+        const location = this.forward.pop();
+        if (location) {
+            this.back.push(this.diagram.currentLocation());
+            this.openLocation(location, false);
+        }
+    }
+
+    private updateHistoryButtons(): void {
+        const label = (location: DiagramLocation | undefined) => location
+            ? `${fileNameOf(location.uri)}${location.element ? ` – ${location.element}` : ''}${location.id && location.id !== location.element ? ` (${location.id})` : ''}`
+            : '';
+        const back = byId<HTMLButtonElement>('btn-back');
+        const forward = byId<HTMLButtonElement>('btn-forward');
+        back.disabled = this.back.length === 0;
+        forward.disabled = this.forward.length === 0;
+        back.title = this.back.length > 0 ? `Back to ${label(this.back[this.back.length - 1])} (Alt+←)` : 'Back (Alt+←)';
+        forward.title = this.forward.length > 0 ? `Forward to ${label(this.forward[this.forward.length - 1])} (Alt+→)` : 'Forward (Alt+→)';
+    }
+
+    /**
+     * Edits of other files of the virtual workspace (e.g. a rename of a component type updating the
+     * structures using it). They are not undone with the edited file (undo them in that file).
+     */
+    async applyWorkspaceEdits(edits: ReadonlyMap<string, readonly TextEdit[]>): Promise<boolean> {
+        const changed = new Map<string, string>();
+        for (const [uri, list] of edits) {
+            const name = fileNameOf(uri);
+            const text = name === this.fileName ? this.editor.getValue() : this.files.get(name) ?? EXAMPLES.find(e => e.fileName === name)?.text;
+            if (text === undefined || name === this.fileName) {
+                return false;
+            }
+            changed.set(name, applyEdits(text, [...list]));
+        }
+        for (const [name, text] of changed) {
+            this.files.set(name, text);
+        }
+        this.saveFiles();
+        this.updateWorkspace();
+        return true;
     }
 
     /** Double-click on a submachine state: opens the file of its state machine if it is available. */
@@ -604,6 +698,11 @@ export class HsmApp implements DiagramHost {
             element.textContent = '';
         }, 6000);
     }
+}
+
+/** The file name of a URI of the virtual workspace (`memory:///door.hsm` -> `door.hsm`). */
+function fileNameOf(uri: string): string {
+    return decodeURIComponent(uri.replace(/^.*\//, ''));
 }
 
 /** Whether a file name is a C/C++ header (imported by models, not edited). */

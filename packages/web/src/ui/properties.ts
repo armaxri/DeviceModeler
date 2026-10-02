@@ -2,8 +2,8 @@ import type { AstNode } from 'langium';
 import {
     allTransitions, allVertices, definitionLines, getStateMachine, isInterfaceScope, isPseudoState, isRegion, isState, isStateMachine, isTransition,
     nodeText, outgoingTransitions, qualifiedName, scopeOf, stateAction, containerName, transitionPriority, DECLARATION_KINDS,
-    type DeclarationKind, type DiagramNodeKind, type EditResult, type ModelEditor, type NewDeclaration, type ScopeContainer, type StateMachine,
-    type Vertex
+    type BehaviorUsage, type DeclarationKind, type DiagramNodeKind, type EditResult, type ModelEditor, type NewDeclaration, type ScopeContainer, type StateMachine,
+    type StructureLocation, type Vertex
 } from 'hsm-language';
 import type { Issue } from '../diagram/model.js';
 import { h } from './dom.js';
@@ -16,6 +16,8 @@ export interface SelectionInfo {
     count: number;
     model?: StateMachine;
     syntaxErrors: boolean;
+    /** The instances of components implemented by the state machine (structure files of the workspace). */
+    usages?: BehaviorUsage[];
 }
 
 /** Operations of the application used by the properties panel. */
@@ -29,6 +31,8 @@ export interface PropertiesHost {
     checkEdit(producer: (editor: ModelEditor) => EditResult | undefined): string | undefined;
     /** Moves the cursor of the text editor to the given diagram element. */
     editInText(id: string): void;
+    /** Opens a location of another file (e.g. the structure using the state machine). */
+    navigate?(location: StructureLocation): void;
 }
 
 const PSEUDO_LABELS: Record<string, string> = {
@@ -76,7 +80,7 @@ export function renderProperties(panel: HTMLElement, info: SelectionInfo, host: 
     } else if (info.kind === 'definition' && isStateMachine(node)) {
         content.push(...definitionPanel(node, info, host));
     } else if (!node || isStateMachine(node) && info.kind === 'machine') {
-        content.push(...machinePanel(info.model, host));
+        content.push(...machinePanel(info.model, host, info.usages));
     } else if (info.kind === 'initial' || info.kind === 'final') {
         content.push(...pseudoEndPanel(info, node as ScopeContainer, host));
     } else if (isState(node)) {
@@ -114,7 +118,7 @@ export function renderProperties(panel: HTMLElement, info: SelectionInfo, host: 
     panel.replaceChildren(...content);
 }
 
-function field(label: string, input: HTMLElement): HTMLElement {
+export function field(label: string, input: HTMLElement): HTMLElement {
     return h('label', { class: 'field' }, h('span', {}, label), input);
 }
 
@@ -122,7 +126,7 @@ function field(label: string, input: HTMLElement): HTMLElement {
  * A text field whose value is checked by `check` (e.g. for syntax errors of the resulting text)
  * before `apply` is called. Errors are shown below the field.
  */
-function checkedField(label: string, input: HTMLInputElement, check: (value: string) => string | undefined, apply: (value: string) => void): HTMLElement[] {
+export function checkedField(label: string, input: HTMLInputElement, check: (value: string) => string | undefined, apply: (value: string) => void): HTMLElement[] {
     const error = h('div', { class: 'field-error' });
     const validate = () => {
         const message = check(input.value);
@@ -135,8 +139,11 @@ function checkedField(label: string, input: HTMLInputElement, check: (value: str
             validate();
         }
     });
+    // (Enter dispatches a change event, the browser another one when the field loses the focus)
+    let applied = input.value;
     input.addEventListener('change', () => {
-        if (validate()) {
+        if (input.value !== applied && validate()) {
+            applied = input.value;
             apply(input.value);
         }
     });
@@ -148,7 +155,7 @@ function checkedField(label: string, input: HTMLInputElement, check: (value: str
     return [field(label, input), error];
 }
 
-function problems(issue: Issue | undefined): HTMLElement[] {
+export function problems(issue: Issue | undefined): HTMLElement[] {
     if (!issue) {
         return [];
     }
@@ -170,7 +177,26 @@ function nameField(vertex: Vertex, host: PropertiesHost): HTMLElement {
     return field('Name', input);
 }
 
-function machinePanel(model: StateMachine | undefined, host: PropertiesHost): HTMLElement[] {
+/** "Used by": the instances of the components implemented by the state machine, as links to their structures. */
+function usagesSection(usages: BehaviorUsage[] | undefined, host: PropertiesHost): HTMLElement[] {
+    if (!usages || usages.length === 0) {
+        return [];
+    }
+    const items = usages.flatMap(usage => usage.instances.length > 0
+        ? usage.instances.map(instance => h('li', {},
+            h('a', {
+                href: '#', class: 'nav-link', title: `Show ${instance.instance} in the diagram of ${instance.structure}`,
+                onClick: (event: Event) => {
+                    event.preventDefault();
+                    host.navigate?.(instance.location);
+                }
+            }, `${instance.structure}/${instance.instance}`),
+            h('span', { class: 'route-file' }, ` : ${usage.component}`)))
+        : [h('li', {}, h('span', {}, `component ${usage.component}`), h('span', { class: 'route-file' }, ' (no instances)'))]);
+    return [h('div', { class: 'route-section' }, h('div', { class: 'route-title' }, 'Used by (behavior of)'), h('ul', { class: 'route-list' }, ...items))];
+}
+
+function machinePanel(model: StateMachine | undefined, host: PropertiesHost, usages?: BehaviorUsage[]): HTMLElement[] {
     if (!model) {
         return [h('p', { class: 'hint' }, 'Loading…')];
     }
@@ -185,6 +211,7 @@ function machinePanel(model: StateMachine | undefined, host: PropertiesHost): HT
             h('dt', {}, 'Composite'), h('dd', {}, String(states.filter(s => s.vertices.length > 0 || s.regions.length > 0).length)),
             h('dt', {}, 'Pseudo states'), h('dd', {}, String(vertices.length - states.length)),
             h('dt', {}, 'Transitions'), h('dd', {}, String(transitions.length))),
+        ...usagesSection(usages, host),
         h('div', { class: 'actions' },
             h('button', { onClick: () => host.setTool('state') }, 'Add state'),
             h('button', { onClick: () => host.setTool('transition') }, 'Add transition')),

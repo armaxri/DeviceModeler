@@ -16,6 +16,14 @@ export const Icons = {
     initial: svg('<circle cx="12" cy="12" r="7" class="icon-fill-dark"/>'),
     final: svg('<circle cx="12" cy="12" r="8.5" class="icon-final"/><circle cx="12" cy="12" r="5" class="icon-fill-dark"/>'),
     transition: svg('<path d="M4 19 C 8 8, 14 6, 19 6" class="icon-edge"/><path d="M21 5.5 L 15.5 3 L 16.5 6.2 L 15.8 9.3 Z" class="icon-arrow"/>'),
+    // structure diagrams (.dmf)
+    thread: svg('<rect x="2.5" y="4" width="19" height="16" rx="3.5" class="icon-thread"/><path d="M5.5 8.2 H13" class="icon-stroke"/>'),
+    instance: svg('<rect x="3.5" y="5.5" width="17" height="13" rx="1" class="icon-state"/><line x1="3.5" y1="10.5" x2="20.5" y2="10.5" class="icon-stroke"/><path d="M7 8 H17" class="icon-stroke" stroke-width="1.2"/>'),
+    providedSync: svg('<path d="M3 12 H9" class="icon-edge"/><rect x="9" y="7" width="10" height="10" class="icon-port-provided"/>'),
+    providedAsync: svg('<path d="M3 12 H9" class="icon-edge"/><rect x="9" y="7" width="10" height="10" class="icon-port-provided"/><path d="M12 9.5 L15.5 12 L12 14.5" class="icon-chevron-light"/>'),
+    requiredSync: svg('<rect x="5" y="7" width="10" height="10" class="icon-port-required"/><path d="M15 12 H21" class="icon-edge"/>'),
+    requiredAsync: svg('<rect x="5" y="7" width="10" height="10" class="icon-port-required"/><path d="M8.5 9.5 L12 12 L8.5 14.5" class="icon-chevron"/><path d="M15 12 H21" class="icon-edge"/>'),
+    connector: svg('<rect x="2" y="9" width="6" height="6" class="icon-port-required"/><rect x="16" y="9" width="6" height="6" class="icon-port-provided"/><path d="M8 12 H16" class="icon-edge"/>'),
     delete: svg('<path d="M6 7 H18 M9 7 V4.5 H15 V7 M7.5 7 L8.5 20 H15.5 L16.5 7" class="icon-edge"/>'),
     fit: svg('<path d="M4 9 V4 H9 M15 4 H20 V9 M20 15 V20 H15 M9 20 H4 V15" class="icon-edge"/>'),
     relayout: svg('<path d="M19 12 A7 7 0 1 1 16.5 6.6 M17 3 V7 H13" class="icon-edge"/>')

@@ -100,13 +100,18 @@ export class IbdInstanceView extends ShapeView {
         const { width, height } = node.size;
         const icon = node.behavior || node.composite ? M.iconWidth : 0;
         const center = (width - icon) / 2;
-        const name = node.typeName !== undefined ? `${node.name} : ${node.typeName}` : node.name;
         const behaviorIcon = node.behavior && !node.composite ? behaviorIconPath(width - M.iconWidth - 2, node.headerHeight / 2) : undefined;
         return <g {...nodeClasses(node)}>
             {node.description ? <title>{node.description}</title> : undefined}
             <rect class-ibd-instance-shape={true} x={0} y={0} rx={2} ry={2} width={width} height={height} />
             <text class-ibd-stereotype={true} class-ibd-block-stereotype={true} x={center} y={baseline(4, 15, M.stereotypeFont)}>{`«${node.stereotype ?? 'component'}»`}</text>
-            <text class-ibd-instance-name={true} x={center} y={baseline(18, 18, M.nameFont)}>{name}</text>
+            {node.typeName !== undefined
+                ? <text class-ibd-instance-name={true} x={center} y={baseline(18, 18, M.nameFont)}>
+                    <tspan class-ibd-instance-label={true}>{node.name}</tspan>
+                    {' : '}
+                    <tspan class-ibd-instance-type={true}><title>{`${node.typeName} – double-click to open the type`}</title>{node.typeName}</tspan>
+                </text>
+                : <text class-ibd-instance-name={true} x={center} y={baseline(18, 18, M.nameFont)}>{node.name}</text>}
             <line class-ibd-instance-separator={true} x1={0} y1={node.headerHeight} x2={width} y2={node.headerHeight} />
             {node.composite
                 ? <g class-ibd-icon={true} class-ibd-composite-icon={true}>
@@ -140,7 +145,9 @@ export class IbdPortView extends ShapeView {
         return <g class-ibd-port={true} class-provided={port.direction === 'provides'} class-required={port.direction === 'requires'}
             class-sync={port.kind === 'sync'} class-async={port.kind === 'async'}
             class-selected={port.selected} class-mouseover={port.hoverFeedback} class-on-route={port.onRoute}
-            class-has-error={port.issue?.severity === 'error'} class-has-warning={port.issue?.severity === 'warning'}>
+            class-has-error={port.issue?.severity === 'error'} class-has-warning={port.issue?.severity === 'warning'}
+            class-connect-ok={port.connect === 'ok'} class-connect-problem={port.connect === 'problem'} class-connect-invalid={port.connect === 'invalid'}
+            class-connect-source={port.connectSource}>
             <title>{portTooltip({ title: port.title, direction: port.direction, kind: port.kind })}</title>
             <rect class-ibd-port-shape={true} x={0} y={0} width={size} height={size} />
             {chevron ? <path class-ibd-port-chevron={true} d={chevron} /> : undefined}
