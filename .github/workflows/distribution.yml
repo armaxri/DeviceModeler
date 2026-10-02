@@ -4,6 +4,7 @@
 #   - the command line executable `hsm` (Node.js single executable application) for 5 platforms
 #   - the VS Code extension (.vsix)
 #   - the Eclipse plugin (p2 update site archive)
+#   - the JetBrains plugin (CLion, IntelliJ IDEA, …: plugin .zip)
 # Desktop app and command line tool are built natively on every platform (so that they can be smoke tested
 # and the macOS ones can be signed ad hoc). Every job uploads its files as a workflow artifact; for version
 # tags the release job attaches all of them and SHA256SUMS.txt to a GitHub release.
@@ -219,10 +220,45 @@ jobs:
           path: eclipse-release/*.zip
           if-no-files-found: error
 
+  jetbrains:
+    name: JetBrains plugin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - run: npm ci
+      - name: Build the web app (packages/web/dist, copied into the plugin by Gradle)
+        run: npm run build -w packages/web
+      - name: Version of a release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: echo "ORG_GRADLE_PROJECT_pluginVersion=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - name: Tests, plugin zip and Plugin Verifier (oldest and latest supported IDE)
+        working-directory: jetbrains-plugin
+        run: ./gradlew --no-daemon test buildPlugin verifyPlugin
+      - name: Name of the plugin archive
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          [[ "$GITHUB_REF" == refs/tags/v* ]] || version="0.1.0-SNAPSHOT"
+          mkdir -p jetbrains-release
+          cp jetbrains-plugin/build/distributions/hsm-jetbrains-*.zip "jetbrains-release/hsm-jetbrains-${version}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jetbrains
+          path: jetbrains-release/*.zip
+          if-no-files-found: error
+
   release:
     name: GitHub release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [cli, desktop, vscode, eclipse]
+    needs: [cli, desktop, vscode, eclipse, jetbrains]
     runs-on: ubuntu-latest
     permissions:
       contents: write

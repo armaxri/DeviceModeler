@@ -1,5 +1,6 @@
 /**
- * Embedding of the web app in another application (e.g. the Eclipse plugin in `eclipse-plugin/`).
+ * Embedding of the web app in another application (the Eclipse plugin in `eclipse-plugin/`, the JetBrains plugin in
+ * `jetbrains-plugin/`, the desktop app).
  *
  * The app is embedded when its URL has the query parameter `?host=http`: the page is then served by a
  * host that holds the edited file and offers a small HTTP API next to the page (relative URLs `api/…`).
@@ -18,7 +19,8 @@
  *
  * The host calls functions of the page (`window.hsmApp`): `reloadFromHost(replaceText)` after external
  * changes, `hostCommand(name, argument)` for its edit commands (undo, copy, find, …), `revealRange(offset, end)`
- * (problem markers, outline) and `generateCpp()`.
+ * (problem markers, outline), `generateCpp()`, `getText()` and `setHostTheme('light' | 'dark')` (the theme of
+ * the host changed; optional, hosts check that it exists).
  * Without the query parameter nothing of this is used and the app keeps its files in the browser.
  */
 

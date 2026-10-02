@@ -73,6 +73,8 @@ packages/
 eclipse-plugin/ Eclipse plugin (prototype, Maven / Tycho): the web app (packages/web/dist, embedded mode of src/host.ts)
                 in an SWT browser, served by a small HTTP server of the plugin; workspace files, problem markers,
                 outline, edit commands, C++ generation; hsm.eclipse.tools: interfaces for the bundled executable
+jetbrains-plugin/ JetBrains plugin (prototype, Gradle / Kotlin): the same web app and protocol in a JCEF browser,
+                on the IntelliJ document (TextEditorWithPreview), Problems / Structure tool windows, hsm validate
 examples/       sample state machines; tests: their unit tests; door-with-motor: imports and submachines;
                 cpp-types: C++ header types; cpp-class-sections: members of the generated C++ class; cmake: CMake example
 cmake/          CMake integration (HsmGenerate.cmake: hsm_generate, hsm_add_tests; HsmConfig.cmake)

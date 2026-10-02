@@ -1,6 +1,6 @@
 # Installation and usage
 
-The HSM Modeler comes in four forms. All of them use the same language implementation (`packages/language`)
+The HSM Modeler comes in five forms. All of them use the same language implementation (`packages/language`)
 and the same graphical editor (the web app of `packages/web`):
 
 | | For | Needs |
@@ -9,6 +9,7 @@ and the same graphical editor (the web app of `packages/web`):
 | [**Command line tool**](#command-line-tool-hsm) `hsm` | validation, code generation, tests, rendering in builds and CI | nothing (one executable) |
 | [**VS Code extension**](#vs-code-extension) | models and tests in VS Code: language server, diagram, Test Explorer | VS Code ≥ 1.95 |
 | [**Eclipse plugin**](#eclipse-plugin) (prototype) | the graphical editor for `.hsm` files of an Eclipse workspace | Eclipse 2025-06 (older releases untested), Java ≥ 17 |
+| [**JetBrains plugin**](#jetbrains-plugin-clion-intellij-idea) (prototype) | the graphical editor for `.hsm` files in CLion, IntelliJ IDEA and the other JetBrains IDEs | an IntelliJ Platform IDE 2025.2 or newer |
 
 ## Downloads
 
@@ -24,13 +25,14 @@ request (artifacts of the workflow run, kept for 90 days). `SHA256SUMS.txt` list
 | Linux x64 | `hsm-modeler-<version>-linux-x86_64.AppImage`, `…-linux-amd64.deb`, `…-linux-x64.tar.gz` | `hsm-<version>-linux-x64.tar.gz` |
 | Linux arm64 | `hsm-modeler-<version>-linux-arm64.AppImage`, `…-linux-arm64.deb`, `…-linux-arm64.tar.gz` | `hsm-<version>-linux-arm64.tar.gz` |
 
-Independent of the platform: `hsm-vscode-<version>.vsix` (VS Code extension) and
-`hsm-eclipse-update-site-<version>.zip` (Eclipse update site archive).
+Independent of the platform: `hsm-vscode-<version>.vsix` (VS Code extension),
+`hsm-eclipse-update-site-<version>.zip` (Eclipse update site archive) and `hsm-jetbrains-<version>.zip`
+(JetBrains plugin).
 
 Sizes: the desktop app is about 115 MB to download (250 MB installed, most of it Electron/Chromium); the
 command line executable 100 – 130 MB (35 – 45 MB compressed, a complete Node.js runtime); the `.vsix`
 2 MB; the Eclipse update site about 200 MB (it contains the `hsm` executables of all five platforms; Eclipse
-installs only the one of its platform, about 40 MB).
+installs only the one of its platform, about 40 MB); the JetBrains plugin about 2.5 MB (without executable).
 
 ### Unsigned downloads
 
@@ -120,15 +122,31 @@ the bundled one, else `hsm` in the `PATH`). The editor itself does not need the 
 with a small HTTP server of the plugin, and *Generate C++* runs in the editor's page. Details, requirements and
 the development setup: [eclipse-plugin/README.md](../eclipse-plugin/README.md).
 
+## JetBrains plugin (CLion, IntelliJ IDEA)
+
+*Settings → Plugins → ⚙ → Install Plugin from Disk…* → `hsm-jetbrains-<version>.zip`. Opening a `.hsm` file
+shows the graphical editor (the web app in the IDE's JCEF browser) with the views *Text*, *Text and Diagram* and
+*Diagram*; page and IntelliJ text editor edit the same document (undo, autosave, local history and VCS as for
+any file). Problems appear in the text editor and in the *Problems* tool window, the outline in the *Structure*
+tool window; *Generate C++* is in the context menu of `.hsm` files and in the page.
+
+The plugin does not bundle the command line executable (one zip for all platforms). With `hsm` in the `PATH`
+(or its path in *Settings → Tools → HSM Modeler*), saved and closed models and their importers are validated
+with `hsm validate --json` (*Tools → Validate HSM Models* validates all). In CLion, the CMake functions of
+[Build integration](build-integration.md) (`hsm_generate`, `hsm_add_tests`) work as in any CMake project once
+`hsm` is in the `PATH` of CLion or `-DHSM_EXECUTABLE=<path>` is set in the CMake options of the profile. Details,
+architecture and the development setup: [jetbrains-plugin/README.md](../jetbrains-plugin/README.md).
+
 ## How the downloads are built
 
 The [*Distribution* workflow](../.github/workflows/distribution.yml) builds everything on native runners
 (desktop app and command line tool for linux-x64, linux-arm64, macos-arm64, macos-x64 and windows-x64),
 smoke-tests the desktop app and the executables, puts the five executables into the platform fragments of the
-Eclipse plugin (`mvn verify -Dhsm.cli.optional=false`) and, for version tags, creates the GitHub release with all
+Eclipse plugin (`mvn verify -Dhsm.cli.optional=false`), builds, tests and verifies the JetBrains plugin
+(`./gradlew test buildPlugin verifyPlugin`) and, for version tags, creates the GitHub release with all
 files and `SHA256SUMS.txt`.
 
-Locally (Node.js ≥ 20.10; for the Eclipse plugin also Java 21 and Maven ≥ 3.9):
+Locally (Node.js ≥ 20.10; for the Eclipse plugin also Java 21 and Maven ≥ 3.9; for the JetBrains plugin a JDK ≥ 17):
 
 ```bash
 npm ci
@@ -140,6 +158,7 @@ node packages/cli/scripts/smoke-test.mjs
 npm run package:vscode                    # packages/vscode/hsm-vscode-<version>.vsix
 npm run build -w packages/web && (cd eclipse-plugin && mvn verify)   # eclipse-plugin/hsm.eclipse.site/target/*.zip
                                           # (with the hsm executable of this platform if built before)
+npm run build -w packages/web && (cd jetbrains-plugin && ./gradlew buildPlugin)   # jetbrains-plugin/build/distributions/*.zip
 ```
 
 If `npm ci` did not download Electron (`node_modules/electron/dist` missing), run
@@ -189,7 +208,8 @@ output) and the CLI is used in builds and CI, where a 250 MB Chromium runtime is
 ### Versions and releases
 
 The version is `HSM_VERSION` (set by the workflow from the tag `v<version>`) or that of the
-`package.json` of the package (Eclipse: `pom.xml`, set with `tycho-versions-plugin` for tags). Pushing a
+`package.json` of the package (Eclipse: `pom.xml`, set with `tycho-versions-plugin` for tags; JetBrains:
+`pluginVersion` of `jetbrains-plugin/gradle.properties`, overridden for tags). Pushing a
 tag (`git tag v0.2.0 && git push origin v0.2.0`) builds everything with that version and attaches all files
 and `SHA256SUMS.txt` to the GitHub release of the tag (created with generated release notes if it does not
 exist).
