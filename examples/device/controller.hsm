@@ -1,0 +1,56 @@
+// Controller of the garage door (examples/device). The component DoorController (components.dmf)
+// declares the ports; the structure language checks that they match the interfaces below.
+/** Opens and closes the door on request and stops at obstacles. */
+statemachine DoorController {
+    import "door_types.h"
+
+    @EventDriven
+
+    /** Commands of the remote control (port `cmd`). */
+    interface cmd:
+        in event open
+        in event close
+        in event stop
+
+    /** Commands to the drive unit (port `motor`). */
+    interface motor:
+        out event up : integer
+        out event down : integer
+        out event halt
+
+    interface:
+        /** The drive reached an end position (port `status`). */
+        in event stopped
+        /** The drive detected an obstacle (port `status`). */
+        in event blocked
+        /** Sounds the buzzer (port `alarm`). */
+        out event alarm
+        /** Number of completed closing cycles (port `cycles`). */
+        var cycles : integer = 0
+        /** Reads the position of the door (port `position`). */
+        operation position() : door::Position
+
+    [*] -> Closed
+
+    state Closed
+    state Opening {
+        entry / raise motor.up : 100
+    }
+    state Open
+    state Closing {
+        entry / raise motor.down : 60
+    }
+    state Blocked {
+        entry / raise alarm
+    }
+
+    Closed -> Opening : cmd.open
+    Opening -> Open : stopped
+    Opening -> Open : cmd.stop / raise motor.halt
+    Opening -> Blocked : blocked
+    Open -> Closing : cmd.close [position().valid]
+    Closing -> Closed : stopped / cycles += 1
+    Closing -> Open : cmd.stop / raise motor.halt
+    Closing -> Blocked : blocked
+    Blocked -> Opening : cmd.open
+}

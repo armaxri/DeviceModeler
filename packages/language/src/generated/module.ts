@@ -5,7 +5,14 @@
 
 import type { LangiumSharedCoreServices, LangiumCoreServices, LangiumGeneratedCoreServices, LangiumGeneratedSharedCoreServices, LanguageMetaData, Module } from 'langium';
 import { HsmAstReflection } from './ast.js';
-import { HsmGrammar, HsmTestGrammar } from './grammar.js';
+import { DmfGrammar, HsmGrammar, HsmTestGrammar } from './grammar.js';
+
+export const DmfLanguageMetaData = {
+    languageId: 'dmf',
+    fileExtensions: ['.dmf'],
+    caseInsensitive: false,
+    mode: 'development'
+} as const satisfies LanguageMetaData;
 
 export const HsmLanguageMetaData = {
     languageId: 'hsm',
@@ -23,6 +30,12 @@ export const HsmTestLanguageMetaData = {
 
 export const HsmGeneratedSharedModule: Module<LangiumSharedCoreServices, LangiumGeneratedSharedCoreServices> = {
     AstReflection: () => new HsmAstReflection()
+};
+
+export const DmfGeneratedModule: Module<LangiumCoreServices, LangiumGeneratedCoreServices> = {
+    Grammar: () => DmfGrammar(),
+    LanguageMetaData: () => DmfLanguageMetaData,
+    parser: {}
 };
 
 export const HsmGeneratedModule: Module<LangiumCoreServices, LangiumGeneratedCoreServices> = {

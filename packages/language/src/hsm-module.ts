@@ -3,7 +3,9 @@ import {
     createDefaultModule, createDefaultSharedModule,
     type DefaultSharedModuleContext, type LangiumServices, type LangiumSharedServices, type PartialLangiumServices, type PartialLangiumSharedServices
 } from 'langium/lsp';
-import { HsmGeneratedModule, HsmGeneratedSharedModule, HsmTestGeneratedModule } from './generated/module.js';
+import { DmfGeneratedModule, HsmGeneratedModule, HsmGeneratedSharedModule, HsmTestGeneratedModule } from './generated/module.js';
+import { DmfModule, type DmfServices } from './dmf-module.js';
+import { registerDmfValidationChecks } from './dmf-validator.js';
 import { HsmDocumentValidator, HsmExpressionValidator } from './hsm-expression-validator.js';
 import { HsmFormatter } from './hsm-formatter.js';
 import { HsmCompletionProvider } from './lsp/cpp-lsp.js';
@@ -61,18 +63,21 @@ export const HsmSharedModule: Module<LangiumSharedServices, PartialLangiumShared
 export interface HsmServiceExtensions {
     hsm?: Module<HsmServices, PartialLangiumServices>;
     hsmTest?: Module<HsmTestServices, PartialLangiumServices>;
+    dmf?: Module<DmfServices, PartialLangiumServices>;
 }
 
 /**
- * Creates the full set of services required by the HSM language (`.hsm`) and its unit test
- * language (`.hsmtest`, see `testing/`). Both languages share the index, so test classes can
- * reference state machines of other documents.
+ * Creates the full set of services required by the HSM language (`.hsm`), its unit test
+ * language (`.hsmtest`, see `testing/`) and the structure language of the Device Modeling Framework
+ * (`.dmf`, see dmf-module.ts). The languages share the index, so test classes can reference state
+ * machines of other documents and components can reference their state machines.
  * Works in Node.js as well as in the browser (pass `EmptyFileSystem` there).
  */
 export function createHsmServices(context: DefaultSharedModuleContext = EmptyFileSystem, extensions: HsmServiceExtensions = {}): {
     shared: LangiumSharedServices,
     Hsm: HsmServices,
-    HsmTest: HsmTestServices
+    HsmTest: HsmTestServices,
+    Dmf: DmfServices
 } {
     const shared = inject(
         createDefaultSharedModule(context),
@@ -91,14 +96,22 @@ export function createHsmServices(context: DefaultSharedModuleContext = EmptyFil
         HsmTestModule,
         extensions.hsmTest ?? {}
     );
+    const Dmf = inject(
+        createDefaultModule({ shared }),
+        DmfGeneratedModule,
+        DmfModule,
+        extensions.dmf ?? {}
+    );
     shared.ServiceRegistry.register(Hsm);
     shared.ServiceRegistry.register(HsmTest);
+    shared.ServiceRegistry.register(Dmf);
     registerValidationChecks(Hsm);
     registerImportValidationChecks(Hsm);
     registerTestValidationChecks(HsmTest);
+    registerDmfValidationChecks(Dmf);
     if (!context.connection) {
         // No language server: the configuration service would otherwise wait for the client forever.
         shared.workspace.ConfigurationProvider.initialized({});
     }
-    return { shared, Hsm, HsmTest };
+    return { shared, Hsm, HsmTest, Dmf };
 }

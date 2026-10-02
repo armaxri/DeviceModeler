@@ -1,6 +1,7 @@
 import { URI, type LangiumDocument } from 'langium';
 import type { Diagnostic } from 'vscode-languageserver-types';
-import { isStateMachine, type StateMachine } from './generated/ast.js';
+import { isComponent, isDmfModel, isStateMachine, type DmfModel, type StateMachine } from './generated/ast.js';
+import { dmfImportKind, dmfImportPaths } from './dmf-imports.js';
 import { createHsmServices, type HsmServices } from './hsm-module.js';
 import type { LangiumSharedServices } from 'langium/lsp';
 import { importKind, importPaths, resolveImportUri } from './imports.js';
@@ -106,6 +107,62 @@ export class HsmModelLoader {
     }
 }
 
+export interface ParsedDmfModel {
+    text: string;
+    document: LangiumDocument<DmfModel>;
+    /** Root of the AST. May be incomplete if the text contains syntax errors. */
+    model: DmfModel;
+    diagnostics: Diagnostic[];
+    /** True if the text contains lexer or parser errors. */
+    hasSyntaxErrors: boolean;
+    /** The `.dmf` and `.hsm` files imported (transitively) by the model that could be loaded. */
+    imported: ImportedModel[];
+}
+
+/**
+ * Parses, links and validates structure files (`.dmf`, see dmf.langium) outside of a language server,
+ * like {@link HsmModelLoader}: imported structure files, the state machines of the components
+ * (`behavior "door.hsm"`) and imported headers are loaded transitively.
+ */
+export class DmfModelLoader {
+
+    readonly services: { shared: LangiumSharedServices };
+    private readonly readFile: FileReader;
+    private counter = 0;
+
+    constructor(services?: { shared: LangiumSharedServices }, options: HsmModelLoaderOptions = {}) {
+        this.services = services ?? createHsmServices();
+        if (options.cppHeaders) {
+            cppHeaderStore(this.services.shared).settings = options.cppHeaders;
+        }
+        const fileSystem = this.services.shared.workspace.FileSystemProvider;
+        this.readFile = options.readFile ?? (async uri => {
+            try {
+                return await fileSystem.readFile(uri);
+            } catch {
+                return undefined;
+            }
+        });
+    }
+
+    /** Loads the given text (`uri` must end with `.dmf`; default: a fresh in-memory document). */
+    async load(text: string, uri?: string, options: LoadOptions = {}): Promise<ParsedDmfModel> {
+        const workspace = this.services.shared.workspace;
+        const documentUri = URI.parse(uri ?? `memory:///structure-${this.counter++}.dmf`);
+        const document = replaceDocument(this.services.shared, documentUri, text) as LangiumDocument<DmfModel>;
+        const imported = await loadImports(this.services.shared, [document], options.files ?? {}, this.readFile);
+        await workspace.DocumentBuilder.build([document, ...imported], { validation: true });
+        return {
+            text,
+            document,
+            model: document.parseResult.value,
+            diagnostics: document.diagnostics ?? [],
+            hasSyntaxErrors: document.parseResult.lexerErrors.length > 0 || document.parseResult.parserErrors.length > 0,
+            imported: imported.map(importedModel)
+        };
+    }
+}
+
 /** Creates a document for the text; a loaded document with the same URI is replaced. */
 export function replaceDocument(shared: LangiumSharedServices, uri: URI, text: string): LangiumDocument {
     const documents = shared.workspace.LangiumDocuments;
@@ -118,7 +175,8 @@ export function replaceDocument(shared: LangiumSharedServices, uri: URI, text: s
 }
 
 /**
- * Loads the `.hsm` files imported (transitively) by the given documents that are not among them:
+ * Loads the `.hsm` files imported (transitively) by the given documents that are not among them
+ * (for structure files also the imported `.dmf` files and the `.hsm` files of `behavior "door.hsm"`):
  * from `files` (by URI or by path relative to the first document), else with `readFile`, else the
  * text of an already loaded document. The documents are created anew (and replace loaded ones), so that they
  * can be built together with the importing documents. Returns the new documents (not built yet).
@@ -172,19 +230,22 @@ export async function loadImports(shared: LangiumSharedServices, roots: LangiumD
     while (queue.length > 0) {
         const document = queue.shift()!;
         const root = document.parseResult.value;
-        if (!isStateMachine(root)) {
-            continue;
-        }
-        for (const path of importPaths(root)) {
-            if (path.path && importKind(path.path) === 'header') {
+        // state machines import state machines and headers, structure files also structure files and
+        // the state machines of their components (`behavior "door.hsm"`)
+        const paths = isStateMachine(root) ? importPaths(root).map(p => p.path)
+            : isDmfModel(root) ? [...dmfImportPaths(root).map(p => p.path), ...root.elements.filter(isComponent).map(c => c.behavior?.path)]
+                : [];
+        for (const path of paths) {
+            const kind = path ? dmfImportKind(path) : 'unsupported';
+            if (path && kind === 'header') {
                 const settings = store.settingsFor(document.uri);
-                await loadHeader(headerCandidates(path.path, UriUtils.dirname(document.uri), settings), settings);
+                await loadHeader(headerCandidates(path, UriUtils.dirname(document.uri), settings), settings);
                 continue;
             }
-            if (!path.path || importKind(path.path) !== 'hsm') {
+            if (!path || (kind !== 'hsm' && (kind !== 'dmf' || !isDmfModel(root)))) {
                 continue;
             }
-            const uri = resolveImportUri(document.uri, path.path);
+            const uri = resolveImportUri(document.uri, path);
             const key = uri.toString();
             if (seen.has(key)) {
                 continue;

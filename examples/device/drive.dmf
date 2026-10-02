@@ -1,0 +1,22 @@
+// The drive unit of the garage door (examples/device): a composite with its own motor task.
+import "types.dmf"
+import "components.dmf"
+
+/** Motor control, PWM output and end switches. */
+structure DriveUnit {
+    provides async ctrl : MotorCmd
+    requires async status : MotorStatus
+
+    @priority(8) @period(1 ms) @stack(2048)
+    thread MotorTask {
+        motor : MotorController
+        switches : EndSwitches
+    }
+    // passive: runs in the thread of its caller
+    pwm : PwmDriver
+
+    connect motor.pwm -> pwm.duty
+    connect switches.events -> motor.sensors
+    delegate ctrl -> motor.ctrl
+    delegate motor.status -> status
+}

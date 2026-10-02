@@ -4,6 +4,7 @@ import {
 } from 'langium';
 import type { LangiumSharedServices } from 'langium/lsp';
 import * as ast from './generated/ast.js';
+import type { DmfServices } from './dmf-module.js';
 import type { HsmServices } from './hsm-module.js';
 import { referenceName, vertexCandidates } from './hsm-scope.js';
 import { resolvedImports } from './imports.js';
@@ -135,7 +136,8 @@ export function ambiguityMessage(name: string, qualifiedNames: string[]): string
 
 /**
  * Document builder of the HSM languages: a document is also relinked if a file it imports changed
- * (or if it has an import that could not be resolved, a new file may resolve it).
+ * (or if it has an import that could not be resolved, a new file may resolve it). Structure files
+ * (`.dmf`) are also relinked if the state machine of a component (`behavior "door.hsm"`) changed.
  */
 export class HsmDocumentBuilder extends DefaultDocumentBuilder {
 
@@ -148,6 +150,10 @@ export class HsmDocumentBuilder extends DefaultDocumentBuilder {
             return true;
         }
         const root = document.parseResult.value;
+        if (ast.isDmfModel(root)) {
+            const services = this.serviceRegistry.getServices(document.uri) as Partial<DmfServices>;
+            return services.references?.DmfImportResolver?.dependenciesChanged(root, changedUris) ?? false;
+        }
         if (!ast.isStateMachine(root)) {
             return false;
         }

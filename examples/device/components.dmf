@@ -1,0 +1,50 @@
+// Component types of the garage door (examples/device). Components with a `behavior` are implemented
+// by a state machine; their ports must match its interfaces (see docs/structure-language.md).
+import "types.dmf"
+import "door_types.h"
+
+/** Opens and closes the door; implemented by controller.hsm. */
+component DoorController {
+    behavior "controller.hsm"
+    provides async cmd : DoorCmd
+    provides async status : MotorStatus
+    requires async motor : MotorCmd
+    requires async alarm : event alarm
+    provides sync cycles : integer
+    requires sync position : door::Position
+}
+
+/** Motor control; implemented by drive.hsm. */
+component MotorController {
+    behavior "drive.hsm"
+    provides async ctrl : MotorCmd
+    provides async sensors : event endSwitch, event overcurrent
+    requires async status : MotorStatus
+    provides sync speed : integer
+    requires sync pwm : integer
+}
+
+/** PWM output of the motor bridge (hardware driver). */
+component PwmDriver {
+    provides sync duty : integer
+}
+
+/** End switches and current monitor (hardware driver, interrupt driven). */
+component EndSwitches {
+    requires async events : event endSwitch, event overcurrent
+}
+
+/** Encoder of the door leaf. */
+component PositionSensor {
+    provides sync position : door::Position
+}
+
+component Buzzer {
+    provides async alarm : event alarm
+}
+
+/** Collects statistics. */
+component Diagnosis {
+    requires sync cycles : integer
+    provides sync report : Diagnostics
+}

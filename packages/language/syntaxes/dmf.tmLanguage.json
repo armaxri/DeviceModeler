@@ -1,0 +1,71 @@
+{
+  "name": "dmf",
+  "scopeName": "source.dmf",
+  "fileTypes": [
+    ".dmf"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "name": "keyword.control.dmf",
+      "match": "\\b(component|interface|structure|behavior|delegate|provides|requires|connect|package|import|struct|system|thread|async|event|sync)\\b"
+    },
+    {
+      "name": "string.quoted.double.dmf",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "include": "#string-character-escape"
+        }
+      ]
+    },
+    {
+      "name": "string.quoted.single.dmf",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "include": "#string-character-escape"
+        }
+      ]
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.dmf",
+          "begin": "/\\*",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.dmf"
+            }
+          },
+          "end": "\\*/",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.dmf"
+            }
+          }
+        },
+        {
+          "begin": "//",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.whitespace.comment.leading.dmf"
+            }
+          },
+          "end": "(?=$)",
+          "name": "comment.line.dmf"
+        }
+      ]
+    },
+    "string-character-escape": {
+      "name": "constant.character.escape.dmf",
+      "match": "\\\\(x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|u\\{[0-9A-Fa-f]+\\}|[0-2][0-7]{0,2}|3[0-6][0-7]?|37[0-7]?|[4-7][0-7]?|.|$)"
+    }
+  }
+}

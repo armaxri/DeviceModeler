@@ -17,6 +17,16 @@
         "textMate": {
             "out": "syntaxes/hsmtest.tmLanguage.json"
         }
+    }, {
+        "id": "dmf",
+        "grammar": "src/dmf.langium",
+        "fileExtensions": [".dmf"],
+        "textMate": {
+            "out": "syntaxes/dmf.tmLanguage.json"
+        },
+        "monarch": {
+            "out": "src/syntaxes/dmf.monarch.ts"
+        }
     }],
     "out": "src/generated"
 }

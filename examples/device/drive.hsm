@@ -1,0 +1,37 @@
+// Motor control of the drive unit of the garage door (examples/device, component MotorController).
+/** Runs the motor with the requested speed and reports why it stopped. */
+statemachine Drive {
+    @CycleBased(10)
+
+    interface:
+        /** Opens with the given speed in percent (port `ctrl`). */
+        in event up : integer
+        /** Closes with the given speed in percent (port `ctrl`). */
+        in event down : integer
+        in event halt
+        /** An end switch was reached (port `sensors`). */
+        in event endSwitch
+        /** The motor current exceeded the limit (port `sensors`). */
+        in event overcurrent
+        out event stopped
+        out event blocked
+        /** The current speed in percent, negative while closing (port `speed`). */
+        var speed : integer = 0
+        /** Sets the duty cycle of the PWM output (port `pwm`). */
+        operation pwm(duty : integer) : void
+
+    [*] -> Idle
+
+    state Idle {
+        entry / speed = 0; pwm(0)
+    }
+    state Running {
+        entry / pwm(speed)
+    }
+
+    Idle -> Running : up / speed = valueof(up)
+    Idle -> Running : down / speed = -valueof(down)
+    Running -> Idle : halt
+    Running -> Idle : endSwitch / raise stopped
+    Running -> Idle : overcurrent / raise blocked
+}

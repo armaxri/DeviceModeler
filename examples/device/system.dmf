@@ -1,0 +1,33 @@
+// A garage door (examples/device): the structure of the product, modeled with the structure language
+// of the Device Modeling Framework (docs/structure-language.md). The controller and the motor control
+// are implemented by state machines (controller.hsm, drive.hsm).
+import "types.dmf"
+import "components.dmf"
+import "drive.dmf"
+
+/** The garage door: remote control commands in, statistics out. */
+system GarageDoor {
+    provides async remote : DoorCmd
+    provides sync report : Diagnostics
+
+    @priority(5) @period(10 ms)
+    thread ControlTask {
+        door : DoorController
+        buzzer : Buzzer
+    }
+    @priority(2) @period(100 ms)
+    thread IoTask {
+        sensor : PositionSensor
+        diag : Diagnosis
+    }
+    // a composite: its parts run in their own threads
+    drive : DriveUnit
+
+    connect door.motor -> drive.ctrl
+    connect drive.status -> door.status
+    connect door.alarm -> buzzer.alarm
+    connect door.position -> sensor.position
+    connect diag.cycles -> door.cycles
+    delegate remote -> door.cmd
+    delegate report -> diag.report
+}
