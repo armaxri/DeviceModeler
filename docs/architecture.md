@@ -5,6 +5,7 @@ packages/
   language/     Langium language and tooling (no DOM dependencies, runs in Node.js and in the browser)
     src/hsm.langium             grammar of the state machine language (.hsm)
     src/hsm-test.langium        grammar of the unit test language (.hsmtest), reuses the expressions of hsm.langium
+    src/dmf.langium             grammar of the structure language (.dmf, docs/structure-language.md)
     src/generated/              Langium generated AST, grammar and module (`npm run langium:generate`)
     src/syntaxes/               generated Monarch grammar (syntax highlighting in Monaco)
     src/hsm-module.ts           dependency injection: services of .hsm and .hsmtest, relinking of importing documents
@@ -24,6 +25,9 @@ packages/
     src/node/                   Node.js host of header imports (file system, `headers` of hsm.gen.json)
     src/lsp/                    hover, go to definition and completion of C++ names (VS Code and web)
     src/model-utils.ts          AST helpers (containers, composite states, …)
+    src/dmf-*.ts                structure language: module, imports, types, scoping / linking, validation,
+                                port <-> state machine mapping (dmf-behavior.ts), route analysis (dmf-routes.ts),
+                                formatter; src/lsp/dmf-lsp.ts: definition, "go to provider", hover, completion
     src/diagram/                AST -> PlantUML-like diagram model (layout.ts), laid out with ELK; font metrics
     src/edit/model-edits.ts     ModelEditor: structural edits (add, move, rename, delete, …) as text edits
     src/render/                 SVG renderer without DOM (renderSvg), diagram style sheet shared with the web app
