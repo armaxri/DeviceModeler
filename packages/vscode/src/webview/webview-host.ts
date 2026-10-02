@@ -3,6 +3,7 @@ import type { DiagramController, DiagramHost, StatusSeverity, TextRange } from '
 import { byId, h } from '@hsm-web/ui/dom.js';
 import { svgToPng } from '@hsm-web/ui/export-svg.js';
 import { SidePanel, type SidePanelState } from '@hsm-web/ui/side-panel.js';
+import { LAYOUT_TEXT, POSITIONS_LABEL, layoutControls } from '@hsm-web/layout-actions.js';
 import type { FromWebview, LayoutCommand, ToWebview, WebviewSettings } from '../common/protocol.js';
 
 /** The persisted state of the webview (the URI is used to restore the diagram when VS Code is restarted). */
@@ -58,7 +59,7 @@ export class WebviewHost implements DiagramHost {
     // Layout and toolbar
 
     private buildLayout(): void {
-        const direction = h('select', { id: 'direction-select', title: 'Layout direction' },
+        const direction = h('select', { id: 'direction-select', title: LAYOUT_TEXT.direction.title },
             h('option', { value: 'DOWN' }, 'Top → bottom'), h('option', { value: 'RIGHT' }, 'Left → right'));
         const routing = h('select', { id: 'routing-select', title: 'Edge routing' },
             h('option', { value: 'SPLINES' }, 'Splines'), h('option', { value: 'ORTHOGONAL' }, 'Orthogonal'), h('option', { value: 'POLYLINE' }, 'Polyline'));
@@ -66,6 +67,7 @@ export class WebviewHost implements DiagramHost {
         direction.addEventListener('change', () => this.post({ type: 'updateSetting', key: 'direction', value: direction.value }));
         routing.addEventListener('change', () => this.post({ type: 'updateSetting', key: 'routing', value: routing.value }));
         priorities.addEventListener('change', () => this.post({ type: 'updateSetting', key: 'priorities', value: priorities.checked }));
+        const layout = layoutControls(false);
         const toolbar = h('header', { class: 'toolbar' },
             h('span', { id: 'file-name', class: 'file-name' }),
             h('div', { class: 'group' },
@@ -74,9 +76,12 @@ export class WebviewHost implements DiagramHost {
                 direction,
                 routing,
                 h('label', { class: 'toggle', title: 'Show the priorities of transitions leaving a state with several outgoing transitions' }, priorities, h('span', {}, 'Priorities'))),
+            // labels, tooltips and visibility are updated by the controller (layout-actions.ts)
             h('div', { class: 'group', id: 'layout-group' },
-                h('button', { id: 'btn-arrange', title: 'Arrange all elements automatically and write the positions into the model (layout annotations)' }, 'Auto-arrange'),
-                h('button', { id: 'btn-reset-layout', title: 'Remove all layout annotations from the model and return to the automatic layout (an earlier arrangement is restored with undo)' }, 'Automatic layout')),
+                h('span', { id: 'layout-mode', class: 'label-text layout-mode', title: layout.mode.title },
+                    `${POSITIONS_LABEL} `, h('span', { class: 'layout-mode-value' }, layout.mode.label)),
+                h('button', { id: 'btn-arrange', title: layout.arrange.title }, layout.arrange.label),
+                h('button', { id: 'btn-reset-layout', title: layout.clear.title, hidden: layout.clear.hidden }, layout.clear.label)),
             h('div', { class: 'spacer' }),
             h('div', { class: 'group' },
                 h('button', { id: 'btn-export', title: 'Export the diagram as SVG or PNG', onClick: () => this.post({ type: 'command', command: 'exportDiagram' }) }, 'Export…'),

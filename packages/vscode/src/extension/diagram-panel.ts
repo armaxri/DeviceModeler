@@ -174,7 +174,7 @@ export class DiagramManager implements vscode.Disposable {
         return panel.rasterize(svg, scale);
     }
 
-    /** Runs a layout command (auto-arrange, reset) in the active diagram. */
+    /** Runs a layout command (arrange: Store positions / Re-arrange, reset: Clear positions) in the diagram. */
     layoutCommand(uri: vscode.Uri | undefined, command: LayoutCommand): boolean {
         const panel = uri ? this.panels.get(uri.toString()) : this.active;
         panel?.post({ type: 'layoutCommand', command });

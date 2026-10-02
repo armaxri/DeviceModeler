@@ -15,6 +15,7 @@ import {
     type ManualLayout, type Point
 } from 'hsm-language';
 import { describeSyntaxProblem, type HsmModelService } from './model-service.js';
+import { LAYOUT_STATUS, layoutControls, layoutOfAction } from './layout-actions.js';
 import { createDiagramContainer } from './diagram/di.config.js';
 import type { DiagramCallbacks, DragInfo } from './diagram/listeners.js';
 import { toSchema, type Issue } from './diagram/model.js';
@@ -76,7 +77,10 @@ export interface ModelState {
     issues: Map<string, Issue>;
 }
 
-/** Buttons of the layout (optional, bound if present): Auto-arrange, Automatic layout. */
+/**
+ * Buttons of the layout (optional, bound if present): `btn-arrange` (Store positions / Re-arrange),
+ * `btn-reset-layout` (Clear positions); names and tooltips in layout-actions.ts.
+ */
 const LAYOUT_CONTROLS = ['btn-arrange', 'btn-reset-layout'];
 
 export type DiagramTheme = 'classic' | 'modern' | 'dark';
@@ -1186,35 +1190,63 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         this.updateLayoutControls();
     }
 
+    /**
+     * Updates the layout controls to the state of the model: the indicator (`layout-mode`: "Positions:
+     * automatic" / "stored in model"), the label of the arrange button and the visibility of Clear positions.
+     */
     private updateLayoutControls(): void {
         const manual = this.isManualLayout();
-        const reset = document.getElementById('btn-reset-layout');
-        if (reset) {
-            reset.hidden = !manual;
+        const controls = layoutControls(manual);
+        const mode = document.getElementById('layout-mode');
+        if (mode) {
+            mode.title = controls.mode.title;
+            const value = mode.querySelector('.layout-mode-value');
+            if (value) {
+                value.textContent = controls.mode.label;
+            }
+            mode.classList.toggle('stored', manual);
+        }
+        const arrange = document.getElementById('btn-arrange');
+        if (arrange) {
+            arrange.textContent = controls.arrange.label;
+            arrange.title = controls.arrange.title;
+        }
+        const clear = document.getElementById('btn-reset-layout');
+        if (clear) {
+            clear.textContent = controls.clear.label;
+            clear.title = controls.clear.title;
+            clear.hidden = controls.clear.hidden;
         }
         byId('diagram-area').classList.toggle('manual-layout', manual);
     }
 
-    /** Arranges everything automatically and writes the result as layout annotations. */
+    /**
+     * "Store positions" / "Re-arrange" (layout action `arrange`): arranges all elements automatically and
+     * stores the positions as layout annotations in the model (replacing stored ones). One undoable edit.
+     */
     autoArrange(): void {
         if (!this.state || this.simulationSession) {
             return;
         }
-        this.writeLayout(captureLayout(this.state.auto.graph, this.settings.direction)).then(changed => {
+        const status = layoutControls(this.isManualLayout()).arrangeStatus;
+        this.writeLayout(layoutOfAction('arrange', this.state.auto.graph, this.settings.direction)).then(changed => {
             if (changed) {
-                this.setStatus('Arranged automatically – the positions can be adjusted by hand (Ctrl+Z restores the previous layout).');
+                this.setStatus(status);
             }
         });
     }
 
-    /** Removes all layout annotations: the diagram is laid out automatically. */
+    /**
+     * "Clear positions" (layout action `clear`): removes all layout annotations from the model, the diagram
+     * is arranged automatically again. One undoable edit; does nothing without stored positions.
+     */
     resetLayout(): void {
         if (!this.state || this.simulationSession || !this.isManualLayout()) {
             return;
         }
-        this.writeLayout(undefined).then(changed => {
+        this.writeLayout(layoutOfAction('clear', this.state.auto.graph, this.settings.direction)).then(changed => {
             if (changed) {
-                this.setStatus('Automatic layout – the layout annotations were removed (Ctrl+Z restores them).');
+                this.setStatus(LAYOUT_STATUS.clear);
             }
         });
     }

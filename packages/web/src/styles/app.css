@@ -657,8 +657,15 @@ body.ui-dark #properties .problems li.error { background: #3d1f1f; color: #ffb4b
 
 /* ---- manual layout (experimental) ---- */
 
-.toolbar .layout-label {
+.toolbar .layout-mode {
     color: var(--ui-muted);
+    white-space: nowrap;
+    cursor: help;
+}
+
+.toolbar .layout-mode-value {
+    color: var(--ui-text);
+    font-weight: 600;
 }
 
 .toolbar .segmented {

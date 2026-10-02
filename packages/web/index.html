@@ -27,8 +27,8 @@
             <button id="btn-format" title="Format the text (Shift+Alt+F)">Format</button>
         </div>
         <div class="group">
-            <label><span class="label-text">Layout</span>
-                <select id="direction-select" title="Layout direction">
+            <label><span class="label-text">Direction</span>
+                <select id="direction-select" title="Direction of the automatic arrangement (used for the whole diagram while no positions are stored, otherwise for new elements and for Re-arrange; stored positions are kept)">
                     <option value="DOWN">Top → bottom</option>
                     <option value="RIGHT">Left → right</option>
                 </select>
@@ -52,9 +52,9 @@
             </label>
         </div>
         <div class="group" id="layout-group">
-            <span class="label-text layout-label">Layout</span>
-            <button id="btn-arrange" title="Arrange all elements automatically and keep the positions as layout annotations in the model (they can then be adjusted by dragging)">Auto-arrange</button>
-            <button id="btn-reset-layout" title="Remove the layout annotations from the model: the diagram is laid out automatically again (an earlier arrangement is restored with undo, Ctrl+Z)" hidden>Automatic layout</button>
+            <span id="layout-mode" class="label-text layout-mode" title="Positions: automatic – the diagram is arranged automatically and follows every change of the model. Dragging a state stores the positions in the model as layout annotations (@at, @via, …).">Positions: <span class="layout-mode-value">automatic</span></span>
+            <button id="btn-arrange" title="Store the current automatic arrangement in the model as layout annotations (@at …), so that it can be adjusted by hand (dragging a state does this as well). Undo: Ctrl+Z">Store positions</button>
+            <button id="btn-reset-layout" title="Remove all layout annotations (positions, waypoints, sizes) from the model: the diagram is arranged automatically again and follows every change of the model. Undo: Ctrl+Z" hidden>Clear positions</button>
         </div>
         <div class="spacer"></div>
         <div class="group">

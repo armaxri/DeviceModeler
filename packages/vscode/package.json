@@ -110,13 +110,13 @@
       },
       {
         "command": "hsm.autoArrange",
-        "title": "Auto-arrange Diagram",
+        "title": "Re-arrange Diagram and Store Positions in Model",
         "category": "HSM",
         "icon": "$(layout)"
       },
       {
         "command": "hsm.resetLayout",
-        "title": "Use Automatic Diagram Layout",
+        "title": "Clear Stored Diagram Positions (Remove Layout Annotations)",
         "category": "HSM",
         "icon": "$(discard)"
       },
