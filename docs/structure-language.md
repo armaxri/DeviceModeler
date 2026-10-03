@@ -14,25 +14,51 @@ one – is a structure file; structure elements after a state machine (or a stat
 elements) are reported: *A .devm file contains either a state machine or structure elements*. The keywords
 of state machines can be used as names in structure files (a field `state`, a port `event`) and vice versa.
 
-The complete example is in [`examples/device`](../examples/device): a garage door with a controller and
-a drive unit (a subsystem with threads of its own), implemented by `controller.devm` and `drive.devm`; `light.devm`
-declares a data type, components and a subsystem in one file.
+The complete example is in [`examples/device`](../examples/device): the closed system `GarageInstallation`
+(`system.devm`) – the garage door with its environment, a remote control and a status display – and the
+garage door itself, a subsystem with a controller and a drive unit (again a subsystem with threads of its
+own), implemented by `controller.devm` and `drive.devm`; `light.devm` declares a data type, components and a
+subsystem in one file.
 
 ```
 // system.devm
+import "components.devm"                     // component types and subsystems of other files
+import "garage-door.devm"
+
+/** The garage with its door, the remote control and the status display. */
+system GarageInstallation {                 // the closed top level: no ports, the environment is a part
+    @priority(4) @period(20 ms)
+    thread RadioTask {                      // a thread and the instances running in it
+        remote : RemoteControl
+    }
+    @priority(1) @period(500 ms)
+    thread DisplayTask {
+        display : StatusDisplay
+    }
+    door : GarageDoor                       // a subsystem: outside of the threads, its parts run in its threads
+
+    connect remote.open -> door.open        // out port -> in port (the direction of the data)
+    connect remote.close -> door.close
+    connect remote.stop -> door.stop
+    connect door.report -> display.report
+}
+```
+
+```
+// garage-door.devm
 import "types.devm"                          // structs and component types of other files
 import "components.devm"
 import "drive-unit.devm"
 
 /** The garage door: remote control commands in, statistics out. */
-system GarageDoor {
-    in async open                           // boundary ports of the system: events of the remote control
+subsystem GarageDoor {
+    in async open                           // boundary ports of the subsystem: events of the remote control
     in async close
     in async stop
     out sync report : Diagnostics           // data for the environment
 
     @priority(5) @period(10 ms)
-    thread ControlTask {                    // a thread and the instances running in it
+    thread ControlTask {
         door : DoorController
         buzzer : Buzzer
     }
@@ -41,9 +67,9 @@ system GarageDoor {
         sensor : PositionSensor
         diag : Diagnosis
     }
-    drive : DriveUnit                       // a subsystem: outside of the threads, its parts run in its threads
+    drive : DriveUnit                       // a subsystem inside a subsystem
 
-    connect door.up -> drive.up             // out port -> in port (the direction of the data)
+    connect door.up -> drive.up
     connect door.down -> drive.down
     connect door.halt -> drive.halt
     connect drive.stopped -> door.stopped
@@ -101,12 +127,21 @@ struct Diagnostics {                        // a data type of ports and struct f
 | struct | `struct Position { x : real  y : real }` | a data type (fields separated by line breaks, `,` or `;`) |
 | component | `component Name "description" { behavior "x.devm"  ports… }` | an atomic component type |
 | subsystem | `subsystem Name { ports… threads… instances… connect… delegate… }` | a composite component type, can be instantiated |
-| system | `system Name { … }` | the root of a product (same body as `subsystem`, cannot be instantiated) |
+| system | `system Name { threads… instances… connect… }` | the root of a product: closed and complete – **no ports and no delegations** (the environment, e.g. the remote control, is modeled as parts); cannot be instantiated |
 | port | `in\|out\|inout sync name : Type`, `in\|out async name` / `in\|out async name : Type` | see [Ports](#ports) |
 | thread | `@priority(5) @period(10 ms) @stack(4096) thread Name { a : A  b }` | see [Threads](#threads) |
 | instance | `name : ComponentType "description"` | a part of a subsystem or system: an instance of a component in a thread, of a subsystem outside of the threads (see [Threads](#threads)) |
 | connection | `connect a.out -> b.in` | connects an out port of a part with an in port of another part (two inout ports: in any order) |
 | delegation | `delegate in -> part.in` / `delegate part.out -> out` | connects a boundary port with a port of a part |
+
+**Subsystem and system.** A `subsystem` is a part with boundary ports: it receives data from its
+environment and delivers data to it (`delegate`). A `system` is the **closed, complete top level** of a
+product: it has **no ports** and therefore no delegations – whatever it talks to (the remote control, a
+display, the user) is modeled as a part of the system and connected with `connect`. A port in a system is
+an error (*… model the environment (e.g. the remote control) as parts of the system, or declare it as
+'subsystem Name'*); the editor offers no port tools and no *Add port* for the frame of a system, completion
+proposes no `in` / `out` / `inout` / `delegate` in its body. Example: `system GarageInstallation`
+(`system.devm`) contains the subsystem `GarageDoor` (`garage-door.devm`) and its environment.
 
 Comments are written like in the state machines (`//`, `/* */`); a `/** … */` comment before an element
 is its documentation (hover in the editor). Annotations are written before the element they belong to.
@@ -202,6 +237,7 @@ crossing threads are only marked (an info diagnostic, dashed in the diagram, see
 | an instance of a component outside of a thread (neither declared in a thread nor assigned to one), an instance of a subsystem in a thread or assigned to one | error |
 | an instance in more than one thread | error |
 | recursive instantiation (`A` contains a `B` which contains an `A`), instantiating a `system` | error |
+| a port or a delegation in a `system`: *'GarageInstallation' is a system: the closed top level has no ports – model the environment (e.g. the remote control) as parts of the system, or declare it as 'subsystem GarageInstallation'.* | error |
 | an in or inout port of a part that is not connected (nor delegated): it receives no data | warning |
 | a boundary port that is not delegated (in: nobody receives its data, out: no part sends it, inout) | warning |
 | duplicate connection or delegation, same file imported twice, hidden or ambiguous imported names | warning |
@@ -299,11 +335,13 @@ navigation into the state machines and subsystems of the instances – see
 [the editor](editor.md#structure-diagrams) and [VS Code](vscode.md)) and rendered by `devm render`
 ([rendering](rendering.md)):
 
-![The garage door system](examples/GarageDoor.svg)
+![The closed system GarageInstallation](examples/GarageInstallation.svg)
+
+![The garage door subsystem](examples/GarageDoor.svg)
 
 | Element | Notation |
 |---|---|
-| subsystem / system | a frame with the tab `ibd [system] GarageDoor` (`ibd [subsystem] DriveUnit`); its boundary ports on the border, labels outside |
+| subsystem / system | a frame with the tab `ibd [subsystem] GarageDoor` (`ibd [system] GarageInstallation`); the boundary ports of a subsystem on the border, labels outside (a system has none) |
 | thread | a rounded, tinted frame `«thread» ControlTask` with its settings (`priority 5 · period 10 ms`) enclosing its instances |
 | instance | a box `«component»` / `«subsystem»` and `name : Type`; an icon of two linked states: the component has a behavior state machine; the rake icon: a subsystem (it has an internal block diagram of its own) |
 | port | a small square on the border, the name inside the box: **hollow** = sync (data values), **filled** = async (an event) |

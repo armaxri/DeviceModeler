@@ -715,6 +715,7 @@
 
 .ibd-port-arrow {
     fill: none;
+    pointer-events: none;
     stroke-width: 1.3px;
     stroke-linecap: round;
     stroke-linejoin: round;
@@ -930,8 +931,8 @@
 <g class="ibd-node ibd-frame" transform="translate(130, 16)">
 <title>The garage door: remote control commands in, statistics out.</title>
 <rect class="ibd-frame-shape" x="0" y="0" width="954" height="556"/>
-<path class="ibd-frame-tab" d="M 0,0 H 183 V 17 L 176,24 H 0 Z"/>
-<text class="ibd-frame-title" x="8" y="16.55"><tspan class="ibd-frame-kind">ibd</tspan> [system] <tspan class="ibd-frame-name">GarageDoor</tspan></text>
+<path class="ibd-frame-tab" d="M 0,0 H 206 V 17 L 199,24 H 0 Z"/>
+<text class="ibd-frame-title" x="8" y="16.55"><tspan class="ibd-frame-kind">ibd</tspan> [subsystem] <tspan class="ibd-frame-name">GarageDoor</tspan></text>
 <g class="ibd-node ibd-thread" transform="translate(81, 48)">
 <rect class="ibd-thread-shape" x="0" y="0" rx="6" ry="6" width="493" height="316"/>
 <text class="ibd-thread-title" x="10" y="16.55"><tspan class="ibd-stereotype">«thread»</tspan> <tspan class="ibd-thread-name">ControlTask</tspan></text>

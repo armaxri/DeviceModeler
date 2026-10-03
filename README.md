@@ -12,7 +12,7 @@ can edit them directly: add states, draw transitions, nest states by drag and dr
 connect ports, rename in place, … Text and diagram always stay in sync, and the structure links to the
 state machines: double-click an instance to open its state machine.
 
-![Device Modeler: the system GarageDoor as text and internal block diagram, the route of the port door.up highlighted](docs/screenshot.png)
+![Device Modeler: the subsystem GarageDoor as text and internal block diagram, opened as the part door of the closed system GarageInstallation (breadcrumb), the route of the port door.up highlighted](docs/screenshot.png)
 
 ## Structure of a product (structure files)
 
@@ -21,7 +21,9 @@ state machines: double-click an instance to open its state machine.
 The kind of a `.devm` file is decided by its first word: a file starting with `statemachine` is a state
 machine, every other file is a structure file.
 
-![The structure of a garage door: internal block diagram of the system GarageDoor](docs/examples/GarageDoor.svg)
+![The closed system GarageInstallation: the garage door subsystem with the remote control and the status display](docs/examples/GarageInstallation.svg)
+
+![The structure of a garage door: internal block diagram of the subsystem GarageDoor](docs/examples/GarageDoor.svg)
 
 - **Component types** with **ports as directed data flow**: every port carries data in a direction –
   **sync** ports data values (`in sync position : door::Position`, `out sync cycles : integer`, shared
@@ -34,7 +36,9 @@ machine, every other file is a structure file.
   (`@priority(5) @period(10 ms)`) with the instances of components running in them, instances of other
   subsystems outside of the threads (recursive nesting; their parts run in threads of their own),
   explicit **connections** in the direction of the data (`connect door.up -> drive.up`, out → in; inout ↔
-  inout) and **delegations** to the boundary ports (`delegate open -> door.open`, `delegate diag.report -> report`).
+  inout) and **delegations** to the boundary ports of a subsystem (`delegate open -> door.open`, `delegate diag.report -> report`).
+  The `system` is the **closed, complete top level**: it has no ports – its environment (the remote control,
+  the status display) is modeled as parts (`system GarageInstallation` in `examples/device/system.devm`).
 - **Validation**: unconnected in ports, more than one source of a sync in port (sender of an async in port), mismatching kinds, types,
   payloads and directions, connections crossing threads (shown dashed), ports that do not match the state
   machine, unresolved imports, …
@@ -158,7 +162,7 @@ npm run build -w packages/language
 node packages/language/bin/cli.js validate examples/cd-player.devm
 node packages/language/bin/cli.js layout examples/keyboard.devm --direction RIGHT
 node packages/language/bin/cli.js render examples -o out --theme modern     # SVG diagrams, see below
-node packages/language/bin/cli.js render examples/device/system.devm -o system.svg   # internal block diagram of a system
+node packages/language/bin/cli.js render examples/device/system.devm -o system.svg   # internal block diagram of the closed system
 node packages/language/bin/cli.js doc examples -o docs/models --format html  # documentation, see below
 node packages/language/bin/cli.js import model.sct -o model.devm   # itemis CREATE import, see below
 node packages/language/bin/cli.js simulate examples/cd-player.devm -e play,eject,eject   # run the interpreter

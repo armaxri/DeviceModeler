@@ -212,7 +212,9 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
   `in` / `out async name [: Type]` (exactly one event, named like the port, with an optional payload); no
   operations, no provided / required services, no interface types –, `behavior "door.devm"` (ports mapped onto
   the interfaces of the state machine: `out sync` = `var`, `in sync` = `var readonly`, `inout sync` = `var`,
-  `in` / `out async` = `in` / `out event`), `subsystem`s and the root `system` (recursive nesting), threads with
+  `in` / `out async` = `in` / `out event`), `subsystem`s and the root `system` (recursive nesting; the system is
+  the closed, complete top level without ports – its environment is modeled as parts, e.g. `GarageInstallation`
+  with the remote control, the status display and the `GarageDoor` subsystem), threads with
   annotations (`@priority`, `@period`, `@stack`) – instances of components run in threads, instances of
   subsystems are placed outside of them –, explicit `connect` / `delegate` in the direction of the data
   (`connect out -> in`, `delegate in -> part.in`, `delegate part.out -> out`, inout with inout in any order),
