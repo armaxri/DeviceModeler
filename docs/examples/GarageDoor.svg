@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic hsm-export ibd-diagram" width="902" height="492" viewBox="0 0 902 492" font-family="Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic hsm-export ibd-diagram" width="1151" height="492" viewBox="0 0 1151 492" font-family="Helvetica, Arial, sans-serif">
 <title>GarageDoor</title>
 <style><![CDATA[
 .theme-classic, .theme-modern, .theme-dark {
@@ -582,13 +582,16 @@
     stroke-width: 1px;
 }
 
-/* ---- internal block diagrams of structures (.dmf, ibd-layout.ts) ---- */
+/* ---- internal block diagrams of subsystems and systems (.dmf, ibd-layout.ts) ---- */
 
 .theme-classic {
     --ibd-thread-fill: #f4f7fb;
     --ibd-thread-stroke: #7f95ab;
     --ibd-frame-stroke: #a80036;
     --ibd-tab-fill: #fbf3dd;
+    --ibd-type-fill: #f4f6f8;
+    --ibd-type-stroke: #6b7b8c;
+    --ibd-type-header: #e6ebf0;
 }
 
 .theme-modern {
@@ -596,6 +599,9 @@
     --ibd-thread-stroke: #8a96a3;
     --ibd-frame-stroke: #181818;
     --ibd-tab-fill: #ececec;
+    --ibd-type-fill: #fafafa;
+    --ibd-type-stroke: #7a7a7a;
+    --ibd-type-header: #efefef;
 }
 
 .theme-dark {
@@ -603,6 +609,9 @@
     --ibd-thread-stroke: #66727f;
     --ibd-frame-stroke: #9fb3c8;
     --ibd-tab-fill: #2d333b;
+    --ibd-type-fill: #22262c;
+    --ibd-type-stroke: #7d8a99;
+    --ibd-type-header: #2c323a;
 }
 
 .theme-classic, .theme-modern {
@@ -723,6 +732,68 @@
     font-size: 11px;
 }
 
+.sprotty-graph .ibd-port-type {
+    fill: var(--hsm-muted);
+}
+
+/* data types (structs, interfaces of the file): value type boxes, never connected */
+.ibd-type-shape {
+    fill: var(--ibd-type-fill);
+    stroke: var(--ibd-type-stroke);
+    stroke-width: 1.2px;
+}
+
+.ibd-type-header {
+    fill: var(--ibd-type-header);
+    stroke: none;
+}
+
+.ibd-type-separator {
+    stroke: var(--ibd-type-stroke);
+    stroke-width: 0.8px;
+}
+
+.ibd-type-stereotype,
+.ibd-type-name {
+    text-anchor: middle;
+}
+
+.ibd-type-name {
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.ibd-type-member {
+    font-size: 11px;
+}
+
+.sprotty-graph .ibd-type-keyword,
+.sprotty-graph .ibd-type-member-type,
+.sprotty-graph .ibd-type-empty {
+    fill: var(--hsm-muted);
+}
+
+.ibd-type-keyword {
+    font-style: italic;
+}
+
+.ibd-node.mouseover > .ibd-type-shape {
+    stroke-width: 2.2px;
+}
+
+.ibd-node.selected > .ibd-type-shape {
+    stroke: var(--hsm-select);
+    stroke-width: 2.5px;
+}
+
+.ibd-node.has-error > .ibd-type-shape {
+    stroke: var(--hsm-error);
+}
+
+.route-highlight .ibd-type {
+    opacity: 0.4;
+}
+
 .ibd-connector-line {
     fill: none;
     stroke: var(--hsm-edge);
@@ -839,64 +910,64 @@
 ]]></style>
 <rect class="export-background" width="100%" height="100%"/>
 <g>
-<g class="ibd-node ibd-frame" transform="translate(69, 16)">
+<g class="ibd-node ibd-frame" transform="translate(130, 16)">
 <title>The garage door: remote control commands in, statistics out.</title>
-<rect class="ibd-frame-shape" x="0" y="0" width="776" height="460"/>
+<rect class="ibd-frame-shape" x="0" y="0" width="903" height="460"/>
 <path class="ibd-frame-tab" d="M 0,0 H 183 V 17 L 176,24 H 0 Z"/>
 <text class="ibd-frame-title" x="8" y="16.55"><tspan class="ibd-frame-kind">ibd</tspan> [system] <tspan class="ibd-frame-name">GarageDoor</tspan></text>
 <g class="ibd-node ibd-thread" transform="translate(41, 48)">
-<rect class="ibd-thread-shape" x="0" y="0" rx="6" ry="6" width="420" height="228"/>
+<rect class="ibd-thread-shape" x="0" y="0" rx="6" ry="6" width="503" height="228"/>
 <text class="ibd-thread-title" x="10" y="16.55"><tspan class="ibd-stereotype">«thread»</tspan> <tspan class="ibd-thread-name">ControlTask</tspan></text>
 <text class="ibd-thread-details" x="10" y="31.85">priority 5 · period 10 ms</text>
 <g class="ibd-node ibd-instance has-behavior" transform="translate(26, 52)">
 <title>Opens and closes the door; implemented by controller.hsm.</title>
-<rect class="ibd-instance-shape" x="0" y="0" rx="2" ry="2" width="177" height="162"/>
-<text class="ibd-stereotype ibd-block-stereotype" x="78.5" y="15.35">«component»</text>
-<text class="ibd-instance-name" x="78.5" y="31.55">door : DoorController</text>
-<line class="ibd-instance-separator" x1="0" y1="40" x2="177" y2="40"/>
-<g class="ibd-icon ibd-behavior-icon"><title>Behavior: state machine DoorController</title><rect x="155" y="16.5" width="6" height="7" rx="2" ry="2"/><rect x="165" y="16.5" width="6" height="7" rx="2" ry="2"/><path d="M 161,20 H 165"/></g>
+<rect class="ibd-instance-shape" x="0" y="0" rx="2" ry="2" width="260" height="162"/>
+<text class="ibd-stereotype ibd-block-stereotype" x="120" y="15.35">«component»</text>
+<text class="ibd-instance-name" x="120" y="31.55">door : DoorController</text>
+<line class="ibd-instance-separator" x1="0" y1="40" x2="260" y2="40"/>
+<g class="ibd-icon ibd-behavior-icon"><title>Behavior: state machine DoorController</title><rect x="238" y="16.5" width="6" height="7" rx="2" ry="2"/><rect x="248" y="16.5" width="6" height="7" rx="2" ry="2"/><path d="M 244,20 H 248"/></g>
 <g class="ibd-port provided async">
 <title>provides async status : MotorStatus
 (accepts the events)</title>
-<rect class="ibd-port-shape" x="171" y="49" width="12" height="12"/>
-<path class="ibd-port-chevron" transform="translate(171, 49)" d="M 8.4,2.76 L 3.6,6 L 8.4,9.24"/>
-<text class="ibd-port-label" x="135" y="58.85">status</text>
+<rect class="ibd-port-shape" x="254" y="49" width="12" height="12"/>
+<path class="ibd-port-chevron" transform="translate(254, 49)" d="M 8.4,2.76 L 3.6,6 L 8.4,9.24"/>
+<text class="ibd-port-label" x="150" y="58.85"><tspan class="ibd-port-name">status</tspan> : <tspan class="ibd-port-type">MotorStatus</tspan></text>
 </g>
 <g class="ibd-port required async">
 <title>requires async motor : MotorCmd
 (sends the events)</title>
-<rect class="ibd-port-shape" x="171" y="71" width="12" height="12"/>
-<path class="ibd-port-chevron" transform="translate(171, 71)" d="M 3.6,9.24 L 8.4,6 L 3.6,2.76"/>
-<text class="ibd-port-label" x="137" y="80.85">motor</text>
+<rect class="ibd-port-shape" x="254" y="71" width="12" height="12"/>
+<path class="ibd-port-chevron" transform="translate(254, 71)" d="M 3.6,9.24 L 8.4,6 L 3.6,2.76"/>
+<text class="ibd-port-label" x="160" y="80.85"><tspan class="ibd-port-name">motor</tspan> : <tspan class="ibd-port-type">MotorCmd</tspan></text>
 </g>
 <g class="ibd-port required async">
 <title>requires async alarm : event alarm
 (sends the events)</title>
-<rect class="ibd-port-shape" x="171" y="93" width="12" height="12"/>
-<path class="ibd-port-chevron" transform="translate(171, 93)" d="M 3.6,9.24 L 8.4,6 L 3.6,2.76"/>
-<text class="ibd-port-label" x="138" y="102.85">alarm</text>
+<rect class="ibd-port-shape" x="254" y="93" width="12" height="12"/>
+<path class="ibd-port-chevron" transform="translate(254, 93)" d="M 3.6,9.24 L 8.4,6 L 3.6,2.76"/>
+<text class="ibd-port-label" x="221" y="102.85">alarm</text>
 </g>
 <g class="ibd-port provided async">
 <title>provides async cmd : DoorCmd
 (accepts the events)</title>
 <rect class="ibd-port-shape" x="-6" y="49" width="12" height="12"/>
 <path class="ibd-port-chevron" transform="translate(-6, 49)" d="M 3.6,9.24 L 8.4,6 L 3.6,2.76"/>
-<text class="ibd-port-label" x="11" y="58.85">cmd</text>
+<text class="ibd-port-label" x="11" y="58.85"><tspan class="ibd-port-name">cmd</tspan> : <tspan class="ibd-port-type">DoorCmd</tspan></text>
 </g>
 <g class="ibd-port required sync">
 <title>requires sync position : door::Position
 (requires the data)</title>
-<rect class="ibd-port-shape" x="171" y="115" width="12" height="12"/>
-<text class="ibd-port-label" x="127" y="124.85">position</text>
+<rect class="ibd-port-shape" x="254" y="115" width="12" height="12"/>
+<text class="ibd-port-label" x="134" y="124.85"><tspan class="ibd-port-name">position</tspan> : <tspan class="ibd-port-type">door::Position</tspan></text>
 </g>
 <g class="ibd-port provided sync">
 <title>provides sync cycles : integer
 (provides the data)</title>
-<rect class="ibd-port-shape" x="171" y="137" width="12" height="12"/>
-<text class="ibd-port-label" x="134" y="146.85">cycles</text>
+<rect class="ibd-port-shape" x="254" y="137" width="12" height="12"/>
+<text class="ibd-port-label" x="174" y="146.85"><tspan class="ibd-port-name">cycles</tspan> : <tspan class="ibd-port-type">integer</tspan></text>
 </g>
 </g>
-<g class="ibd-node ibd-instance" transform="translate(283, 96)">
+<g class="ibd-node ibd-instance" transform="translate(366, 96)">
 <rect class="ibd-instance-shape" x="0" y="0" rx="2" ry="2" width="123" height="74"/>
 <text class="ibd-stereotype ibd-block-stereotype" x="61.5" y="15.35">«component»</text>
 <text class="ibd-instance-name" x="61.5" y="31.55">buzzer : Buzzer</text>
@@ -910,8 +981,8 @@
 </g>
 </g>
 </g>
-<g class="ibd-node ibd-thread" transform="translate(527, 172)">
-<rect class="ibd-thread-shape" x="0" y="0" rx="6" ry="6" width="213" height="264"/>
+<g class="ibd-node ibd-thread" transform="translate(610, 172)">
+<rect class="ibd-thread-shape" x="0" y="0" rx="6" ry="6" width="257" height="264"/>
 <text class="ibd-thread-title" x="10" y="16.55"><tspan class="ibd-stereotype">«thread»</tspan> <tspan class="ibd-thread-name">IoTask</tspan></text>
 <text class="ibd-thread-details" x="10" y="31.85">priority 2 · period 100 ms</text>
 <g class="ibd-node ibd-instance" transform="translate(26, 52)">
@@ -924,49 +995,49 @@
 <title>provides sync position : door::Position
 (provides the data)</title>
 <rect class="ibd-port-shape" x="-6" y="49" width="12" height="12"/>
-<text class="ibd-port-label" x="11" y="58.85">position</text>
+<text class="ibd-port-label" x="11" y="58.85"><tspan class="ibd-port-name">position</tspan> : <tspan class="ibd-port-type">door::Position</tspan></text>
 </g>
 </g>
 <g class="ibd-node ibd-instance" transform="translate(26, 154)">
 <title>Collects statistics.</title>
-<rect class="ibd-instance-shape" x="0" y="0" rx="2" ry="2" width="125" height="96"/>
-<text class="ibd-stereotype ibd-block-stereotype" x="62.5" y="15.35">«component»</text>
-<text class="ibd-instance-name" x="62.5" y="31.55">diag : Diagnosis</text>
-<line class="ibd-instance-separator" x1="0" y1="40" x2="125" y2="40"/>
+<rect class="ibd-instance-shape" x="0" y="0" rx="2" ry="2" width="217" height="96"/>
+<text class="ibd-stereotype ibd-block-stereotype" x="108.5" y="15.35">«component»</text>
+<text class="ibd-instance-name" x="108.5" y="31.55">diag : Diagnosis</text>
+<line class="ibd-instance-separator" x1="0" y1="40" x2="217" y2="40"/>
 <g class="ibd-port required sync">
 <title>requires sync cycles : integer
 (requires the data)</title>
 <rect class="ibd-port-shape" x="-6" y="49" width="12" height="12"/>
-<text class="ibd-port-label" x="11" y="58.85">cycles</text>
+<text class="ibd-port-label" x="11" y="58.85"><tspan class="ibd-port-name">cycles</tspan> : <tspan class="ibd-port-type">integer</tspan></text>
 </g>
 <g class="ibd-port provided sync">
 <title>provides sync report : Diagnostics
 (provides the data)</title>
 <rect class="ibd-port-shape" x="-6" y="71" width="12" height="12"/>
-<text class="ibd-port-label" x="11" y="80.85">report</text>
+<text class="ibd-port-label" x="11" y="80.85"><tspan class="ibd-port-name">report</tspan> : <tspan class="ibd-port-type">Diagnostics</tspan></text>
 </g>
 </g>
 </g>
-<g class="ibd-node ibd-instance composite" transform="translate(534, 48)">
+<g class="ibd-node ibd-instance composite" transform="translate(617, 48)">
 <title>Motor control, PWM output and end switches.</title>
-<rect class="ibd-instance-shape" x="0" y="0" rx="2" ry="2" width="145" height="96"/>
-<text class="ibd-stereotype ibd-block-stereotype" x="62.5" y="15.35">«structure»</text>
-<text class="ibd-instance-name" x="62.5" y="31.55">drive : DriveUnit</text>
-<line class="ibd-instance-separator" x1="0" y1="40" x2="145" y2="40"/>
-<g class="ibd-icon ibd-composite-icon"><title>Composite: structure DriveUnit</title><path d="M 130,14 V 20 M 124,26 V 20 H 136 V 26 M 130,20 V 26"/></g>
+<rect class="ibd-instance-shape" x="0" y="0" rx="2" ry="2" width="222" height="96"/>
+<text class="ibd-stereotype ibd-block-stereotype" x="101" y="15.35">«subsystem»</text>
+<text class="ibd-instance-name" x="101" y="31.55">drive : DriveUnit</text>
+<line class="ibd-instance-separator" x1="0" y1="40" x2="222" y2="40"/>
+<g class="ibd-icon ibd-composite-icon"><title>Subsystem DriveUnit (has an internal block diagram)</title><path d="M 207,14 V 20 M 201,26 V 20 H 213 V 26 M 207,20 V 26"/></g>
 <g class="ibd-port required async">
 <title>requires async status : MotorStatus
 (sends the events)</title>
 <rect class="ibd-port-shape" x="-6" y="49" width="12" height="12"/>
 <path class="ibd-port-chevron" transform="translate(-6, 49)" d="M 8.4,2.76 L 3.6,6 L 8.4,9.24"/>
-<text class="ibd-port-label" x="11" y="58.85">status</text>
+<text class="ibd-port-label" x="11" y="58.85"><tspan class="ibd-port-name">status</tspan> : <tspan class="ibd-port-type">MotorStatus</tspan></text>
 </g>
 <g class="ibd-port provided async">
 <title>provides async ctrl : MotorCmd
 (accepts the events)</title>
 <rect class="ibd-port-shape" x="-6" y="71" width="12" height="12"/>
 <path class="ibd-port-chevron" transform="translate(-6, 71)" d="M 3.6,9.24 L 8.4,6 L 3.6,2.76"/>
-<text class="ibd-port-label" x="11" y="80.85">ctrl</text>
+<text class="ibd-port-label" x="11" y="80.85"><tspan class="ibd-port-name">ctrl</tspan> : <tspan class="ibd-port-type">MotorCmd</tspan></text>
 </g>
 </g>
 <g class="ibd-port provided async">
@@ -974,21 +1045,21 @@
 (accepts the events)</title>
 <rect class="ibd-port-shape" x="-6" y="149" width="12" height="12"/>
 <path class="ibd-port-chevron" transform="translate(-6, 149)" d="M 3.6,9.24 L 8.4,6 L 3.6,2.76"/>
-<text class="ibd-port-label" x="-45" y="149.85">remote</text>
+<text class="ibd-port-label" x="-101" y="149.85"><tspan class="ibd-port-name">remote</tspan> : <tspan class="ibd-port-type">DoorCmd</tspan></text>
 </g>
 <g class="ibd-port provided sync">
 <title>provides sync report : Diagnostics
 (provides the data)</title>
 <rect class="ibd-port-shape" x="-6" y="397" width="12" height="12"/>
-<text class="ibd-port-label" x="-40" y="397.85">report</text>
+<text class="ibd-port-label" x="-106" y="397.85"><tspan class="ibd-port-name">report</tspan> : <tspan class="ibd-port-type">Diagnostics</tspan></text>
 </g>
 </g>
-<g class="ibd-connector connection cross-thread"><title>connect door.motor -&gt; drive.ctrl</title><path class="ibd-connector-line" d="M 319,193 L 355,193 L 355,141 L 448.5,141 L 535,141 L 597,141"/></g>
-<g class="ibd-connector connection cross-thread"><title>connect drive.status -&gt; door.status</title><path class="ibd-connector-line" d="M 597,119 L 555,119 L 555,130 L 535,130 L 448.5,130 L 345,130 L 345,171 L 319,171"/></g>
-<g class="ibd-connector connection"><title>connect door.alarm -&gt; buzzer.alarm</title><path class="ibd-connector-line" d="M 319,215 L 387,215"/></g>
-<g class="ibd-connector connection cross-thread"><title>connect door.position -&gt; sensor.position</title><path class="ibd-connector-line" d="M 319,237 L 345,237 L 345,252 L 448.5,252 L 535,252 L 565,252 L 565,295 L 591,295 L 616,295"/></g>
-<g class="ibd-connector connection cross-thread"><title>connect diag.cycles -&gt; door.cycles</title><path class="ibd-connector-line" d="M 616,397 L 591,397 L 555,397 L 555,263 L 535,263 L 448.5,263 L 345,263 L 345,259 L 319,259"/></g>
-<g class="ibd-connector delegation"><title>delegate remote -&gt; door.cmd</title><path class="ibd-connector-line" d="M 75,171 L 105,171 L 130,171"/></g>
-<g class="ibd-connector delegation"><title>delegate report -&gt; diag.report</title><path class="ibd-connector-line" d="M 75,419 L 320,419 L 591,419 L 616,419"/></g>
+<g class="ibd-connector connection cross-thread"><title>connect door.motor -&gt; drive.ctrl</title><path class="ibd-connector-line" d="M 463,193 L 499,193 L 499,141 L 592.5,141 L 679,141 L 741,141"/></g>
+<g class="ibd-connector connection cross-thread"><title>connect drive.status -&gt; door.status</title><path class="ibd-connector-line" d="M 741,119 L 699,119 L 699,130 L 679,130 L 592.5,130 L 489,130 L 489,171 L 463,171"/></g>
+<g class="ibd-connector connection"><title>connect door.alarm -&gt; buzzer.alarm</title><path class="ibd-connector-line" d="M 463,215 L 531,215"/></g>
+<g class="ibd-connector connection cross-thread"><title>connect door.position -&gt; sensor.position</title><path class="ibd-connector-line" d="M 463,237 L 489,237 L 489,252 L 592.5,252 L 679,252 L 709,252 L 709,295 L 735,295 L 760,295"/></g>
+<g class="ibd-connector connection cross-thread"><title>connect diag.cycles -&gt; door.cycles</title><path class="ibd-connector-line" d="M 760,397 L 735,397 L 699,397 L 699,263 L 679,263 L 592.5,263 L 489,263 L 489,259 L 463,259"/></g>
+<g class="ibd-connector delegation"><title>delegate remote -&gt; door.cmd</title><path class="ibd-connector-line" d="M 136,171 L 166,171 L 191,171"/></g>
+<g class="ibd-connector delegation"><title>delegate report -&gt; diag.report</title><path class="ibd-connector-line" d="M 136,419 L 422.5,419 L 735,419 L 760,419"/></g>
 </g>
 </svg>

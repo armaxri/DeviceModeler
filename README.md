@@ -1,7 +1,7 @@
 # Device Modeling Framework
 
 A [Langium](https://langium.org) based modeling environment for devices: the **structure of a product**
-(components with their ports, composites, threads, instances and connections – 🧪 the structure
+(components with their ports, subsystems, threads, instances and connections – 🧪 the structure
 language, `.dmf`) and the **hierarchical state machines** that implement the behavior of its components
 (`.hsm`, the HSM Modeler). Both are edited as text and in graphical editors built on
 [Sprotty](https://sprotty.org) and [ELK](https://eclipse.dev/elk/): the state machine diagrams look like
@@ -24,8 +24,9 @@ state machines: double-click an instance to open its state machine.
   `interface DoorCmd { event open event close }`). A component can be implemented by a state machine
   (`behavior "door.hsm"`): its ports are checked against the interfaces of the state machine (provided async
   port = `in` events, required async port = `out` events, sync ports = variables and operations).
-- **Composites** and the root **`system`**: instances of component types (also of other
-  composites – recursive nesting), **threads** grouping the instances (`@priority(5) @period(10 ms)`),
+- **Subsystems** (`subsystem`, composite component types) and the root **`system`**: **threads**
+  (`@priority(5) @period(10 ms)`) with the instances of components running in them, instances of other
+  subsystems outside of the threads (recursive nesting; their parts run in threads of their own),
   explicit **connections** (`connect door.motor -> drive.ctrl`, required → provided) and **delegations**
   to the boundary ports.
 - **Validation**: unconnected required ports, mismatching kinds, types and directions, connections
@@ -33,15 +34,17 @@ state machines: double-click an instance to open its state machine.
 - **Route analysis**: selecting a port, connector or instance highlights the whole signal path across
   connections and delegations through all levels of the hierarchy and all files; *go to provider* of a
   required port.
-- **Internal block diagram** (SysML style, PlantUML themes): frames for the structure and its threads,
-  instances with stereotypes, filled (provided) / hollow (required) ports with a chevron for async ports.
+- **Internal block diagram** (SysML style, PlantUML themes): frames for the subsystem / system and its
+  threads, instances with stereotypes, filled (provided) / hollow (required) ports with a chevron for async
+  ports and their type; the structs and interfaces declared in the file as separate «struct» /
+  «interface» boxes.
   **Graphical editing** like the state machine diagrams (palette for threads, instances, ports and
   connectors with compatibility feedback, rename, drag into threads, properties panel) – every action is a
-  text edit; **navigation** between structures, composites, component types and state machines with a
+  text edit; **navigation** between systems, subsystems, component types, data types and state machines with a
   back / forward history.
 - **Tools**: the web editor, the VS Code extension (language server, diagram, navigation, edits across
   files) and `hsm render` (SVG) support structure files. Not (yet) supported: simulation and code
-  generation of structures.
+  generation of structure files.
 
 ## State machines (`.hsm`)
 
@@ -160,7 +163,7 @@ node packages/language/bin/cli.js generate --check          # exit 1 if generate
 | Document | Content |
 | --- | --- |
 | [The language](docs/language.md) | syntax of the models: definition section, reactions, expressions, states, regions, pseudo states; imports and submachines; C/C++ header imports |
-| [Structure language](docs/structure-language.md) | 🧪 `.dmf` files: components, ports, structures, threads, instances, connections; port ↔ state machine rules; route analysis |
+| [Structure language](docs/structure-language.md) | 🧪 `.dmf` files: components, ports, subsystems, threads, instances, connections; port ↔ state machine rules; route analysis |
 | [Execution semantics](docs/semantics.md) | how a state machine executes – the specification implemented by the interpreter and the code generators |
 | [Web editor](docs/editor.md) | editing in the diagram, 🧪 structure diagrams and navigation, 🧪 manual layout, simulation |
 | [Manual layout](docs/manual-layout.md) | 🧪 experimental (branch `claude/layout-annotations`): layout annotations in the model, layout computation, routing, editor integration, migration |

@@ -1,13 +1,14 @@
 # The structure language (`.dmf`)
 
 🧪 Experimental: the structure language of the **Device Modeling Framework**. A `.dmf` file describes
-the structure of a product – component types, their ports, composite structures, threads, instances and
+the structure of a product – component types, their ports, subsystems, threads, instances and
 connections – alongside the state machines (`.hsm`) that implement the behavior of its components. The
 validator checks the ports of a component against its state machine, and the route analysis follows a
 signal through all levels of the hierarchy.
 
 The complete example is in [`examples/device`](../examples/device): a garage door with a controller and
-a drive unit (a composite with its own motor task), implemented by `controller.hsm` and `drive.hsm`.
+a drive unit (a subsystem with threads of its own), implemented by `controller.hsm` and `drive.hsm`; `light.dmf`
+declares data types, components and a subsystem in one file.
 
 ```
 // system.dmf
@@ -30,7 +31,7 @@ system GarageDoor {
         sensor : PositionSensor
         diag : Diagnosis
     }
-    drive : DriveUnit                       // a composite: its parts run in their own threads
+    drive : DriveUnit                       // a subsystem: outside of the threads, its parts run in its threads
 
     connect door.motor -> drive.ctrl        // required port -> provided port
     connect drive.status -> door.status
@@ -84,11 +85,11 @@ interface MotorCmd {                        // a named group of events: the type
 | struct | `struct Position { x : real  y : real }` | a data type (fields separated by line breaks, `,` or `;`) |
 | interface | `interface DoorCmd { event open  event close }` | a group of events: the type of async ports |
 | component | `component Name "description" { behavior "x.hsm"  ports… }` | an atomic component type |
-| structure | `structure Name { ports… threads… instances… connect… delegate… }` | a composite component type, can be instantiated |
-| system | `system Name { … }` | the root of a product (same body as `structure`, cannot be instantiated) |
+| subsystem | `subsystem Name { ports… threads… instances… connect… delegate… }` | a composite component type, can be instantiated |
+| system | `system Name { … }` | the root of a product (same body as `subsystem`, cannot be instantiated) |
 | port | `provides\|requires sync\|async name : Type` | see [Ports](#ports) |
 | thread | `@priority(5) @period(10 ms) @stack(4096) thread Name { a : A  b }` | see [Threads](#threads) |
-| instance | `name : ComponentType "description"` | a part of a structure (in its body or in a thread) |
+| instance | `name : ComponentType "description"` | a part of a subsystem or system: an instance of a component in a thread, of a subsystem outside of the threads (see [Threads](#threads)) |
 | connection | `connect a.required -> b.provided` | connects a required port of a part with a provided port of another part |
 | delegation | `delegate port -> part.port` / `delegate part.port -> port` | connects a boundary port with a port of a part |
 
@@ -140,12 +141,13 @@ the same type as a C++ struct with the same unqualified name (`Position` and `ge
 
 | Check | Severity |
 |---|---|
-| duplicate names (elements of a file, ports, fields, events of a port or interface, instances and threads of a structure); element named like a built-in type | error |
+| duplicate names (elements of a file, ports, fields, events of a port or interface, instances and threads of a subsystem or system); element named like a built-in type | error |
 | unknown type, unresolved component type / instance / port / state machine, import or behavior file not found, unsupported import | error |
 | connection not from a required to a provided port, `connect` with a boundary port | error |
 | delegation not between a boundary port and a port of a part, different directions, provided delegated inwards → outwards, required outwards → inwards | error |
 | incompatible kinds / events / payload types / data types of connected or delegated ports | error |
 | a sync required port connected more than once (one provider), a sync provided boundary port delegated more than once | error |
+| an instance of a component outside of a thread (neither declared in a thread nor assigned to one), an instance of a subsystem in a thread or assigned to one | error |
 | an instance in more than one thread | error |
 | recursive instantiation (`A` contains a `B` which contains an `A`), instantiating a `system` | error |
 | a required port of a part that is not connected (nor delegated) | warning |
@@ -182,36 +184,40 @@ port to the state machine elements).
 
 ## Threads
 
-A thread groups instances that run in the same thread of execution. Instances are declared in the thread
-(`thread T { door : DoorController }`) or declared in the structure and assigned by name
-(`thread T { door }`). An instance belongs to at most one thread.
+A thread groups the instances of components that run in the same thread of execution. **Instances of
+components are always in a thread**, **instances of subsystems never**:
 
+- An instance of a component is declared in a thread (`thread T { door : DoorController }`) or declared
+  in the body of the subsystem / system and assigned to a thread by name (`thread T { door }`). An
+  instance belongs to exactly one thread; a component instance outside of any thread is an error (the
+  message shows both ways to write it).
+- An instance of a subsystem is declared in the body, outside of the threads (`drive : DriveUnit`): its
+  parts run in the threads of the subsystem (the parts of `DriveUnit` run in `MotorTask` and
+  `SwitchTask`). Declaring it in a thread or assigning it to one is an error.
+- The grammar accepts `name : Type` in both places – whether `Type` is a component or a subsystem is
+  only known after linking – so the validator checks the rules and tells where the instance belongs;
+  completion offers components in threads and subsystems outside of them.
 - Annotations: `@priority(n)` (integer), `@period(10 ms)` (period of a cyclic thread, units `s`, `ms`,
   `us`, `ns`), `@stack(4096)` (stack size in bytes). Other annotations are reported as unknown; tools can
   register further names in `DMF_ANNOTATIONS` (dmf-validator.ts).
-- **Instances outside of any thread** are passive: they run in the threads of their callers (e.g. a
-  driver called synchronously). A composite instance outside of a thread contributes the threads of its
-  own structure (the parts of `DriveUnit` run in `MotorTask`); a composite instance inside a thread runs
-  those of its parts that are not assigned to a thread of their own structure in that thread.
 - A connection between two instances of different threads crosses threads: an info diagnostic (the
-  diagram draws it dashed). For a composite instance outside of any thread, the threads of the component
-  ports the connection leads to inside the composite count (`door.motor -> drive.ctrl` crosses from
-  `ControlTask` to `MotorTask`, see `connectionThreads` in dmf-routes.ts). Connections to passive instances
-  are not reported.
+  diagram draws it dashed). For an instance of a subsystem, the threads of the component ports the
+  connection leads to inside the subsystem count (`door.motor -> drive.ctrl` crosses from `ControlTask`
+  to `MotorTask`, see `connectionThreads` and `effectiveThread` in dmf-routes.ts).
 
 ## Route analysis
 
 `dmf-routes.ts` computes the signal paths of a port or instance across connections, delegations and the
 boundaries of composite instances, through all levels of the hierarchy (exported from the package index).
-Endpoints are ports in the *instance tree* of a root structure (by default the structure containing the
-start), so a structure that is instantiated several times has separate endpoints per instance path
+Endpoints are ports in the *instance tree* of a root (by default the subsystem or system containing the
+start), so a subsystem that is instantiated several times has separate endpoints per instance path
 (`drive.motor.ctrl`). All hops point in request direction (see above); a `boundary` hop connects the port
 of a composite instance with the same port seen from inside the composite.
 
 | Function | Result |
 |---|---|
 | `portRoute(start, direction = 'both')` | endpoints and hops reachable from the start endpoint(s): the whole net (`both`), towards the providers (`forward`) or the requirers (`backward`) |
-| `routeOf(node, { root? })` | the route of a model element: port reference, connection, delegation, instance, port, structure |
+| `routeOf(node, { root? })` | the route of a model element: port reference, connection, delegation, instance, port, subsystem / system |
 | `findProviders(endpoint)` / `findRequirers(endpoint)` | the ends of the route: providing ports of components (or required boundary ports of the root: provided by the environment) / requiring ports |
 | `providersOf(node, { root? })` | "go to provider" of the ports at a model element |
 | `routeEndpointsOf(node, { root? })`, `endpointsOfPort(root, port)`, `structureContexts(root)` | endpoints of model elements, the instance tree |
@@ -222,7 +228,7 @@ of a composite instance with the same port seen from inside the composite.
 The diagram of a structure file is an internal block diagram (IBD) in the style of SysML, in the themes of
 the state machine diagrams (PlantUML classic / modern, dark). It is shown and edited by the web editor and
 the VS Code extension (palette, rename in place, drag & drop into threads, connectors, properties,
-navigation into the state machines and structures of the instances – see
+navigation into the state machines and subsystems of the instances – see
 [the editor](editor.md#structure-diagrams-dmf) and [VS Code](vscode.md)) and rendered by `hsm render`
 ([rendering](rendering.md)):
 
@@ -230,21 +236,31 @@ navigation into the state machines and structures of the instances – see
 
 | Element | Notation |
 |---|---|
-| structure / system | a frame with the tab `ibd [system] GarageDoor`; its boundary ports on the border, labels outside |
+| subsystem / system | a frame with the tab `ibd [system] GarageDoor` (`ibd [subsystem] DriveUnit`); its boundary ports on the border, labels outside |
 | thread | a rounded, tinted frame `«thread» ControlTask` with its settings (`priority 5 · period 10 ms`) enclosing its instances |
-| instance | a box `«component»` / `«structure»` and `name : Type`; an icon of two linked states: the component has a behavior state machine; the rake icon: a composite (a structure with an internal diagram of its own) |
+| instance | a box `«component»` / `«subsystem»` and `name : Type`; an icon of two linked states: the component has a behavior state machine; the rake icon: a subsystem (it has an internal block diagram of its own) |
 | port | a small square on the border, the name inside the box: **filled** = provided, **hollow** = required |
 | async / sync | async ports (events) show a chevron pointing in the direction the events flow – into the box for provided ports, out of it for required ports; sync ports (data) are plain squares |
+| port label | the name and, for a port typed by a named type, the type: `cmd : DoorCmd`, `pwm : integer` (an inline list of events shows the name only); double-click the type to open its declaration |
 | connection, delegation | solid orthogonal lines between the ports (no arrow heads: the port symbols show the direction); **dashed** if the connection crosses threads |
 
-Instances outside of threads (passive instances, composites) are drawn directly in the frame. Ports are on
+Instances of subsystems are drawn directly in the frame (outside of the threads). Ports are on
 the side facing the ports they are connected to (by default provided ports left, required ports right),
 ordered by the position of their partners, so a reply (`drive.status -> door.status`) needs no detour.
 
 **Choosing what is shown.** The diagram shows the first `system` of the file, else its first
-`structure`; a file with component types only shows them all as blocks with their ports (or one of
+`subsystem`; a file with component types only shows them all as blocks with their ports (or one of
 them). If the file declares several elements, a selector at the top of the diagram chooses the shown one;
-moving the text cursor into another structure shows that one.
+moving the text cursor into another subsystem shows that one.
+
+**Data types.** The structs and interfaces declared **in the file** are shown as separate value type boxes
+– `«struct» Position` with its fields, `«interface» DoorCmd` with its events – in rows below the frame (or
+the component blocks), never connected to anything: the ports show their type in the label instead. A file
+with data types only (like `types.dmf` of the example) shows only these boxes; a file mixing data types,
+components and a subsystem (like `light.dmf`) shows them next to its diagram. Clicking a box selects the
+declaration in the text; double-clicking the type of a port opens the box of the type (also in another
+file). The boxes are part of the diagram model (kind `type`, ids `type:Position`, graph kind `types` for a
+file without component types), so the export and `hsm render` include them.
 
 **Routes.** Selecting a port, a connection or an instance highlights the route of its signals
 (`ibdRouteElements`, based on `routeOf` / `portRoute` of the route analysis): the ports, connectors and
@@ -266,8 +282,11 @@ hierarchy handling, ports with fixed positions). Not supported yet: layout annot
 ports, thread annotations and the behavior of components; rename; delete), `planConnection` decides
 between `connect` and `delegate` and the order of the ends of two chosen ports (and reports
 incompatibilities with `portIncompatibilities`), `dmfRenameEdits` renames an element and its references
-in all loaded files (Langium references; qualified references keep their qualifier). Deleting a thread
-keeps its instances: they become passive parts of the structure. Deleting a port also deletes the
+in all loaded files (Langium references; qualified references keep their qualifier). An instance of a
+component is added to a thread, an instance of a subsystem outside of the threads; moving an instance of a
+component out of its thread or an instance of a subsystem into one is refused. Deleting a thread deletes it
+together with its instances and their connections and delegations (instances of components only exist in
+threads, so keeping them would leave invalid instances behind). Deleting a port also deletes the
 connections and delegations using it – in the file by `DmfEditor`, in the other files of the workspace by
 `DmfWorkspace.portDeletionEdits` (the editors apply all of them as one step).
 
@@ -304,5 +323,5 @@ TextMate grammar, and opens the structure diagram with **HSM: Open Diagram** lik
 machine; navigation between the diagrams and edits of several files go through the extension
 ([VS Code extension](vscode.md#structure-files-dmf)).
 
-Not (yet) supported: simulation and code generation of structures; state machines cannot use the structs
+Not (yet) supported: simulation and code generation of structure files; state machines cannot use the structs
 of structure files (share C/C++ headers instead).

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic hsm-export ibd-diagram" width="896" height="318" viewBox="0 0 896 318" font-family="Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic hsm-export ibd-diagram" width="1097" height="370" viewBox="0 0 1097 370" font-family="Helvetica, Arial, sans-serif">
 <title>DriveUnit</title>
 <style><![CDATA[
 .theme-classic, .theme-modern, .theme-dark {
@@ -582,13 +582,16 @@
     stroke-width: 1px;
 }
 
-/* ---- internal block diagrams of structures (.dmf, ibd-layout.ts) ---- */
+/* ---- internal block diagrams of subsystems and systems (.dmf, ibd-layout.ts) ---- */
 
 .theme-classic {
     --ibd-thread-fill: #f4f7fb;
     --ibd-thread-stroke: #7f95ab;
     --ibd-frame-stroke: #a80036;
     --ibd-tab-fill: #fbf3dd;
+    --ibd-type-fill: #f4f6f8;
+    --ibd-type-stroke: #6b7b8c;
+    --ibd-type-header: #e6ebf0;
 }
 
 .theme-modern {
@@ -596,6 +599,9 @@
     --ibd-thread-stroke: #8a96a3;
     --ibd-frame-stroke: #181818;
     --ibd-tab-fill: #ececec;
+    --ibd-type-fill: #fafafa;
+    --ibd-type-stroke: #7a7a7a;
+    --ibd-type-header: #efefef;
 }
 
 .theme-dark {
@@ -603,6 +609,9 @@
     --ibd-thread-stroke: #66727f;
     --ibd-frame-stroke: #9fb3c8;
     --ibd-tab-fill: #2d333b;
+    --ibd-type-fill: #22262c;
+    --ibd-type-stroke: #7d8a99;
+    --ibd-type-header: #2c323a;
 }
 
 .theme-classic, .theme-modern {
@@ -723,6 +732,68 @@
     font-size: 11px;
 }
 
+.sprotty-graph .ibd-port-type {
+    fill: var(--hsm-muted);
+}
+
+/* data types (structs, interfaces of the file): value type boxes, never connected */
+.ibd-type-shape {
+    fill: var(--ibd-type-fill);
+    stroke: var(--ibd-type-stroke);
+    stroke-width: 1.2px;
+}
+
+.ibd-type-header {
+    fill: var(--ibd-type-header);
+    stroke: none;
+}
+
+.ibd-type-separator {
+    stroke: var(--ibd-type-stroke);
+    stroke-width: 0.8px;
+}
+
+.ibd-type-stereotype,
+.ibd-type-name {
+    text-anchor: middle;
+}
+
+.ibd-type-name {
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.ibd-type-member {
+    font-size: 11px;
+}
+
+.sprotty-graph .ibd-type-keyword,
+.sprotty-graph .ibd-type-member-type,
+.sprotty-graph .ibd-type-empty {
+    fill: var(--hsm-muted);
+}
+
+.ibd-type-keyword {
+    font-style: italic;
+}
+
+.ibd-node.mouseover > .ibd-type-shape {
+    stroke-width: 2.2px;
+}
+
+.ibd-node.selected > .ibd-type-shape {
+    stroke: var(--hsm-select);
+    stroke-width: 2.5px;
+}
+
+.ibd-node.has-error > .ibd-type-shape {
+    stroke: var(--hsm-error);
+}
+
+.route-highlight .ibd-type {
+    opacity: 0.4;
+}
+
 .ibd-connector-line {
     fill: none;
     stroke: var(--hsm-edge);
@@ -839,35 +910,41 @@
 ]]></style>
 <rect class="export-background" width="100%" height="100%"/>
 <g>
-<g class="ibd-node ibd-frame" transform="translate(65, 16)">
+<g class="ibd-node ibd-frame" transform="translate(133, 16)">
 <title>Motor control, PWM output and end switches.</title>
-<rect class="ibd-frame-shape" x="0" y="0" width="766" height="286"/>
-<path class="ibd-frame-tab" d="M 0,0 H 174 V 17 L 167,24 H 0 Z"/>
-<text class="ibd-frame-title" x="8" y="16.55"><tspan class="ibd-frame-kind">ibd</tspan> [structure] <tspan class="ibd-frame-name">DriveUnit</tspan></text>
-<g class="ibd-node ibd-thread" transform="translate(41, 48)">
-<rect class="ibd-thread-shape" x="0" y="0" rx="6" ry="6" width="482" height="214"/>
+<rect class="ibd-frame-shape" x="0" y="0" width="831" height="338"/>
+<path class="ibd-frame-tab" d="M 0,0 H 187 V 17 L 180,24 H 0 Z"/>
+<text class="ibd-frame-title" x="8" y="16.55"><tspan class="ibd-frame-kind">ibd</tspan> [subsystem] <tspan class="ibd-frame-name">DriveUnit</tspan></text>
+<g class="ibd-node ibd-thread" transform="translate(314, 48)">
+<rect class="ibd-thread-shape" x="0" y="0" rx="6" ry="6" width="476" height="214"/>
 <text class="ibd-thread-title" x="10" y="16.55"><tspan class="ibd-stereotype">«thread»</tspan> <tspan class="ibd-thread-name">MotorTask</tspan></text>
 <text class="ibd-thread-details" x="10" y="31.85">priority 8 · period 1 ms · stack 2048</text>
-<g class="ibd-node ibd-instance has-behavior" transform="translate(266, 52)">
+<g class="ibd-node ibd-instance has-behavior" transform="translate(26, 52)">
 <title>Motor control; implemented by drive.hsm.</title>
-<rect class="ibd-instance-shape" x="0" y="0" rx="2" ry="2" width="190" height="118"/>
-<text class="ibd-stereotype ibd-block-stereotype" x="85" y="15.35">«component»</text>
-<text class="ibd-instance-name" x="85" y="31.55">motor : MotorController</text>
-<line class="ibd-instance-separator" x1="0" y1="40" x2="190" y2="40"/>
-<g class="ibd-icon ibd-behavior-icon"><title>Behavior: state machine Drive</title><rect x="168" y="16.5" width="6" height="7" rx="2" ry="2"/><rect x="178" y="16.5" width="6" height="7" rx="2" ry="2"/><path d="M 174,20 H 178"/></g>
+<rect class="ibd-instance-shape" x="0" y="0" rx="2" ry="2" width="222" height="118"/>
+<text class="ibd-stereotype ibd-block-stereotype" x="101" y="15.35">«component»</text>
+<text class="ibd-instance-name" x="101" y="31.55">motor : MotorController</text>
+<line class="ibd-instance-separator" x1="0" y1="40" x2="222" y2="40"/>
+<g class="ibd-icon ibd-behavior-icon"><title>Behavior: state machine Drive</title><rect x="200" y="16.5" width="6" height="7" rx="2" ry="2"/><rect x="210" y="16.5" width="6" height="7" rx="2" ry="2"/><path d="M 206,20 H 210"/></g>
 <g class="ibd-port provided async">
 <title>provides async ctrl : MotorCmd
 (accepts the events)</title>
 <rect class="ibd-port-shape" x="-6" y="49" width="12" height="12"/>
 <path class="ibd-port-chevron" transform="translate(-6, 49)" d="M 3.6,9.24 L 8.4,6 L 3.6,2.76"/>
-<text class="ibd-port-label" x="11" y="58.85">ctrl</text>
+<text class="ibd-port-label" x="11" y="58.85"><tspan class="ibd-port-name">ctrl</tspan> : <tspan class="ibd-port-type">MotorCmd</tspan></text>
 </g>
 <g class="ibd-port required async">
 <title>requires async status : MotorStatus
 (sends the events)</title>
-<rect class="ibd-port-shape" x="184" y="49" width="12" height="12"/>
-<path class="ibd-port-chevron" transform="translate(184, 49)" d="M 3.6,9.24 L 8.4,6 L 3.6,2.76"/>
-<text class="ibd-port-label" x="148" y="58.85">status</text>
+<rect class="ibd-port-shape" x="216" y="49" width="12" height="12"/>
+<path class="ibd-port-chevron" transform="translate(216, 49)" d="M 3.6,9.24 L 8.4,6 L 3.6,2.76"/>
+<text class="ibd-port-label" x="112" y="58.85"><tspan class="ibd-port-name">status</tspan> : <tspan class="ibd-port-type">MotorStatus</tspan></text>
+</g>
+<g class="ibd-port required sync">
+<title>requires sync pwm : integer
+(requires the data)</title>
+<rect class="ibd-port-shape" x="216" y="71" width="12" height="12"/>
+<text class="ibd-port-label" x="144" y="80.85"><tspan class="ibd-port-name">pwm</tspan> : <tspan class="ibd-port-type">integer</tspan></text>
 </g>
 <g class="ibd-port provided async">
 <title>provides async sensors : event endSwitch, event overcurrent
@@ -876,20 +953,32 @@
 <path class="ibd-port-chevron" transform="translate(-6, 71)" d="M 3.6,9.24 L 8.4,6 L 3.6,2.76"/>
 <text class="ibd-port-label" x="11" y="80.85">sensors</text>
 </g>
-<g class="ibd-port required sync">
-<title>requires sync pwm : integer
-(requires the data)</title>
-<rect class="ibd-port-shape" x="184" y="71" width="12" height="12"/>
-<text class="ibd-port-label" x="155" y="80.85">pwm</text>
-</g>
 <g class="ibd-port provided sync">
 <title>provides sync speed : integer
 (provides the data)</title>
 <rect class="ibd-port-shape" x="-6" y="93" width="12" height="12"/>
-<text class="ibd-port-label" x="11" y="102.85">speed</text>
+<text class="ibd-port-label" x="11" y="102.85"><tspan class="ibd-port-name">speed</tspan> : <tspan class="ibd-port-type">integer</tspan></text>
 </g>
 </g>
-<g class="ibd-node ibd-instance" transform="translate(14, 126)">
+<g class="ibd-node ibd-instance" transform="translate(328, 126)">
+<title>PWM output of the motor bridge (hardware driver).</title>
+<rect class="ibd-instance-shape" x="0" y="0" rx="2" ry="2" width="134" height="74"/>
+<text class="ibd-stereotype ibd-block-stereotype" x="67" y="15.35">«component»</text>
+<text class="ibd-instance-name" x="67" y="31.55">pwm : PwmDriver</text>
+<line class="ibd-instance-separator" x1="0" y1="40" x2="134" y2="40"/>
+<g class="ibd-port provided sync">
+<title>provides sync duty : integer
+(provides the data)</title>
+<rect class="ibd-port-shape" x="-6" y="49" width="12" height="12"/>
+<text class="ibd-port-label" x="11" y="58.85"><tspan class="ibd-port-name">duty</tspan> : <tspan class="ibd-port-type">integer</tspan></text>
+</g>
+</g>
+</g>
+<g class="ibd-node ibd-thread" transform="translate(36, 174)">
+<rect class="ibd-thread-shape" x="0" y="0" rx="6" ry="6" width="212" height="140"/>
+<text class="ibd-thread-title" x="10" y="16.55"><tspan class="ibd-stereotype">«thread»</tspan> <tspan class="ibd-thread-name">SwitchTask</tspan></text>
+<text class="ibd-thread-details" x="10" y="31.85">priority 10 · stack 1024</text>
+<g class="ibd-node ibd-instance" transform="translate(14, 52)">
 <title>End switches and current monitor (hardware driver, interrupt driven).</title>
 <rect class="ibd-instance-shape" x="0" y="0" rx="2" ry="2" width="172" height="74"/>
 <text class="ibd-stereotype ibd-block-stereotype" x="86" y="15.35">«component»</text>
@@ -904,37 +993,24 @@
 </g>
 </g>
 </g>
-<g class="ibd-node ibd-instance" transform="translate(596, 174)">
-<title>PWM output of the motor bridge (hardware driver).</title>
-<rect class="ibd-instance-shape" x="0" y="0" rx="2" ry="2" width="134" height="74"/>
-<text class="ibd-stereotype ibd-block-stereotype" x="67" y="15.35">«component»</text>
-<text class="ibd-instance-name" x="67" y="31.55">pwm : PwmDriver</text>
-<line class="ibd-instance-separator" x1="0" y1="40" x2="134" y2="40"/>
-<g class="ibd-port provided sync">
-<title>provides sync duty : integer
-(provides the data)</title>
-<rect class="ibd-port-shape" x="-6" y="49" width="12" height="12"/>
-<text class="ibd-port-label" x="11" y="58.85">duty</text>
-</g>
-</g>
 <g class="ibd-port provided async">
 <title>provides async ctrl : MotorCmd
 (accepts the events)</title>
 <rect class="ibd-port-shape" x="-6" y="149" width="12" height="12"/>
 <path class="ibd-port-chevron" transform="translate(-6, 149)" d="M 3.6,9.24 L 8.4,6 L 3.6,2.76"/>
-<text class="ibd-port-label" x="-25" y="149.85">ctrl</text>
+<text class="ibd-port-label" x="-87" y="149.85"><tspan class="ibd-port-name">ctrl</tspan> : <tspan class="ibd-port-type">MotorCmd</tspan></text>
 </g>
 <g class="ibd-port required async">
 <title>requires async status : MotorStatus
 (sends the events)</title>
-<rect class="ibd-port-shape" x="760" y="149" width="12" height="12"/>
-<path class="ibd-port-chevron" transform="translate(760, 149)" d="M 3.6,9.24 L 8.4,6 L 3.6,2.76"/>
-<text class="ibd-port-label" x="776" y="149.85">status</text>
+<rect class="ibd-port-shape" x="825" y="149" width="12" height="12"/>
+<path class="ibd-port-chevron" transform="translate(825, 149)" d="M 3.6,9.24 L 8.4,6 L 3.6,2.76"/>
+<text class="ibd-port-label" x="841" y="149.85"><tspan class="ibd-port-name">status</tspan> : <tspan class="ibd-port-type">MotorStatus</tspan></text>
 </g>
 </g>
-<g class="ibd-connector connection"><title>connect motor.pwm -&gt; pwm.duty</title><path class="ibd-connector-line" d="M 568,193 L 593,193 L 613,193 L 613,245 L 655,245"/></g>
-<g class="ibd-connector connection"><title>connect switches.events -&gt; motor.sensors</title><path class="ibd-connector-line" d="M 298,245 L 324,245 L 324,193 L 366,193"/></g>
-<g class="ibd-connector delegation"><title>delegate ctrl -&gt; motor.ctrl</title><path class="ibd-connector-line" d="M 71,171 L 101,171 L 212,171 L 366,171"/></g>
-<g class="ibd-connector delegation"><title>delegate motor.status -&gt; status</title><path class="ibd-connector-line" d="M 568,171 L 593,171 L 722,171 L 825,171"/></g>
+<g class="ibd-connector connection"><title>connect motor.pwm -&gt; pwm.duty</title><path class="ibd-connector-line" d="M 701,193 L 727,193 L 727,245 L 769,245"/></g>
+<g class="ibd-connector connection cross-thread"><title>connect switches.events -&gt; motor.sensors</title><path class="ibd-connector-line" d="M 361,297 L 386,297 L 406,297 L 406,193 L 442,193 L 467,193"/></g>
+<g class="ibd-connector delegation"><title>delegate ctrl -&gt; motor.ctrl</title><path class="ibd-connector-line" d="M 139,171 L 277.5,171 L 442,171 L 467,171"/></g>
+<g class="ibd-connector delegation"><title>delegate motor.status -&gt; status</title><path class="ibd-connector-line" d="M 701,171 L 836,171 L 928,171 L 958,171"/></g>
 </g>
 </svg>

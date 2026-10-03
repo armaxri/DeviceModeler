@@ -196,8 +196,9 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
 - 🧪 Structure language (`.dmf`, `src/dmf.langium` in the language package, sharing the services and types
   of the state machines): component types with `provides` / `requires` ports (sync: simple types, structs,
   C/C++ header types; async: events, named `interface`s), `behavior "door.hsm"` (ports checked against the
-  interfaces of the state machine), composites and the root `system` (recursive nesting),
-  threads with annotations (`@priority`, `@period`, `@stack`), explicit `connect` / `delegate`, imports of
+  interfaces of the state machine), `subsystem`s and the root `system` (recursive nesting), threads with
+  annotations (`@priority`, `@period`, `@stack`) – instances of components run in threads, instances of
+  subsystems are placed outside of them –, explicit `connect` / `delegate`, imports of
   structure files, state machines and headers
 - 🧪 Validation (directions, kinds, types, unconnected required ports, connections crossing threads, the
   port ↔ state machine mapping) and route analysis through all levels (`routeOf`, `findProviders`, go to
@@ -205,8 +206,10 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
 - 🧪 Internal block diagram (SysML style, PlantUML themes, ELK with orthogonal routing): `hsm render`, the
   web editor and VS Code; graphical editing as text edits (threads, instances, ports, connectors with
   compatibility feedback, rename across files, delete with the connections in other files, properties),
-  route highlighting, navigation between structures, composites, component types and state machines
-  (*Used by*, *Follow into*, back / forward), markers for problems in imported files
+  route highlighting, navigation between systems, subsystems, component types and state machines
+  (*Used by*, *Follow into*, back / forward), markers for problems in imported files; the structs and
+  interfaces of a file as unconnected «struct» / «interface» boxes (types-only files show only them),
+  port labels with their type
 - 🧪 VS Code: `.dmf` in the language server (references, renames and go to provider across files), the
   structure diagram in the diagram webview, navigation through the extension (shared history), edits of
   several files as one `WorkspaceEdit`, all workspace `.hsm` / `.dmf` files sent to the diagrams

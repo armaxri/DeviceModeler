@@ -84,18 +84,20 @@ label of a selected transition. The first drag turns the diagram into a manual l
 
 🧪 The structure language of the Device Modeling Framework (`docs/structure-language.md` of the
 repository): component types with `provides` / `requires` ports (sync data, async events), implemented by
-state machines (`behavior "door.hsm"`), composites and the `system`, threads and connections.
+state machines (`behavior "door.hsm"`), subsystems and the `system`, threads (instances of components run
+in threads, instances of subsystems outside of them) and connections.
 
 - **Language server**: diagnostics (ports checked against the state machine, connection kinds, types and
   directions, threads), completion, hover, formatting, outline, go to definition (component types, ports,
   types, imports, the state machine of a behavior), **Go to Implementation** = go to the provider of a
   required port, find references and rename across all `.dmf` files of the workspace.
-- **Diagram** (**HSM: Open Diagram**): the internal block diagram of the structure next to the text, edited
+- **Diagram** (**HSM: Open Diagram**): the internal block diagram of the subsystem or system next to the
+  text (with the structs and interfaces of the file as separate «struct» / «interface» boxes), edited
   like in the web app – palette (thread, instance, ports, connector), rename (`F2`), drag instances into
   threads, `Del`, properties panel; selecting a port, connector or instance highlights the route of its
-  signals through all levels. **HSM: Export Diagram…** exports the shown structure (SVG / PNG).
-- **Navigation**: double-click an instance to open its state machine or the diagram of its structure, its
-  type name to open the type; *Go to provider*, *Follow into*, *Used by* (on a state machine diagram: the
+  signals through all levels. **HSM: Export Diagram…** exports the shown diagram (SVG / PNG).
+- **Navigation**: double-click an instance to open its state machine or the diagram of its subsystem, its
+  type name (or the type of a port) to open the type; *Go to provider*, *Follow into*, *Used by* (on a state machine diagram: the
   instances implementing it). The target file is opened with its diagram; *◀* / *▶* in the diagram toolbar,
   `Alt+←` / `Alt+→` and **HSM: Diagram: Go Back / Go Forward** move through the navigation history shared
   by all diagrams.

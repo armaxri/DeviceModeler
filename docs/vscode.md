@@ -56,9 +56,10 @@ same extension:
 - **Diagram**: **HSM: Open Diagram** (editor title, context menus, `hsm.diagram.autoOpen`) opens the
   internal block diagram beside the text, in the same webview as the state machine diagrams (structure
   mode of the diagram controller, the styles of the web app): palette, rename, drag into threads,
-  connectors, properties, route highlighting, the selector of the shown structure; the controls of the
-  state machines (layout settings, simulation, auto-arrange, C++) are disabled.
-- **Navigation** (double-click an instance, its type name, *Go to provider*, *Follow into*, *Used by* of a
+  connectors, properties, route highlighting, the selector of the shown subsystem or system, the structs
+  and interfaces of the file as «struct» / «interface» boxes (a file with data types only shows only
+  them); the controls of the state machines (layout settings, simulation, auto-arrange, C++) are disabled.
+- **Navigation** (double-click an instance, its type name, the type of a port, *Go to provider*, *Follow into*, *Used by* of a
   state machine, …): the extension opens the target file in the text editor column of the diagram and
   its diagram in the column of the diagram, and shows and selects the target there. The navigation
   history is shared by all diagrams: *◀* / *▶* in the toolbar of every diagram, `Alt+←` / `Alt+→` in the
