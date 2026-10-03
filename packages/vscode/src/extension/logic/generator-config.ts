@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { globToRegExp, isGlob, type CppTargetConfig, type GeneratorConfig, type ModelEntry } from 'hsm-language';
+import { globToRegExp, isGlob, type CppTargetConfig, type GeneratorConfig, type ModelEntry } from 'devm-language';
 // Node-only part of the language package (not exported from its index because the web app bundles the index)
 import { loadGeneratorConfig, type GenerateDiagnostic } from '../../../../language/src/generator/generate-command.js';
 

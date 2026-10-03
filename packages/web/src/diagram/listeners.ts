@@ -4,7 +4,7 @@ import {
     type IActionHandler, type SModelElementImpl, type SModelRootImpl, type ViewerOptions
 } from 'sprotty';
 import { BringToFrontAction, MoveAction, SelectAction, SelectAllAction, type Action } from 'sprotty-protocol';
-import { borderPlacement, borderPoint, ibdRoutePath, type NodeSide, type Point } from 'hsm-language';
+import { borderPlacement, borderPoint, ibdRoutePath, type NodeSide, type Point } from 'devm-language';
 import { isTransitionEdge, isVertexNode, type TransitionEdge, type VertexNode } from './model.js';
 import { IbdConnectorElement, IbdNodeElement, IbdPortElement } from './ibd-model.js';
 import { arrowHead, routePath } from './views.js';

@@ -1,4 +1,4 @@
-// Packages the built extension (run `node scripts/build.mjs` first) into `hsm-vscode-<version>.vsix`
+// Packages the built extension (run `node scripts/build.mjs` first) into `devm-vscode-<version>.vsix`
 // with @vscode/vsce. All code is bundled, so no node_modules are packaged (`dependencies: false`).
 import { createVSIX } from '@vscode/vsce';
 import * as fs from 'node:fs/promises';

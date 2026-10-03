@@ -8,7 +8,7 @@ import {
     cppHover, cppHeaderStore, cppTypeOfReference, createHsmServices, HsmDefinitionProvider, importKind, isCppReference, isEventDeclaration,
     isInterfaceScope, isOperationDeclaration, isPseudoState, isState, isStateMachine, isTypeReference, isVariableDeclaration, nodeText,
     qualifiedName, resolveCppValue, type HsmServiceExtensions
-} from 'hsm-language';
+} from 'devm-language';
 import type { DefaultSharedModuleContext, LangiumSharedServices } from 'langium/lsp';
 // Node-only part of the language package (not exported from its index because the web app bundles the index)
 import {

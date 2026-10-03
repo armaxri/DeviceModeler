@@ -1,5 +1,5 @@
 {
-  "name": "hsm-web",
+  "name": "devm-web",
   "version": "0.1.0",
   "private": true,
   "description": "Device Modeler: browser based graphical + textual editor for state machines and product structures",
@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "hsm-language": "0.1.0",
+    "devm-language": "0.1.0",
     "inversify": "~6.2.2",
     "monaco-editor": "~0.52.2",
     "reflect-metadata": "~0.2.2",

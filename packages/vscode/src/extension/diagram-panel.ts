@@ -7,7 +7,7 @@ import { effectiveTheme, webviewHtml } from './logic/webview.js';
 import { collectImportedFiles } from './logic/imports.js';
 import { NavigationHistory } from './logic/navigation.js';
 import { WorkspaceFiles } from './workspace-files.js';
-import { isStructureText, type CppHeaderSettings } from 'hsm-language';
+import { isStructureText, type CppHeaderSettings } from 'devm-language';
 // Node-only part of the language package (not exported from its index because the web app bundles the index)
 import {
     HeaderConfigFinder, headerSettingsForModel, headerSettingsFromSection, type HeaderSettingsSection

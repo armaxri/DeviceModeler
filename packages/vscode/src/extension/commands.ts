@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import {
     cppHeaderStore, DmfModelLoader, HsmModelLoader, importSct, isStructureText, layoutFileName, layoutStateMachineWithLayout, layoutStructure, layoutTextEdits,
     parseManualLayout, renderIbdSvg, renderSvg, type ParsedModel
-} from 'hsm-language';
+} from 'devm-language';
 import { runGeneration } from '../../../language/src/generator/generate-command.js';
 import { installNodeHeaderSupport } from '../../../language/src/node/cpp-headers-node.js';
 import { isStructureFile, readText, vscodeHeaderSettings, type DiagramManager } from './diagram-panel.js';

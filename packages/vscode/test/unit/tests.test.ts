@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { CoverageCollector } from 'hsm-language';
+import { CoverageCollector } from 'devm-language';
 import { discoverTests, failureMessage, lineCoverage, runHsmTests } from '../../src/extension/logic/tests.js';
 
 const examples = path.resolve(__dirname, '../../../../examples');

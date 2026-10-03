@@ -4,7 +4,7 @@ import {
     nodeText, outgoingTransitions, qualifiedName, scopeOf, stateAction, containerName, transitionPriority, DECLARATION_KINDS,
     type BehaviorUsage, type DeclarationKind, type DiagramNodeKind, type EditResult, type ModelEditor, type NewDeclaration, type ScopeContainer, type StateMachine,
     type StructureLocation, type Vertex
-} from 'hsm-language';
+} from 'devm-language';
 import type { Issue } from '../diagram/model.js';
 import { h } from './dom.js';
 
@@ -45,7 +45,7 @@ const PSEUDO_LABELS: Record<string, string> = {
     exit: 'Exit node'
 };
 
-function pseudoHint(pseudo: import('hsm-language').PseudoState): string | undefined {
+function pseudoHint(pseudo: import('devm-language').PseudoState): string | undefined {
     const parent = scopeOf(pseudo);
     const owner = isRegion(parent) ? parent.$container : parent;
     switch (pseudo.kind) {
@@ -229,7 +229,7 @@ function machinePanel(model: StateMachine | undefined, host: PropertiesHost, usa
     ];
 }
 
-function statePanel(state: import('hsm-language').State, info: SelectionInfo, host: PropertiesHost): HTMLElement[] {
+function statePanel(state: import('devm-language').State, info: SelectionInfo, host: PropertiesHost): HTMLElement[] {
     const actionField = (kind: 'entry' | 'exit', label: string) => checkedField(label,
         h('input', {
             value: nodeText(stateAction(state, kind)?.effect),
@@ -270,7 +270,7 @@ function statePanel(state: import('hsm-language').State, info: SelectionInfo, ho
     ].filter((e): e is HTMLElement => !!e);
 }
 
-function transitionPanel(transition: import('hsm-language').Transition, info: SelectionInfo, host: PropertiesHost): HTMLElement[] {
+function transitionPanel(transition: import('devm-language').Transition, info: SelectionInfo, host: PropertiesHost): HTMLElement[] {
     const model = info.model!;
     const names = allVertices(model).map(v => qualifiedName(v)).sort((a, b) => a.localeCompare(b));
     const endSelect = (end: 'source' | 'target') => {

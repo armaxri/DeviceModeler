@@ -11,7 +11,7 @@ import { generateCpp, type CppGeneratorOptions } from './cpp/index.js';
  *
  * ```json
  * {
- *     "$schema": "../node_modules/hsm-language/schemas/devm-gen.schema.json",
+ *     "$schema": "../node_modules/devm-language/schemas/devm-gen.schema.json",
  *     "models": ["models/*.devm", { "path": "legacy/door.devm", "cpp": { "namespace": "legacy" } }],
  *     "cpp": { "outDir": "src-gen", "namespace": "app::sm", "std": 17, "headerExtension": ".hpp" },
  *     "headers": { "includePaths": ["include"], "defines": { "USE_CAN": "1" }, "dataModel": { "longBits": 32, "pointerBits": 32 } },

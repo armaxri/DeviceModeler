@@ -48,7 +48,7 @@
 #   2. node + packages/language/bin/cli.js of the Device Modeler repository containing this file (after
 #      `npm ci && npm run build -w packages/language`)
 #   3. `devm` in the PATH (`npm install -g <repository>/packages/language`, or a package made with `npm pack`)
-#   4. `npx --no-install devm` in the source directory (hsm-language installed as a dev dependency)
+#   4. `npx --no-install devm` in the source directory (devm-language installed as a dev dependency)
 
 include_guard(GLOBAL)
 cmake_minimum_required(VERSION 3.20)

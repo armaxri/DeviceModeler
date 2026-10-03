@@ -3,7 +3,7 @@ import type { Diagnostic } from 'vscode-languageserver-types';
 import {
     createHsmServices, hasAnnotation, HsmTestWorkspace, runTests, type CppHeaderSettings, type CoverageCollector, type MachineCoverage, type TestModel, type TestResult,
     type WorkspaceFile
-} from 'hsm-language';
+} from 'devm-language';
 // Node-only part of the language package (not exported from its index because the web app bundles the index)
 import { installNodeHeaderSupport } from '../../../../language/src/node/cpp-headers-node.js';
 

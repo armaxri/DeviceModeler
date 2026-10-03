@@ -171,7 +171,7 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
   - 🧪 transitions of moved states are rerouted around the other states in the shape of the edge routing
     setting (orthogonal router, polyline shortcuts, splines); bend points are waypoints the route passes
     through
-  - 🧪 web app and VS Code extension of the branch (`hsm-vscode-0.1.0-manual-layout.vsix`, *Device Modeler
+  - 🧪 web app and VS Code extension of the branch (`devm-vscode-0.1.0-manual-layout.vsix`, *Device Modeler
     (manual layout)*) share the diagram controller; the `.sct` import writes annotations, the SVG export,
     `devm layout|render|doc` and test coverage diagrams apply them; `devm migrate-layout` converts the
     `.devm.layout` files of the earlier sidecar experiment

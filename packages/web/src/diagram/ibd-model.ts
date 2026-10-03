@@ -3,7 +3,7 @@ import { SChildElementImpl, SNodeImpl, SShapeElementImpl, boundsFeature, hoverFe
 /** Ports while drawing a connector: can be connected (`ok`), with incompatible types (`problem`), not at all (`invalid`). */
 export type ConnectStatus = 'ok' | 'problem' | 'invalid';
 import type { SModelElement, SModelRoot } from 'sprotty-protocol';
-import type { DiagramLabel, IbdBehavior, IbdComposite, IbdEdge, IbdGraph, IbdMember, IbdNode, IbdNodeKind, IbdPort, Point } from 'hsm-language';
+import type { DiagramLabel, IbdBehavior, IbdComposite, IbdEdge, IbdGraph, IbdMember, IbdNode, IbdNodeKind, IbdPort, Point } from 'devm-language';
 import type { Issue } from './model.js';
 
 /*

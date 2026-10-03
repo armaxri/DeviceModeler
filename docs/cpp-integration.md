@@ -39,7 +39,7 @@ headers and uses the types directly.
 ## 2. The analyzer
 
 Pure TypeScript without Node dependencies (it runs in the web app and in the VS Code extension,
-which bundle the language package). Exported from `hsm-language`:
+which bundle the language package). Exported from `devm-language`:
 
 | file | content |
 | --- | --- |

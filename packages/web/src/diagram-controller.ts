@@ -9,11 +9,11 @@ import {
     nodeText as nodeTextOf, type DeletionTarget, type DiagramNode, type DiagramNodeKind, type DiagramSubmachine, type EdgeRouting, type EditResult,
     type LayoutDirection, type LayoutResult,
     type NewVertexKind, type ParsedDmfModel, type ParsedModel, type ScopeContainer, type TextEdit, type Transition, type TransitionSource, type TransitionTarget, type Vertex
-} from 'hsm-language';
+} from 'devm-language';
 import {
     applyManualLayout, captureLayout, contentOrigin, diagramElementIds, layoutFromModel, layoutTextEdits, toFrameCoordinates,
     isStructureText, type ManualLayout, type NodeSide, type Point
-} from 'hsm-language';
+} from 'devm-language';
 import { LayoutEditor, replacementEdit, sampleSpline } from './layout-editing.js';
 import { describeSyntaxProblem, type HsmModelService } from './model-service.js';
 import { createDiagramContainer } from './diagram/di.config.js';
@@ -30,7 +30,7 @@ import { SimulationSession, canHaveBreakpoint } from './simulation/session.js';
 import { StructureDiagram, type DiagramLocation, type StructureTool } from './structure-diagram.js';
 import { renderBreadcrumb } from './ui/breadcrumb.js';
 import type { SModelRoot } from 'sprotty-protocol';
-import { normalizeUri, type BehaviorUsage } from 'hsm-language';
+import { normalizeUri, type BehaviorUsage } from 'devm-language';
 
 export type { DiagramLocation, StructureTool } from './structure-diagram.js';
 

@@ -1,7 +1,7 @@
 # Code generation (C++)
 
 C++ is the primary code generation target. `devm generate cpp model.devm -o gen` (or
-`generateCpp(machine, options)` of `hsm-language`) generates code in the spirit of the itemis CREATE C++
+`generateCpp(machine, options)` of `devm-language`) generates code in the spirit of the itemis CREATE C++
 generator: one class per state machine in `<Class>.h` / `<Class>.cpp` (`TrafficLight.h`,
 `TrafficLight.cpp`) plus the shared runtime header `sc_statemachine.h` (`sc::integer` = `int64_t`,
 `sc::real` = `double`, `sc::boolean` = `bool`, `sc::string` = `std::string`, the interfaces

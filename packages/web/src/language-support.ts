@@ -1,6 +1,6 @@
 import { monaco } from './monaco.js';
-import { cppHover, DevmMonarchSyntax, isStructureText } from 'hsm-language';
-import type { HsmServices } from 'hsm-language';
+import { cppHover, DevmMonarchSyntax, isStructureText } from 'devm-language';
+import type { HsmServices } from 'devm-language';
 import { HsmModelService } from './model-service.js';
 import type { Diagnostic, Range, TextEdit } from 'vscode-languageserver-types';
 

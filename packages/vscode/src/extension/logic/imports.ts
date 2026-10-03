@@ -3,7 +3,7 @@ import {
     createHsmServices, dmfImportKind, dmfImportPaths, headerCandidates, importKind, importPaths, isComponent, isDmfModel, isStateMachine, isStructureText,
     parseCppHeader,
     resolveImportUri, type CppHeaderSettings
-} from 'hsm-language';
+} from 'devm-language';
 
 /** Reads the text of a file (an open document or the file system); `undefined` if it cannot be read. */
 export type TextReader = (uri: string) => Promise<string | undefined>;

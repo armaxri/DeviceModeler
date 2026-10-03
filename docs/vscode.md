@@ -90,14 +90,14 @@ same extension:
   the markers of instances whose component type or state machine has errors work across files.
 
 ```bash
-npm run package:vscode    # builds and packages packages/vscode/hsm-vscode-<version>.vsix
-code --install-extension packages/vscode/hsm-vscode-0.1.0-manual-layout.vsix   # main branch: hsm-vscode-0.1.0.vsix
+npm run package:vscode    # builds and packages packages/vscode/devm-vscode-<version>.vsix
+code --install-extension packages/vscode/devm-vscode-0.1.0-manual-layout.vsix   # main branch: devm-vscode-0.1.0.vsix
 ```
 
-On the branches `claude/manual-layout` and `claude/layout-annotations` the package is `hsm-vscode-0.1.0-manual-layout.vsix` with the
+On the branches `claude/manual-layout` and `claude/layout-annotations` the package is `devm-vscode-0.1.0-manual-layout.vsix` with the
 display name *Device Modeler (manual layout)*, so the two builds can be told apart. Both have the same
-extension id (`hsm-modeler.hsm-vscode`): only one of them can be installed at a time. To switch, uninstall
-the other one first (`code --uninstall-extension hsm-modeler.hsm-vscode`) or install with `--force`.
+extension id (`device-modeler.devm-vscode`): only one of them can be installed at a time. To switch, uninstall
+the other one first (`code --uninstall-extension device-modeler.devm-vscode`) or install with `--force`.
 Models with layout annotations (`@at`, …) cannot be opened by the build of the main branch (syntax
 errors) until the experiment is merged.
 

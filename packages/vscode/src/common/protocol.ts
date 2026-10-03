@@ -1,4 +1,4 @@
-import type { CppHeaderSettings, StructureContext } from 'hsm-language';
+import type { CppHeaderSettings, StructureContext } from 'devm-language';
 
 /**
  * Messages between the extension and the diagram webview. The webview holds a copy of the document

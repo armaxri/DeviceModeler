@@ -1,4 +1,4 @@
-import { DIAGRAM_CSS } from 'hsm-language';
+import { DIAGRAM_CSS } from 'devm-language';
 
 /**
  * Creates a standalone SVG document of the rendered diagram: the viewport transformation is

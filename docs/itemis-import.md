@@ -7,7 +7,7 @@ node packages/language/bin/cli.js import TrafficLight.sct -o TrafficLight.devm  
 ```
 
 In the web editor, `Open…` accepts `.sct` files as well; warnings are shown in the status bar. From
-code, use `importSct(xml)` of `hsm-language`, which returns `{ text, warnings, layout }` (no DOM needed; the layout is already written into `text`
+code, use `importSct(xml)` of `devm-language`, which returns `{ text, warnings, layout }` (no DOM needed; the layout is already written into `text`
 as annotations, `layout: false` skips them).
 Several statecharts are imported together with `devm import A.sct B.sct` (or several files in `Open…`,
 `importSctFiles(files)`): a **submachine state** that references one of the other statecharts becomes a

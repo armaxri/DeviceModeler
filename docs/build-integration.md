@@ -11,7 +11,7 @@ completion and validation in editors (`"$schema"`); unknown properties are error
 
 ```json
 {
-    "$schema": "node_modules/hsm-language/schemas/devm-gen.schema.json",
+    "$schema": "node_modules/devm-language/schemas/devm-gen.schema.json",
     "models": [
         "models/**/*.devm",
         { "path": "models/door.devm", "cpp": { "namespace": "legacy", "className": "DoorController" } }
@@ -59,7 +59,7 @@ devm generate cpp model.devm -o gen  # without configuration (as before; --confi
 
 `--namespace`, `--class-name`, `--std` and `--prefix` override the configuration. From code, the format
 is available as `parseGeneratorConfig(json)` and `generateTarget(machine, target, options)` of
-`hsm-language` (no file system access, usable in the browser); the file based part is
+`devm-language` (no file system access, usable in the browser); the file based part is
 `src/generator/generate-command.ts` (`loadGeneratorConfig`, `runGeneration`).
 
 ## Installing the command line tool
@@ -69,7 +69,7 @@ The CMake functions need the `devm` command line tool (Node.js ≥ 20.10):
 - **In this repository**: `npm ci && npm run build -w packages/language`. `cmake/HsmGenerate.cmake` finds
   `packages/language/bin/cli.js` next to it automatically.
 - **Globally**: `npm install -g ./packages/language` (links the package of this checkout, build it first) or
-  `cd packages/language && npm pack` and `npm install -g hsm-language-0.1.0.tgz` on any machine (the
+  `cd packages/language && npm pack` and `npm install -g devm-language-0.1.0.tgz` on any machine (the
   package includes `schemas/`).
 - **As a dev dependency** of a project with a `package.json`: `npm install -D <path or tarball>`; CMake then
   uses `npx --no-install devm`.

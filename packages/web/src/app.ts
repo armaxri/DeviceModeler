@@ -1,7 +1,7 @@
 import { monaco } from './monaco.js';
 import {
     applyEdits, importSct, importSctFiles, isModelPath, isStructureText, type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ParsedModel, type TextEdit
-} from 'hsm-language';
+} from 'devm-language';
 import { EDITOR_THEMES, HsmLanguageSupport, LANGUAGE_ID } from './language-support.js';
 import { DiagramController, type DiagramHost, type DiagramLocation, type DiagramSettings, type StatusSeverity, type TextRange } from './diagram-controller.js';
 import { createWorkerElk } from './diagram/elk.js';
@@ -15,10 +15,10 @@ interface Settings extends DiagramSettings {
     editorWidth?: string;
 }
 
-const STORAGE_TEXT = 'hsm-modeler.text';
-const STORAGE_SETTINGS = 'hsm-modeler.settings';
-const STORAGE_FILE = 'hsm-modeler.file';
-const STORAGE_FILES = 'hsm-modeler.files';
+const STORAGE_TEXT = 'device-modeler.text';
+const STORAGE_SETTINGS = 'device-modeler.settings';
+const STORAGE_FILE = 'device-modeler.file';
+const STORAGE_FILES = 'device-modeler.files';
 /** Directory of the virtual files of the web app: imports are resolved against it. */
 const FILE_BASE = 'memory:///';
 /** Value prefix of the files in the example list. */

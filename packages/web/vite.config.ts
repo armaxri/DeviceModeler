@@ -6,7 +6,7 @@ export default defineConfig({
     resolve: {
         alias: {
             // use the TypeScript sources of the language package directly (no pre-build needed)
-            'hsm-language': path.resolve(__dirname, '../language/src/index.ts')
+            'devm-language': path.resolve(__dirname, '../language/src/index.ts')
         }
     },
     esbuild: {

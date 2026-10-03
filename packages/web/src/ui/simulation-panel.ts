@@ -1,5 +1,5 @@
 import type { AstNode } from 'langium';
-import { declaredType, runtimeTypeOfValue, type HostValue } from 'hsm-language';
+import { declaredType, runtimeTypeOfValue, type HostValue } from 'devm-language';
 import { h } from './dom.js';
 import { type LogEntry, type OperationMock, type SimulationSession } from '../simulation/session.js';
 import { defaultHostValue, formatHostValue, typeLabel, valueEditor, type EditorType, type ValueEditor } from './value-editor.js';

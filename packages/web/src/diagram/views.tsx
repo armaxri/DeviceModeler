@@ -2,7 +2,7 @@
 import { injectable } from 'inversify';
 import { ShapeView, svg, type IView, type RenderingContext } from 'sprotty';
 import type { VNode } from 'snabbdom';
-import { DiagramMetrics, submachinePointPositions, type DiagramNode, type Point } from 'hsm-language';
+import { DiagramMetrics, submachinePointPositions, type DiagramNode, type Point } from 'devm-language';
 import type { Issue, TransitionEdge, VertexNode } from './model.js';
 
 const m = DiagramMetrics;

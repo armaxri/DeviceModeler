@@ -140,7 +140,7 @@ Other scripts:
 npm test           # unit tests of the language package and of the VS Code extension
 npm run build      # langium generate + TypeScript build + web app (packages/web/dist) + extension bundles (packages/vscode/dist)
 npm run typecheck
-npm run package:vscode   # packages/vscode/hsm-vscode-<version>.vsix
+npm run package:vscode   # packages/vscode/devm-vscode-<version>.vsix
 ```
 
 ### Command line
@@ -192,8 +192,8 @@ The repository is an npm workspace with three packages: `packages/language` (the
 `.devm` language of state machines and structures and the unit test language –, CLI `devm`, interpreter,
 test runner, renderer and code generators –
 no DOM dependencies, runs in Node.js and in the browser), `packages/web` (the Vite web app: Monaco editor
-and Sprotty diagram) and `packages/vscode` (the VS Code extension). The npm package names (`hsm-language`,
-`hsm-web`, `hsm-vscode`) keep the former name *HSM Modeler*. The text is the single source of truth: diagram
+and Sprotty diagram) and `packages/vscode` (the VS Code extension). The npm package names (`devm-language`,
+`devm-web`, `devm-vscode`) keep the former name *HSM Modeler*. The text is the single source of truth: diagram
 edits become text edits, which run
 through the same parse → validate → layout → render pipeline as typed changes. See
 [docs/architecture.md](docs/architecture.md) for the details.

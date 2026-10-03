@@ -165,7 +165,7 @@ the layout of every parsed model with `layoutFromModel` and turns every layout c
 
 ## VS Code extension
 
-The extension of this branch is packaged as `hsm-vscode-0.1.0-manual-layout.vsix` (display name
+The extension of this branch is packaged as `devm-vscode-0.1.0-manual-layout.vsix` (display name
 *Device Modeler (manual layout)*). It has the same extension id as the build of the main branch, so only
 one of them can be installed at a time (uninstall the other one first, or install with `--force`).
 

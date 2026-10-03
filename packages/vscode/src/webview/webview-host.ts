@@ -1,7 +1,7 @@
-import { isStructureText, normalizeUri, type DiagramSubmachine, type TextEdit } from 'hsm-language';
-import type { DiagramController, DiagramHost, DiagramLocation, StatusSeverity, TextRange } from '@hsm-web/diagram-controller.js';
-import { byId, h } from '@hsm-web/ui/dom.js';
-import { svgToPng } from '@hsm-web/ui/export-svg.js';
+import { isStructureText, normalizeUri, type DiagramSubmachine, type TextEdit } from 'devm-language';
+import type { DiagramController, DiagramHost, DiagramLocation, StatusSeverity, TextRange } from '@devm-web/diagram-controller.js';
+import { byId, h } from '@devm-web/ui/dom.js';
+import { svgToPng } from '@devm-web/ui/export-svg.js';
 import type { FromWebview, LayoutCommand, NavigationState, OffsetEdit, ToWebview, WebviewSettings } from '../common/protocol.js';
 import { textHash } from '../common/text-hash.js';
 

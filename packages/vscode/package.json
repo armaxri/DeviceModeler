@@ -1,10 +1,10 @@
 {
-  "name": "hsm-vscode",
+  "name": "devm-vscode",
   "displayName": "Device Modeler (manual layout)",
   "description": "Device Modeler: the structure of a product (components, ports, threads, instances, connections) as SysML internal block diagrams and its hierarchical state machines with their unit tests, in .devm and .devmtest files: language server, PlantUML-style diagram editors, C++ code generation, test runner and itemis CREATE import – experimental build with hand-arranged diagrams (layout annotations in the model)",
   "version": "0.1.0-manual-layout",
   "private": true,
-  "publisher": "hsm-modeler",
+  "publisher": "device-modeler",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -388,8 +388,8 @@
     "package": "node scripts/build.mjs && node scripts/package.mjs"
   },
   "dependencies": {
-    "hsm-language": "0.1.0",
-    "hsm-web": "0.1.0",
+    "devm-language": "0.1.0",
+    "devm-web": "0.1.0",
     "langium": "~4.4.0",
     "vscode-languageclient": "~10.1.2",
     "vscode-languageserver": "~10.1.0"

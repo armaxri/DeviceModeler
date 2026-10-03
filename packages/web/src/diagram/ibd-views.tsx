@@ -2,7 +2,7 @@
 import { injectable } from 'inversify';
 import { ShapeView, svg, type IView, type RenderingContext } from 'sprotty';
 import type { VNode } from 'snabbdom';
-import { IbdMetrics as M, behaviorIconPath, compositeIconPath, frameTabPath, ibdRoutePath, portChevron, portTooltip } from 'hsm-language';
+import { IbdMetrics as M, behaviorIconPath, compositeIconPath, frameTabPath, ibdRoutePath, portChevron, portTooltip } from 'devm-language';
 import type { IbdConnectorElement, IbdNodeElement, IbdPortElement } from './ibd-model.js';
 import type { Issue } from './model.js';
 

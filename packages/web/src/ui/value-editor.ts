@@ -1,6 +1,6 @@
 import {
     defaultValueOf, fromHost, formatValue as formatRuntimeValue, isCppType, runtimeTypeOfCpp, toHost, type HostValue, type RuntimeType
-} from 'hsm-language';
+} from 'devm-language';
 import { h } from './dom.js';
 
 /**

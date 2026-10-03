@@ -1,4 +1,4 @@
-import { cloneLayout, type BaseManualLayout, type Point, type TextEdit } from 'hsm-language';
+import { cloneLayout, type BaseManualLayout, type Point, type TextEdit } from 'devm-language';
 
 /*
  * Editing of manual layouts in the diagram editor, shared by the state machine diagram

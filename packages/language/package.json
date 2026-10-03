@@ -1,5 +1,5 @@
 {
-  "name": "hsm-language",
+  "name": "devm-language",
   "version": "0.1.0",
   "description": "Device Modeler: Langium language, validation, layout, simulation and code generation of state machines and product structures (.devm)",
   "type": "module",

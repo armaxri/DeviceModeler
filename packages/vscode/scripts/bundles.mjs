@@ -23,7 +23,7 @@ export function bundleOptions(name, options = {}) {
         sourcemap: true,
         minify: options.minify ?? false,
         // the language package is bundled from its TypeScript sources (no pre-build needed)
-        alias: { 'hsm-language': path.join(root, '../language/src/index.ts') },
+        alias: { 'devm-language': path.join(root, '../language/src/index.ts') },
         external: ['vscode'],
         logLevel: 'info',
         tsconfig: path.join(root, 'tsconfig.json')

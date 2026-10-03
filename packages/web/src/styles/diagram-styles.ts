@@ -1,4 +1,4 @@
-import { DIAGRAM_CSS } from 'hsm-language';
+import { DIAGRAM_CSS } from 'devm-language';
 
 /*
  * The style sheet of the diagram is shared with the SVG renderer of the language package

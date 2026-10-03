@@ -1,5 +1,5 @@
 {
-  "name": "hsm-workspace",
+  "name": "devm-workspace",
   "private": true,
   "description": "Device Modeler: Langium based modeling environment for product structures and hierarchical state machines",
   "type": "module",

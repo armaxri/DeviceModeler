@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
-import { CoverageCollector, type MachineCoverage, type WorkspaceFile } from 'hsm-language';
+import { CoverageCollector, type MachineCoverage, type WorkspaceFile } from 'devm-language';
 import { vscodeHeaderSettings } from './diagram-panel.js';
 import { discoverTests, failureMessage, lineCoverage, runHsmTests, type TextRange } from './logic/tests.js';
 

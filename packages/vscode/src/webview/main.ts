@@ -1,13 +1,13 @@
 import 'reflect-metadata';
 import 'sprotty/css/sprotty.css';
-import '@hsm-web/styles/app.css';
-import '@hsm-web/styles/diagram-styles.js';
-import '@hsm-web/styles/simulation.css';
+import '@devm-web/styles/app.css';
+import '@devm-web/styles/diagram-styles.js';
+import '@devm-web/styles/simulation.css';
 import './webview.css';
 import ElkApi from 'elkjs/lib/elk-api.js';
 import elkWorkerSource from 'elkjs/lib/elk-worker.min.js?raw';
-import { DiagramController } from '@hsm-web/diagram-controller.js';
-import { HsmModelService } from '@hsm-web/model-service.js';
+import { DiagramController } from '@devm-web/diagram-controller.js';
+import { HsmModelService } from '@devm-web/model-service.js';
 import { WebviewHost, type VsCodeApi } from './webview-host.js';
 
 declare function acquireVsCodeApi(): VsCodeApi;

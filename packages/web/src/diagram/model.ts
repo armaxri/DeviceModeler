@@ -3,7 +3,7 @@ import {
     type SModelElementImpl
 } from 'sprotty';
 import type { SModelElement, SModelRoot } from 'sprotty-protocol';
-import type { DiagramEdge, DiagramGraph, DiagramLabel, DiagramNode, DiagramNodeKind, DiagramSubmachine, Point } from 'hsm-language';
+import type { DiagramEdge, DiagramGraph, DiagramLabel, DiagramNode, DiagramNodeKind, DiagramSubmachine, Point } from 'devm-language';
 
 export type IssueSeverity = 'error' | 'warning';
 

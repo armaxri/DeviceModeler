@@ -7,8 +7,8 @@
     "noEmit": true,
     "declaration": false,
     "paths": {
-      "hsm-language": ["../language/src/index.ts"],
-      "@hsm-web/*": ["../web/src/*"]
+      "devm-language": ["../language/src/index.ts"],
+      "@devm-web/*": ["../web/src/*"]
     }
   },
   "include": ["src/webview/**/*.ts", "src/common/**/*.ts", "vite.webview.config.ts"]

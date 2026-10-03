@@ -10,7 +10,7 @@ import {
     type ParsedDmfModel, type Port, type PortEndpoint, type Structure, type StructureContext, type StructureLocation, type TextEdit, type Thread,
     captureIbdLayout, cloneIbdLayout, edgeFrameOrigin, ibdContentOrigin, ibdLayoutTextEdits, structureDiagramElements, withoutIbdLayoutAnnotations,
     type IbdGraph, type IbdManualLayout, type IbdManualLayoutResult, type NodeSide, type Point
-} from 'hsm-language';
+} from 'devm-language';
 import type { DiagramHost, StatusSeverity, TextRange } from './diagram-controller.js';
 import type { DragInfo } from './diagram/listeners.js';
 import { LayoutEditor, replacementEdit } from './layout-editing.js';

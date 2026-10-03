@@ -34,7 +34,7 @@ narrower than the boxes.
 From code (works in the browser as well):
 
 ```ts
-import { HsmModelLoader, layoutStateMachine, renderSvg } from 'hsm-language';
+import { HsmModelLoader, layoutStateMachine, renderSvg } from 'devm-language';
 
 const { model } = await new HsmModelLoader().load(text);
 const layout = await layoutStateMachine(model, { direction: 'DOWN' });

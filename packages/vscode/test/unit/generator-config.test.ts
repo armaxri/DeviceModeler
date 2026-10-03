@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { parseGeneratorConfig } from 'hsm-language';
+import { parseGeneratorConfig } from 'devm-language';
 import {
     generationFromConfig, generationFromSettings, isGeneratorConfigFile, matchingEntries, resolveGeneration, resolveOutputDirectory, type CppSettings
 } from '../../src/extension/logic/generator-config.js';
@@ -70,7 +70,7 @@ describe('resolveGeneration', () => {
     let dir: string;
 
     beforeEach(async () => {
-        dir = await fs.mkdtemp(path.join(os.tmpdir(), 'hsm-vscode-'));
+        dir = await fs.mkdtemp(path.join(os.tmpdir(), 'devm-vscode-'));
         await fs.mkdir(path.join(dir, 'models'));
         await fs.writeFile(path.join(dir, 'models/lamp.devm'), MODEL);
     });

@@ -4,7 +4,7 @@ import {
     referableName,
     type EventDeclaration, type HostValue, type OperationDeclaration, type RuntimeType, type State, type StateMachine, type TraceEntry, type Transition,
     type VariableDeclaration
-} from 'hsm-language';
+} from 'devm-language';
 import { defaultHostValue } from '../ui/value-editor.js';
 
 export { defaultHostValue };

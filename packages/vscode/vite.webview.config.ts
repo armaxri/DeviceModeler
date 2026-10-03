@@ -9,8 +9,8 @@ export default defineConfig({
     resolve: {
         alias: {
             // use the TypeScript sources of the language package and the web app directly
-            'hsm-language': path.resolve(__dirname, '../language/src/index.ts'),
-            '@hsm-web': path.resolve(__dirname, '../web/src')
+            'devm-language': path.resolve(__dirname, '../language/src/index.ts'),
+            '@devm-web': path.resolve(__dirname, '../web/src')
         }
     },
     esbuild: {

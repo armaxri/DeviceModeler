@@ -2,7 +2,7 @@ import { URI, UriUtils } from 'langium';
 import {
     createHsmServices, cppHeaderStore, DmfModelLoader, DmfWorkspace, HsmModelLoader, importKind, isModelPath, isStructureText,
     type CppHeaderSettings, type DmfServices, type ParsedDmfModel, type ParsedModel
-} from 'hsm-language';
+} from 'devm-language';
 
 export interface SyntaxProblem {
     message: string;
