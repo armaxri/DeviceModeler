@@ -721,6 +721,7 @@ export const DIAGRAM_CSS = `
 
 .ibd-port-arrow {
     fill: none;
+    pointer-events: none;
     stroke-width: 1.3px;
     stroke-linecap: round;
     stroke-linejoin: round;

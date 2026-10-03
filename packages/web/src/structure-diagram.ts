@@ -1665,7 +1665,7 @@ export class StructureDiagram {
             if (this.isOwn(owner) && !part) {
                 result.push(...this.portFields(node));
             } else {
-                result.push(h('dl', {}, h('dt', {}, 'Type'), h('dd', {}, portTypeLabel(node))));
+                result.push(h('dl', {}, h('dt', {}, node.kind === 'async' ? 'Payload' : 'Type'), h('dd', {}, portTypeLabel(node) || 'none (an event without data)')));
                 if (part) {
                     result.push(h('p', { class: 'hint' }, `The port belongs to the component type ${owner.name}${this.isOwn(owner) ? '' : ` (${documentOf(owner)?.uri.path.replace(/^.*\//, '')})`}.`),
                         this.isOwn(owner) ? h('div', {}, ...this.portFields(node)) : h('div', { class: 'actions' }, h('button', { onClick: () => this.goToType(part) }, `Edit in ${owner.name}`)));
@@ -1844,7 +1844,10 @@ export class StructureDiagram {
                     : h('div', { class: 'hint' }, info.endsKind === 'Targets' ? 'not used' : 'not connected')));
             if (info.endsKind !== 'Targets' && info.ends.length > 0) {
                 const first = info.ends[0];
-                result.push(h('div', { class: 'actions' }, h('button', { onClick: () => this.context.navigate(first), title: 'Show the port the data or the event comes from' }, 'Go to source')));
+                const shared = info.endsKind === 'Shared with';
+                result.push(h('div', { class: 'actions' }, h('button', {
+                    onClick: () => this.context.navigate(first), title: shared ? 'Show the port sharing the data' : 'Show the port the data or the event comes from'
+                }, shared ? 'Go to shared port' : 'Go to source')));
             }
         }
         if (info.labels.length > 1) {

@@ -35,7 +35,7 @@ const TITLES: Record<string, string> = {
     'system.devm': 'Garage door: system (threads, ports, connections)',
     'drive-unit.devm': 'Garage door: drive unit (subsystem)',
     'components.devm': 'Garage door: component types',
-    'types.devm': 'Garage door: data types and interfaces',
+    'types.devm': 'Garage door: data types',
     'light.devm': 'Garage door: courtesy light (data types, components and a subsystem in one file)',
     'controller.devm': 'Garage door: controller (behavior of DoorController)',
     'drive.devm': 'Garage door: motor control (behavior of MotorController)'
