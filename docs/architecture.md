@@ -22,7 +22,7 @@ packages/
     src/cpp-types.ts            C++ types and constants of headers in the HSM type system
     src/cpp-storage.ts          storage types (`std::uint8_t`, …): width preserving values
     src/cpp-header/             C++ header analyzer: lexer, preprocessor, parser, type index, constant evaluation
-    src/node/                   Node.js host of header imports (file system, `headers` of hsm.gen.json)
+    src/node/                   Node.js host of header imports (file system, `headers` of devm.gen.json)
     src/lsp/                    hover, go to definition and completion of C++ names (VS Code and web)
     src/model-utils.ts          AST helpers (containers, composite states, …)
     src/dmf-*.ts                structure language: module, imports, types, scoping / linking, validation,
@@ -42,11 +42,11 @@ packages/
     src/generator/common/       shared part of the C / C++ generators (analysis, states, transitions, expressions)
     src/generator/cpp/          C++ code generator and scenario test harness generator
     src/generator/c/            C code generator and scenario test harness generator
-    src/generator/config.ts     generator configuration (hsm.gen.json): format, validation, file names (no fs)
+    src/generator/config.ts     generator configuration (devm.gen.json): format, validation, file names (no fs)
     src/generator/generate-command.ts  `hsm generate`: loads the configuration, writes / checks the files (Node)
     src/importer/               itemis CREATE (.sct) importer with a small XML parser
     src/cli/                    command line interface (`hsm`): validate, generate, test, simulate, render, doc, import, …
-    schemas/                    JSON schema of hsm.gen.json
+    schemas/                    JSON schema of devm.gen.json
     test/                       unit tests; test/scenarios: conformance suite shared with the code generators
   web/          Vite app: Monaco editor + Sprotty diagram
     src/app.ts                  the web app: Monaco editor, toolbar, files; host of the diagram controller

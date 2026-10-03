@@ -9,7 +9,7 @@
 #
 # hsm_generate(TARGET <target>
 #              [MODELS <file.devm>...]       models (relative to the current source directory)
-#              [CONFIG <hsm.gen.json>]      generator configuration (models, per target options)
+#              [CONFIG <devm.gen.json>]      generator configuration (models, per target options)
 #              [GENERATOR cpp|c]            target language (default: cpp with MODELS, all targets of CONFIG)
 #              [OUTPUT_DIR <dir>]           default: ${CMAKE_CURRENT_BINARY_DIR}/hsm_generated/<target>
 #              [NAMESPACE <ns>]             cpp: namespace (a::b), "" for the global namespace

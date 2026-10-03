@@ -16,7 +16,7 @@ export const Icons = {
     initial: svg('<circle cx="12" cy="12" r="7" class="icon-fill-dark"/>'),
     final: svg('<circle cx="12" cy="12" r="8.5" class="icon-final"/><circle cx="12" cy="12" r="5" class="icon-fill-dark"/>'),
     transition: svg('<path d="M4 19 C 8 8, 14 6, 19 6" class="icon-edge"/><path d="M21 5.5 L 15.5 3 L 16.5 6.2 L 15.8 9.3 Z" class="icon-arrow"/>'),
-    // structure diagrams (.dmf)
+    // structure diagrams
     thread: svg('<rect x="2.5" y="4" width="19" height="16" rx="3.5" class="icon-thread"/><path d="M5.5 8.2 H13" class="icon-stroke"/>'),
     instance: svg('<rect x="3.5" y="5.5" width="17" height="13" rx="1" class="icon-state"/><line x1="3.5" y1="10.5" x2="20.5" y2="10.5" class="icon-stroke"/><path d="M7 8 H17" class="icon-stroke" stroke-width="1.2"/>'),
     providedSync: svg('<path d="M3 12 H9" class="icon-edge"/><rect x="9" y="7" width="10" height="10" class="icon-port-provided"/>'),

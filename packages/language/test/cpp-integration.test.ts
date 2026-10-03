@@ -201,13 +201,13 @@ describe('C++ header imports: language server features', () => {
 });
 
 describe('C++ header imports: Node.js hosts', () => {
-    test('headers are read from the file system with the settings of the nearest hsm.gen.json', async () => {
+    test('headers are read from the file system with the settings of the nearest devm.gen.json', async () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-headers-'));
         try {
             fs.mkdirSync(path.join(dir, 'models'));
             fs.mkdirSync(path.join(dir, 'include/app'), { recursive: true });
             fs.writeFileSync(path.join(dir, 'include/app/config.h'), '#if WIDE\nusing Count = long;\n#else\nusing Count = short;\n#endif\nnamespace app { constexpr int kLimit = LIMIT; }\n');
-            fs.writeFileSync(path.join(dir, 'hsm.gen.json'), JSON.stringify({
+            fs.writeFileSync(path.join(dir, 'devm.gen.json'), JSON.stringify({
                 models: ['models/*.devm'], cpp: {}, headers: { includePaths: ['include'], defines: { WIDE: '1', LIMIT: '7' }, dataModel: { longBits: 32 } }
             }));
             const model = path.join(dir, 'models/m.devm');
@@ -218,7 +218,7 @@ describe('C++ header imports: Node.js hosts', () => {
             const parsed = await loader.load(fs.readFileSync(model, 'utf-8'), pathToFileURL(model).toString());
             expect(errors(parsed)).toEqual([]);
             const storage = storageOfTypeReference((parsed.model.scopes[0].declarations[0] as VariableDeclaration).type);
-            // `long` has 32 bits (dataModel of hsm.gen.json), LIMIT of the command line overrides the configuration
+            // `long` has 32 bits (dataModel of devm.gen.json), LIMIT of the command line overrides the configuration
             expect(storage).toMatchObject({ kind: 'integer', bits: 32, signed: true });
             expect(warnings(parsed)).toEqual([]);
             const sim = new StatechartInterpreter(parsed.model);

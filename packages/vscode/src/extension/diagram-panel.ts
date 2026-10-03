@@ -641,7 +641,7 @@ const headerConfigs = new HeaderConfigFinder();
 
 /**
  * The settings of imported C/C++ headers for a model, like the language server uses them: the
- * `headers` block of the nearest `hsm.gen.json` and the settings `hsm.headers.*`.
+ * `headers` block of the nearest `devm.gen.json` and the settings `hsm.headers.*`.
  */
 export function headerSettingsFor(uri: vscode.Uri): CppHeaderSettings {
     if (uri.scheme !== 'file') {
@@ -651,7 +651,7 @@ export function headerSettingsFor(uri: vscode.Uri): CppHeaderSettings {
     return headerSettingsForModel(uri.fsPath, headerConfigs, vscodeHeaderSettings(uri));
 }
 
-/** The VS Code settings `hsm.headers.*` for a resource (without the settings of `hsm.gen.json`). */
+/** The VS Code settings `hsm.headers.*` for a resource (without the settings of `devm.gen.json`). */
 export function vscodeHeaderSettings(uri: vscode.Uri | undefined): CppHeaderSettings {
     const folder = uri ? vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const section = vscode.workspace.getConfiguration('hsm', uri).get<HeaderSettingsSection>('headers');

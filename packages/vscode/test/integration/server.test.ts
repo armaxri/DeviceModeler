@@ -192,7 +192,7 @@ beforeAll(async () => {
     await fs.writeFile(path.join(dir, 'models/parts/motor.devm'), MOTOR);
     await fs.writeFile(path.join(dir, 'models/gate.devm'), GATE);
     await fs.writeFile(path.join(dir, 'models/types.h'), TYPES_H);
-    // a header found through the include paths of the headers block of hsm.gen.json
+    // a header found through the include paths of the headers block of devm.gen.json
     await fs.mkdir(path.join(dir, 'include'));
     await fs.writeFile(path.join(dir, 'include/shared.h'), 'namespace shared { constexpr int kOffset = 1; }\n');
     // structure files: the system links the component types of another file (not opened by the tests first)
@@ -200,7 +200,7 @@ beforeAll(async () => {
     await fs.writeFile(path.join(dir, 'device/pump.devm'), PUMP);
     await fs.writeFile(path.join(dir, 'device/parts.devm'), PARTS);
     await fs.writeFile(path.join(dir, 'device/plant.devm'), PLANT);
-    await fs.writeFile(path.join(dir, 'hsm.gen.json'), JSON.stringify({ models: ['models/*.devm'], cpp: {}, headers: { includePaths: ['include'] } }));
+    await fs.writeFile(path.join(dir, 'devm.gen.json'), JSON.stringify({ models: ['models/*.devm'], cpp: {}, headers: { includePaths: ['include'] } }));
     await esbuild.build({ ...bundleOptions('server', { outdir: path.join(dir, 'out') }), logLevel: 'warning', sourcemap: false });
 
     server = spawn(process.execPath, [path.join(dir, 'out/server.cjs'), '--stdio'], { stdio: ['pipe', 'pipe', 'inherit'] });
@@ -356,7 +356,7 @@ describe('HSM language server', () => {
         expect(lost.some(d => d.severity === 1 && /nowhere\.devm/.test(d.message))).toBe(true);
     });
 
-    it('resolves C++ header imports (include paths of hsm.gen.json), hovers and navigates into headers and revalidates when a header changes', async () => {
+    it('resolves C++ header imports (include paths of devm.gen.json), hovers and navigates into headers and revalidates when a header changes', async () => {
         open('models/valve.devm', 'devm', VALVE);
         const valveUri = uriOf('models/valve.devm');
         expect((await diagnosticsFor(valveUri)).filter(d => d.severity === 1)).toEqual([]);

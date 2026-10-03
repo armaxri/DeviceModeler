@@ -33,18 +33,18 @@ generation, a test runner in the Test Explorer and the import of itemis CREATE m
   aliases and constants of headers. Headers are read from disk and re-read when they change (the models
   importing them are validated again); hover shows declarations with their documentation comments, go to
   definition opens the header, completion after `ns::` and `var.`. Include paths, defines and the data
-  model come from the `headers` block of the nearest `hsm.gen.json` and the settings
+  model come from the `headers` block of the nearest `devm.gen.json` and the settings
   `hsm.headers.includePaths`, `hsm.headers.defines` and `hsm.headers.dataModel` (also used by the diagram,
   its simulation – enum drop-downs and struct editors – and the Test Explorer).
 - **Themes**: with `hsm.diagram.theme` = `auto` (default) the diagram follows the color theme of VS
   Code: light themes use `hsm.diagram.lightTheme` (default *PlantUML classic*), dark and high contrast
   themes the dark diagram theme.
 - **HSM: Generate C++**: generates `sc_statemachine.h`, `<Class>.h` and `<Class>.cpp` exactly like
-  `hsm generate`. A generator configuration `hsm.gen.json` or `<name>.hsm.gen.json` in the directory of
+  `hsm generate`. A generator configuration `devm.gen.json` or `<name>.devm.gen.json` in the directory of
   the model or in a parent directory (up to the workspace folder) that lists the model and configures
   the `cpp` target is used with all its options (output directory, namespace, class name, standard,
   file extensions, license header, …). Otherwise the settings `hsm.cpp.outputDirectory`,
-  `hsm.cpp.namespace` and `hsm.cpp.standard` apply. `hsm.gen.json` files are validated against the
+  `hsm.cpp.namespace` and `hsm.cpp.standard` apply. `devm.gen.json` files are validated against the
   JSON schema (completion and hover in the JSON editor).
 - **Tests** in the Test Explorer: the `@Test` operations of all `.hsmtest` files, grouped by file and
   test class. Failed assertions are reported with their location and the execution trace. The run

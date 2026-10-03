@@ -216,7 +216,7 @@ constexpr Position kHome{10, 20};                          operation drive(p : m
   (`assert mode == motor::Mode::Fast`, `mock measure returns (motor::kHome)`, `p.x = 3` for a local struct).
 - **Headers** are searched relative to the importing model, then in the **include paths**; the headers they
   include (`#include "…"` / `<…>` found in the include paths) are analyzed too and their declarations are
-  visible. The settings of the analysis are configured in the `headers` block of `hsm.gen.json` (include
+  visible. The settings of the analysis are configured in the `headers` block of `devm.gen.json` (include
   paths relative to the file, predefined macros for `#if`, the data model of the target, e.g. 32-bit `long`
   on microcontrollers):
 
@@ -225,7 +225,7 @@ constexpr Position kHome{10, 20};                          operation drive(p : m
     "headers": { "includePaths": ["include"], "defines": { "USE_CAN": "1" }, "dataModel": { "longBits": 32, "pointerBits": 32 } } }
   ```
 
-  The nearest `hsm.gen.json` / `*.hsm.gen.json` in the directory of a model or a parent directory applies (CLI,
+  The nearest `devm.gen.json` / `*.devm.gen.json` in the directory of a model or a parent directory applies (CLI,
   language server); `hsm validate|simulate|test|generate|layout` add `-I <dir>`, `-D NAME[=VALUE]` and
   `--data-model lp64|llp64|ilp32`, VS Code the settings `hsm.headers.includePaths` / `hsm.headers.defines` /
   `hsm.headers.dataModel`, CMake `hsm_generate(… INCLUDE_DIRS … DEFINES …)`. A missing header is an error at

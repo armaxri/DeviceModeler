@@ -323,7 +323,7 @@ main {
     opacity: 1;
 }
 
-/* ---- structure diagrams (.dmf) ---- */
+/* ---- structure diagrams ---- */
 
 /* where the diagram is used: the structure path of a composite part, the instances using a state machine */
 #diagram-breadcrumb {

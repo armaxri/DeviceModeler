@@ -309,7 +309,7 @@
         "hsm.cpp.outputDirectory": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Output directory of **Device Modeler: Generate C++**, relative to the model file (absolute paths and `${workspaceFolder}` are supported). Empty: the directory of the model. A generator configuration (`hsm.gen.json` or `*.hsm.gen.json` in the directory of the model or a parent directory) that lists the model takes precedence over all `hsm.cpp.*` settings."
+          "markdownDescription": "Output directory of **Device Modeler: Generate C++**, relative to the model file (absolute paths and `${workspaceFolder}` are supported). Empty: the directory of the model. A generator configuration (`devm.gen.json` or `*.devm.gen.json` in the directory of the model or a parent directory) that lists the model takes precedence over all `hsm.cpp.*` settings."
         },
         "hsm.cpp.namespace": {
           "type": [
@@ -334,7 +334,7 @@
             "type": "string"
           },
           "default": [],
-          "markdownDescription": "Include directories for imported C/C++ headers (`import \"motor_types.h\"`), searched after the directory of the model; relative to the workspace folder (`${workspaceFolder}` is supported). They are added to the `includePaths` of the `headers` block of the nearest `hsm.gen.json`."
+          "markdownDescription": "Include directories for imported C/C++ headers (`import \"motor_types.h\"`), searched after the directory of the model; relative to the workspace folder (`${workspaceFolder}` is supported). They are added to the `includePaths` of the `headers` block of the nearest `devm.gen.json`."
         },
         "hsm.headers.defines": {
           "type": "object",
@@ -345,7 +345,7 @@
             ]
           },
           "default": {},
-          "markdownDescription": "Predefined macros for the analysis of imported C/C++ headers (like `-D`): `\"NAME\": \"value\"` (`\"\"` for a macro without value). They override the `defines` of `hsm.gen.json`."
+          "markdownDescription": "Predefined macros for the analysis of imported C/C++ headers (like `-D`): `\"NAME\": \"value\"` (`\"\"` for a macro without value). They override the `defines` of `devm.gen.json`."
         },
         "hsm.headers.dataModel": {
           "type": "string",
@@ -356,7 +356,7 @@
             "ilp32"
           ],
           "default": "",
-          "markdownDescription": "Data model of the target for imported C/C++ headers (widths of `long` and `size_t`): `lp64` (Linux / macOS 64-bit, the default), `llp64` (Windows 64-bit), `ilp32` (32-bit targets like ARM Cortex-M). Empty: the `dataModel` of `hsm.gen.json` or LP64."
+          "markdownDescription": "Data model of the target for imported C/C++ headers (widths of `long` and `size_t`): `lp64` (Linux / macOS 64-bit, the default), `llp64` (Windows 64-bit), `ilp32` (32-bit targets like ARM Cortex-M). Empty: the `dataModel` of `devm.gen.json` or LP64."
         },
         "hsm.trace.server": {
           "type": "string",
@@ -373,10 +373,10 @@
     "jsonValidation": [
       {
         "fileMatch": [
-          "hsm.gen.json",
-          "*.hsm.gen.json"
+          "devm.gen.json",
+          "*.devm.gen.json"
         ],
-        "url": "./schemas/hsm-gen.schema.json"
+        "url": "./schemas/devm-gen.schema.json"
       }
     ]
   },

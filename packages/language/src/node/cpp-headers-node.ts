@@ -8,13 +8,13 @@ import { parseHeaderConfig, type HeaderConfig } from '../generator/config.js';
 /**
  * Node.js hosts of C/C++ header imports (the CLI and the language server of the VS Code extension):
  * headers are read synchronously from the file system when a model is linked, the settings come
- * from the `headers` block of the nearest generator configuration (`hsm.gen.json` or
- * `<name>.hsm.gen.json` in the directory of the model or a parent directory) and from the command
+ * from the `headers` block of the nearest generator configuration (`devm.gen.json` or
+ * `<name>.devm.gen.json` in the directory of the model or a parent directory) and from the command
  * line (`-I`, `-D`, `--data-model`) or the VS Code settings (`hsm.headers.*`). Not exported from the
  * package index (the web app bundles the index).
  */
 
-const CONFIG_FILE = /^(hsm\.gen\.json|.+\.hsm\.gen\.json)$/;
+const CONFIG_FILE = /^(devm\.gen\.json|.+\.devm\.gen\.json)$/;
 
 /** The settings of a `headers` block: include paths resolved relative to the directory of the configuration. */
 export function headerSettingsFromConfig(headers: HeaderConfig, configDir: string): CppHeaderSettings {
@@ -77,7 +77,7 @@ export class HeaderConfigFinder {
 export interface NodeHeaderOptions {
     /** Global settings (CLI `-I` / `-D` / `--data-model`, VS Code settings); include paths absolute or as file URIs. */
     settings?: CppHeaderSettings;
-    /** Whether the `headers` block of the nearest `hsm.gen.json` applies (default true). */
+    /** Whether the `headers` block of the nearest `devm.gen.json` applies (default true). */
     configs?: boolean;
     /** The directory at which the search for configuration files stops. */
     root?: string;

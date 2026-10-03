@@ -1,17 +1,17 @@
 # Build integration (CMake)
 
-## Generator configuration (`hsm.gen.json`)
+## Generator configuration (`devm.gen.json`)
 
 Like the `.sgen` files of itemis CREATE, a generator configuration says which models are generated for
-which targets with which options. `hsm generate` without arguments reads `hsm.gen.json` in the current
-directory (`--config <file>` for another file; `<name>.hsm.gen.json` is the recommended name for further
+which targets with which options. `hsm generate` without arguments reads `devm.gen.json` in the current
+directory (`--config <file>` for another file; `<name>.devm.gen.json` is the recommended name for further
 configurations). Relative paths are relative to the configuration file. The JSON schema
-[`packages/language/schemas/hsm-gen.schema.json`](../packages/language/schemas/hsm-gen.schema.json) gives
+[`packages/language/schemas/devm-gen.schema.json`](../packages/language/schemas/devm-gen.schema.json) gives
 completion and validation in editors (`"$schema"`); unknown properties are errors.
 
 ```json
 {
-    "$schema": "node_modules/hsm-language/schemas/hsm-gen.schema.json",
+    "$schema": "node_modules/hsm-language/schemas/devm-gen.schema.json",
     "models": [
         "models/**/*.hsm",
         { "path": "models/door.hsm", "cpp": { "namespace": "legacy", "className": "DoorController" } }
@@ -48,9 +48,9 @@ file with different contents (e.g. the same class name) is an error. Nothing is 
 errors.
 
 ```bash
-hsm generate                       # all targets of ./hsm.gen.json ("Generated …" / "Unchanged …")
+hsm generate                       # all targets of ./devm.gen.json ("Generated …" / "Unchanged …")
 hsm generate cpp                   # only the cpp target
-hsm generate --config sm.hsm.gen.json -o build/gen   # another configuration, all outputs into build/gen
+hsm generate --config sm.devm.gen.json -o build/gen   # another configuration, all outputs into build/gen
 hsm generate --check               # writes nothing, exit 1 if a file is missing or out of date (for CI)
 hsm generate --list-outputs        # writes nothing, prints the absolute paths of the generated files
 hsm generate --list-inputs         # prints the configuration, the models, imported files (.hsm, C/C++ headers) and license header files
@@ -84,7 +84,7 @@ include(HsmGenerate)                                  # or: find_package(Hsm CON
 
 add_library(statemachines STATIC)
 hsm_generate(TARGET statemachines
-    MODELS models/traffic-light.hsm models/door.hsm   # and / or CONFIG hsm.gen.json
+    MODELS models/traffic-light.hsm models/door.hsm   # and / or CONFIG devm.gen.json
     NAMESPACE app                                    # cpp: namespace ("" for the global namespace)
     STD 17)                                          # also required from the target (cxx_std_17)
 
@@ -122,7 +122,7 @@ a CTest test `<name>.<file stem>` (label `hsm`) per test file that runs `hsm tes
 ## Example
 
 [`examples/cmake`](../examples/cmake) builds the traffic light (generated with `MODELS`) and the CD player
-(generated with the configuration [`examples/cmake/hsm.gen.json`](../examples/cmake/hsm.gen.json): `.hpp` /
+(generated with the configuration [`examples/cmake/devm.gen.json`](../examples/cmake/devm.gen.json): `.hpp` /
 `.cc` files with a license header) as static libraries, an application with a `std::chrono` timer service
 and operation callbacks ([`main.cpp`](../examples/cmake/main.cpp)), a C++ test driving both classes with a
 virtual clock and the `.hsmtest` unit tests of both models. The conveyor of

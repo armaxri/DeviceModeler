@@ -3,15 +3,15 @@ import { generateC } from './c/index.js';
 import { generateCpp, type CppGeneratorOptions } from './cpp/index.js';
 
 /**
- * Generator configuration files (`hsm.gen.json`, like the `.sgen` files of itemis CREATE): which
+ * Generator configuration files (`devm.gen.json`, like the `.sgen` files of itemis CREATE): which
  * models are generated for which targets with which options. This module contains the format, its
  * validation and the file name / include post-processing; it has no file system access (it is also
  * used in the browser). Loading the file, expanding the globs and writing the files is done by
- * `generate-command.ts` (Node only). The JSON schema is `schemas/hsm-gen.schema.json`.
+ * `generate-command.ts` (Node only). The JSON schema is `schemas/devm-gen.schema.json`.
  *
  * ```json
  * {
- *     "$schema": "../node_modules/hsm-language/schemas/hsm-gen.schema.json",
+ *     "$schema": "../node_modules/hsm-language/schemas/devm-gen.schema.json",
  *     "models": ["models/*.devm", { "path": "legacy/door.devm", "cpp": { "namespace": "legacy" } }],
  *     "cpp": { "outDir": "src-gen", "namespace": "app::sm", "std": 17, "headerExtension": ".hpp" },
  *     "headers": { "includePaths": ["include"], "defines": { "USE_CAN": "1" }, "dataModel": { "longBits": 32, "pointerBits": 32 } },
@@ -21,11 +21,11 @@ import { generateCpp, type CppGeneratorOptions } from './cpp/index.js';
  *
  * The `headers` block configures the analysis of imported C/C++ headers (`import "motor_types.h"`,
  * docs/cpp-integration.md) for all hosts: `devm` (CLI), the language server of the VS Code extension
- * (the nearest `hsm.gen.json` / `*.hsm.gen.json` above a model) and the generator.
+ * (the nearest `devm.gen.json` / `*.devm.gen.json` above a model) and the generator.
  */
 
-/** Default file name of a generator configuration (`<name>.hsm.gen.json` is also recognized by the schema). */
-export const GENERATOR_CONFIG_FILE = 'hsm.gen.json';
+/** Default file name of a generator configuration (`<name>.devm.gen.json` is also recognized by the schema). */
+export const GENERATOR_CONFIG_FILE = 'devm.gen.json';
 
 export type GeneratorTarget = 'cpp' | 'c';
 export const GENERATOR_TARGETS: readonly GeneratorTarget[] = ['cpp', 'c'];

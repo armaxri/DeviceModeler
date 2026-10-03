@@ -27,7 +27,7 @@ export async function parseModel(document: vscode.TextDocument): Promise<ParsedM
     // imported state machines are read from the open documents or the file system
     if (!loader) {
         loader = new HsmModelLoader(undefined, { readFile: uri => readText(uri.toString()) });
-        // imported C/C++ headers: read from disk with the settings of hsm.gen.json
+        // imported C/C++ headers: read from disk with the settings of devm.gen.json
         installNodeHeaderSupport(loader.services.shared);
     }
     cppHeaderStore(loader.services.shared).updateSettings(vscodeHeaderSettings(document.uri));
@@ -36,7 +36,7 @@ export async function parseModel(document: vscode.TextDocument): Promise<ParsedM
 
 /**
  * The diagram of a structure file as SVG document (`renderIbdSvg` of the language package, like
- * `hsm render`): the internal block diagram of `element` (a subsystem, system or component type; default:
+ * `devm render`): the internal block diagram of `element` (a subsystem, system or component type; default:
  * the first system, else the first subsystem, else the component types, else the data types).
  */
 export async function renderStructureSvg(document: vscode.TextDocument, element?: string): Promise<string> {
@@ -256,7 +256,7 @@ function cppSettings(uri: vscode.Uri): CppSettings {
 
 /**
  * `Device Modeler: Generate C++`: generates `sc_statemachine.h`, `<Class>.h` and `<Class>.cpp` with the
- * generator of the language package (`runGeneration`, as `hsm generate`), configured by a
+ * generator of the language package (`runGeneration`, as `devm generate`), configured by a
  * generator configuration file or the settings. Unsaved changes of the model are saved first.
  */
 export async function generateCppFor(uri: vscode.Uri, output: vscode.LogOutputChannel): Promise<vscode.Uri[]> {

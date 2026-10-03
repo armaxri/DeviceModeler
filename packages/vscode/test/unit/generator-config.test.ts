@@ -18,11 +18,11 @@ function config(value: unknown) {
 }
 
 describe('generator configuration files', () => {
-    it('recognizes hsm.gen.json and <name>.hsm.gen.json', () => {
-        expect(isGeneratorConfigFile('hsm.gen.json')).toBe(true);
-        expect(isGeneratorConfigFile('firmware.hsm.gen.json')).toBe(true);
+    it('recognizes devm.gen.json and <name>.devm.gen.json', () => {
+        expect(isGeneratorConfigFile('devm.gen.json')).toBe(true);
+        expect(isGeneratorConfigFile('firmware.devm.gen.json')).toBe(true);
         expect(isGeneratorConfigFile('package.json')).toBe(false);
-        expect(isGeneratorConfigFile('hsm.gen.json.bak')).toBe(false);
+        expect(isGeneratorConfigFile('devm.gen.json.bak')).toBe(false);
     });
 
     it('matches models by path and glob relative to the configuration', () => {
@@ -37,7 +37,7 @@ describe('generator configuration files', () => {
 
     it('generates only the model with the merged options of its entries', () => {
         const c = config({ models: ['*.devm', { path: 'door.devm', cpp: { namespace: 'legacy' } }], cpp: { outDir: 'gen', std: 11 } });
-        const resolved = generationFromConfig(c, path.resolve('/work/hsm.gen.json'), '/work/door.devm')!;
+        const resolved = generationFromConfig(c, path.resolve('/work/devm.gen.json'), '/work/door.devm')!;
         expect(resolved.baseDir).toBe(path.resolve('/work'));
         expect(resolved.config.models).toEqual([{ path: path.resolve('/work/door.devm'), cpp: undefined }, { path: path.resolve('/work/door.devm'), cpp: { namespace: 'legacy' } }]);
         expect(resolved.config.cpp).toEqual({ outDir: 'gen', std: 11 });
@@ -45,8 +45,8 @@ describe('generator configuration files', () => {
     });
 
     it('ignores configurations without the model or without the C++ target', () => {
-        expect(generationFromConfig(config({ models: ['a.devm'], cpp: {} }), '/work/hsm.gen.json', '/work/b.devm')).toBeUndefined();
-        expect(generationFromConfig(config({ models: ['b.devm'], c: {} }), '/work/hsm.gen.json', '/work/b.devm')).toBeUndefined();
+        expect(generationFromConfig(config({ models: ['a.devm'], cpp: {} }), '/work/devm.gen.json', '/work/b.devm')).toBeUndefined();
+        expect(generationFromConfig(config({ models: ['b.devm'], c: {} }), '/work/devm.gen.json', '/work/b.devm')).toBeUndefined();
     });
 });
 
@@ -85,13 +85,13 @@ describe('resolveGeneration', () => {
         expect(resolved.config.cpp?.outDir).toBe(path.join(dir, 'models'));
     });
 
-    it('uses a configuration file in a parent directory and generates like hsm generate', async () => {
-        await fs.writeFile(path.join(dir, 'hsm.gen.json'), JSON.stringify({
+    it('uses a configuration file in a parent directory and generates like devm generate', async () => {
+        await fs.writeFile(path.join(dir, 'devm.gen.json'), JSON.stringify({
             models: ['models/*.devm'], cpp: { outDir: 'src-gen', namespace: 'app', headerExtension: '.hpp', licenseHeader: 'Copyright ACME' }
         }));
         const model = path.join(dir, 'models/lamp.devm');
         const resolved = await resolveGeneration(model, settings, dir);
-        expect(resolved.configFile).toBe(path.join(dir, 'hsm.gen.json'));
+        expect(resolved.configFile).toBe(path.join(dir, 'devm.gen.json'));
         const result = await runGeneration({ config: resolved.config, baseDir: resolved.baseDir, targets: ['cpp'], mode: 'write' });
         expect(result.diagnostics.filter(d => d.severity === 'error')).toEqual([]);
         expect(result.outputs.map(o => path.relative(dir, o.file)).sort()).toEqual(['src-gen/Lamp.cpp', 'src-gen/Lamp.hpp', 'src-gen/sc_statemachine.hpp']);
@@ -102,14 +102,14 @@ describe('resolveGeneration', () => {
     });
 
     it('skips configuration files with errors and reports them', async () => {
-        await fs.writeFile(path.join(dir, 'models/hsm.gen.json'), '{ "models": ["*.devm"], "cpp": { "std": 14 } }');
+        await fs.writeFile(path.join(dir, 'models/devm.gen.json'), '{ "models": ["*.devm"], "cpp": { "std": 14 } }');
         const resolved = await resolveGeneration(path.join(dir, 'models/lamp.devm'), settings, dir);
         expect(resolved.configFile).toBeUndefined();
-        expect(resolved.diagnostics.some(d => d.severity === 'error' && d.file === path.join(dir, 'models/hsm.gen.json'))).toBe(true);
+        expect(resolved.diagnostics.some(d => d.severity === 'error' && d.file === path.join(dir, 'models/devm.gen.json'))).toBe(true);
     });
 
     it('does not search above the workspace folder', async () => {
-        await fs.writeFile(path.join(dir, 'hsm.gen.json'), JSON.stringify({ models: ['models/*.devm'], cpp: {} }));
+        await fs.writeFile(path.join(dir, 'devm.gen.json'), JSON.stringify({ models: ['models/*.devm'], cpp: {} }));
         const resolved = await resolveGeneration(path.join(dir, 'models/lamp.devm'), settings, path.join(dir, 'models'));
         expect(resolved.configFile).toBeUndefined();
     });

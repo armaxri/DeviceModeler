@@ -41,7 +41,7 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
   widths are kept as storage types (wrap-around on assignment, range warnings), enums compare with `==` / `!=`,
   structs are assigned as a whole; interpreter, unit tests, scenarios (14 `s10-cpp-*`), C++ generator
   (`#include`s the headers, uses the types by name), hover / definition / completion, include paths, defines
-  and data model in the `headers` block of `hsm.gen.json`, `-I` / `-D` / `--data-model`, VS Code settings,
+  and data model in the `headers` block of `devm.gen.json`, `-I` / `-D` / `--data-model`, VS Code settings,
   headers re-read on change; web app: headers in the virtual file list, editors for enum and struct values
   in the simulation. Example [`examples/cpp-types`](examples/cpp-types) (also built by the CMake example)
   - 📋 still missing: struct literals (`motor::Position{1, 2}`), `==` of structs with a user-defined
@@ -138,7 +138,7 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
   operations of the state machine cannot be called from tests
 - 💭 Further generator targets only on demand (currently none planned); they can build on the shared
   generator core (`src/generator/common`)
-- ✅ Generator configuration (`hsm.gen.json`, like itemis `.sgen` files) with a JSON schema: models (globs),
+- ✅ Generator configuration (`devm.gen.json`, like itemis `.sgen` files) with a JSON schema: models (globs),
   per target and per model options (output directory, namespace, class name, standard, prefix, file
   extensions, license header), only changed files are written; `hsm generate` (no arguments),
   `--check` for CI, `--list-outputs` / `--list-inputs` for build systems
@@ -153,7 +153,7 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
 - ✅ VS Code extension (`packages/vscode`): Langium language server for `.hsm` / `.hsmtest` (workspace
   index, hover with doc comments, rename, formatting, semantic highlighting, …), the diagram editor of
   the web app as webview with selection sync and diagram edits applied as `WorkspaceEdit`s, theme
-  following VS Code, Generate C++ (`hsm.gen.json` or settings), tests and model coverage in the Test
+  following VS Code, Generate C++ (`devm.gen.json` or settings), tests and model coverage in the Test
   Explorer, `.sct` import, SVG / PNG export, `.vsix` packaging
   - 🧪 structure files (`.dmf`) of the Device Modeling Framework on the branch `claude/device-modeling`, see
     [Phase 7](#phase-7--device-modeling-framework-)

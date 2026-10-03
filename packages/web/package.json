@@ -2,7 +2,7 @@
   "name": "hsm-web",
   "version": "0.1.0",
   "private": true,
-  "description": "Browser based graphical + textual editor for hierarchical state machines",
+  "description": "Device Modeler: browser based graphical + textual editor for state machines and product structures",
   "type": "module",
   "scripts": {
     "dev": "vite",

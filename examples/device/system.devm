@@ -1,5 +1,5 @@
 // A garage door (examples/device): the structure of the product, modeled with the structure language
-// of the Device Modeling Framework (docs/structure-language.md). The controller and the motor control
+// of the Device Modeler (docs/structure-language.md). The controller and the motor control
 // are implemented by state machines (controller.devm, drive.devm).
 import "types.devm"
 import "components.devm"

@@ -7,7 +7,7 @@ import type { IbdConnectorElement, IbdNodeElement, IbdPortElement } from './ibd-
 import type { Issue } from './model.js';
 
 /*
- * Views of the internal block diagram of a structure (`.dmf`). They render the same SVG structure and
+ * Views of the internal block diagram of a structure. They render the same SVG structure and
  * CSS classes as `renderIbdSvg` (packages/language/src/render/ibd-svg.ts), see the notation in
  * docs/structure-language.md#diagram.
  */

@@ -21,7 +21,7 @@ import type { CppDataModel, CppDiagnostic, CppHeader } from './cpp-header/model.
  * `CppTypeIndex` for the machine (cached by the versions of the headers and the settings).
  */
 
-/** Settings of the header analysis (the `headers` block of `hsm.gen.json`, CLI `-I` / `-D`, VS Code settings). */
+/** Settings of the header analysis (the `headers` block of `devm.gen.json`, CLI `-I` / `-D`, VS Code settings). */
 export interface CppHeaderSettings {
     /**
      * Include directories, searched (in order) after the directory of the importing file for
@@ -73,7 +73,7 @@ export class CppHeaderStore {
     /** Settings used for all documents (unless {@link settingsProvider} gives settings for a document). */
     settings: CppHeaderSettings = {};
 
-    /** Settings for a document, e.g. from the `hsm.gen.json` next to it (merged over {@link settings}). */
+    /** Settings for a document, e.g. from the `devm.gen.json` next to it (merged over {@link settings}). */
     settingsProvider?: (documentUri: URI) => CppHeaderSettings | undefined;
 
     /** Sets the text of a header (replaces a text read before). */
@@ -144,7 +144,7 @@ export class CppHeaderStore {
 
     /**
      * The effective settings for a document: the settings of its configuration ({@link settingsProvider},
-     * e.g. the `headers` block of the nearest `hsm.gen.json`) combined with the global {@link settings}
+     * e.g. the `headers` block of the nearest `devm.gen.json`) combined with the global {@link settings}
      * (CLI `-I` / `-D`, VS Code settings): the include paths of the configuration come first, defines
      * and the data model of the global settings override those of the configuration.
      */

@@ -174,7 +174,7 @@ export function createHsmLanguageServerServices(context: DefaultSharedModuleCont
 /**
  * Imported C/C++ headers in the language server: headers are read from the file system (changed files
  * are re-read: file watcher events), the settings come from the `headers` block of the nearest
- * `hsm.gen.json` and from the VS Code settings `hsm.headers.*` (include paths relative to the first
+ * `devm.gen.json` and from the VS Code settings `hsm.headers.*` (include paths relative to the first
  * workspace folder, `${workspaceFolder}`). Documents importing a changed header are validated again.
  */
 export function installHeaderSupport(shared: LangiumSharedServices): HeaderConfigFinder {
@@ -206,7 +206,7 @@ export function installHeaderSupport(shared: LangiumSharedServices): HeaderConfi
         if (headers.length > 0) {
             store.invalidate(headers);
         }
-        if (uris.some(uri => /(^|\/)([^/]+\.)?hsm\.gen\.json$/.test(uri.path))) {
+        if (uris.some(uri => /(^|\/)([^/]+\.)?devm\.gen\.json$/.test(uri.path))) {
             finder.clear();
             store.updateSettings(store.settings);
         }

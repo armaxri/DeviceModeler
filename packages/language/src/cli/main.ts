@@ -31,7 +31,7 @@ export interface HeaderCommandOptions {
 /** Adds `-I`, `-D` and `--data-model` (settings of imported C/C++ headers, see docs/cpp-integration.md). */
 export function headerOptions(command: Command): Command {
     return command
-        .option('-I, --include <dirs...>', 'include directories for imported C/C++ headers (after the headers block of hsm.gen.json)')
+        .option('-I, --include <dirs...>', 'include directories for imported C/C++ headers (after the headers block of devm.gen.json)')
         .option('-D, --define <macros...>', 'predefined macros for imported C/C++ headers: NAME or NAME=VALUE')
         .option('--data-model <model>', 'data model of the target for C/C++ headers: lp64 (default), llp64 or ilp32 (32-bit long and pointers)');
 }

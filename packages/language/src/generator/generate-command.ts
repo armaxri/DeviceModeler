@@ -16,7 +16,7 @@ import {
 } from './config.js';
 
 /*
- * Node side of the generator configuration (`devm generate`): loading `hsm.gen.json`, expanding the
+ * Node side of the generator configuration (`devm generate`): loading `devm.gen.json`, expanding the
  * model globs, running the generators and writing (or checking) the files. Not exported from
  * `index.ts` because the web bundle imports it.
  */
@@ -323,7 +323,7 @@ export interface GenerateCommandOptions {
 
 /**
  * `devm generate [target] [files...]`: without files, the models and options come from the
- * generator configuration (`--config`, default `hsm.gen.json` in the current directory); with files,
+ * generator configuration (`--config`, default `devm.gen.json` in the current directory); with files,
  * the given models are generated for the target (with the options of `--config` if given).
  * Returns the exit code.
  */

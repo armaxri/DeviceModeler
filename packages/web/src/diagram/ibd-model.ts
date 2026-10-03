@@ -7,7 +7,7 @@ import type { DiagramLabel, IbdBehavior, IbdComposite, IbdEdge, IbdGraph, IbdMem
 import type { Issue } from './model.js';
 
 /*
- * The Sprotty model of the internal block diagram of a structure (`.dmf`, see ibd-model.ts of the
+ * The Sprotty model of the internal block diagram of a structure (see ibd-model.ts of the
  * language package): frame, thread and instance nodes with ports, connectors, type boxes (structs,
  * interfaces of the file).
  */

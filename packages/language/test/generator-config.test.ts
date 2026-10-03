@@ -12,7 +12,7 @@ describe('parseGeneratorConfig', () => {
 
     test('accepts a complete configuration', () => {
         const { config, diagnostics } = parseGeneratorConfig(JSON.stringify({
-            $schema: './hsm-gen.schema.json',
+            $schema: './devm-gen.schema.json',
             models: ['models/*.devm', { path: 'door.devm', cpp: { className: 'MyDoor' } }],
             cpp: { outDir: 'gen', namespace: 'app::sm', std: 11, headerExtension: '.hpp', sourceExtension: '.cc', licenseHeader: ['a', 'b'] },
             c: { outDir: 'gen-c', stringCapacity: 32 },
@@ -51,7 +51,7 @@ describe('parseGeneratorConfig', () => {
     });
 
     test('the JSON schema declares the same properties as the validator', () => {
-        const schema = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../schemas/hsm-gen.schema.json'), 'utf-8'));
+        const schema = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../schemas/devm-gen.schema.json'), 'utf-8'));
         expect(Object.keys(schema.properties).sort()).toEqual([...CONFIG_PROPERTIES].sort());
         for (const target of ['cpp', 'c'] as const) {
             expect(Object.keys(schema.definitions[target].properties).sort()).toEqual(Object.keys(TARGET_PROPERTIES[target]).sort());
@@ -128,7 +128,7 @@ describe('runGeneration / devm generate', () => {
         vi.restoreAllMocks();
     });
 
-    const writeConfig = (config: unknown) => fs.writeFileSync(path.join(dir, 'hsm.gen.json'), JSON.stringify(config));
+    const writeConfig = (config: unknown) => fs.writeFileSync(path.join(dir, 'devm.gen.json'), JSON.stringify(config));
 
     test('expands globs', async () => {
         expect(await expandModelPath(dir, 'models/**/*.devm')).toEqual([path.join(dir, 'models/door.devm'), path.join(dir, 'models/sub/keyboard.devm')]);
@@ -138,7 +138,7 @@ describe('runGeneration / devm generate', () => {
 
     test('writes only changed files and checks them', async () => {
         writeConfig({ models: ['models/**/*.devm'], cpp: { outDir: 'gen', namespace: 'app', licenseHeaderFile: 'LICENSE.txt' }, c: { outDir: 'gen-c' } });
-        const loaded = await loadGeneratorConfig(path.join(dir, 'hsm.gen.json'));
+        const loaded = await loadGeneratorConfig(path.join(dir, 'devm.gen.json'));
         expect(loaded.diagnostics).toEqual([]);
         const request = { config: loaded.config!, baseDir: dir };
         const first = await runGeneration({ ...request, mode: 'write' });
@@ -171,7 +171,7 @@ describe('runGeneration / devm generate', () => {
     test('reports conflicts, unmatched globs and model errors without writing', async () => {
         fs.writeFileSync(path.join(dir, 'models/broken.devm'), 'statemachine Broken { [*] -> Missing }');
         writeConfig({ models: ['models/*.devm', 'nothing/*.devm', { path: 'models/sub/keyboard.devm', cpp: { className: 'Door' } }], cpp: { outDir: 'gen' } });
-        const loaded = await loadGeneratorConfig(path.join(dir, 'hsm.gen.json'));
+        const loaded = await loadGeneratorConfig(path.join(dir, 'devm.gen.json'));
         const result = await runGeneration({ config: loaded.config!, baseDir: dir, mode: 'write' });
         const messages = result.diagnostics.map(d => `${d.file ? path.relative(dir, d.file) : ''}: ${d.message}`);
         expect(messages).toContainEqual(`: 'nothing/*.devm' matches no model`);
@@ -183,11 +183,11 @@ describe('runGeneration / devm generate', () => {
     test('structure files: skipped when matched by a glob, an error when named', async () => {
         fs.writeFileSync(path.join(dir, 'models/types.devm'), 'struct Position { x : real }\n');
         writeConfig({ models: ['models/*.devm'], cpp: { outDir: 'gen' } });
-        const globbed = await runGeneration({ config: (await loadGeneratorConfig(path.join(dir, 'hsm.gen.json'))).config!, baseDir: dir, mode: 'check' });
+        const globbed = await runGeneration({ config: (await loadGeneratorConfig(path.join(dir, 'devm.gen.json'))).config!, baseDir: dir, mode: 'check' });
         expect(globbed.diagnostics).toEqual([]);
         expect(globbed.outputs.map(o => path.basename(o.file))).toEqual(['sc_statemachine.h', 'Door.h', 'Door.cpp']);
         writeConfig({ models: ['models/types.devm'], cpp: { outDir: 'gen' } });
-        const named = await runGeneration({ config: (await loadGeneratorConfig(path.join(dir, 'hsm.gen.json'))).config!, baseDir: dir, mode: 'check' });
+        const named = await runGeneration({ config: (await loadGeneratorConfig(path.join(dir, 'devm.gen.json'))).config!, baseDir: dir, mode: 'check' });
         expect(named.diagnostics.map(d => `${path.relative(dir, d.file!)}: ${d.message}`)).toEqual(['models/types.devm: a structure file, not a state machine: nothing to generate']);
     });
 
@@ -196,7 +196,7 @@ describe('runGeneration / devm generate', () => {
         const log: string[] = [];
         vi.spyOn(console, 'log').mockImplementation((line: string) => log.push(line));
         vi.spyOn(console, 'error').mockImplementation((line: string) => log.push(`E ${line}`));
-        const config = path.join(dir, 'hsm.gen.json');
+        const config = path.join(dir, 'devm.gen.json');
         expect(await runGenerateCommand(undefined, [], { config, listOutputs: true })).toBe(0);
         expect(log.splice(0)).toEqual(['sc_statemachine.hpp', 'Door.hpp', 'Door.cpp'].map(f => path.join(dir, 'gen', f).replace(/\\/g, '/')));
         expect(await runGenerateCommand(undefined, [], { config, check: true })).toBe(1);

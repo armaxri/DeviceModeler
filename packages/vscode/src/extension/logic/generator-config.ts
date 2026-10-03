@@ -5,14 +5,14 @@ import { globToRegExp, isGlob, type CppTargetConfig, type GeneratorConfig, type 
 import { loadGeneratorConfig, type GenerateDiagnostic } from '../../../../language/src/generator/generate-command.js';
 
 /**
- * Resolution of the generator configuration of `HSM: Generate C++` for a model.
+ * Resolution of the generator configuration of `Device Modeler: Generate C++` for a model.
  *
- * A generator configuration file (`hsm.gen.json` or `<name>.hsm.gen.json`, the format of
- * `hsm generate`, see `packages/language/src/generator/config.ts`) in the directory of the model or
+ * A generator configuration file (`devm.gen.json` or `<name>.devm.gen.json`, the format of
+ * `devm generate`, see `packages/language/src/generator/config.ts`) in the directory of the model or
  * in a parent directory up to the workspace folder takes precedence if it lists the model (directly
  * or via a glob) and configures the `cpp` target. Otherwise the VS Code settings `hsm.cpp.*` are
  * used. The result is a configuration for `runGeneration` of the language package that contains only
- * this model, so the files are generated exactly as `hsm generate` would generate them.
+ * this model, so the files are generated exactly as `devm generate` would generate them.
  */
 
 /** The `hsm.cpp.*` settings. */
@@ -35,7 +35,7 @@ export interface ResolvedGeneration {
     diagnostics: GenerateDiagnostic[];
 }
 
-const CONFIG_FILE_PATTERN = /^(hsm\.gen\.json|.+\.hsm\.gen\.json)$/;
+const CONFIG_FILE_PATTERN = /^(devm\.gen\.json|.+\.devm\.gen\.json)$/;
 
 export function isGeneratorConfigFile(fileName: string): boolean {
     return CONFIG_FILE_PATTERN.test(fileName);
@@ -106,7 +106,7 @@ export function resolveOutputDirectory(modelPath: string, setting: string, works
 }
 
 /**
- * Finds the configuration for the model: searches `hsm.gen.json` / `*.hsm.gen.json` from the
+ * Finds the configuration for the model: searches `devm.gen.json` / `*.devm.gen.json` from the
  * directory of the model up to the workspace folder (only the model directory without workspace
  * folder); the first file that configures C++ for the model wins. Falls back to the settings.
  * Configuration files with errors are skipped and reported in `diagnostics`.

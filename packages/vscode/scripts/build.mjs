@@ -14,9 +14,9 @@ await fs.mkdir(path.join(root, 'syntaxes'), { recursive: true });
 for (const grammar of ['devm.tmLanguage.json', 'devmtest.tmLanguage.json']) {
     await fs.copyFile(path.join(root, '../language/syntaxes', grammar), path.join(root, 'syntaxes', grammar));
 }
-// the JSON schema of generator configurations (hsm.gen.json, `jsonValidation`) and the license
+// the JSON schema of generator configurations (devm.gen.json, `jsonValidation`) and the license
 await fs.mkdir(path.join(root, 'schemas'), { recursive: true });
-await fs.copyFile(path.join(root, '../language/schemas/hsm-gen.schema.json'), path.join(root, 'schemas/hsm-gen.schema.json'));
+await fs.copyFile(path.join(root, '../language/schemas/devm-gen.schema.json'), path.join(root, 'schemas/devm-gen.schema.json'));
 await fs.copyFile(path.join(root, '../../LICENSE'), path.join(root, 'LICENSE'));
 
 const builds = [bundleOptions('extension', { minify: !watch }), bundleOptions('server', { minify: !watch })];

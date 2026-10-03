@@ -87,7 +87,7 @@ export interface HsmTestRunOptions {
 export async function runHsmTests(models: readonly WorkspaceFile[], testFiles: readonly WorkspaceFile[], options: HsmTestRunOptions = {}): Promise<HsmTestRunResult> {
     const testUris = new Set(testFiles.map(file => file.uri));
     const services = createHsmServices();
-    // imported C/C++ headers: read from disk, settings of hsm.gen.json and of the VS Code settings
+    // imported C/C++ headers: read from disk, settings of devm.gen.json and of the VS Code settings
     installNodeHeaderSupport(services.shared, { settings: options.headers });
     const workspace = new HsmTestWorkspace(services);
     const documents = await workspace.load([...models.filter(model => !testUris.has(model.uri)), ...testFiles]);

@@ -96,8 +96,8 @@ describe('the .devm language: one kind per file', () => {
         expect(errors(ok)).toEqual([]);
         const structure = await load('component C {\n    behavior "types.devm"\n}\n', { 'types.devm': TYPES });
         expect(errors(structure)).toEqual(["The behavior of a component is a state machine file: 'types.devm' is a structure file."]);
-        const other = await load('component C {\n    behavior "motor.hsm"\n}\n');
-        expect(errors(other)).toEqual(["The behavior of a component is a state machine file ('.devm'), not 'motor.hsm'."]);
+        const other = await load('component C {\n    behavior "motor.sm"\n}\n');
+        expect(errors(other)).toEqual(["The behavior of a component is a state machine file ('.devm'), not 'motor.sm'."]);
     });
 
     test('completion does not propose the keywords of the other kind', async () => {

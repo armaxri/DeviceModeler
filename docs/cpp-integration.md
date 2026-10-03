@@ -153,7 +153,7 @@ with the macros defined so far in the header, the predefined macros (`__cplusplu
 
 Consequence: a header whose declarations depend on configuration macros defined in other headers
 (`#if CONFIG_USE_CAN`) is analyzed with the macro undefined, unless it is passed in `defines`
-(`headers.defines` of `hsm.gen.json`, `-D`, `hsm.headers.defines`, see §4.7).
+(`headers.defines` of `devm.gen.json`, `-D`, `hsm.headers.defines`, see §4.7).
 
 ### 3.2 Constant expressions
 
@@ -324,7 +324,7 @@ Event payloads, operation parameters and return values may use all these types.
 ### 4.7 Hosts and settings
 
 **Decision:** the settings of the analysis are a `headers` block of the generator configuration
-`hsm.gen.json` (one configuration file per project, already used by the CLI, CMake and VS Code; a separate
+`devm.gen.json` (one configuration file per project, already used by the CLI, CMake and VS Code; a separate
 `hsm.config.json` would have duplicated the lookup):
 
 ```json
@@ -335,17 +335,17 @@ Event payloads, operation parameters and return values may use all these types.
 }
 ```
 
-Relative include paths are relative to the configuration file. For a model, the **nearest** `hsm.gen.json` /
-`*.hsm.gen.json` with a `headers` block in its directory or a parent directory applies (CLI, language server,
+Relative include paths are relative to the configuration file. For a model, the **nearest** `devm.gen.json` /
+`*.devm.gen.json` with a `headers` block in its directory or a parent directory applies (CLI, language server,
 VS Code webview; `hsm generate --config` uses the given configuration for its models). Global settings are
 combined with it: their include paths come after those of the configuration, their defines and data model
 override it.
 
 | host | headers | settings |
 | --- | --- | --- |
-| CLI (`hsm validate`, `simulate`, `test`, `generate`, `layout`, `render`, `doc`) | read from disk (`installNodeHeaderSupport` in `src/node/cpp-headers-node.ts`: synchronous reader) | `hsm.gen.json`; `-I <dir>`, `-D NAME[=VALUE]`, `--data-model lp64`/`llp64`/`ilp32`; `hsm generate --list-inputs` lists the imported headers (CMake dependencies); CMake `INCLUDE_DIRS` / `DEFINES` |
+| CLI (`hsm validate`, `simulate`, `test`, `generate`, `layout`, `render`, `doc`) | read from disk (`installNodeHeaderSupport` in `src/node/cpp-headers-node.ts`: synchronous reader) | `devm.gen.json`; `-I <dir>`, `-D NAME[=VALUE]`, `--data-model lp64`/`llp64`/`ilp32`; `hsm generate --list-inputs` lists the imported headers (CMake dependencies); CMake `INCLUDE_DIRS` / `DEFINES` |
 | API (`HsmModelLoader`, `HsmTestWorkspace`) | `files` / `readFile` (async, loaded before the build by `loadImports`, also the includes), header files given to `HsmTestWorkspace.load` | `HsmModelLoaderOptions.cppHeaders`, `cppHeaderStore(shared).settings` / `settingsProvider` |
-| VS Code language server | read from disk; the `**/*` file watcher of Langium invalidates changed headers and `hsm.gen.json` files; importing models are relinked and validated again | `hsm.gen.json`; settings `hsm.headers.includePaths` (relative to the workspace folder, `${workspaceFolder}`), `hsm.headers.defines`, `hsm.headers.dataModel` |
+| VS Code language server | read from disk; the `**/*` file watcher of Langium invalidates changed headers and `devm.gen.json` files; importing models are relinked and validated again | `devm.gen.json`; settings `hsm.headers.includePaths` (relative to the workspace folder, `${workspaceFolder}`), `hsm.headers.defines`, `hsm.headers.dataModel` |
 | VS Code diagram webview | the extension sends the header texts (and their includes) with the imported `.hsm` files (`collectImportedFiles`) | the extension sends the effective settings (`headers` of the `text` message) |
 | Web app | the virtual file list: headers of the examples and headers opened with *Open…* (`.h`, `.hpp`, …; added to the list, not edited) | – |
 

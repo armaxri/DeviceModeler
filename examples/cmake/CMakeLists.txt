@@ -26,9 +26,9 @@ hsm_generate(TARGET traffic_light_sm
     NAMESPACE example
     STD 17)
 
-# 2. A generator configuration (hsm.gen.json): CdPlayer.hpp / CdPlayer.cc with a license header.
+# 2. A generator configuration (devm.gen.json): CdPlayer.hpp / CdPlayer.cc with a license header.
 add_library(cd_player_sm STATIC)
-hsm_generate(TARGET cd_player_sm CONFIG hsm.gen.json STD 17)
+hsm_generate(TARGET cd_player_sm CONFIG devm.gen.json STD 17)
 
 # 3. A model importing a C++ header (examples/cpp-types): the generated class uses conveyor::Mode,
 #    conveyor::Package, ... directly and is regenerated when the header changes.

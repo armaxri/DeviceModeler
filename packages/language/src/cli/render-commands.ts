@@ -77,7 +77,7 @@ interface LoadedStructure {
  */
 async function loadModels(files: string[], logger: Logger): Promise<{ models: LoadedModel[], structures: LoadedStructure[], failures: number }> {
     const services = createHsmServices(NodeFileSystem);
-    // imported C/C++ headers: read from the file system, settings of the nearest hsm.gen.json
+    // imported C/C++ headers: read from the file system, settings of the nearest devm.gen.json
     installNodeHeaderSupport(services.shared);
     // state machine files and structure files are one language: the kind of a file is the kind of its root
     const loader = new HsmModelLoader(services);

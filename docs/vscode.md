@@ -29,12 +29,12 @@ the Device Modeling Framework (details in [packages/vscode/README.md](../package
 - **C/C++ header imports**: headers are read from disk (and re-read when they change: the importing models are
   validated again), hover shows their declarations with documentation, go to definition opens the header,
   completion after `ns::`. Include paths, defines and the data model come from the `headers` block of the
-  nearest `hsm.gen.json` and the settings `hsm.headers.includePaths` / `hsm.headers.defines` /
+  nearest `devm.gen.json` and the settings `hsm.headers.includePaths` / `hsm.headers.defines` /
   `hsm.headers.dataModel`; the diagram webview gets the headers from the extension.
-- **HSM: Generate C++** uses a generator configuration (`hsm.gen.json` / `*.hsm.gen.json` that lists
+- **HSM: Generate C++** uses a generator configuration (`devm.gen.json` / `*.devm.gen.json` that lists
   the model, searched from the model directory up to the workspace folder) with the same generator code
   as `hsm generate`, otherwise the settings `hsm.cpp.outputDirectory`, `hsm.cpp.namespace` and
-  `hsm.cpp.standard`. `hsm.gen.json` files are validated with the JSON schema.
+  `hsm.cpp.standard`. `devm.gen.json` files are validated with the JSON schema.
 - **Tests** in the Test Explorer (all `@Test` operations of the workspace; failures with location and
   trace; **HSM: Run Tests** for the active file) and a **Run with Model Coverage** profile that shows
   covered states / transitions / reactions and guard decisions in the coverage view.
