@@ -1,0 +1,101 @@
+name: Pages
+
+# Publishes the web app of every branch to GitHub Pages, one folder per branch:
+#   https://<owner>.github.io/<repo>/                  overview of all published branches
+#   https://<owner>.github.io/<repo>/<branch>/         the web app of <branch> ("/" in branch names → "-")
+# The site lives on the branch `gh-pages` (Settings → Pages → Deploy from a branch → gh-pages, / (root)).
+# Deleting a branch removes its folder (the `delete` event runs the workflow of the default branch).
+
+on:
+  push:
+    branches-ignore: [gh-pages]
+  delete:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# one deployment at a time, so the commits to gh-pages don't race
+concurrency:
+  group: pages-gh-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name != 'delete' || github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Branch and folder
+        id: branch
+        env:
+          BRANCH: ${{ github.event_name == 'delete' && github.event.ref || github.ref_name }}
+        run: |
+          echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "folder=$(echo "$BRANCH" | sed -e 's#[^A-Za-z0-9._-]#-#g')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: github.event_name != 'delete'
+
+      - uses: actions/setup-node@v4
+        if: github.event_name != 'delete'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build the web app
+        if: github.event_name != 'delete'
+        run: |
+          npm ci
+          npm run build -w packages/language
+          npm run build -w packages/web
+
+      - name: Update gh-pages
+        env:
+          BRANCH: ${{ steps.branch.outputs.name }}
+          FOLDER: ${{ steps.branch.outputs.folder }}
+          DELETED: ${{ github.event_name == 'delete' }}
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          url="https://x-access-token:${TOKEN}@github.com/${REPO}.git"
+          if git ls-remote --exit-code --heads "$url" gh-pages > /dev/null; then
+            git clone --depth 1 --branch gh-pages "$url" site
+          else
+            git init -b gh-pages site
+            git -C site remote add origin "$url"
+          fi
+          rm -rf "site/$FOLDER"
+          if [ "$DELETED" != "true" ]; then
+            cp -r packages/web/dist "site/$FOLDER"
+            printf '%s\n%s\n%s\n' "$BRANCH" "$(git rev-parse --short HEAD)" "$(git log -1 --format=%cs)" > "site/$FOLDER/.branch"
+          fi
+          touch site/.nojekyll
+
+          # overview page: one link per published branch, main first
+          {
+            echo '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            echo '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            echo '<title>Device Modeler – branches</title>'
+            echo '<style>body{font-family:system-ui,sans-serif;max-width:40rem;margin:2rem auto;padding:0 1rem;color:#222;background:#fff}'
+            echo 'a{color:#a80036;font-weight:600;text-decoration:none}li{margin:.6rem 0}small{color:#666}'
+            echo '@media (prefers-color-scheme:dark){body{color:#ddd;background:#1e1e1e}a{color:#ff7a9c}small{color:#999}}</style>'
+            echo '</head><body><h1>Device Modeler</h1><p>Web app of each branch:</p><ul>'
+            for meta in $( (ls site/main/.branch 2>/dev/null; ls site/*/.branch 2>/dev/null | grep -v '^site/main/') ); do
+              dir=$(basename "$(dirname "$meta")")
+              name=$(sed -n 1p "$meta"); sha=$(sed -n 2p "$meta"); date=$(sed -n 3p "$meta")
+              echo "<li><a href=\"./$dir/\">$name</a> <small>$sha · $date</small></li>"
+            done
+            echo '</ul></body></html>'
+          } > site/index.html
+
+          cd site
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing to publish."
+          else
+            git commit -m "Pages: ${BRANCH} ($([ "$DELETED" = "true" ] && echo removed || echo "$GITHUB_SHA"))"
+            git push origin gh-pages
+          fi
