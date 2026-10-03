@@ -73,10 +73,11 @@ const STRUCTURE_TOOLS: Array<ToolDescription | 'separator'> = [
     { tool: 'thread', label: 'Thread', key: 'T', icon: Icons.thread, hint: 'Click into the subsystem or system to add a thread' },
     { tool: 'instance', label: 'Instance (part)', key: 'I', icon: Icons.instance, hint: 'Click into a thread to add a component instance, on the frame to add a subsystem instance (or a component: then choose its thread)' },
     'separator',
-    { tool: 'port-provides-sync', label: 'Provided sync port (data)', key: '1', icon: Icons.providedSync, hint: 'Click on the frame, a component or an instance to add a provided sync port' },
-    { tool: 'port-provides-async', label: 'Provided async port (events in)', key: '2', icon: Icons.providedAsync, hint: 'Click on the frame, a component or an instance to add a provided async port' },
-    { tool: 'port-requires-sync', label: 'Required sync port (data)', key: '3', icon: Icons.requiredSync, hint: 'Click on the frame, a component or an instance to add a required sync port' },
-    { tool: 'port-requires-async', label: 'Required async port (events out)', key: '4', icon: Icons.requiredAsync, hint: 'Click on the frame, a component or an instance to add a required async port' },
+    { tool: 'port-in-sync', label: 'In port, sync (data)', key: '1', icon: Icons.portInSync, hint: 'Click on the frame, a component or an instance to add an in sync port (receives data)' },
+    { tool: 'port-out-sync', label: 'Out port, sync (data)', key: '2', icon: Icons.portOutSync, hint: 'Click on the frame, a component or an instance to add an out sync port (sends data)' },
+    { tool: 'port-inout-sync', label: 'Inout port, sync (shared data)', key: '3', icon: Icons.portInoutSync, hint: 'Click on the frame, a component or an instance to add an inout sync port (shares data)' },
+    { tool: 'port-in-async', label: 'In port, async (event)', key: '4', icon: Icons.portInAsync, hint: 'Click on the frame, a component or an instance to add an in async port (receives an event)' },
+    { tool: 'port-out-async', label: 'Out port, async (event)', key: '5', icon: Icons.portOutAsync, hint: 'Click on the frame, a component or an instance to add an out async port (sends an event)' },
     'separator',
     { tool: 'connector', label: 'Connector (connect / delegate)', key: 'C', icon: Icons.connector, hint: 'Press on a port and drag to the port to connect it with' }
 ];
@@ -164,7 +165,7 @@ export interface DiagramHost {
     applyWorkspaceEdits?(edits: ReadonlyMap<string, readonly TextEdit[]>): Promise<boolean>;
     /**
      * Navigation from the diagram to another file (open the state machine of an instance, the structure of
-     * a composite, a type definition, a provider in another file, back to the structure using a state
+     * a composite, a type definition, a source in another file, back to the structure using a state
      * machine): the host opens the file (and records the navigation history) and calls
      * {@link DiagramController.revealLocation} so that the diagram shows and selects the target once the
      * file is loaded. Returns false if the file is not available. Locations in the edited file are shown

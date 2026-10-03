@@ -2,7 +2,7 @@
 import { injectable } from 'inversify';
 import { ShapeView, svg, type IView, type RenderingContext } from 'sprotty';
 import type { VNode } from 'snabbdom';
-import { IbdMetrics as M, behaviorIconPath, compositeIconPath, frameTabPath, ibdRoutePath, portChevron, portTooltip } from 'devm-language';
+import { IbdMetrics as M, behaviorIconPath, compositeIconPath, connectorArrowheads, frameTabPath, ibdRoutePath, portArrow, portTooltip } from 'devm-language';
 import type { IbdConnectorElement, IbdNodeElement, IbdPortElement } from './ibd-model.js';
 import type { Issue } from './model.js';
 
@@ -145,8 +145,8 @@ export class IbdInstanceView extends ShapeView {
 }
 
 /**
- * A struct or interface of the file: a value type box «struct» / «interface» with the name and the fields
- * / events; never connected (ports show their type in their label).
+ * A struct of the file: a value type box «struct» with the name and the fields; never connected (ports
+ * show their type in their label).
  */
 @injectable()
 export class IbdTypeView extends ShapeView {
@@ -173,7 +173,7 @@ export class IbdTypeView extends ShapeView {
                 {member.type ? <tspan class-ibd-type-member-type={true}>{member.type}</tspan> : undefined}
             </text>)}
             {members.length === 0
-                ? <text class-ibd-type-member={true} class-ibd-type-empty={true} x={M.instancePadding} y={row(0)}>{node.stereotype === 'interface' ? 'no events' : 'no fields'}</text>
+                ? <text class-ibd-type-member={true} class-ibd-type-empty={true} x={M.instancePadding} y={row(0)}>no fields</text>
                 : undefined}
             {issueMarker(node.issue, width - 4, 4)}
             {resizeHandle(node)}
@@ -181,7 +181,7 @@ export class IbdTypeView extends ShapeView {
     }
 }
 
-/** A port: a square on the border (filled: provided, hollow: required), a chevron for async ports, the label. */
+/** A port: a square on the border (hollow: sync, filled: async), an arrow showing the direction of the data, the label. */
 @injectable()
 export class IbdPortView extends ShapeView {
     render(port: Readonly<IbdPortElement>, context: RenderingContext): VNode | undefined {
@@ -189,9 +189,9 @@ export class IbdPortView extends ShapeView {
             return undefined;
         }
         const size = port.size.width;
-        const chevron = portChevron({ direction: port.direction, kind: port.kind, side: port.side, size });
+        const arrow = portArrow({ direction: port.direction, side: port.side, size });
         const label = port.label;
-        return <g class-ibd-port={true} class-provided={port.direction === 'provides'} class-required={port.direction === 'requires'}
+        return <g class-ibd-port={true} class-flow-in={port.direction === 'in'} class-flow-out={port.direction === 'out'} class-flow-inout={port.direction === 'inout'}
             class-sync={port.kind === 'sync'} class-async={port.kind === 'async'}
             class-selected={port.selected} class-mouseover={port.hoverFeedback} class-on-route={port.onRoute}
             class-has-error={port.issue?.severity === 'error'} class-has-warning={port.issue?.severity === 'warning'}
@@ -199,7 +199,7 @@ export class IbdPortView extends ShapeView {
             class-connect-source={port.connectSource} class-movable={port.movable}>
             <title>{portTooltip({ title: port.title, direction: port.direction, kind: port.kind })}</title>
             <rect class-ibd-port-shape={true} x={0} y={0} width={size} height={size} />
-            {chevron ? <path class-ibd-port-chevron={true} d={chevron} /> : undefined}
+            <path class-ibd-port-arrow={true} d={arrow} />
             {label
                 ? <text class-ibd-port-label={true} x={label.x} y={baseline(label.y, label.height, M.portFont)}>
                     {port.typeName !== undefined
@@ -212,7 +212,10 @@ export class IbdPortView extends ShapeView {
     }
 }
 
-/** A connector (connection or delegation) along its orthogonal route; dashed if it crosses threads. */
+/**
+ * A connector (connection or delegation) along its orthogonal route with an arrowhead at the receiving
+ * end (both ends between inout ports); dashed if it crosses threads.
+ */
 @injectable()
 export class IbdConnectorView implements IView {
     render(edge: Readonly<IbdConnectorElement>, _context: RenderingContext): VNode | undefined {
@@ -228,6 +231,7 @@ export class IbdConnectorView implements IView {
             <title>{edge.title + (edge.crossThread ? '\n(crosses threads)' : '')}</title>
             <path class-ibd-connector-hit={true} d={path} />
             <path class-ibd-connector-line={true} d={path} />
+            {...connectorArrowheads(edge.points, edge.bidirectional).map(d => <path class-ibd-connector-arrow={true} d={d} />)}
             {edge.editable && edge.selected
                 ? <g class-bend-handles={true}>
                     {...edge.waypoints.map(p => <circle class-bend-handle={true} cx={p.x} cy={p.y} r={4.5}>

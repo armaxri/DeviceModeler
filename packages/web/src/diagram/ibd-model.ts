@@ -1,6 +1,6 @@
 import { SChildElementImpl, SNodeImpl, SShapeElementImpl, boundsFeature, hoverFeedbackFeature, selectFeature } from 'sprotty';
 
-/** Ports while drawing a connector: can be connected (`ok`), incompatible kinds / events / types (`problem`, refused with an explanation), not at all (`invalid`). */
+/** Ports while drawing a connector: can be connected (`ok`), incompatible kinds / types / payloads (`problem`, refused with an explanation), not at all (`invalid`). */
 export type ConnectStatus = 'ok' | 'problem' | 'invalid';
 import type { SModelElement, SModelRoot } from 'sprotty-protocol';
 import type { DiagramLabel, IbdBehavior, IbdComposite, IbdEdge, IbdGraph, IbdMember, IbdNode, IbdNodeKind, IbdPort, Point } from 'devm-language';
@@ -8,8 +8,8 @@ import type { Issue } from './model.js';
 
 /*
  * The Sprotty model of the internal block diagram of a structure (see ibd-model.ts of the
- * language package): frame, thread and instance nodes with ports, connectors, type boxes (structs,
- * interfaces of the file).
+ * language package): frame, thread and instance nodes with ports, connectors, type boxes (the structs
+ * of the file).
  */
 
 /** Types of the elements of the internal block diagram (used to select the views). */
@@ -19,7 +19,7 @@ export const IbdTypes = {
     thread: 'node:ibd-thread',
     instance: 'node:ibd-instance',
     block: 'node:ibd-block',
-    /** A struct or interface of the file (not connected). */
+    /** A struct of the file (not connected). */
     type: 'node:ibd-type',
     port: 'port:ibd',
     /** An invisible node covering the whole diagram (the labels of boundary ports are outside of the frame): fit to screen shows them. */
@@ -41,7 +41,7 @@ export class IbdNodeElement extends SNodeImpl {
     tabWidth?: number;
     behavior?: IbdBehavior;
     composite?: IbdComposite;
-    /** Type boxes: fields / events. */
+    /** Type boxes: fields. */
     members?: IbdMember[];
     issue?: Issue;
     /** The node owns a port of the highlighted route. */
@@ -54,11 +54,11 @@ export class IbdPortElement extends SShapeElementImpl {
     static readonly DEFAULT_FEATURES = [selectFeature, boundsFeature, hoverFeedbackFeature];
 
     portName = '';
-    direction: IbdPort['direction'] = 'provides';
+    direction: IbdPort['direction'] = 'in';
     kind: IbdPort['kind'] = 'sync';
     side: IbdPort['side'] = 'WEST';
     title = '';
-    /** The named type shown in the label (`cmd : DoorCmd`). */
+    /** The type shown in the label (`up : integer`). */
     typeName?: string;
     /** The label, relative to the port. */
     label?: DiagramLabel;
@@ -78,9 +78,11 @@ export class IbdConnectorElement extends SChildElementImpl {
     static readonly DEFAULT_FEATURES = [selectFeature, hoverFeedbackFeature];
 
     kind: IbdEdge['kind'] = 'connect';
-    /** The ports at the ends (source: the required side of a connection). */
+    /** The ports at the ends (the data flows from the source to the target). */
     sourceId = '';
     targetId = '';
+    /** Between inout ports: the data flows both ways (arrowheads at both ends). */
+    bidirectional = false;
     crossThread = false;
     title = '';
     points: Point[] = [];
@@ -168,6 +170,7 @@ export function toIbdSchema(graph: IbdGraph, options: IbdSchemaOptions): SModelR
         kind: edge.kind,
         sourceId: edge.source,
         targetId: edge.target,
+        bidirectional: edge.bidirectional ?? false,
         crossThread: edge.crossThread,
         title: edge.title,
         points: edge.points,

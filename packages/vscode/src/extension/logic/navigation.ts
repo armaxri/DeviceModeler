@@ -5,7 +5,7 @@ const HISTORY_LIMIT = 50;
 
 /**
  * The navigation history of the diagrams (Back / Forward), shared by all diagram panels: navigating from a
- * diagram (double-click on an instance, "go to provider", "used by", …) records the location it came from;
+ * diagram (double-click on an instance, "go to source", "used by", …) records the location it came from;
  * Back returns to it and records the current location for Forward.
  */
 export class NavigationHistory {

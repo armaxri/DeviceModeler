@@ -246,10 +246,10 @@ main {
 .icon-arrow { fill: var(--ui-text); }
 .icon-text { fill: #000; font-weight: bold; }
 .icon-thread { fill: #f4f7fb; stroke: #7f95ab; stroke-width: 1.4; }
-.icon-port-provided { fill: #a80036; stroke: #a80036; stroke-width: 1.4; }
-.icon-port-required { fill: #fefece; stroke: #a80036; stroke-width: 1.4; }
-.icon-chevron { fill: none; stroke: #a80036; stroke-width: 1.5; }
-.icon-chevron-light { fill: none; stroke: #fff; stroke-width: 1.5; }
+.icon-port-async { fill: #a80036; stroke: #a80036; stroke-width: 1.4; }
+.icon-port-sync { fill: #fff; stroke: #a80036; stroke-width: 1.4; }
+.icon-chevron { fill: none; stroke: #a80036; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.icon-chevron-light { fill: none; stroke: #fff; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ---- diagram ---- */
 

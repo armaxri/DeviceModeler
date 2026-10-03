@@ -2,8 +2,8 @@ import type { AstNode, LangiumDocument } from 'langium';
 import type { SModelElementImpl } from 'sprotty';
 import type { SModelRoot } from 'sprotty-protocol';
 import {
-    BUILTIN_TYPES, StructureEditor, EditError, IncompatiblePortsError, IBD_OVERVIEW_ID, IBD_TYPES_ID, applyEdits, behaviorMachine, checkRename, mapOffset, endpointLabel, findProviders, findRequirers, ibdChoices, ibdElementAt,
-    ibdNodes, ibdRouteElements, instanceType, isComponent, isComponentInstance, isComponentType, isConnection, isDelegation, isPort, isPortInterface,
+    BUILTIN_TYPES, StructureEditor, EditError, IncompatiblePortsError, IBD_OVERVIEW_ID, IBD_TYPES_ID, applyEdits, behaviorMachine, checkRename, mapOffset, endpointLabel, findSources, findTargets, ibdChoices, ibdElementAt,
+    ibdNodes, ibdRouteElements, instanceType, isComponent, isComponentInstance, isComponentType, isConnection, isDelegation, isPort,
     isStructDeclaration, isCompositeType, isThread, layoutStructure, memberText, normalizeUri, planConnection, portEndpoint, portTypeLabel, resolveDataType, routeContinuations, routeIdsAt,
     threadInstances, threadOf, threadSettings, visibleElements,
     type Component, type ComponentInstance, type ComponentType, type PortEnd, type StructureWorkspace, type EditResult, type IbdLayoutResult, type IbdNode,
@@ -42,7 +42,7 @@ export interface DiagramLocation {
 }
 
 /** The tools of the palette of the structure diagram. */
-export type StructureTool = 'thread' | 'instance' | 'port-provides-sync' | 'port-provides-async' | 'port-requires-sync' | 'port-requires-async' | 'connector';
+export type StructureTool = 'thread' | 'instance' | 'port-in-sync' | 'port-out-sync' | 'port-inout-sync' | 'port-in-async' | 'port-out-async' | 'connector';
 
 /** What the structure diagram needs from the diagram controller (which owns the Sprotty diagram and the palette). */
 export interface StructureDiagramContext {
@@ -94,20 +94,21 @@ interface RouteInfo {
     ids: Set<string>;
     /** The endpoints of the route (labels relative to the root). */
     labels: string[];
-    /** Providers (required port) or requirers (provided port) of the selected port. */
+    /** Sources (in port), targets (out port) or the ports sharing the data (inout port) of the selected port. */
     ends: StructureLocation[];
-    endsKind?: 'Providers' | 'Requirers';
+    endsKind?: 'Sources' | 'Targets' | 'Shared with';
     /** Composite parts of the shown structure the route continues into. */
     continuations: Array<{ instance: string, location: StructureLocation }>;
     /** The route continues outside of the shown structure (in the parent at the context). */
     outward?: StructureLocation;
 }
 
-const PORT_TOOLS: Record<string, { direction: 'provides' | 'requires', kind: 'sync' | 'async' }> = {
-    'port-provides-sync': { direction: 'provides', kind: 'sync' },
-    'port-provides-async': { direction: 'provides', kind: 'async' },
-    'port-requires-sync': { direction: 'requires', kind: 'sync' },
-    'port-requires-async': { direction: 'requires', kind: 'async' }
+const PORT_TOOLS: Record<string, { direction: 'in' | 'out' | 'inout', kind: 'sync' | 'async' }> = {
+    'port-in-sync': { direction: 'in', kind: 'sync' },
+    'port-out-sync': { direction: 'out', kind: 'sync' },
+    'port-inout-sync': { direction: 'inout', kind: 'sync' },
+    'port-in-async': { direction: 'in', kind: 'async' },
+    'port-out-async': { direction: 'out', kind: 'async' }
 };
 
 /**
@@ -115,7 +116,7 @@ const PORT_TOOLS: Record<string, { direction: 'provides' | 'requires', kind: 'sy
  * ibd-layout.ts of the language package), shown by the {@link DiagramController} instead of the state
  * machine diagram when the edited file is a structure file. Graphical editing (palette, rename in
  * place, drag & drop of instances into threads, connectors, properties) becomes text edits
- * ({@link StructureEditor}); selecting a port, connector or instance highlights the route of its signals,
+ * ({@link StructureEditor}); selecting a port, connector or instance highlights the route of its data,
  * across the levels of the hierarchy and the files of the workspace ({@link StructureWorkspace}); instances
  * open the state machine of their behavior or the diagram of their structure. If the file has several
  * structures or component types, a selector at the top of the diagram (and the text cursor) chooses the
@@ -129,7 +130,7 @@ export class StructureDiagram {
     private readonly chosen = new Map<string, string>();
     /**
      * The context of the shown structure given by the navigation that opened it (from a containing
-     * subsystem or system: "follow into", double-click a subsystem instance, go to provider, history).
+     * subsystem or system: "follow into", double-click a subsystem instance, go to source, history).
      * A structure shown in any other way (file opened, selector, text cursor) has no context: it is shown
      * on its own, its routes end at its boundary ports.
      */
@@ -610,7 +611,7 @@ export class StructureDiagram {
         const portStart = isPort(node) ? starts[0] : isConnection(node) ? starts[0] : undefined;
         if (portStart) {
             ends = ws.routeEnds(portStart, { ...ctx, path: [] });
-            endsKind = portStart.port.direction === 'requires' ? 'Providers' : 'Requirers';
+            endsKind = endsKindOf(portStart.port);
         }
         const continuations = routeContinuations(route, ctx.path).map(instance => {
             const inner = route.endpoints.filter(e => e.path.length === ctx.path.length + 1 && e.path[ctx.path.length].name === instance);
@@ -836,8 +837,7 @@ export class StructureDiagram {
                 return;
             }
             const { direction, kind } = PORT_TOOLS[tool];
-            const type = kind === 'sync' ? 'integer' : this.defaultInterface();
-            this.applyEdit(editor => editor.addPort(owner, { direction, kind, type }), true);
+            this.applyEdit(editor => editor.addPort(owner, { direction, kind }), true);
             this.context.toolDone();
         }
     }
@@ -865,20 +865,6 @@ export class StructureDiagram {
             return undefined;
         }
         return owner;
-    }
-
-    /** The first interface visible in the file (the default type of a new async port). */
-    private defaultInterface(): string | undefined {
-        const model = this.state?.parsed.model;
-        if (!model) {
-            return undefined;
-        }
-        for (const [name, element] of visibleElements(model)) {
-            if (isPortInterface(element) && !name.includes('.')) {
-                return name;
-            }
-        }
-        return undefined;
     }
 
     /** The component types an instance can be created of (visible in the file, not systems, not the structure itself). */
@@ -1009,9 +995,9 @@ export class StructureDiagram {
             }
             try {
                 const plan = planConnection(structure, source, other);
-                this.connectStatus.set(otherId, { status: 'ok', message: `${plan.text}${plan.swapped ? ' (from the required port)' : ''}` });
+                this.connectStatus.set(otherId, { status: 'ok', message: `${plan.text}${plan.swapped ? ' (in the direction of the data: from the out port)' : ''}` });
             } catch (error) {
-                // incompatible kinds, events or types: orange, the hint explains why (cannot be connected either)
+                // incompatible kinds, types or payloads: orange, the hint explains why (cannot be connected either)
                 this.connectStatus.set(otherId, {
                     status: error instanceof IncompatiblePortsError ? 'problem' : 'invalid',
                     message: error instanceof Error ? error.message : String(error)
@@ -1047,7 +1033,7 @@ export class StructureDiagram {
             return result;
         }).then(done => {
             if (done && plan) {
-                this.context.setStatus(`Added '${plan.text}'${plan.swapped ? ' (written from the required to the provided port)' : ''}.`);
+                this.context.setStatus(`Added '${plan.text}'${plan.swapped ? ' (written in the direction of the data: from the out port to the in port)' : ''}.`);
             }
         });
         this.context.toolDone();
@@ -1264,7 +1250,7 @@ export class StructureDiagram {
         const element = event.target instanceof Element ? event.target : undefined;
         if (isPort(node) && element?.closest('.ibd-port-type')) {
             this.goToDataType(node);
-        } else if (isStructDeclaration(node) || isPortInterface(node)) {
+        } else if (isStructDeclaration(node)) {
             const range = this.rangeOf(id);
             if (range) {
                 this.context.host.editTextAt(range.offset);
@@ -1320,13 +1306,13 @@ export class StructureDiagram {
         this.context.navigate({ uri: document.uri.toString(), element: type.name, id: type.name, offset: type.$cstNode?.offset });
     }
 
-    /** Shows the declaration of the type of a port (a struct or interface of this or another structure file). */
+    /** Shows the declaration of the type of a port (a struct of this or another structure file). */
     goToDataType(port: Port): void {
         const resolution = port.type ? resolveDataType(port.type) : undefined;
-        const declaration = resolution?.kind === 'interface' ? resolution.interface : resolution?.kind === 'data' ? resolution.struct : undefined;
+        const declaration = resolution?.kind === 'data' ? resolution.struct : undefined;
         const document = declaration ? documentOf(declaration) : undefined;
         if (!declaration || !document) {
-            this.context.setStatus(`'${port.type?.name ?? portTypeLabel(port)}' is ${resolution?.kind === 'data' ? 'a built-in or C/C++ type' : 'not a struct or interface of a structure file'}.`, 'warning');
+            this.context.setStatus(`'${port.type?.name ?? portTypeLabel(port)}' is ${resolution?.kind === 'data' ? 'a built-in or C/C++ type' : 'not a struct of a structure file'}.`, 'warning');
             return;
         }
         this.context.navigate({ uri: document.uri.toString(), id: `type:${declaration.name}`, offset: declaration.$cstNode?.offset });
@@ -1451,7 +1437,7 @@ export class StructureDiagram {
                 skipped = true;
                 continue;
             }
-            if (isStructDeclaration(node) || isPortInterface(node)) {
+            if (isStructDeclaration(node)) {
                 continue; // (data types are deleted in the text)
             }
             nodes.push(node);
@@ -1593,21 +1579,21 @@ export class StructureDiagram {
             h('h2', { style: 'margin-top:18px' }, 'How to edit'),
             h('ul', { class: 'hint', style: 'padding-left:18px;margin:6px 0' },
                 h('li', {}, 'Pick a tool in the palette (thread, instance, ports, connector), then click into the diagram. Hold ', h('kbd', {}, 'Shift'), ' to keep the tool.'),
-                h('li', {}, 'Connector: press on a port and drag to the other port – compatible ports turn green. A connection is written from the required to the provided port, a boundary port is delegated.'),
+                h('li', {}, 'Connector: press on a port and drag to the other port – compatible ports turn green. A connection is written in the direction of the data (from the out port to the in port, whichever you start at), a boundary port is delegated; inout ports connect with inout ports.'),
                 h('li', {}, 'Instances of components run in threads: click into a thread with the instance tool (on the frame: choose the thread next). Instances of subsystems are placed on the frame, outside of the threads.'),
                 h('li', {}, 'Drag an instance of a component into another thread to change its thread. Deleting a thread deletes its instances and their connections.'),
                 h('li', {}, 'Layout: drag the frame, threads, instances and type boxes to arrange them, the corner handle of a selected node to resize it, a port along the border of its instance (to another side). '
                     + 'Double-click a selected connector to add a waypoint (drag it; double-click it to remove it). The positions are written as layout annotations (@at, @size, @port, @via); '
                     + 'Automatic layout removes them.'),
                 h('li', {}, 'Double-click an instance to open its state machine or subsystem, its type name (or the type of a port) to open the type, its name (or ', h('kbd', {}, 'F2'), ') to rename it.'),
-                h('li', {}, 'Select a port, connector or instance to highlight the route of its signals (also through composites).'),
+                h('li', {}, 'Select a port, connector or instance to highlight the route of its data (also through composites); the properties list the sources and targets.'),
                 h('li', {}, h('kbd', {}, 'Del'), ' deletes, ', h('kbd', {}, 'Ctrl'), '+', h('kbd', {}, 'Z'), ' undoes; ', h('kbd', {}, 'Alt'), '+', h('kbd', {}, '←'), ' goes back.')),
             h('h2', { style: 'margin-top:18px' }, 'Notation'),
             h('ul', { class: 'hint', style: 'padding-left:18px;margin:6px 0' },
-                h('li', {}, 'Ports: filled square = provided, hollow square = required.'),
-                h('li', {}, 'Async ports (events) show a chevron in the direction of the events, sync ports (data) are plain squares.'),
-                h('li', {}, 'Dashed connectors cross threads.'),
-                h('li', {}, 'Boxes «struct» / «interface» below the diagram: the data types declared in the file (not connected; ports show their type after the name).')));
+                h('li', {}, 'Ports: hollow square = sync (data), filled square = async (an event).'),
+                h('li', {}, 'The arrow in the port shows the direction of the data: into the box = in, out of the box = out, both ways = inout (shared data).'),
+                h('li', {}, 'Connectors have an arrowhead at the receiving end (both ends between inout ports); dashed connectors cross threads.'),
+                h('li', {}, 'Boxes «struct» below the diagram: the data types declared in the file (not connected; ports show their type after the name).')));
         return result;
     }
 
@@ -1659,8 +1645,8 @@ export class StructureDiagram {
         }
         if (own) {
             result.push(h('div', { class: 'actions' },
-                h('button', { onClick: () => this.applyEdit(e => e.addPort(component, { direction: 'provides', kind: 'async', type: this.defaultInterface() }), true) }, 'Add provided port'),
-                h('button', { onClick: () => this.applyEdit(e => e.addPort(component, { direction: 'requires', kind: 'async', type: this.defaultInterface() }), true) }, 'Add required port')));
+                h('button', { onClick: () => this.applyEdit(e => e.addPort(component, { direction: 'in', kind: 'sync' }), true) }, 'Add in port'),
+                h('button', { onClick: () => this.applyEdit(e => e.addPort(component, { direction: 'out', kind: 'sync' }), true) }, 'Add out port')));
         }
         return result;
     }
@@ -1674,7 +1660,7 @@ export class StructureDiagram {
             const part = isComponentInstance(instance) ? instance : undefined;
             const owner = node.$container;
             result.push(h('h2', {}, part ? `${part.name}.${node.name}` : node.name),
-                h('div', { class: 'kind' }, `${node.direction === 'provides' ? 'Provided' : 'Required'} ${node.kind} port of ${owner.name}`),
+                h('div', { class: 'kind' }, `${portKindText(node)} of ${owner.name}`),
                 ...problems(issue));
             if (this.isOwn(owner) && !part) {
                 result.push(...this.portFields(node));
@@ -1699,16 +1685,16 @@ export class StructureDiagram {
                 h('div', { class: 'kind' }, isConnection(node) ? (edge?.crossThread ? 'Connection (crosses threads)' : 'Connection') : 'Delegation'),
                 ...problems(issue),
                 h('dl', {},
-                    h('dt', {}, isConnection(node) ? 'Required' : 'From'), h('dd', {}, h('code', {}, node.source ? referenceText(node.source) : '?')),
-                    h('dt', {}, isConnection(node) ? 'Provided' : 'To'), h('dd', {}, h('code', {}, node.target ? referenceText(node.target) : '?'))),
+                    h('dt', {}, edge?.bidirectional ? 'Shared by' : 'From (source)'), h('dd', {}, h('code', {}, node.source ? referenceText(node.source) : '?')),
+                    h('dt', {}, edge?.bidirectional ? 'and' : 'To (target)'), h('dd', {}, h('code', {}, node.target ? referenceText(node.target) : '?'))),
                 ...this.routePanel(state, id, node, undefined),
                 h('div', { class: 'actions' }, h('button', { onClick: () => this.context.host.editTextAt(this.rangeOf(id)?.end ?? 0) }, 'Edit in text'), remove));
-        } else if (isStructDeclaration(node) || isPortInterface(node)) {
+        } else if (isStructDeclaration(node)) {
             const box = this.ibdNode(id);
-            result.push(h('h2', {}, node.name), h('div', { class: 'kind' }, isStructDeclaration(node) ? 'Struct (data type)' : 'Interface (events of async ports)'),
+            result.push(h('h2', {}, node.name), h('div', { class: 'kind' }, 'Struct (data type)'),
                 ...problems(issue),
                 this.isOwn(node) ? this.nameField(node) : undefined,
-                h('dl', {}, h('dt', {}, isStructDeclaration(node) ? 'Fields' : 'Events'),
+                h('dl', {}, h('dt', {}, 'Fields'),
                     h('dd', {}, ...(box?.members?.length ? box.members.map(m => h('div', {}, h('code', {}, memberText(m)))) : ['–']))),
                 h('p', { class: 'hint' }, 'Edit the declaration in the text (it is selected there). Ports using the type show it after their name; double-click the type of a port to come here.'));
         } else if (isComponent(node)) {
@@ -1720,30 +1706,35 @@ export class StructureDiagram {
         return result.filter((e): e is HTMLElement => !!e);
     }
 
-    /** Name, direction, kind and type of a port (of a type of the edited file). */
+    /**
+     * Name, direction, kind and type of a port (of a type of the edited file): the direction of the data
+     * (`inout` only for sync ports), sync (data) or async (an event), the type of the data or the payload
+     * of the event (empty: an event without data).
+     */
     private portFields(port: Port): HTMLElement[] {
-        const direction = h('select', {}, h('option', { value: 'provides' }, 'provides'), h('option', { value: 'requires' }, 'requires'));
+        const direction = h('select', {}, h('option', { value: 'in' }, 'in (receives)'), h('option', { value: 'out' }, 'out (sends)'),
+            h('option', { value: 'inout', disabled: port.kind === 'async', title: port.kind === 'async' ? 'An async port sends or receives an event: in or out' : 'Shared data' }, 'inout (shares)'));
         direction.value = port.direction;
         direction.addEventListener('change', () => this.applyEdit(editor => editor.setPortDirection(port, direction.value as Port['direction'])));
-        const kind = h('select', {}, h('option', { value: 'sync' }, 'sync (data)'), h('option', { value: 'async' }, 'async (events)'));
+        const kind = h('select', {}, h('option', { value: 'sync' }, 'sync (data)'), h('option', { value: 'async' }, 'async (event)'));
         kind.value = port.kind;
         kind.addEventListener('change', () => this.applyEdit(editor => editor.setPortKind(port, kind.value as Port['kind'])));
         const model = this.state?.parsed.model;
-        const names = model ? [...visibleElements(model)].filter(([, e]) => isPortInterface(e) || isStructDeclaration(e)).map(([n]) => n) : [];
+        const names = model ? [...visibleElements(model)].filter(([, e]) => isStructDeclaration(e)).map(([n]) => n) : [];
         const types = h('datalist', { id: 'structure-port-types' }, ...[...BUILTIN_TYPES.filter(t => t !== 'void'), ...names].map(n => h('option', { value: n })));
         const typeText = port.$cstNode ? this.typeTextOf(port) : portTypeLabel(port);
         return [
             this.nameField(port),
             h('div', { class: 'row' }, field('Direction', direction), field('Kind', kind)),
-            ...checkedField('Type', h('input', {
+            ...checkedField(port.kind === 'async' ? 'Payload type' : 'Type', h('input', {
                 value: typeText, list: 'structure-port-types', spellcheck: 'false',
-                placeholder: port.kind === 'async' ? 'interface or event a, event b : integer' : 'e.g. integer'
+                placeholder: port.kind === 'async' ? 'empty: an event without data' : 'e.g. integer'
             }), value => this.checkEdit(editor => editor.setPortType(port, value)), value => this.applyEdit(editor => editor.setPortType(port, value))),
             types
         ];
     }
 
-    /** The type of a port as written (after the colon). */
+    /** The type of a port as written (after the colon; empty for an event without payload). */
     private typeTextOf(port: Port): string {
         const text = this.state?.parsed.text ?? '';
         const cst = port.$cstNode!;
@@ -1822,7 +1813,7 @@ export class StructureDiagram {
         ].filter((e): e is HTMLElement => !!e);
     }
 
-    /** The route of the selected element: providers / requirers (links, also in other files), "follow into" the composites. */
+    /** The route of the selected element: sources / targets (links, also in other files), "follow into" the composites. */
     private routePanel(state: StructureState, id: string, node: AstNode, part: ComponentInstance | undefined): HTMLElement[] {
         const info = this.routeInfo?.id === id ? this.routeInfo : undefined;
         const result: HTMLElement[] = [];
@@ -1831,8 +1822,8 @@ export class StructureDiagram {
             const structure = this.shownComposite();
             if (isPort(node) && structure && (!part || isComponentInstance(part))) {
                 const endpoint = portEndpoint(structure, part, node);
-                const ends = node.direction === 'requires' ? findProviders(endpoint) : findRequirers(endpoint);
-                result.push(h('dl', {}, h('dt', {}, node.direction === 'requires' ? 'Providers' : 'Requirers'),
+                const ends = node.direction === 'out' ? findTargets(endpoint) : findSources(endpoint);
+                result.push(h('dl', {}, h('dt', {}, endsKindOf(node)),
                     h('dd', {}, ends.length > 0 ? ends.map(endpointLabel).join(', ') : '–')));
             }
             return result;
@@ -1850,10 +1841,10 @@ export class StructureDiagram {
                 info.ends.length > 0
                     ? h('ul', { class: 'route-list' }, ...info.ends.map(end => h('li', {}, link(endLabel(end), end),
                         end.uri !== normalizeUri(this.uri) ? h('span', { class: 'route-file' }, ` · ${fileName(end.uri)}`) : undefined)))
-                    : h('div', { class: 'hint' }, info.endsKind === 'Providers' ? 'not connected' : 'not used')));
-            if (info.endsKind === 'Providers' && info.ends.length > 0) {
+                    : h('div', { class: 'hint' }, info.endsKind === 'Targets' ? 'not used' : 'not connected')));
+            if (info.endsKind !== 'Targets' && info.ends.length > 0) {
                 const first = info.ends[0];
-                result.push(h('div', { class: 'actions' }, h('button', { onClick: () => this.context.navigate(first), title: 'Show the port providing the data or accepting the events' }, 'Go to provider')));
+                result.push(h('div', { class: 'actions' }, h('button', { onClick: () => this.context.navigate(first), title: 'Show the port the data or the event comes from' }, 'Go to source')));
             }
         }
         if (info.labels.length > 1) {
@@ -1870,6 +1861,18 @@ export class StructureDiagram {
         void state;
         return result;
     }
+}
+
+/** What the ends of the route of a port are: the sources of an in port, the targets of an out port, the ports sharing the data of an inout port. */
+function endsKindOf(port: Port): NonNullable<RouteInfo['endsKind']> {
+    return port.direction === 'in' ? 'Sources' : port.direction === 'out' ? 'Targets' : 'Shared with';
+}
+
+/** `In port (event)`, `Inout port (shared data)`: the kind of a port for the properties panel. */
+function portKindText(port: Port): string {
+    const direction = port.direction === 'in' ? 'In' : port.direction === 'out' ? 'Out' : 'Inout';
+    const what = port.kind === 'async' ? 'event' : port.direction === 'inout' ? 'shared data' : 'data';
+    return `${direction} port (${port.kind}, ${what})`;
 }
 
 /** The element shown by a layout (the choice of the selector). */

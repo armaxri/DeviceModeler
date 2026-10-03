@@ -14,7 +14,7 @@ export function isModelFile(uri: vscode.Uri): boolean {
 /**
  * The texts of all `.devm` files of the workspace (open documents with their unsaved changes,
  * the others read from disk and cached until they change). The diagrams need them for queries across
- * files: the structures using a state machine, routes and providers in other files, renames updating the
+ * files: the structures using a state machine, routes and the sources of data in other files, renames updating the
  * files referencing an element. {@link onDidChange} fires when a file is created, deleted or changed (on
  * disk or in an editor).
  */

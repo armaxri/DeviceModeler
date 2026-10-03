@@ -50,10 +50,6 @@ export function tokenKind(node: AstNode | undefined): TokenKind | undefined {
             return { type: SemanticTokenTypes.class };
         case 'StructDeclaration':
             return { type: SemanticTokenTypes.struct };
-        case 'PortInterface':
-            return { type: SemanticTokenTypes.interface };
-        case 'PortEvent':
-            return { type: SemanticTokenTypes.event };
         case 'StructField':
         case 'Port':
             return { type: SemanticTokenTypes.property };
