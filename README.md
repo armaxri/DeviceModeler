@@ -173,7 +173,7 @@ node packages/language/bin/cli.js generate --check          # exit 1 if generate
 | [Structure language](docs/structure-language.md) | 🧪 structure files: components, ports, subsystems, threads, instances, connections; port ↔ state machine rules; route analysis |
 | [Execution semantics](docs/semantics.md) | how a state machine executes – the specification implemented by the interpreter and the code generators |
 | [Web editor](docs/editor.md) | editing in the diagram, 🧪 structure diagrams and navigation, 🧪 manual layout, simulation |
-| [Manual layout](docs/manual-layout.md) | 🧪 experimental (branch `claude/layout-annotations`): layout annotations in the model (state machines and structure diagrams), layout computation, routing, editor integration, migration |
+| [Manual layout](docs/manual-layout.md) | on the main branch since PR #4 (from the branch `claude/layout-annotations`): layout annotations in the model (state machines and structure diagrams), layout computation, routing, editor integration, migration |
 | [VS Code extension](docs/vscode.md) | language server, diagrams, 🧪 structure files, generation, Test Explorer (details in [packages/vscode/README.md](packages/vscode/README.md)) |
 | [Rendering and model documentation](docs/rendering.md) | `devm render` (SVG diagrams), `devm doc` (Markdown / HTML documentation), doc comments |
 | [Unit tests and coverage](docs/testing.md) | the `.devmtest` language, `devm test`, model coverage, CI examples |

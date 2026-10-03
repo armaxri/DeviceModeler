@@ -1,7 +1,7 @@
 # Manual layout (experimental)
 
-Status: 🧪 experiment on the branch `claude/layout-annotations` (based on `claude/manual-layout`, which
-stored the layout in a sidecar file `<model>.layout`). The automatic layout (ELK) stays the default:
+Status: merged into main (PR #4) from the experiment branch `claude/layout-annotations` (based on
+`claude/manual-layout`, which stored the layout in a sidecar file `<model>.layout`). The automatic layout (ELK) stays the default:
 a model without layout annotations is exactly the diagram computed by `layoutStateMachine`.
 
 This note describes how hand-arranged diagrams are stored and computed, and the trade-offs behind the
@@ -21,9 +21,8 @@ has a manual layout, a model without has the automatic one – there is no separ
 | Sidecar file `<model>.layout` (previous experiment) | the text stays free of layout information | two files to keep together; renames in the text lose the position; a second undo history and file synchronization in the editors |
 | Separate section at the end of the text | one file | still noise in the text, fragile when editing by hand, keys by name like the sidecar |
 
-Compatibility: models with layout annotations cannot be opened by builds of the main branch (the
-grammar there does not accept annotations in front of states and transitions) until the experiment
-is merged. Generated code does not depend on the annotations (`devm generate --check` stays stable when
+Compatibility: models with layout annotations cannot be opened by builds from before the merge (their
+grammar does not accept annotations in front of states and transitions). Generated code does not depend on the annotations (`devm generate --check` stays stable when
 only the layout changes).
 
 ### Syntax
@@ -165,9 +164,9 @@ the layout of every parsed model with `layoutFromModel` and turns every layout c
 
 ## VS Code extension
 
-The extension of this branch is packaged as `devm-vscode-0.1.0-manual-layout.vsix` (display name
-*Device Modeler (manual layout)*). It has the same extension id as the build of the main branch, so only
-one of them can be installed at a time (uninstall the other one first, or install with `--force`).
+The extension is still packaged as `devm-vscode-0.1.0-manual-layout.vsix` (display name
+*Device Modeler (manual layout)*), the version of the experiment. All builds have the same extension id, so
+only one of them can be installed at a time (uninstall the other one first, or install with `--force`).
 
 - **Toolbar and commands:** the diagram webview shows *Auto-arrange* and *Automatic layout* like the web app; the
   same actions are the commands **Device Modeler: Auto-arrange Diagram** and **Device Modeler: Use Automatic Diagram Layout** (command

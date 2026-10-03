@@ -1,12 +1,11 @@
 # Device Modeler for VS Code
 
-> 🧪 This is the build of the branch `claude/layout-annotations` (version `0.1.0-manual-layout`, display name
-> *Device Modeler (manual layout)*) with hand-arranged diagrams, see
-> [Manual layout](#manual-layout-experimental), and the 🧪 structure files
+> Version `0.1.0-manual-layout` (display name *Device Modeler (manual layout)*, the version of the
+> [manual layout](#manual-layout-experimental) experiment, now merged into main), with the 🧪 structure files
 > (branch `claude/device-modeling`), see [Structure files](#structure-files-experimental).
-> It has the same extension id as the regular build (`device-modeler.devm-vscode`), so only one of them can
-> be installed at a time: uninstall the other one first (`code --uninstall-extension device-modeler.devm-vscode`)
-> or install with `code --install-extension <file>.vsix --force`.
+> The extension id is `device-modeler.devm-vscode` (formerly `hsm-modeler.hsm-vscode`, settings formerly
+> `hsm.*`): uninstall a build with the former id first (`code --uninstall-extension hsm-modeler.hsm-vscode`);
+> builds with the same id replace each other with `code --install-extension <file>.vsix --force`.
 
 Hierarchical state machines and the structure of a product (components, ports, threads, instances and
 connections) in `.devm` files – a file contains either a state machine or structure elements – and the

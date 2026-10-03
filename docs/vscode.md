@@ -15,7 +15,7 @@
   computed with `ModelEditor` and applied to the document as `WorkspaceEdit`s, so undo, the dirty
   state and git behave as for typed changes. The diagram follows the VS Code color theme (light:
   PlantUML classic, configurable with `devm.diagram.lightTheme`; dark: dark theme).
-- 🧪 **Manual layout** (only on the branches `claude/manual-layout` / `claude/layout-annotations`): the
+- **Manual layout** (merged into main from the branch `claude/layout-annotations`, PR #4): the
   diagram is arranged by hand as soon as a state is dragged; the positions are layout annotations in the
   model (`@at(x, y)`, `@via(…)`, …, see [Manual layout](manual-layout.md)). *Auto-arrange* and *Automatic layout* in
   the toolbar of the diagram (also as commands **Device Modeler: Auto-arrange Diagram** and **Device Modeler: Use Automatic
@@ -91,15 +91,14 @@ same extension:
 
 ```bash
 npm run package:vscode    # builds and packages packages/vscode/devm-vscode-<version>.vsix
-code --install-extension packages/vscode/devm-vscode-0.1.0-manual-layout.vsix   # main branch: devm-vscode-0.1.0.vsix
+code --install-extension packages/vscode/devm-vscode-0.1.0-manual-layout.vsix
 ```
 
-On the branches `claude/manual-layout` and `claude/layout-annotations` the package is `devm-vscode-0.1.0-manual-layout.vsix` with the
-display name *Device Modeler (manual layout)*, so the two builds can be told apart. Both have the same
-extension id (`device-modeler.devm-vscode`): only one of them can be installed at a time. To switch, uninstall
-the other one first (`code --uninstall-extension device-modeler.devm-vscode`) or install with `--force`.
-Models with layout annotations (`@at`, …) cannot be opened by the build of the main branch (syntax
-errors) until the experiment is merged.
+The package still has the version `0.1.0-manual-layout` and the display name *Device Modeler (manual
+layout)* of the layout experiment (merged into main). The extension id is `device-modeler.devm-vscode`
+(formerly `hsm-modeler.hsm-vscode`): a build with the former id is a different extension and has to be
+uninstalled first (`code --uninstall-extension hsm-modeler.hsm-vscode`); builds with the same id replace
+each other with `--force`. Its settings `hsm.*` are not taken over, the settings are now `devm.*`.
 
 Three bundles: `dist/extension.cjs` (extension host, esbuild), `dist/server.cjs` (language server,
 esbuild) and `dist/webview/` (Vite, the diagram controller, views and styles of `packages/web` – no
