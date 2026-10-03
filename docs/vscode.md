@@ -22,7 +22,8 @@ the Device Modeling Framework (details in [packages/vscode/README.md](../package
   **HSM: Convert Layout File to Annotations** writes an old `<model>.hsm.layout` into the model.
   Layout changes are `WorkspaceEdit`s like every diagram edit: one undo history (`Ctrl+Z` in the text
   editor or in the diagram), the dirty marker and *Save* apply to them. The `.sct` import writes the
-  arrangement of the itemis diagram as annotations, and the SVG export applies them.
+  arrangement of the itemis diagram as annotations, and the SVG export applies them. Structure diagrams
+  are arranged the same way (see below).
 - 🧪 **Structure files (`.dmf`)**, see [below](#structure-files-dmf): language server, the structure
   diagram with editing and navigation between the diagrams.
 - **C/C++ header imports**: headers are read from disk (and re-read when they change: the importing models are
@@ -58,7 +59,15 @@ same extension:
   mode of the diagram controller, the styles of the web app): palette, rename, drag into threads,
   connectors, properties, route highlighting, the selector of the shown subsystem or system, the structs
   and interfaces of the file as «struct» / «interface» boxes (a file with data types only shows only
-  them); the controls of the state machines (layout settings, simulation, auto-arrange, C++) are disabled.
+  them). **Manual layout** as in the web app: drag nodes, resize them, drag ports along the border of their
+  node, add / move waypoints of connectors – the positions are layout annotations of the `.dmf` text
+  (`@at`, `@size`, `@port`, `@via`, see [Manual layout](manual-layout.md#structure-diagrams-dmf)), written as
+  `WorkspaceEdit`s (undone with `Ctrl+Z`). *Auto-arrange* / *Automatic layout* (toolbar, the *…* menu of the
+  diagram panel and the commands **HSM: Auto-arrange Diagram** / **HSM: Use Automatic Diagram Layout**, also
+  with a `.dmf` editor active) apply to the shown diagram, and **HSM: Export Diagram…** uses the layout. The
+  controls of the state machines (layout direction and edge routing, simulation, C++) are disabled; the
+  context key `hsm.structureDiagramActive` hides *Generate C++* and *Convert Layout File to Annotations* for
+  structure diagrams.
 - **Navigation** (double-click an instance, its type name, the type of a port, *Go to provider*, *Follow into*, *Used by* of a
   state machine, …): the extension opens the target file in the text editor column of the diagram and
   its diagram in the column of the diagram, and shows and selects the target there. The navigation

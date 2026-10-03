@@ -5,7 +5,10 @@ stored the layout in a sidecar file `<model>.hsm.layout`). The automatic layout 
 a model without layout annotations is exactly the diagram computed by `layoutStateMachine`.
 
 This note describes how hand-arranged diagrams are stored and computed, and the trade-offs behind the
-design, so the experiment can be evaluated (and removed again) easily.
+design, so the experiment can be evaluated (and removed again) easily. The structure diagrams of `.dmf`
+files are arranged with the same concept and syntax, see [Structure diagrams](#structure-diagrams-dmf);
+the parts both share are in `packages/language/src/diagram/layout-core/` (see
+[Architecture](architecture.md#manual-layout-shared-core)).
 
 ## Where the layout lives
 
@@ -78,8 +81,8 @@ statemachine CdPlayer {
 
 ### Writing the annotations
 
-`layoutTextEdits(machine, text, layout)` computes the minimal text edits that make the annotations of
-a model equal to a layout (`undefined` removes all layout annotations; other annotations are kept):
+`layoutTextEdits(machine, text, layout)` computes (with the shared `annotationSlotEdits` of layout-core)
+the minimal text edits that make the annotations of a model equal to a layout (`undefined` removes all layout annotations; other annotations are kept):
 values are updated in place, new annotations are added on a line before the element (with its
 indentation) or appended to an existing annotation line of the element, removed annotations take their
 line with them if it becomes empty. Applying the same layout again yields no edits. Structural diagram
@@ -182,7 +185,7 @@ mocked VS Code API, the extension code with a `vscode` mock).
 ## Command line
 
 `hsm layout`, `hsm render`, `hsm doc` and the coverage diagrams of `hsm test` use the layout annotations
-(`--auto` ignores them for `layout`, `render` and `doc`). `hsm import model.sct` writes the itemis
+(`--auto` ignores them for `layout`, `render` and `doc`); `hsm render` also those of structure files. `hsm import model.sct` writes the itemis
 diagram as annotations (`--no-layout` to skip them).
 
 ## Migration from `.hsm.layout`
@@ -205,6 +208,84 @@ transitions between vertices of the same container become `@via` waypoints. Sinc
 usually wider than in itemis (the text is not wrapped at the itemis width), overlapping states are
 pushed apart; the relative arrangement is kept.
 
+## Structure diagrams (`.dmf`)
+
+The internal block diagrams of structure files are arranged by hand the same way: layout annotations in
+the `.dmf` text, no mode switch (a diagram with at least one layout annotation is arranged by hand),
+applied on top of the automatic ELK layout, the same editor gestures, *Auto-arrange* / *Automatic layout*,
+undo of the text.
+
+```
+@at(720, 16)                                    // a type box (struct / interface) of the file
+struct LightLevel { brightness : integer }
+
+@at(112, 16) @port(cmd, left, 155)              // the frame and the place of its boundary port cmd
+subsystem CourtesyLight {
+    provides async cmd : LightCmd
+    @priority(1) @period(20 ms) @at(41, 48) @size(500, 196)
+    thread LightTask {
+        @at(26, 52) dimmer : Dimmer
+        @at(330, 96) @port(level, top, 40) led : LedDriver
+    }
+    @via(300, 120) connect dimmer.level -> led.level
+    delegate cmd -> dimmer.cmd
+}
+```
+
+| Annotation | Written before | Meaning |
+| --- | --- | --- |
+| `@at(x, y)` | `system` / `subsystem` (the frame), `thread`, an instance, `component` (its block in the overview of the component types), `struct` / `interface` (type box) | position relative to the parent node (the frame or a thread; the canvas for the frame, blocks and type boxes) |
+| `@size(width, height)` | the same | explicit (minimum) size, only if the user resized the node – a node never becomes smaller than its content |
+| `@port(name, side, offset)` | an instance (the ports of its type), `system` / `subsystem` (its boundary ports) | the side of the port (`left`, `right`, `top`, `bottom`) and the offset of its center along the side, from the top / left corner (optional) |
+| `@via(x1, y1, …)` | `connect`, `delegate` | waypoints relative to the connector's frame (the innermost node containing the nodes of both ports: a thread for a connector within a thread, otherwise the frame) |
+
+- The annotations belong to the element they are written before (in the grammar they are part of the
+  element), so they move, are deleted and renamed with it. They are checked by the validator (the known
+  annotations of structure files, `DMF_ANNOTATIONS`): misplaced or unknown annotations are warnings,
+  wrong arguments and duplicates errors, `@port` of a port the type does not have is a warning. Renaming a
+  port in the diagram updates the `@port` annotations of the instances of its type.
+- Only the annotations of the elements of the shown diagram are read and written: every subsystem / system
+  of a file has its own diagram. The structs and interfaces of a file are shown in every diagram of the
+  file (and blocks in the overview of the component types): they have one position for all of them.
+- As written by the layout writer and the formatter, the annotations of the frame, threads, components
+  and types stand on the line before them, those of instances, ports, connections and delegations in front
+  of them on the same line (formatter-stable).
+- **Ports**: a port without `@port` keeps the side and offset of the automatic layout (which puts each
+  port on the side facing its partners); ports of a side keep a minimum distance (later ones are pushed
+  along the side), the node grows if they do not fit. The labels of ports on the top / bottom side of an
+  instance are outside of it, right of the port; connectors leave a port perpendicular to its side.
+- **Computation** (`applyIbdManualLayout`, ibd-manual-layout.ts; `layoutStructure` applies the annotations
+  unless `layout: null`): bottom-up like the state machines – the shared `placeChildren` for the frame,
+  threads and canvas, threads and the frame grow to fit their content (their stored size is the minimum);
+  a connector keeps the route of the automatic layout while both its ports and their nodes are arranged like
+  in the automatic layout (relative to its frame) and no moved node lies on the route, other connectors and
+  connectors with waypoints are routed orthogonally around the instances (the shared router; threads are
+  crossed). A captured automatic layout reproduces the automatic layout exactly. The automatic layout is
+  reused while only the layout annotations change (dragging re-runs only the manual step).
+- **Layout settings**: structure diagrams are always laid out from left to right with orthogonal
+  connectors, so the *Layout* direction and *Edges* settings do not apply to them (they are disabled for
+  `.dmf` files); *Auto-arrange* and *Automatic layout* do.
+
+Editing (web app and VS Code, `StructureDiagram` with the shared `LayoutEditor` and mouse listener):
+
+- Drag the frame, a thread, an instance, a block or a type box to move it (the selection moves together;
+  the content of a thread or the frame moves with it). The connectors attached to moved nodes follow as
+  orthogonal lines while dragging and are routed on drop. The first drag in an automatically laid out
+  diagram writes the positions of all nodes (nothing jumps).
+- Dropping an instance onto another thread still moves it into that thread (the model changes, with the
+  rules of the structure language: an instance of a component is refused on the frame, an instance of a
+  subsystem in a thread); in a manual layout it keeps the drop position (`@at` relative to the new thread),
+  written together with the move as one undoable edit.
+- A selected node shows a resize handle at its bottom right corner (`@size`).
+- Drag a port of an instance or a boundary port along the border of its node: it snaps to the nearest side
+  (`@port`); its connectors follow while dragging.
+- A selected connector shows its waypoints: drag them, double-click the connector to add one, double-click
+  a waypoint to remove it (`@via`).
+- *Auto-arrange* writes the automatic layout of the diagram as annotations, *Automatic layout* removes the
+  layout annotations of the diagram (other annotations such as `@priority` stay).
+- `hsm render` and the SVG / PNG export (web app and VS Code) use the annotations (`hsm render --auto`
+  ignores them).
+
 ## Limitations and risks
 
 - Coordinate noise: every drag changes the model; reviews and merges see the numbers.
@@ -217,3 +298,6 @@ pushed apart; the relative arrangement is kept.
 - A container annotation whose element disappears (e.g. `@initial` after the initial transition was
   deleted in the text) stays until the next layout change in the diagram removes it; it is ignored.
 - No alignment guides, snapping, multi-select resize or region resizing.
+- Structure diagrams: the type boxes of a file share one position in all diagrams of the file; deleting a
+  port in a component type leaves `@port` annotations of other files until their diagram is arranged again
+  (they are reported and ignored); the labels of ports are not obstacles of the connector routes.

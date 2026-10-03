@@ -213,10 +213,12 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
 - 🧪 VS Code: `.dmf` in the language server (references, renames and go to provider across files), the
   structure diagram in the diagram webview, navigation through the extension (shared history), edits of
   several files as one `WorkspaceEdit`, all workspace `.hsm` / `.dmf` files sent to the diagrams
+- 🧪 Manual layout of structure diagrams with the concept and syntax of the state machines (`@at`,
+  `@size`, `@via`, `@port` for the side and offset of ports), on a layout core shared with the state machine
+  diagrams (`src/diagram/layout-core`: annotation edits, placement, orthogonal routing; web: mouse
+  interaction and `LayoutEditor`); connectors follow dragged instances; `hsm render`, export and VS Code
+  ([docs/manual-layout.md](docs/manual-layout.md#structure-diagrams-dmf))
 - 📋 open follow-ups of the experiment:
-  - layout annotations for structure diagrams (manual layout: positions of instances, threads and ports,
-    connector waypoints, consistent with the `@at` / `@via` annotations of the state machines); connectors
-    do not follow an instance while it is dragged
   - simulation of the composed system (several state machines connected through the ports, threads and
     their periods / priorities) and code generation of the composition (instances, wiring of the generated
     state machine classes, thread setup)

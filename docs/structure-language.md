@@ -198,8 +198,9 @@ components are always in a thread**, **instances of subsystems never**:
   only known after linking – so the validator checks the rules and tells where the instance belongs;
   completion offers components in threads and subsystems outside of them.
 - Annotations: `@priority(n)` (integer), `@period(10 ms)` (period of a cyclic thread, units `s`, `ms`,
-  `us`, `ns`), `@stack(4096)` (stack size in bytes). Other annotations are reported as unknown; tools can
-  register further names in `DMF_ANNOTATIONS` (dmf-validator.ts).
+  `us`, `ns`), `@stack(4096)` (stack size in bytes), and the layout annotations of the diagram (see
+  [Diagram](#diagram)). Other annotations are reported as unknown; tools can register further names in
+  `DMF_ANNOTATIONS` (dmf-validator.ts).
 - A connection between two instances of different threads crosses threads: an info diagnostic (the
   diagram draws it dashed). For an instance of a subsystem, the threads of the component ports the
   connection leads to inside the subsystem count (`door.motor -> drive.ctrl` crosses from `ControlTask`
@@ -248,6 +249,27 @@ Instances of subsystems are drawn directly in the frame (outside of the threads)
 the side facing the ports they are connected to (by default provided ports left, required ports right),
 ordered by the position of their partners, so a reply (`drive.status -> door.status`) needs no detour.
 
+**Manual layout.** The diagram can be arranged by hand, with the same concept and syntax as the state
+machine diagrams ([Manual layout](manual-layout.md#structure-diagrams-dmf)): layout annotations in the text
+place the frame, threads, instances, component blocks and type boxes (`@at(x, y)`, `@size(w, h)`), the
+ports of an instance or the boundary ports (`@port(name, left | right | top | bottom, offset)`) and the
+waypoints of connections and delegations (`@via(x1, y1, …)`); a diagram without them is laid out
+automatically. They are written by dragging in the diagram and removed by *Automatic layout*:
+
+```
+@at(112, 16)
+subsystem CourtesyLight {
+    provides async cmd : LightCmd
+    @priority(1) @period(20 ms) @at(41, 48) @size(500, 196)
+    thread LightTask {
+        @at(26, 52) dimmer : Dimmer
+        @at(330, 96) @port(level, top, 40) led : LedDriver
+    }
+    connect dimmer.level -> led.level
+    delegate cmd -> dimmer.cmd
+}
+```
+
 **Choosing what is shown.** The diagram shows the first `system` of the file, else its first
 `subsystem`; a file with component types only shows them all as blocks with their ports (or one of
 them). If the file declares several elements, a selector at the top of the diagram chooses the shown one;
@@ -275,7 +297,9 @@ derived from the names – frame `GarageDoor`, boundary port `GarageDoor.remote`
 connection `GarageDoor/door.motor->drive.ctrl`, delegation `GarageDoor/remote->door.cmd`; the result maps
 ids to AST nodes and back (`elements`, `ids`; ports of instances also to their instance, `instances`). The
 layout uses ELK (layered, left to right, orthogonal routing, threads and the frame as compound nodes with
-hierarchy handling, ports with fixed positions). Not supported yet: layout annotations (manual layout).
+hierarchy handling, ports with fixed positions); the layout annotations of the diagram's elements are
+applied on top of it (`applyIbdManualLayout` in `ibd-manual-layout.ts`, read and written by
+`ibd-layout-annotations.ts`; `layoutStructure(model, { layout: null })` gives the automatic layout).
 
 **Editing** (`src/edit/dmf-edits.ts`): `DmfEditor` turns the diagram operations into minimal text edits
 (add threads, instances, ports, connections and component types; move instances between threads; edit

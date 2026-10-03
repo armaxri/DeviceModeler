@@ -35,7 +35,7 @@ is edited like the state machine diagrams: every action is a minimal text edit o
 | Add an instance (part) | *Instance* tool (`I`), click into a thread and choose the component (instances of components run in threads), or click on the frame and choose a subsystem (placed outside of the threads); choosing a component on the frame asks for its thread next (without a thread nothing is added). The list shows the types visible in the file (type to filter) – then type the name |
 | Add a port | *Port* tools: provided sync `1`, provided async `2`, required sync `3`, required async `4`; click on the frame (a boundary port of the subsystem or system), a component block or an instance whose type is declared in the file. New ports are `integer` (sync) or typed by the first interface of the file (async) – change the type in the properties panel |
 | Connect two ports | *Connector* tool (`C`): press on a port and drag to the other port (or click both). While drawing, the ports that can be connected turn green, ports with incompatible types orange, the others fade; the hint shows the statement or the reason. Two ports of parts become `connect required -> provided` (drawn the other way round, the ends are swapped), a boundary port and a port of a part a `delegate` (`delegate p -> part.q` for provided, `delegate part.r -> r` for required ports). Incompatible ports are connected with a warning (the validator reports the error) |
-| Move an instance into another thread | drag it onto the thread (an assignment by name, `thread T { door }`, is replaced). Dropping an instance of a component onto the frame or an instance of a subsystem into a thread is refused with a hint |
+| Move an instance into another thread | drag it onto the thread (an assignment by name, `thread T { door }`, is replaced). Dropping an instance of a component onto the frame or an instance of a subsystem into a thread is refused with a hint. In a manually arranged diagram the instance keeps the drop position |
 | Rename | double-click the name (of an instance: on its name, not on its type) or `F2`; also in the properties panel. Component types and ports are renamed in all structure files of the workspace that use them (Langium references); in the web app those other files are changed in the workspace (not undone with `Ctrl+Z` of the edited file), in VS Code all files are changed by one workspace edit (undone together) |
 | Edit a port | properties panel: name, direction, kind, type (with completion of the built-in types, structs and interfaces) |
 | Edit a thread | properties panel: name, priority, period (`10 ms`), stack size – the annotations `@priority(5) @period(10 ms) @stack(4096)` on the line before the thread |
@@ -43,6 +43,23 @@ is edited like the state machine diagrams: every action is a minimal text edit o
 | Set the behavior of a component | properties panel of the component (`behavior "door.hsm"`, completion of the state machine files) |
 | Add a component type | properties panel of the overview (*Add component / subsystem / system*) |
 | Delete | `Del` / the trash button: an instance with its connections, delegations and assignments; a port with the connections and delegations using it (also in the other structure files of the workspace); a thread together with its instances and their connections and delegations (instances of components only exist in threads); connections, delegations, component types. Ports shown at an instance belong to its type: they are edited and deleted in the type |
+
+### Layout of structure diagrams
+
+Structure diagrams are arranged by hand like the state machines (see [Manual layout](#manual-layout-experimental)
+and [Manual layout: structure diagrams](manual-layout.md#structure-diagrams-dmf)): the first drag stores
+the positions of all nodes as layout annotations in the `.dmf` text (`@at`, `@size`, `@port`, `@via`),
+*Auto-arrange* and *Automatic layout* in the toolbar apply to the shown diagram, `Ctrl+Z` undoes layout
+changes. The *Layout* direction and *Edges* settings do not apply (structure diagrams are always laid out
+from left to right with orthogonal connectors).
+
+| Action (layout) | How |
+| --- | --- |
+| Move the frame, a thread, an instance, a component block or a type box | drag it (with the *Select* tool; the connectors follow, the content of a thread moves with it) |
+| Resize a node | select it, drag the handle at its bottom right corner |
+| Move a port to another place or side | drag the port along the border of its instance (or of the frame) |
+| Add / move / remove a waypoint of a connector | select the connector; double-click its line / drag the point / double-click the point |
+| Arrange automatically / back to the automatic layout | *Auto-arrange* / *Automatic layout* in the toolbar |
 
 ### Navigation
 

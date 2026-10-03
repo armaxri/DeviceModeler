@@ -29,7 +29,9 @@ packages/
                                 port <-> state machine mapping (dmf-behavior.ts), route analysis (dmf-routes.ts),
                                 formatter; src/lsp/dmf-lsp.ts: definition, "go to provider", hover, completion
     src/diagram/                AST -> PlantUML-like diagram model (layout.ts), laid out with ELK; font metrics;
-                                structures: internal block diagram (ibd-model.ts, ibd-layout.ts)
+                                structures: internal block diagram (ibd-model.ts, ibd-layout.ts);
+                                manual layouts: layout-core/ (shared), manual-layout.ts + layout-annotations.ts
+                                (state machines), ibd-manual-layout.ts + ibd-layout-annotations.ts (structures)
     src/edit/model-edits.ts     ModelEditor: structural edits (add, move, rename, delete, …) as text edits
     src/edit/dmf-edits.ts       DmfEditor: the edits of structure diagrams (threads, instances, ports, connections, …)
     src/dmf-workspace.ts        DmfWorkspace: all structure files loaded together (navigation, routes and renames across files)
@@ -52,6 +54,7 @@ packages/
     src/diagram-controller.ts   graphical editor: text -> Langium -> ELK (web worker) -> Sprotty, diagram edits -> text
                                 (independent of Monaco: also used by the VS Code webview via the DiagramHost interface);
                                 structure files (.dmf): structure-diagram.ts (editing, route highlighting, navigation)
+    src/layout-editing.ts       manual layout editing shared by both diagrams (LayoutEditor: moves, sizes, waypoints)
     src/model-service.ts        Langium parsing / validation of the model text (and its imports) in the browser
     src/language-support.ts     Langium services wired into Monaco (markers, completion, hover, formatting, …)
     src/diagram/                Sprotty model, views (PlantUML look), ELK worker, mouse / selection listeners;
@@ -95,3 +98,39 @@ host is the VS Code document, navigation opens the target document and its diagr
 several files are one `WorkspaceEdit` (see [VS Code extension](vscode.md)). The CLI, the language server
 and the test runner use the same `packages/language` code in Node.js; the simulator, unit tests,
 coverage and the conformance scenarios all execute on the one interpreter in `src/simulation`.
+
+## Manual layout: shared core
+
+Both diagrams can be arranged by hand with the same concept (docs/manual-layout.md): the layout is stored
+as layout annotations in the model text (`@at`, `@size`, `@via`, …), a model without them is laid out
+automatically, and the manual layout is applied on top of the automatic (ELK) layout, which is always
+computed first. What is the same for both lives in `packages/language/src/diagram/layout-core/`:
+
+| Module | Content |
+| --- | --- |
+| `model.ts` | the data model (`BaseManualLayout` with nodes – position relative to the parent, optional size – and edges – waypoints relative to the edge's frame, label offset), geometry helpers, `borderPlacement` (side and offset of a point on a node's border) |
+| `annotation-edits.ts` | the minimal text edits making the layout annotations of a model equal to a layout, independent of the language: the languages describe *annotation slots* (the annotations written at one place, the wanted layout annotations, where new ones are inserted); values are replaced in place, new annotations appended or inserted on a line of their own / in front of the element, removed ones take their line with them |
+| `tree.ts` | the node hierarchy (`LayoutTree`): paths, absolute positions, the frame of an edge (innermost node containing both ends) |
+| `placement.ts` | `placeChildren`: pinned nodes at their stored position (shifted as a whole below a container's header, pushed apart if they overlap), the other nodes near their automatic position at a free spot |
+| `routing.ts`, `orthogonal-router.ts` | orthogonal routing around obstacles on a sparse grid, through waypoints part by part |
+
+What stays language specific, and why:
+
+- **Reading / writing the annotations** (`layout-annotations.ts`, `ibd-layout-annotations.ts`): the
+  grammars differ – state machines have element *and* container annotations (`@initial`, `@definitions`)
+  whose owner is found by position in a body, structure elements own their annotations directly – and so do
+  the diagram ids, the elements carrying annotations and the formatting (structure instances and connectors
+  have their annotations on the same line).
+- **The layout engines** (`ManualLayoutEngine` in manual-layout.ts, `IbdManualLayoutEngine` in
+  ibd-manual-layout.ts) use the shared placement, hierarchy and router, but the node sizes (state
+  compartments, regions stacked in a state vs. instances with port rows, threads, the frame) and the edge
+  ends differ: transitions attach anywhere on a vertex border (spline / polyline shaping, labels, ends spread
+  along a side), connectors attach to fixed ports and leave them perpendicular to their side (ports are
+  placed by `@port`, structure diagrams have no edge labels and are always orthogonal).
+
+In the web editor (`packages/web`) the mouse interaction (`diagram/listeners.ts`: dragging nodes with the
+attached edges following, resize handles, waypoint handles, dragging ports along a border) serves both
+diagrams, and `layout-editing.ts` (`LayoutEditor`) turns every change into a new layout based on the
+effective layout (all nodes pinned where they are shown; the captured automatic layout for an
+automatically laid out diagram) – the diagrams only provide the layout, its conversion into text edits
+(`DiagramController.writeLayout`, `StructureDiagram.writeLayout`) and the routes of their edges.
