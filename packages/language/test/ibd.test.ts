@@ -47,21 +47,21 @@ function withClass(root: XmlElement, cls: string): XmlElement[] {
     return elements(root).filter(e => (e.attributes.class ?? '').split(/\s+/).includes(cls));
 }
 
-describe('internal block diagram: the garage door system', () => {
+describe('internal block diagram: the garage door subsystem', () => {
     let model: ast.StructureModel;
     let layout: IbdLayoutResult;
 
     beforeAll(async () => {
-        model = await loadExample('system.devm');
+        model = await loadExample('garage-door.devm');
         layout = (await layoutStructure(model))!;
     });
 
-    test('the frame of the system with its boundary ports', () => {
+    test('the frame of the subsystem with its boundary ports', () => {
         const graph = layout.graph;
-        expect(graph.kind).toBe('system');
+        expect(graph.kind).toBe('subsystem');
         expect(graph.children.map(n => `${n.kind} ${n.id}`)).toEqual(['frame GarageDoor']);
         const frame = graph.children[0];
-        expect(frame.details).toBe('ibd [system] GarageDoor');
+        expect(frame.details).toBe('ibd [subsystem] GarageDoor');
         expect(frame.ports.map(p => `${p.id} ${p.direction} ${p.kind} ${p.side}`)).toEqual([
             'GarageDoor.open in async WEST',
             'GarageDoor.close in async WEST',
@@ -137,7 +137,7 @@ describe('internal block diagram: the garage door system', () => {
                 ys.slice(1).forEach((y, i) => expect(y - ys[i]).toBeGreaterThanOrEqual(20));
             }
         }
-        // the in port `open` receives the events of the system's boundary port on the left; the in port
+        // the in port `open` receives the events of the subsystem's boundary port on the left; the in port
         // `stopped` faces its source in the drive unit on the right
         expect(door.ports.find(p => p.name === 'open')!.side).toBe('WEST');
         expect(door.ports.find(p => p.name === 'stopped')!.side).toBe('EAST');
@@ -228,6 +228,27 @@ describe('internal block diagram: the garage door system', () => {
     });
 });
 
+describe('internal block diagram: the closed garage installation system', () => {
+    test('a frame without ports: the garage door subsystem and its environment as parts', async () => {
+        const layout = (await layoutStructure(await loadExample('system.devm')))!;
+        expect(layout.graph.kind).toBe('system');
+        const frame = layout.graph.children[0];
+        expect(`${frame.kind} ${frame.id}`).toBe('frame GarageInstallation');
+        expect(frame.details).toBe('ibd [system] GarageInstallation');
+        expect(frame.ports).toEqual([]);
+        expect(frame.children.map(n => `${n.kind} ${n.id}`)).toEqual([
+            'thread GarageInstallation/thread:RadioTask', 'thread GarageInstallation/thread:DisplayTask', 'instance GarageInstallation/door'
+        ]);
+        expect(layout.graph.edges.map(e => `${e.id} ${e.kind}`)).toEqual([
+            'GarageInstallation/remote.open->door.open connect',
+            'GarageInstallation/remote.close->door.close connect',
+            'GarageInstallation/remote.stop->door.stop connect',
+            'GarageInstallation/door.report->display.report connect'
+        ]);
+        expect(node(layout, 'GarageInstallation/door').composite?.structure).toBe('GarageDoor');
+    });
+});
+
 describe('internal block diagram: other elements', () => {
     test('the drive unit: two threads, delegations to and from the boundary ports', async () => {
         const layout = (await layoutStructure(await loadExample('drive-unit.devm')))!;
@@ -252,7 +273,7 @@ describe('internal block diagram: other elements', () => {
     test('component types: the overview and a single block', async () => {
         const model = await loadExample('components.devm');
         expect(ibdChoices(model).map(c => c.id)).toEqual([
-            'DoorController', 'MotorController', 'PwmDriver', 'EndSwitches', 'PositionSensor', 'Buzzer', 'Diagnosis', IBD_OVERVIEW_ID
+            'DoorController', 'MotorController', 'PwmDriver', 'EndSwitches', 'PositionSensor', 'Buzzer', 'Diagnosis', 'RemoteControl', 'StatusDisplay', IBD_OVERVIEW_ID
         ]);
         expect(defaultIbdElement(model)).toBe(IBD_OVERVIEW_ID);
         const overview = (await layoutStructure(model))!;
@@ -360,13 +381,14 @@ describe('devm render: structure files', () => {
         const messages: string[] = [];
         const code = await runRenderCommand([DEVICE], { out, theme: 'modern' }, { log: m => messages.push(m), error: m => messages.push(`error: ${m}`) });
         expect(code).toBe(0);
-        expect(fs.readdirSync(out).sort()).toEqual(['components.svg', 'controller.svg', 'drive-unit.svg', 'drive.svg', 'light.svg', 'system.svg', 'types.svg']);
+        expect(fs.readdirSync(out).sort()).toEqual(['components.svg', 'controller.svg', 'drive-unit.svg', 'drive.svg', 'garage-door.svg', 'light.svg', 'system.svg', 'types.svg']);
         expect(fs.readFileSync(path.join(out, 'types.svg'), 'utf-8')).toContain('class="ibd-node ibd-type"');
         const system = fs.readFileSync(path.join(out, 'system.svg'), 'utf-8');
         expect(system).toMatch(/^<\?xml/);
         expect(system).toContain('theme-modern');
         expect(system).toContain('class="ibd-node ibd-frame"');
-        expect(system).toContain('GarageDoor');
+        expect(system).toContain('GarageInstallation');
+        expect(fs.readFileSync(path.join(out, 'garage-door.svg'), 'utf-8')).toContain('[subsystem] <tspan class="ibd-frame-name">GarageDoor');
         expect(fs.readFileSync(path.join(out, 'drive-unit.svg'), 'utf-8')).toContain('DriveUnit');
         fs.rmSync(out, { recursive: true, force: true });
     });

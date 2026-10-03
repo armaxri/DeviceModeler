@@ -196,10 +196,10 @@ describe('CLI render and doc', () => {
         const all = (await expandFiles([EXAMPLES_DIR])).map(f => path.basename(f));
         // cpp-types/: the example importing a C++ header, device/: the structure example (structure files
         // and state machines), door-with-motor/: the submachine example (two files)
-        expect(all).toEqual(['cd-player.devm', 'conveyor.devm', 'components.devm', 'controller.devm', 'drive-unit.devm', 'drive.devm', 'light.devm',
-            'system.devm', 'types.devm', 'gate.devm', 'motor.devm', 'door.devm', 'keyboard.devm', 'traffic-light.devm']);
+        expect(all).toEqual(['cd-player.devm', 'conveyor.devm', 'components.devm', 'controller.devm', 'drive-unit.devm', 'drive.devm', 'garage-door.devm',
+            'light.devm', 'system.devm', 'types.devm', 'gate.devm', 'motor.devm', 'door.devm', 'keyboard.devm', 'traffic-light.devm']);
         expect((await expandFiles([path.join(EXAMPLES_DIR, 'k*.devm')])).map(f => path.basename(f))).toEqual(['keyboard.devm']);
-        expect(await expandFiles([path.join(EXAMPLES_DIR, '**/*.devm')])).toHaveLength(14);
+        expect(await expandFiles([path.join(EXAMPLES_DIR, '**/*.devm')])).toHaveLength(15);
         expect(await expandFiles([path.join(EXAMPLES_DIR, '*.nothing')])).toEqual([]);
     });
 
@@ -209,7 +209,7 @@ describe('CLI render and doc', () => {
         expect(await runRenderCommand([EXAMPLES_DIR], { out: dir, theme: 'dark', direction: 'right', routing: 'orthogonal' }, log)).toBe(0);
         // (with the structure files of examples/device)
         expect(fs.readdirSync(dir).sort()).toEqual(['cd-player.svg', 'components.svg', 'controller.svg', 'conveyor.svg', 'door.svg', 'drive-unit.svg', 'drive.svg',
-            'gate.svg', 'keyboard.svg', 'light.svg', 'motor.svg', 'system.svg', 'traffic-light.svg', 'types.svg']);
+            'garage-door.svg', 'gate.svg', 'keyboard.svg', 'light.svg', 'motor.svg', 'system.svg', 'traffic-light.svg', 'types.svg']);
         const svg = fs.readFileSync(path.join(dir, 'door.svg'), 'utf-8');
         expect(parseXml(svg).attributes.class).toContain('theme-dark');
         const single = path.join(dir, 'sub', 'door-classic.svg');

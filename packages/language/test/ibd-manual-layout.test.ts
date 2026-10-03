@@ -19,23 +19,23 @@ import { createDevmServices } from '../src/devm-module.js';
 const DEVICE = path.resolve(__dirname, '../../../examples/device');
 const services = createDevmServices(NodeFileSystem);
 const deviceLoader = new StructureModelLoader(services);
-const SYSTEM = fs.readFileSync(path.join(DEVICE, 'system.devm'), 'utf-8');
+const SYSTEM = fs.readFileSync(path.join(DEVICE, 'garage-door.devm'), 'utf-8');
 
 /** Loads a structure file of the device example (the other files of the example are read from disk). */
-async function load(text: string, file = 'system.devm') {
+async function load(text: string, file = 'garage-door.devm') {
     const location = path.join(DEVICE, file);
     const parsed = await deviceLoader.load(text, URI.file(location).toString());
     expect(parsed.hasSyntaxErrors, text).toBe(false);
     return parsed;
 }
 
-async function diagram(text: string, file = 'system.devm', element?: string): Promise<{ model: ast.StructureModel, layout: IbdManualLayoutResult }> {
+async function diagram(text: string, file = 'garage-door.devm', element?: string): Promise<{ model: ast.StructureModel, layout: IbdManualLayoutResult }> {
     const parsed = await load(text, file);
     return { model: parsed.model, layout: (await layoutStructure(parsed.model, { element }))! };
 }
 
 /** The text with the layout written as annotations (computed on the diagram of `text`). */
-async function withLayout(text: string, change: (layout: IbdManualLayout, current: IbdManualLayoutResult) => void, file = 'system.devm', element?: string): Promise<string> {
+async function withLayout(text: string, change: (layout: IbdManualLayout, current: IbdManualLayoutResult) => void, file = 'garage-door.devm', element?: string): Promise<string> {
     const { model, layout } = await diagram(text, file, element);
     const manual = layout.effective ? structuredClone(layout.effective) : captureIbdLayout(layout.graph);
     change(manual, layout);
@@ -62,7 +62,7 @@ describe('structure diagrams: manual layout', () => {
         const auto = (await diagram(SYSTEM)).layout;
         expect(auto.effective).toBeUndefined();
         const text = await withLayout(SYSTEM, () => undefined);
-        expect(text).toContain('@at(130, 16)\nsystem GarageDoor {');
+        expect(text).toContain('@at(130, 16)\nsubsystem GarageDoor {');
         expect(text).toContain('    @priority(5) @period(10 ms) @at(81, 48)\n    thread ControlTask {');
         expect(text).toContain('        @at(26, 52) door : DoorController');
         expect(await format(text)).toBe(text);
@@ -112,7 +112,7 @@ describe('structure diagrams: manual layout', () => {
             layout.ports['GarageDoor.report'] = { side: 'SOUTH', offset: 300 };
         });
         expect(text).toContain('@at(26, 52) @port(stopped, bottom, 40) door : DoorController');
-        expect(text).toContain('@at(130, 16) @port(report, bottom, 300)\nsystem GarageDoor {');
+        expect(text).toContain('@at(130, 16) @port(report, bottom, 300)\nsubsystem GarageDoor {');
         expect(await format(text)).toBe(text);
         const { model, layout } = await diagram(text);
         expect(ibdLayoutFromModel(model, layout)?.ports).toEqual({
@@ -277,7 +277,7 @@ system Outer {
             .replace('    connect door.up -> drive.up', '    @via(1, 2, 3) connect door.up -> drive.up')
             .replace('    in async open', '    @at(1, 2) in async open')
             .replace('    thread IoTask', '    @via(1, 2) @port(open, left)\n    thread IoTask');
-        const parsed = await deviceLoader.load(text, URI.file(path.join(DEVICE, 'system.devm')).toString());
+        const parsed = await deviceLoader.load(text, URI.file(path.join(DEVICE, 'garage-door.devm')).toString());
         const messages = parsed.diagnostics.map(d => `${d.severity === 1 ? 'error' : 'warning'}: ${d.message}`);
         expect(messages).toEqual(expect.arrayContaining([
             'error: Invalid arguments: position in the structure diagram: @at(x, y).',

@@ -11,12 +11,12 @@ import { StructureModelLoader } from '../src/model-loader.js';
 const loader = new StructureModelLoader();
 const DEVICE_DIR = path.resolve(__dirname, '../../../examples/device');
 const deviceFile = (name: string) => fs.readFileSync(path.join(DEVICE_DIR, name), 'utf-8');
-const DEVICE_FILES = ['types.devm', 'components.devm', 'drive-unit.devm', 'system.devm', 'controller.devm', 'drive.devm', 'door_types.h'];
+const DEVICE_FILES = ['types.devm', 'components.devm', 'drive-unit.devm', 'garage-door.devm', 'controller.devm', 'drive.devm', 'door_types.h'];
 
 let counter = 0;
 
 /** Loads a structure file of the device example (with the other files of the example). */
-async function load(text: string, name = 'system.devm') {
+async function load(text: string, name = 'garage-door.devm') {
     const files: Record<string, string> = {};
     for (const file of DEVICE_FILES) {
         if (file !== name) {
@@ -56,7 +56,7 @@ function end(s: ast.CompositeType, text: string): PortEnd {
 
 describe('structure edits: threads and instances', () => {
     test('add a thread after the last thread', async () => {
-        const { text, result } = await edit('system.devm', (e, m) => e.addThread(structure(m, 'GarageDoor')));
+        const { text, result } = await edit('garage-door.devm', (e, m) => e.addThread(structure(m, 'GarageDoor')));
         expect(result.createdName).toBe('Thread1');
         expect(text).toContain(`        diag : Diagnosis
     }
@@ -78,19 +78,19 @@ describe('structure edits: threads and instances', () => {
     });
 
     test('add an instance of a component into a thread, of a subsystem outside of threads', async () => {
-        const inThread = await edit('system.devm', (e, m) => e.addInstance(structure(m, 'GarageDoor'), 'Buzzer', { thread: structure(m, 'GarageDoor').threads[1] }));
+        const inThread = await edit('garage-door.devm', (e, m) => e.addInstance(structure(m, 'GarageDoor'), 'Buzzer', { thread: structure(m, 'GarageDoor').threads[1] }));
         expect(inThread.result.createdName).toBe('buzzer1');
         expect(inThread.text).toContain(`        diag : Diagnosis
         buzzer1 : Buzzer
     }`);
         expect(inThread.text.substring(inThread.result.selectOffset!)).toMatch(/^buzzer1 : Buzzer/);
-        const subsystem = await edit('system.devm', (e, m) => e.addInstance(structure(m, 'GarageDoor'), 'DriveUnit', { name: 'drive2' }));
+        const subsystem = await edit('garage-door.devm', (e, m) => e.addInstance(structure(m, 'GarageDoor'), 'DriveUnit', { name: 'drive2' }));
         expect(subsystem.text).toContain(`    drive : DriveUnit
     drive2 : DriveUnit
 
     connect door.up -> drive.up`);
         // a component instance needs a thread, a subsystem instance must not be in one
-        const parsed = await load(deviceFile('system.devm'));
+        const parsed = await load(deviceFile('garage-door.devm'));
         const editor = new StructureEditor(parsed.text, parsed.model);
         const s = structure(parsed.model, 'GarageDoor');
         expect(() => editor.addInstance(s, 'PwmDriver')).toThrow("'PwmDriver' is a component: its instances run in a thread – add the instance to a thread.");
@@ -104,7 +104,7 @@ describe('structure edits: threads and instances', () => {
     });
 
     test('names must be unique and valid', async () => {
-        const parsed = await load(deviceFile('system.devm'));
+        const parsed = await load(deviceFile('garage-door.devm'));
         const editor = new StructureEditor(parsed.text, parsed.model);
         expect(() => editor.addThread(structure(parsed.model, 'GarageDoor'), 'door')).toThrow(EditError);
         expect(() => editor.addThread(structure(parsed.model, 'GarageDoor'), 'thread')).toThrow(/not a valid name/);
@@ -113,8 +113,8 @@ describe('structure edits: threads and instances', () => {
     });
 
     test('move an instance between threads (with its comment)', async () => {
-        const text = deviceFile('system.devm').replace('        buzzer : Buzzer\n', '        // beeps\n        buzzer : Buzzer // the alarm\n');
-        const { text: result, errors } = await edit('system.devm', (e, m) => {
+        const text = deviceFile('garage-door.devm').replace('        buzzer : Buzzer\n', '        // beeps\n        buzzer : Buzzer // the alarm\n');
+        const { text: result, errors } = await edit('garage-door.devm', (e, m) => {
             const s = structure(m, 'GarageDoor');
             return e.moveInstance(instance(s, 'buzzer'), s.threads[1]);
         }, text);
@@ -129,7 +129,7 @@ describe('structure edits: threads and instances', () => {
     });
 
     test('instances of components stay in threads, instances of subsystems outside of them', async () => {
-        const parsed = await load(deviceFile('system.devm'));
+        const parsed = await load(deviceFile('garage-door.devm'));
         const editor = new StructureEditor(parsed.text, parsed.model);
         const s = structure(parsed.model, 'GarageDoor');
         expect(() => editor.moveInstance(instance(s, 'sensor'), s)).toThrow("'sensor' is an instance of the component PositionSensor: it runs in a thread – move it into another thread.");
@@ -151,15 +151,15 @@ describe('structure edits: threads and instances', () => {
     });
 
     test('change the type of an instance', async () => {
-        const { text } = await edit('system.devm', (e, m) => e.setInstanceType(instance(structure(m, 'GarageDoor'), 'buzzer'), 'Diagnosis'));
+        const { text } = await edit('garage-door.devm', (e, m) => e.setInstanceType(instance(structure(m, 'GarageDoor'), 'buzzer'), 'Diagnosis'));
         expect(text).toContain('        buzzer : Diagnosis\n');
     });
 });
 
 describe('structure edits: connections', () => {
     test('connect an out port to an in port, swapped if drawn the other way', async () => {
-        const text = deviceFile('system.devm').replace('    connect door.alarm -> buzzer.alarm\n', '');
-        const { text: result, result: r, errors } = await edit('system.devm', (e, m) => {
+        const text = deviceFile('garage-door.devm').replace('    connect door.alarm -> buzzer.alarm\n', '');
+        const { text: result, result: r, errors } = await edit('garage-door.devm', (e, m) => {
             const s = structure(m, 'GarageDoor');
             return e.addConnection(s, end(s, 'buzzer.alarm'), end(s, 'door.alarm'));
         }, text);
@@ -172,8 +172,8 @@ describe('structure edits: connections', () => {
     });
 
     test('inout ports: connected in the order they were chosen', async () => {
-        const text = deviceFile('system.devm').replace('    connect door.errors -> diag.errors\n', '');
-        const { text: result, result: r, errors } = await edit('system.devm', (e, m) => {
+        const text = deviceFile('garage-door.devm').replace('    connect door.errors -> diag.errors\n', '');
+        const { text: result, result: r, errors } = await edit('garage-door.devm', (e, m) => {
             const s = structure(m, 'GarageDoor');
             return e.addConnection(s, end(s, 'diag.errors'), end(s, 'door.errors'));
         }, text);
@@ -181,7 +181,7 @@ describe('structure edits: connections', () => {
         expect((r as { plan: { swapped: boolean } }).plan.swapped).toBe(false);
         expect(result).toContain('    connect door.cycles -> diag.cycles\n    connect diag.errors -> door.errors\n');
         // connected already (in the other order)
-        const parsed = await load(deviceFile('system.devm'));
+        const parsed = await load(deviceFile('garage-door.devm'));
         const s = structure(parsed.model, 'GarageDoor');
         expect(() => planConnection(s, end(s, 'diag.errors'), end(s, 'door.errors'))).toThrow(/already connected/);
     });
@@ -201,7 +201,7 @@ describe('structure edits: connections', () => {
     });
 
     test('invalid and incompatible connections are refused', async () => {
-        const parsed = await load(deviceFile('system.devm'));
+        const parsed = await load(deviceFile('garage-door.devm'));
         const s = structure(parsed.model, 'GarageDoor');
         expect(() => planConnection(s, end(s, 'door.open'), end(s, 'buzzer.alarm'))).toThrow('Both ports are in ports – the data flows from an out port to an in port.');
         expect(() => planConnection(s, end(s, 'door.up'), end(s, 'door.alarm'))).toThrow(/same part/);
@@ -235,7 +235,7 @@ describe('structure edits: connections', () => {
     });
 
     test('a sync in port has one source, an async in port one sender: a second one is refused', async () => {
-        const text = deviceFile('system.devm').replace('        sensor : PositionSensor\n', '        sensor : PositionSensor\n        backup : PositionSensor\n')
+        const text = deviceFile('garage-door.devm').replace('        sensor : PositionSensor\n', '        sensor : PositionSensor\n        backup : PositionSensor\n')
             .replace('        buzzer : Buzzer\n', '        buzzer : Buzzer\n        horn : Buzzer\n');
         const parsed = await load(text);
         const s = structure(parsed.model, 'GarageDoor');
@@ -307,9 +307,9 @@ describe('structure edits: ports, annotations, behavior', () => {
 
     test('thread annotations: change, add, remove', async () => {
         const thread = (m: ast.StructureModel) => structure(m, 'GarageDoor').threads[0];
-        const changed = await edit('system.devm', (e, m) => e.setThreadAnnotations(thread(m), { priority: '7', stack: '1024' }));
+        const changed = await edit('garage-door.devm', (e, m) => e.setThreadAnnotations(thread(m), { priority: '7', stack: '1024' }));
         expect(changed.text).toContain('    @priority(7) @period(10 ms) @stack(1024)\n    thread ControlTask {');
-        const removed = await edit('system.devm', (e, m) => e.setThreadAnnotations(thread(m), { priority: '', period: undefined }));
+        const removed = await edit('garage-door.devm', (e, m) => e.setThreadAnnotations(thread(m), { priority: '', period: undefined }));
         expect(removed.text).toContain('    out sync report : Diagnostics\n\n    thread ControlTask {');
         expect(removed.text).toContain('    @priority(2) @period(100 ms)\n    thread IoTask');
         const text = 'system S {\n    thread T {\n    }\n}\n';
@@ -331,7 +331,7 @@ describe('structure edits: ports, annotations, behavior', () => {
 
     test('add component types', async () => {
         const { text, result } = await edit('components.devm', e => e.addComponentType('component'));
-        expect(text.endsWith('    out sync report : Diagnostics\n}\n\ncomponent Component1 {\n}\n')).toBe(true);
+        expect(text.endsWith('    in sync report : Diagnostics\n}\n\ncomponent Component1 {\n}\n')).toBe(true);
         expect(text.substring(result.selectOffset!)).toMatch(/^component Component1/);
         const { text: empty } = await edit('main.devm', e => e.addComponentType('system', 'Car'), '// nothing yet\n');
         expect(empty).toBe('// nothing yet\n\nsystem Car {\n}\n');
@@ -340,7 +340,7 @@ describe('structure edits: ports, annotations, behavior', () => {
 
 describe('structure edits: rename and delete', () => {
     test('rename an instance and its references in the file', async () => {
-        const { text, errors } = await edit('system.devm', (e, m) => e.rename(instance(structure(m, 'GarageDoor'), 'door'), 'gate'));
+        const { text, errors } = await edit('garage-door.devm', (e, m) => e.rename(instance(structure(m, 'GarageDoor'), 'door'), 'gate'));
         expect(errors).toEqual([]);
         expect(text).toContain('        gate : DoorController\n');
         expect(text).toContain('    connect gate.up -> drive.up\n    connect gate.down -> drive.down\n');
@@ -371,7 +371,7 @@ describe('structure edits: rename and delete', () => {
     });
 
     test('delete an instance with its connections and delegations', async () => {
-        const { text, errors } = await edit('system.devm', (e, m) => e.deleteElements([instance(structure(m, 'GarageDoor'), 'door')]));
+        const { text, errors } = await edit('garage-door.devm', (e, m) => e.deleteElements([instance(structure(m, 'GarageDoor'), 'door')]));
         expect(text).not.toMatch(/door\.|door :/);
         expect(text).toContain('    thread ControlTask {\n        buzzer : Buzzer\n    }');
         expect(text).toContain('    delegate diag.report -> report\n}');
@@ -419,7 +419,7 @@ describe('structure edits: rename and delete', () => {
     });
 
     test('delete connections, a thread with a deleted instance, assignments by name', async () => {
-        const { text } = await edit('system.devm', (e, m) => {
+        const { text } = await edit('garage-door.devm', (e, m) => {
             const s = structure(m, 'GarageDoor');
             return e.deleteElements([s.connections[0], s.delegations[1], s.threads[1], instance(s, 'diag')]);
         });
@@ -455,11 +455,11 @@ describe('structure workspace: navigation across files', () => {
         const ws = await workspace();
         const drive = ws.componentType('memory:///drive-unit.devm', 'DriveUnit') as ast.CompositeType;
         // the context given by a navigation from the system into its part drive
-        const contexts = [{ rootUri: 'memory:/system.devm', root: 'GarageDoor', path: ['drive'] }];
+        const contexts = [{ rootUri: 'memory:/garage-door.devm', root: 'GarageDoor', path: ['drive'] }];
         expect(ws.resolveContext(contexts[0])?.structure).toBe(drive);
         expect(ws.resolveContext({ ...contexts[0], path: ['door'] })).toBeUndefined();
         // the route of door.up in the system continues into the drive
-        const root = { rootUri: 'memory:///system.devm', root: 'GarageDoor', path: [] };
+        const root = { rootUri: 'memory:///garage-door.devm', root: 'GarageDoor', path: [] };
         const start = ws.endpoint(root, 'door', 'up')!;
         const route = ws.route([start]);
         expect(routeContinuations(route, [])).toEqual(['drive']);
@@ -468,7 +468,7 @@ describe('structure workspace: navigation across files', () => {
         expect(ws.routeEnds(start, root).map(l => l.id)).toEqual(['DriveUnit/motor.up']);
         // from inside the drive: the source of the motor command is the door controller in the system file
         const up = ws.endpoint(contexts[0], 'motor', 'up')!;
-        expect(ws.routeEnds(up, contexts[0])).toEqual([{ uri: 'memory:/system.devm', element: 'GarageDoor', id: 'GarageDoor/door.up', context: { rootUri: 'memory:/system.devm', root: 'GarageDoor', path: [] } }]);
+        expect(ws.routeEnds(up, contexts[0])).toEqual([{ uri: 'memory:/garage-door.devm', element: 'GarageDoor', id: 'GarageDoor/door.up', context: { rootUri: 'memory:/garage-door.devm', root: 'GarageDoor', path: [] } }]);
         // the targets of the out port `stopped`: the door controller
         const stopped = ws.endpoint(contexts[0], 'motor', 'stopped')!;
         expect(ws.routeEnds(stopped, contexts[0]).map(l => l.id)).toEqual(['GarageDoor/door.stopped']);

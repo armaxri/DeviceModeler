@@ -1,41 +1,24 @@
-// A garage door (examples/device): the structure of the product, modeled with the structure language
-// of the Device Modeler (docs/structure-language.md). The controller and the motor control
-// are implemented by state machines (controller.devm, drive.devm).
-import "types.devm"
+// The garage installation (examples/device): the closed, complete system – the garage door (a subsystem,
+// garage-door.devm) together with its environment, the remote control and the status display. A system is
+// the top level: it has no ports, everything it talks to is one of its parts (docs/structure-language.md).
 import "components.devm"
-import "drive-unit.devm"
+import "garage-door.devm"
 
-/** The garage door: remote control commands in, statistics out. */
-system GarageDoor {
-    in async open
-    in async close
-    in async stop
-    out sync report : Diagnostics
-
-    @priority(5) @period(10 ms)
-    thread ControlTask {
-        door : DoorController
-        buzzer : Buzzer
+/** The garage with its door, the remote control and the status display. */
+system GarageInstallation {
+    @priority(4) @period(20 ms)
+    thread RadioTask {
+        remote : RemoteControl
     }
-    @priority(2) @period(100 ms)
-    thread IoTask {
-        sensor : PositionSensor
-        diag : Diagnosis
+    @priority(1) @period(500 ms)
+    thread DisplayTask {
+        display : StatusDisplay
     }
-    // a subsystem: outside of the threads, its parts run in the threads of DriveUnit
-    drive : DriveUnit
+    // a subsystem: outside of the threads, its parts run in the threads of GarageDoor
+    door : GarageDoor
 
-    connect door.up -> drive.up
-    connect door.down -> drive.down
-    connect door.halt -> drive.halt
-    connect drive.stopped -> door.stopped
-    connect drive.blocked -> door.blocked
-    connect door.alarm -> buzzer.alarm
-    connect sensor.position -> door.position
-    connect door.cycles -> diag.cycles
-    connect door.errors -> diag.errors
-    delegate open -> door.open
-    delegate close -> door.close
-    delegate stop -> door.stop
-    delegate diag.report -> report
+    connect remote.open -> door.open
+    connect remote.close -> door.close
+    connect remote.stop -> door.stop
+    connect door.report -> display.report
 }

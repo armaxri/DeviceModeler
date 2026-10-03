@@ -131,7 +131,7 @@ system S {
 });
 
 describe('structure language: the example', () => {
-    const files = ['system.devm', 'components.devm', 'drive-unit.devm', 'types.devm', 'light.devm'];
+    const files = ['system.devm', 'garage-door.devm', 'components.devm', 'drive-unit.devm', 'types.devm', 'light.devm'];
 
     test.each(files)('examples/device/%s has no errors or warnings', async file => {
         const device = new StructureModelLoader(createDevmServices(NodeFileSystem));
@@ -142,7 +142,7 @@ describe('structure language: the example', () => {
         for (const imported of parsed.imported) {
             expect(imported.hasErrors, imported.uri).toBe(false);
         }
-        if (file === 'system.devm') {
+        if (file === 'garage-door.devm') {
             // (drive is a subsystem outside of threads: its parts run in the MotorTask)
             expect(infos(parsed)).toEqual([
                 "The connection crosses threads ('ControlTask' -> 'MotorTask').",
@@ -166,6 +166,20 @@ describe('structure language: the example', () => {
             ]);
             expect(mapping.ports.filter(p => p.problem)).toEqual([]);
             expect(mapping.unmapped).toEqual([]);
+        }
+        if (file === 'system.devm') {
+            // the closed system: the garage door (a subsystem) and its environment as parts, no ports
+            const root = parsed.model.elements[0] as ast.CompositeType;
+            expect(`${root.kind} ${root.name}`).toBe('system GarageInstallation');
+            expect(root.ports).toEqual([]);
+            expect(root.delegations).toEqual([]);
+            expect(compositeInstances(root).map(i => `${i.name}:${i.type.ref?.name}`)).toEqual(['remote:RemoteControl', 'display:StatusDisplay', 'door:GarageDoor']);
+            expect(infos(parsed)).toEqual([
+                "The connection crosses threads ('RadioTask' -> 'ControlTask').",
+                "The connection crosses threads ('RadioTask' -> 'ControlTask').",
+                "The connection crosses threads ('RadioTask' -> 'ControlTask').",
+                "The connection crosses threads ('IoTask' -> 'DisplayTask')."
+            ]);
         }
     });
 });
@@ -741,7 +755,7 @@ system S {
     });
 
     test('the formatter keeps the examples', async () => {
-        for (const file of ['system.devm', 'components.devm', 'drive-unit.devm', 'types.devm', 'light.devm']) {
+        for (const file of ['system.devm', 'garage-door.devm', 'components.devm', 'drive-unit.devm', 'types.devm', 'light.devm']) {
             const text = fs.readFileSync(path.join(DEVICE_DIR, file), 'utf-8');
             expect(await format(text), file).toBe(text);
         }

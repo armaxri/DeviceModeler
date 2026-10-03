@@ -38,12 +38,33 @@ function endpoint(owner: ast.CompositeType, text: string): PortEndpoint {
 const labels = (endpoints: readonly PortEndpoint[]) => endpoints.map(endpointLabel);
 const hops = (route: Route) => route.hops.map(h => `${h.kind}: ${endpointLabel(h.from)} -> ${endpointLabel(h.to)}`);
 
-describe('route analysis: the garage door example', () => {
+describe('route analysis: the closed garage installation', () => {
     let root: ast.CompositeType;
 
     beforeAll(async () => {
         const device = new StructureModelLoader(createDevmServices(NodeFileSystem));
         const location = path.resolve(__dirname, '../../../examples/device/system.devm');
+        const parsed = await device.load(fs.readFileSync(location, 'utf-8'), URI.file(location).toString());
+        root = parsed.model.elements[0] as ast.CompositeType;
+    });
+
+    test('the instance tree and routes from the environment into the garage door and back', () => {
+        expect(structureContexts(root).map(c => `${c.path.map(i => i.name).join('.') || '(root)'}: ${c.structure.name}`)).toEqual([
+            '(root): GarageInstallation', 'door: GarageDoor', 'door.drive: DriveUnit'
+        ]);
+        // the remote control reaches the door controller through the boundary of the subsystem
+        expect(labels(findTargets(endpoint(root, 'remote.open')))).toEqual(['door.door.open']);
+        // the display reads the report of the diagnosis
+        expect(labels(findSources(endpoint(root, 'display.report')))).toEqual(['door.diag.report']);
+    });
+});
+
+describe('route analysis: the garage door example', () => {
+    let root: ast.CompositeType;
+
+    beforeAll(async () => {
+        const device = new StructureModelLoader(createDevmServices(NodeFileSystem));
+        const location = path.resolve(__dirname, '../../../examples/device/garage-door.devm');
         const parsed = await device.load(fs.readFileSync(location, 'utf-8'), URI.file(location).toString());
         root = parsed.model.elements[0] as ast.CompositeType;
     });

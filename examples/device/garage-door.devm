@@ -1,0 +1,42 @@
+// A garage door (examples/device): the structure of the product, modeled with the structure language
+// of the Device Modeler (docs/structure-language.md). A subsystem: its boundary ports receive the commands
+// of the remote control and send the statistics; the closed system around it is GarageInstallation
+// (system.devm). The controller and the motor control are implemented by state machines (controller.devm, drive.devm).
+import "types.devm"
+import "components.devm"
+import "drive-unit.devm"
+
+/** The garage door: remote control commands in, statistics out. */
+subsystem GarageDoor {
+    in async open
+    in async close
+    in async stop
+    out sync report : Diagnostics
+
+    @priority(5) @period(10 ms)
+    thread ControlTask {
+        door : DoorController
+        buzzer : Buzzer
+    }
+    @priority(2) @period(100 ms)
+    thread IoTask {
+        sensor : PositionSensor
+        diag : Diagnosis
+    }
+    // a subsystem: outside of the threads, its parts run in the threads of DriveUnit
+    drive : DriveUnit
+
+    connect door.up -> drive.up
+    connect door.down -> drive.down
+    connect door.halt -> drive.halt
+    connect drive.stopped -> door.stopped
+    connect drive.blocked -> door.blocked
+    connect door.alarm -> buzzer.alarm
+    connect sensor.position -> door.position
+    connect door.cycles -> diag.cycles
+    connect door.errors -> diag.errors
+    delegate open -> door.open
+    delegate close -> door.close
+    delegate stop -> door.stop
+    delegate diag.report -> report
+}

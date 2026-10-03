@@ -61,3 +61,17 @@ component Diagnosis {
     inout sync errors : integer     // counted by the controller, reset after a report
     out sync report : Diagnostics
 }
+
+// The environment of the garage door, part of the closed system GarageInstallation (system.devm)
+
+/** Hand-held remote control (radio receiver): sends the commands of its buttons. */
+component RemoteControl {
+    out async open
+    out async close
+    out async stop
+}
+
+/** Status display in the garage: shows the statistics of the door. */
+component StatusDisplay {
+    in sync report : Diagnostics
+}
