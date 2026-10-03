@@ -35,7 +35,7 @@ machine, every other file is a structure file.
   subsystems outside of the threads (recursive nesting; their parts run in threads of their own),
   explicit **connections** in the direction of the data (`connect door.up -> drive.up`, out → in; inout ↔
   inout) and **delegations** to the boundary ports (`delegate open -> door.open`, `delegate diag.report -> report`).
-- **Validation**: unconnected in ports, more than one source of a sync in port, mismatching kinds, types,
+- **Validation**: unconnected in ports, more than one source of a sync in port (sender of an async in port), mismatching kinds, types,
   payloads and directions, connections crossing threads (shown dashed), ports that do not match the state
   machine, unresolved imports, …
 - **Route analysis**: selecting a port, connector or instance highlights the whole data path across

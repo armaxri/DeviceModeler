@@ -218,8 +218,8 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
   (`connect out -> in`, `delegate in -> part.in`, `delegate part.out -> out`, inout with inout in any order),
   imports of structure files, state machines and headers. The earlier `provides` / `requires` ports with
   `interface` event groups were replaced by this model (the parser points to the new syntax)
-- 🧪 Validation (directions, kinds, types and payloads, one source per sync in port – async in ports merge
-  the events of several sources –, unconnected in ports, connections crossing threads, the port ↔ state
+- 🧪 Validation (directions, kinds, types and payloads, one source per sync in port, one sender per async in
+  port, unconnected in ports, connections crossing threads, the port ↔ state
   machine mapping) and route analysis through all levels along the data flow (`routeOf`, `findSources`,
   `findTargets`, go to source)
 - 🧪 Internal block diagram (SysML style, PlantUML themes, ELK with orthogonal routing): `devm render`, the
@@ -252,9 +252,9 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
     files directly); the web app has no real workspace (a virtual file list)
   - state machines cannot use the structs of structure files (shared C/C++ headers instead); a validation of
     the `behavior` of components across the instances (e.g. one state machine per thread)
-  - 💭 multiplicities of ports and instances, deployment (mapping threads to cores / ECUs); semantics of
-    the data flow for the simulation / generation of the composition (when sync data is copied between
-    threads, queues of async in ports with several sources)
+  - 💭 multiplicities of ports and instances, deployment (mapping threads to cores / ECUs); copying and
+    transporting the data between threads (and instances) is the job of the underlying runtime framework,
+    the model describes the data flow only ([docs/structure-language.md](docs/structure-language.md#semantics-of-the-data-flow))
   - no tests in a real VS Code instance (the webview bundle is smoke-tested in Chromium with a mocked VS Code API)
 
 ## Decisions

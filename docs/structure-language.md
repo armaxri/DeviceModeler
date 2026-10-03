@@ -171,10 +171,22 @@ structure file is the same type as a C++ struct with the same unqualified name (
 
 - A **sync in port has one source**: a second connection (or delegation) delivering its data is an error.
   The same holds for an out boundary port (the data of one part leaves the subsystem).
-- An **async in port may have several sources**: the events of all sources are merged (e.g. two remote
-  controls sending `open`).
+- An **async in port has exactly one sender**: a second connection (or delegation) sending events to it
+  is an error, e.g. *door.open already receives its events from open (delegate) – an async in port has
+  exactly one sender.* The same holds for an async out boundary port (the events of one part leave the
+  subsystem). Two remote controls sending `open` are two ports (or one component combining them).
 - An **out port may have several targets** (fan-out): every target receives the data or the event; an
   in boundary port may be delegated to several parts.
+
+### Semantics of the data flow
+
+The model describes the **data flow** – which port receives the data or events of which port, along the
+connections and delegations through all levels – not how the data gets there. **Copying and transporting
+the data between threads, and between instances in general, is the job of the underlying runtime
+framework**, not expressed in the model: whether sync data is copied when it is written or read, how it is
+protected against concurrent access, and how async events are queued and delivered to the receiving
+thread are decided by the framework the composition is generated for (or simulated with). Connections
+crossing threads are only marked (an info diagnostic, dashed in the diagram, see [Threads](#threads)).
 
 ### Rules (validation)
 
@@ -186,7 +198,7 @@ structure file is the same type as a C++ struct with the same unqualified name (
 | a connection not from an out port to an in port (or between two inout ports), `connect` with a boundary port | error |
 | a delegation not between a boundary port and a port of a part, different directions, in delegated inner → outer, out outer → inner | error |
 | incompatible kinds / data types / payloads of connected or delegated ports – the message names both ports with their signatures and the reason, e.g. *door.up (out async integer) cannot be connected to buzzer.alarm (in async): the event door.up carries integer, but buzzer.alarm expects no payload* | error |
-| a sync in port (or out boundary port) with more than one source | error |
+| a sync in port (or out boundary port) with more than one source, an async in port (or async out boundary port) with more than one sender | error |
 | an instance of a component outside of a thread (neither declared in a thread nor assigned to one), an instance of a subsystem in a thread or assigned to one | error |
 | an instance in more than one thread | error |
 | recursive instantiation (`A` contains a `B` which contains an `A`), instantiating a `system` | error |
@@ -380,7 +392,7 @@ between `connect` and `delegate` and writes the ends of two chosen ports in the 
 (from the out port to the in port, whichever was chosen first; two inout ports in the order they were
 chosen) and refuses ports that cannot be connected (`IncompatiblePortsError` with the message of the
 validator, `incompatibilityMessage` in structure-types.ts, for incompatible kinds, types and payloads and
-for a second source of a sync in port), `structureRenameEdits` renames an element and its references
+for a second source of a sync in port or a second sender of an async in port), `structureRenameEdits` renames an element and its references
 in all loaded files (Langium references; qualified references keep their qualifier). An instance of a
 component is added to a thread, an instance of a subsystem outside of the threads; moving an instance of a
 component out of its thread or an instance of a subsystem into one is refused. Deleting a thread deletes it
