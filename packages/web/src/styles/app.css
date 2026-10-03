@@ -127,6 +127,21 @@ button.primary {
     padding: 0 6px;
 }
 
+.toolbar .icon-button {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 6px;
+    color: var(--ui-muted);
+}
+
+.toolbar .icon-button[aria-pressed="true"] {
+    color: var(--ui-text);
+}
+
+.toolbar .icon-button[aria-pressed="false"] .panel-fill {
+    opacity: 0;
+}
+
 #example-select {
     max-width: 130px;
 }
@@ -318,6 +333,14 @@ main {
 }
 
 /* ---- properties ---- */
+
+#diagram-pane.hide-properties {
+    grid-template-columns: auto 1fr;
+}
+
+#diagram-pane.hide-properties #properties {
+    display: none;
+}
 
 #properties {
     width: 280px;
