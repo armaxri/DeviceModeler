@@ -143,12 +143,15 @@ export function planConnection(structure: ast.CompositeType, a: PortEnd, b: Port
     if (message) {
         throw new IncompatiblePortsError(message, plan);
     }
-    if (target.port.kind === 'sync' && target.port.direction !== 'inout') {
+    if (target.port.direction !== 'inout') {
+        // one source per receiving port: a sync in port has one source, an async in port one sender
         const existing = [...structure.connections, ...structure.delegations].find(s => same(s.target, target));
         if (existing?.source) {
             const from = existing.source.instance ? `${existing.source.instance.$refText}.${existing.source.port.$refText}` : existing.source.port.$refText;
-            throw new IncompatiblePortsError(mismatchMessage(kind, sourceSide, targetSide,
-                [`the sync port ${targetSide.text} already receives its data from ${from} (a sync port has one source)`]), plan);
+            throw new IncompatiblePortsError(mismatchMessage(kind, sourceSide, targetSide, [target.port.kind === 'sync'
+                ? `the sync port ${targetSide.text} already receives its data from ${from} (a sync port has one source)`
+                : `${targetSide.text} already receives its events from ${from} (${ast.isConnection(existing) ? 'connect' : 'delegate'}) – `
+                    + `an async ${target.port.direction === 'out' ? 'out boundary' : 'in'} port has exactly one sender`]), plan);
         }
     }
     return plan;

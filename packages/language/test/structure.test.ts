@@ -432,7 +432,7 @@ system S {
         expect(warnings(parsed).filter(w => w.includes('c.cmd') || w.includes('s.pos'))).toEqual([]);
     });
 
-    test('a sync in port has one source, an async in port may have several', async () => {
+    test('a sync in port has one source, an async in port exactly one sender', async () => {
         const parsed = await system(`
     in sync p : Point
     out sync q : Point
@@ -451,14 +451,31 @@ system S {
             "The sync port 'q' receives its data from one source only, but it has 2 sources."
         ]);
         expect(warnings(parsed)).toEqual(['Duplicate connection.']);
-        // events of several sources are merged: an async in port may have several sources, an out port several targets
-        const merged = await system(`
+        // an async in port has exactly one sender (connected or delegated), like an async out boundary port
+        const senders = await system(`
+    in async x : integer
+    out async y : integer
     thread T { c : Client  d : Client  s : Server }
     connect c.cmd -> s.cmd
     connect d.cmd -> s.cmd
+    delegate x -> s.cmd
+    delegate c.cmd -> y
+    delegate d.cmd -> y
     connect s.pos -> c.pos
     connect s.pos -> d.pos`);
-        expect(merged.diagnostics).toEqual([]);
+        expect(errors(senders)).toEqual([
+            's.cmd already receives its events from c.cmd (connect) – an async in port has exactly one sender.',
+            's.cmd already receives its events from c.cmd (connect) – an async in port has exactly one sender.',
+            'y already receives its events from c.cmd (delegate) – an async out boundary port has exactly one sender.'
+        ]);
+        // an out port may have several targets (sync and async)
+        const fanOut = await system(`
+    thread T { c : Client  d : Client  s : Server  t : Server }
+    connect c.cmd -> s.cmd
+    connect c.cmd -> t.cmd
+    connect s.pos -> c.pos
+    connect s.pos -> d.pos`);
+        expect(fanOut.diagnostics).toEqual([]);
     });
 
     test('an instance belongs to one thread', async () => {

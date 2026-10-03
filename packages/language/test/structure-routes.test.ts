@@ -188,10 +188,11 @@ system Root {
     thread T {
         x : Client
         y : Server
+        z : Server
     }
     connect x.r -> a.i
     connect a.o -> y.p
-    connect b.o -> y.p
+    connect b.o -> z.p
     connect x.r -> b.i
 }`;
 
@@ -199,16 +200,17 @@ system Root {
         const model = await load(MODEL);
         const root = structure(model, 'Root');
         expect(structureContexts(root).map(c => c.path.map(i => i.name).join('.'))).toEqual(['', 'a', 'a.sub', 'b', 'b.sub']);
-        // an out port may have several targets, an async in port several sources
+        // an out port may have several targets, an async in port has exactly one sender
         expect(labels(findTargets(endpoint(root, 'x.r')))).toEqual(['a.sub.server.p', 'b.sub.server.p']);
-        expect(labels(findSources(endpoint(root, 'y.p')))).toEqual(['a.sub.client.r', 'b.sub.client.r']);
+        expect(labels(findSources(endpoint(root, 'y.p')))).toEqual(['a.sub.client.r']);
+        expect(labels(findSources(endpoint(root, 'z.p')))).toEqual(['b.sub.client.r']);
         // from inside `a`, the route leaves through `a` only
         const sub = structureContexts(root).find(c => c.path.map(i => i.name).join('.') === 'a.sub')!;
         const client = compositeInstances(sub.structure).find(i => i.name === 'client')!;
         const start = portEndpoint(sub.structure, client, client.type.ref!.ports[0], sub.path);
         expect(labels(findTargets(start))).toEqual(['y.p']);
         expect(labels(portRoute(start).endpoints)).toEqual([
-            'a.sub.client.r', 'a.sub.o', 'a.sub.o', 'a.o', 'a.o', 'y.p', 'b.o', 'b.o', 'b.sub.o', 'b.sub.o', 'b.sub.client.r'
+            'a.sub.client.r', 'a.sub.o', 'a.sub.o', 'a.o', 'a.o', 'y.p'
         ]);
     });
 

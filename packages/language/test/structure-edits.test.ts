@@ -234,14 +234,21 @@ describe('structure edits: connections', () => {
         expect(() => new StructureEditor(parsed.text, parsed.model).addConnection(s, end(s, 'door.alarm'), end(s, 'drive.up'))).toThrow(IncompatiblePortsError);
     });
 
-    test('a sync in port has one source: a second one is refused', async () => {
-        const text = deviceFile('system.devm').replace('        sensor : PositionSensor\n', '        sensor : PositionSensor\n        backup : PositionSensor\n');
+    test('a sync in port has one source, an async in port one sender: a second one is refused', async () => {
+        const text = deviceFile('system.devm').replace('        sensor : PositionSensor\n', '        sensor : PositionSensor\n        backup : PositionSensor\n')
+            .replace('        buzzer : Buzzer\n', '        buzzer : Buzzer\n        horn : Buzzer\n');
         const parsed = await load(text);
         const s = structure(parsed.model, 'GarageDoor');
         expect(() => planConnection(s, end(s, 'door.position'), end(s, 'backup.position'))).toThrow(
             'backup.position (out sync door::Position) cannot be connected to door.position (in sync door::Position): the sync port door.position already receives its data from sensor.position (a sync port has one source).');
-        // an async in port may have several sources (the events are merged)
-        expect(planConnection(s, end(s, 'buzzer.alarm'), end(s, 'drive.stopped')).text).toBe('connect drive.stopped -> buzzer.alarm');
+        // an async in port has exactly one sender: a second connection or delegation is refused as well
+        expect(() => planConnection(s, end(s, 'buzzer.alarm'), end(s, 'drive.stopped'))).toThrow(
+            'drive.stopped (out async) cannot be connected to buzzer.alarm (in async): buzzer.alarm already receives its events from door.alarm (connect) – an async in port has exactly one sender.');
+        expect(() => planConnection(s, end(s, 'drive.stopped'), end(s, 'door.open'))).toThrow(
+            'drive.stopped (out async) cannot be connected to door.open (in async): door.open already receives its events from open (delegate) – an async in port has exactly one sender.');
+        expect(() => planConnection(s, end(s, 'close'), end(s, 'door.open'))).toThrow(IncompatiblePortsError);
+        // an out port may have several targets
+        expect(planConnection(s, end(s, 'horn.alarm'), end(s, 'door.alarm')).text).toBe('connect door.alarm -> horn.alarm');
     });
 });
 

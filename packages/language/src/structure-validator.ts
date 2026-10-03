@@ -298,8 +298,8 @@ export class StructureValidator {
 
     /**
      * The ports of the parts receive their data: an in port (and an inout port) of a part is connected
-     * (or delegated), a sync in port has one source only (an async in port may receive the events of
-     * several sources); connections are not duplicated. Out ports may be left unconnected (nobody uses
+     * (or delegated), a sync in port has one source only and an async in port exactly one sender (the
+     * same for out boundary ports: the data of one part leaves the subsystem); connections are not duplicated. Out ports may be left unconnected (nobody uses
      * the data).
      */
     checkPortUsage(structure: ast.CompositeType, accept: ValidationAcceptor): void {
@@ -325,15 +325,25 @@ export class StructureValidator {
             }
             seen.add(text);
         }
-        /** The statements delivering data to a port (it is their target). */
-        const sources = (key: string, port: ast.Port) => (uses.get(key) ?? []).filter(e => e.target?.port?.ref === port && keyOf(e.target) === key);
+        /** The statements delivering data to a port (it is their target; without unresolved sources and duplicates). */
+        const sources = (key: string, port: ast.Port) => {
+            const statements = (uses.get(key) ?? []).filter(e => e.target?.port?.ref === port && keyOf(e.target) === key && keyOf(e.source));
+            return statements.filter((e, i) => statements.findIndex(o => o.$type === e.$type && keyOf(o.source) === keyOf(e.source)) === i);
+        };
         const checkOneSource = (key: string, port: ast.Port, label: string) => {
-            if (port.kind !== 'sync' || port.direction === 'inout') {
+            if (port.direction === 'inout') {
                 return;
             }
             const statements = sources(key, port);
+            const first = statements[0];
             for (const extra of statements.slice(1)) {
-                accept('error', `The sync port '${label}' receives its data from one source only, but it has ${statements.length} sources.`, { node: extra, property: 'target' });
+                if (port.kind === 'sync') {
+                    accept('error', `The sync port '${label}' receives its data from one source only, but it has ${statements.length} sources.`, { node: extra, property: 'target' });
+                } else {
+                    const from = first.source ? portReferenceText(first.source) : '?';
+                    accept('error', `${label} already receives its events from ${from} (${ast.isConnection(first) ? 'connect' : 'delegate'}) – `
+                        + `an async ${port.direction === 'out' ? 'out boundary' : 'in'} port has exactly one sender.`, { node: extra, property: 'target' });
+                }
             }
         };
         for (const instance of compositeInstances(structure)) {
