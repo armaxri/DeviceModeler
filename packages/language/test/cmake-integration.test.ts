@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 /**
- * End-to-end test of the CMake integration (cmake/HsmGenerate.cmake) with the example project
+ * End-to-end test of the CMake integration (cmake/DevmGenerate.cmake) with the example project
  * examples/cmake in a temporary copy: configure, build, ctest, then incremental rebuilds after model
  * changes. Uses Ninja if available, Unix Makefiles otherwise. Skipped if cmake or a C++ compiler is
  * missing. The CLI is run from `out/` (compiled by `tsc -b` before the test).
@@ -20,8 +20,8 @@ function available(command: string, args = ['--version']): boolean {
 }
 
 const HAS_CMAKE = available('cmake') && (available('c++') || available('g++') || available('clang++'));
-/** `HSM_CMAKE_GENERATOR='Unix Makefiles' npm test` tests another generator. */
-const GENERATOR = process.env.HSM_CMAKE_GENERATOR ?? (available('ninja') ? 'Ninja' : 'Unix Makefiles');
+/** `DEVM_CMAKE_GENERATOR='Unix Makefiles' npm test` tests another generator. */
+const GENERATOR = process.env.DEVM_CMAKE_GENERATOR ?? (available('ninja') ? 'Ninja' : 'Unix Makefiles');
 const packageDir = path.resolve(__dirname, '..');
 const repoDir = path.resolve(packageDir, '../..');
 const cli = path.join(packageDir, 'bin/cli.js');
@@ -49,7 +49,7 @@ describe.skipIf(!HAS_CMAKE)(`CMake integration (${GENERATOR})`, () => {
 
     beforeAll(() => {
         execFileSync(process.execPath, [path.join(repoDir, 'node_modules/typescript/bin/tsc'), '-b', path.join(packageDir, 'tsconfig.json')]);
-        dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cmake-'));
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-cmake-'));
         build = path.join(dir, 'build');
         fs.cpSync(path.join(repoDir, 'cmake'), path.join(dir, 'cmake'), { recursive: true });
         for (const entry of ['cmake', 'tests', 'traffic-light.devm', 'cd-player.devm', 'cpp-types']) {
@@ -65,19 +65,19 @@ describe.skipIf(!HAS_CMAKE)(`CMake integration (${GENERATOR})`, () => {
     });
 
     test('configure, build, ctest and incremental regeneration', () => {
-        const configure = run('cmake', ['-S', path.join(dir, 'examples/cmake'), '-B', build, '-G', GENERATOR, `-DHSM_EXECUTABLE=${process.execPath};${cli}`]);
+        const configure = run('cmake', ['-S', path.join(dir, 'examples/cmake'), '-B', build, '-G', GENERATOR, `-DDEVM_EXECUTABLE=${process.execPath};${cli}`]);
         expect(configure.output).toContain('devm: using');
         expect(configure.status, configure.output).toBe(0);
 
         const first = cmakeBuild();
         expect(first.status, first.output).toBe(0);
         expect(first.output).toContain('Generating state machine code for traffic_light_sm');
-        expect(fs.existsSync(path.join(build, 'hsm_generated/cd_player_sm/CdPlayer.cc'))).toBe(true);
+        expect(fs.existsSync(path.join(build, 'devm_generated/cd_player_sm/CdPlayer.cc'))).toBe(true);
 
         const ctest = run('ctest', ['--output-on-failure'], build);
         expect(ctest.status, ctest.output).toBe(0);
         expect(ctest.output).toContain('100% tests passed, 0 tests failed out of 5');
-        expect(fs.readFileSync(path.join(build, 'hsm_test_results/traffic-light.xml'), 'utf-8')).toContain('<testsuite');
+        expect(fs.readFileSync(path.join(build, 'devm_test_results/traffic-light.xml'), 'utf-8')).toContain('<testsuite');
 
         // a comment: the code is regenerated but nothing is recompiled
         editModel('traffic-light.devm', '// A pedestrian traffic light', '// A changed pedestrian traffic light');
@@ -89,7 +89,7 @@ describe.skipIf(!HAS_CMAKE)(`CMake integration (${GENERATOR})`, () => {
         // behavior: only the traffic light is regenerated and recompiled
         editModel('traffic-light.devm', 'every 500 ms', 'every 400 ms');
         const check = run(process.execPath, [cli, 'generate', 'cpp', path.join(dir, 'examples/traffic-light.devm'), '--namespace', 'example',
-            '--std', '17', '-o', path.join(build, 'hsm_generated/traffic_light_sm'), '--check']);
+            '--std', '17', '-o', path.join(build, 'devm_generated/traffic_light_sm'), '--check']);
         expect(check.status, check.output).toBe(1);
         expect(check.output).toContain('TrafficLight.cpp');
         const behavior = cmakeBuild();

@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "Device Modeler generator configuration (devm.gen.json)",
-    "description": "Which state machine models (.devm) are generated for which targets with which options. Used by `devm generate` and the CMake function hsm_generate. Relative paths are relative to the configuration file.",
+    "description": "Which state machine models (.devm) are generated for which targets with which options. Used by `devm generate` and the CMake function devm_generate. Relative paths are relative to the configuration file.",
     "type": "object",
     "additionalProperties": false,
     "required": ["models"],
@@ -72,7 +72,7 @@
             }
         },
         "outDir": {
-            "description": "Output directory, relative to the configuration file (default: the directory of each model). devm generate --out and hsm_generate(OUTPUT_DIR) override it.",
+            "description": "Output directory, relative to the configuration file (default: the directory of each model). devm generate --out and devm_generate(OUTPUT_DIR) override it.",
             "type": "string"
         },
         "headerExtension": {

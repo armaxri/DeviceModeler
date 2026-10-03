@@ -164,4 +164,4 @@ g++ -std=c++17 -Wall -Wextra -Igen -o traffic-light main.cpp gen/TrafficLight.cp
 
 The test harnesses are generated from the scenarios by `generateCppScenarioHarness(api, scenario)`
 (mocked operation callbacks with scripted results, a virtual timer service, observers recording the out
-events); `HSM_CXXFLAGS='-O1 -fsanitize=address,undefined' npm test` runs them with sanitizers.
+events); `DEVM_CXXFLAGS='-O1 -fsanitize=address,undefined' npm test` runs them with sanitizers.

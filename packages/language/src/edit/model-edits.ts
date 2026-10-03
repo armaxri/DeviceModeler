@@ -57,7 +57,7 @@ export type TransitionTarget = ast.Vertex | { finalOf: ScopeContainer };
 /** Things that can be deleted from the diagram. */
 export type DeletionTarget = AstNode | { initialOf: ScopeContainer } | { finalOf: ScopeContainer };
 
-export const HSM_KEYWORDS = new Set([
+export const STATE_MACHINE_KEYWORDS = new Set([
     'statemachine', 'namespace', 'state', 'region', 'choice', 'junction', 'history', 'deephistory', 'sync', 'entry', 'exit',
     'interface', 'internal', 'in', 'out', 'event', 'var', 'const', 'readonly', 'operation', 'alias',
     'after', 'every', 'always', 'oncycle', 'else', 'default', 'raise', 'valueof', 'active', 'as', 'true', 'false', 'null']);
@@ -65,7 +65,7 @@ export const HSM_KEYWORDS = new Set([
 const ID_REGEX = /^[_a-zA-Z]\w*$/;
 
 export function isValidIdentifier(name: string): boolean {
-    return ID_REGEX.test(name) && !HSM_KEYWORDS.has(name);
+    return ID_REGEX.test(name) && !STATE_MACHINE_KEYWORDS.has(name);
 }
 
 /** Encodes the given text as a string literal of the HSM language. */

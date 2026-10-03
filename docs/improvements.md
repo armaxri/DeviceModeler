@@ -14,7 +14,7 @@ Code generation is planned "much later"; these items are the known gaps of the e
 | Improvement | Why | How | Effort |
 | --- | --- | --- | --- |
 | Submachine instances in generated code | Models with `var motor : Motor` / `state Moving : motor` can be simulated and tested, but not generated yet (the generators report a diagnostic) | Generate the instance as a member of the parent class, forward the step order and event visibility of [semantics §9](semantics.md); enable the 19 skipped `s9-*` scenarios | L |
-| GoogleTest from `.devmtest` | Run the unit tests against the compiled C++ code, not only against the interpreter; CTest targets via `hsm_add_tests` | Translate test operations to `TEST()` functions: `raise` → `raise_x()`, `proceed` → run cycles with a virtual timer service, mocks → generated operation callback classes | M |
+| GoogleTest from `.devmtest` | Run the unit tests against the compiled C++ code, not only against the interpreter; CTest targets via `devm_add_tests` | Translate test operations to `TEST()` functions: `raise` → `raise_x()`, `proceed` → run cycles with a virtual timer service, mocks → generated operation callback classes | M |
 | Tracing hooks | Log state changes on the target; later animate the diagram live from a running device | Optional observer interface (`onStateEntered`, `onStateExited`, `onTransition`) called from the generated code, zero cost when not set | S–M |
 | Thread-safe in-event queue (`@InEventQueue`) | Raise events from other threads (drivers, ISRs, worker threads) | Optional generated wrapper with a mutex-protected or lock-free queue drained at the beginning of `runCycle()` | M |
 | Fixed-capacity queues without heap | Event driven machines on small targets without dynamic memory | Template parameter / option for a ring buffer instead of `std::deque`, overflow reported via the error handler | S |
@@ -61,7 +61,7 @@ Code generation is planned "much later"; these items are the known gaps of the e
 
 | Improvement | Why | How | Effort |
 | --- | --- | --- | --- |
-| Ship the CMake module with the npm package | Today `cmake/HsmGenerate.cmake` is used from the repository | Add `cmake/` to the package files and document `find_package(Hsm CONFIG)` with the installed path | S |
+| Ship the CMake module with the npm package | Today `cmake/DevmGenerate.cmake` is used from the repository | Add `cmake/` to the package files and document `find_package(Devm CONFIG)` with the installed path | S |
 | Windows / MSVC | Only Linux (gcc / clang, Ninja / Make) is verified | CI job on `windows-latest` building the CMake example with MSVC | S–M |
 | Regenerate when the `devm` CLI changes | Upgrading the tool does not trigger regeneration | Add the CLI version (or its path) to the dependencies of the custom command | S |
 

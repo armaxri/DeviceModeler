@@ -66,41 +66,41 @@ is available as `parseGeneratorConfig(json)` and `generateTarget(machine, target
 
 The CMake functions need the `devm` command line tool (Node.js ≥ 20.10):
 
-- **In this repository**: `npm ci && npm run build -w packages/language`. `cmake/HsmGenerate.cmake` finds
+- **In this repository**: `npm ci && npm run build -w packages/language`. `cmake/DevmGenerate.cmake` finds
   `packages/language/bin/cli.js` next to it automatically.
 - **Globally**: `npm install -g ./packages/language` (links the package of this checkout, build it first) or
   `cd packages/language && npm pack` and `npm install -g devm-language-0.1.0.tgz` on any machine (the
   package includes `schemas/`).
 - **As a dev dependency** of a project with a `package.json`: `npm install -D <path or tarball>`; CMake then
   uses `npx --no-install devm`.
-- Or set the CMake cache variable `HSM_EXECUTABLE` to the command, e.g.
-  `-DHSM_EXECUTABLE="node;/opt/hsm/packages/language/bin/cli.js"`.
+- Or set the CMake cache variable `DEVM_EXECUTABLE` to the command, e.g.
+  `-DDEVM_EXECUTABLE="node;/opt/devm/packages/language/bin/cli.js"`.
 
 ## CMake functions
 
 ```cmake
-list(APPEND CMAKE_MODULE_PATH "${HSM_ROOT}/cmake")   # the cmake/ directory of this repository
-include(HsmGenerate)                                  # or: find_package(Hsm CONFIG REQUIRED PATHS "${HSM_ROOT}/cmake")
+list(APPEND CMAKE_MODULE_PATH "${DEVM_ROOT}/cmake")   # the cmake/ directory of this repository
+include(DevmGenerate)                                  # or: find_package(Devm CONFIG REQUIRED PATHS "${DEVM_ROOT}/cmake")
 
 add_library(statemachines STATIC)
-hsm_generate(TARGET statemachines
+devm_generate(TARGET statemachines
     MODELS models/traffic-light.devm models/door.devm   # and / or CONFIG devm.gen.json
     NAMESPACE app                                    # cpp: namespace ("" for the global namespace)
     STD 17)                                          # also required from the target (cxx_std_17)
 
 enable_testing()
-hsm_add_tests(TARGET statemachines TESTS tests/traffic-light.devmtest MODELS models/traffic-light.devm)
+devm_add_tests(TARGET statemachines TESTS tests/traffic-light.devmtest MODELS models/traffic-light.devm)
 ```
 
-`hsm_generate(TARGET <target> [MODELS <file.devm>...] [CONFIG <file>] [GENERATOR cpp|c] [OUTPUT_DIR <dir>]
+`devm_generate(TARGET <target> [MODELS <file.devm>...] [CONFIG <file>] [GENERATOR cpp|c] [OUTPUT_DIR <dir>]
 [NAMESPACE <ns>] [STD 17|11] [PREFIX <prefix>] [INCLUDE_DIRS <dir>...] [DEFINES <NAME[=VALUE]>...])`:
 
 - generates the code **at build time** into `OUTPUT_DIR` (default
-  `${CMAKE_CURRENT_BINARY_DIR}/hsm_generated/<target>`), adds the generated files to the sources of the
+  `${CMAKE_CURRENT_BINARY_DIR}/devm_generated/<target>`), adds the generated files to the sources of the
   target and `OUTPUT_DIR` to its include directories (`PUBLIC` for libraries, `PRIVATE` for executables);
 - the generated files are determined at configure time (`devm generate --list-outputs`); the models, the
   configuration and license header files are dependencies of the generation (custom target
-  `<target>_hsm_generate`), so changing a model regenerates the code. Thanks to `writeOnlyIfChanged` only
+  `<target>_devm_generate`), so changing a model regenerates the code. Thanks to `writeOnlyIfChanged` only
   files whose content changed are recompiled: a changed comment in the model recompiles nothing, a changed
   transition `<Class>.cpp` (and the files including the header if the header changed, e.g. the comment of
   a time event);
@@ -115,9 +115,9 @@ hsm_add_tests(TARGET statemachines TESTS tests/traffic-light.devmtest MODELS mod
   definitions of the target; the generated header includes a header by its import path if it is found in
   an include directory, otherwise by its path relative to `OUTPUT_DIR`.
 
-`hsm_add_tests(TARGET <name> TESTS <file.devmtest>... [MODELS <file.devm>...] [JUNIT_DIR <dir>] [INCLUDE_DIRS <dir>...] [DEFINES …])` registers
+`devm_add_tests(TARGET <name> TESTS <file.devmtest>... [MODELS <file.devm>...] [JUNIT_DIR <dir>] [INCLUDE_DIRS <dir>...] [DEFINES …])` registers
 a CTest test `<name>.<file stem>` (label `devm`) per test file that runs `devm test` with a JUnit report in
-`JUNIT_DIR` (default `${CMAKE_CURRENT_BINARY_DIR}/hsm_test_results`).
+`JUNIT_DIR` (default `${CMAKE_CURRENT_BINARY_DIR}/devm_test_results`).
 
 ## Example
 
@@ -138,5 +138,5 @@ build/cmake-example/traffic_light 30                         # runs the traffic 
 ```
 
 `npm test` runs this example end to end in a temporary directory (configure, build, ctest, incremental
-rebuilds after model changes; skipped without cmake; `HSM_CMAKE_GENERATOR='Unix Makefiles'` selects the
+rebuilds after model changes; skipped without cmake; `DEVM_CMAKE_GENERATOR='Unix Makefiles'` selects the
 generator).

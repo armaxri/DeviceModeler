@@ -28,8 +28,8 @@ function hasCompiler(command: string): boolean {
 const GCC = hasCompiler('gcc');
 const CLANG = hasCompiler('clang');
 const FLAGS = ['-std=c99', '-Wall', '-Wextra', '-Wpedantic', '-Werror'];
-/** Additional flags for the scenario harnesses, e.g. `HSM_CFLAGS='-O2 -fsanitize=address,undefined'`. */
-const EXTRA_FLAGS = (process.env.HSM_CFLAGS ?? '').split(/\s+/).filter(flag => flag);
+/** Additional flags for the scenario harnesses, e.g. `DEVM_CFLAGS='-O2 -fsanitize=address,undefined'`. */
+const EXTRA_FLAGS = (process.env.DEVM_CFLAGS ?? '').split(/\s+/).filter(flag => flag);
 
 /**
  * Scenarios that cannot run against the generated C code, with the reason. Keep this list minimal.

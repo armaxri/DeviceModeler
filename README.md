@@ -122,7 +122,7 @@ machine, every other file is a structure file.
   editors of the web app next to the text editor, C++ generation, tests in the Test Explorer (with model
   coverage) and the itemis CREATE import – see [VS Code extension](docs/vscode.md).
 - **Build integration**: a generator configuration file (`devm.gen.json`, like the `.sgen` files of itemis
-  CREATE), `devm generate --check` for CI and CMake functions (`hsm_generate`, `hsm_add_tests`) that
+  CREATE), `devm generate --check` for CI and CMake functions (`devm_generate`, `devm_add_tests`) that
   regenerate the code when a model changes (see [Build integration (CMake)](docs/build-integration.md)).
 
 ## Getting started
@@ -179,7 +179,7 @@ node packages/language/bin/cli.js generate --check          # exit 1 if generate
 | [Unit tests and coverage](docs/testing.md) | the `.devmtest` language, `devm test`, model coverage, CI examples |
 | [Code generation (C++)](docs/cpp-generator.md) | generated API, runtime errors, a complete host example |
 | [Code generation (C)](docs/c-generator.md) | C99 generator |
-| [Build integration (CMake)](docs/build-integration.md) | `devm.gen.json`, installing the command line tool, `hsm_generate` / `hsm_add_tests` |
+| [Build integration (CMake)](docs/build-integration.md) | `devm.gen.json`, installing the command line tool, `devm_generate` / `devm_add_tests` |
 | [Importing itemis CREATE models](docs/itemis-import.md) | `.sct` import and its mapping |
 | [C++ integration](docs/cpp-integration.md) | the C++ header analyzer, the supported C++ subset and design decisions |
 | [Architecture](docs/architecture.md) | packages, source files and the editing pipeline |

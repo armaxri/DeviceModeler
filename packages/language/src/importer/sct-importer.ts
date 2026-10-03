@@ -26,7 +26,7 @@
  * imported together): an import of its `.devm` file, an instance variable in the internal scope and
  * the binding of the state. Otherwise they are imported as simple states with a TODO comment.
  */
-import { HSM_KEYWORDS } from '../edit/model-edits.js';
+import { STATE_MACHINE_KEYWORDS } from '../edit/model-edits.js';
 import { DEFINITION_ID, DiagramMetrics, MACHINE_ID } from '../diagram/layout.js';
 import { createManualLayout, type ManualLayout, type NodeLayout } from '../diagram/manual-layout.js';
 import type { Point } from '../diagram/diagram-model.js';
@@ -381,7 +381,7 @@ class SctImporter {
         }
         const base = resolved.machine.charAt(0).toLowerCase() + resolved.machine.slice(1);
         let instance = sanitizeName(base) || 'instance';
-        for (let i = 2; this.instances.some(existing => existing.name === instance) || HSM_KEYWORDS.has(instance); i++) {
+        for (let i = 2; this.instances.some(existing => existing.name === instance) || STATE_MACHINE_KEYWORDS.has(instance); i++) {
             instance = `${sanitizeName(base)}${i}`;
         }
         this.instances.push({ name: instance, machine: resolved.machine });
@@ -1097,7 +1097,7 @@ export function sanitizeName(name: string): string {
     if (/^[0-9]/.test(result)) {
         result = '_' + result;
     }
-    if (HSM_KEYWORDS.has(result)) {
+    if (STATE_MACHINE_KEYWORDS.has(result)) {
         result += '_';
     }
     return result;

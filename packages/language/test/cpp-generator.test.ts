@@ -32,8 +32,8 @@ function hasCompiler(command: string): boolean {
 const GXX = hasCompiler('g++');
 const CLANGXX = hasCompiler('clang++');
 const FLAGS = ['-std=c++17', '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-Wshadow', '-Wconversion'];
-/** Additional flags for the scenario programs, e.g. `HSM_CXXFLAGS='-O2 -fsanitize=address,undefined'`. */
-const EXTRA_FLAGS = (process.env.HSM_CXXFLAGS ?? '').split(/\s+/).filter(flag => flag);
+/** Additional flags for the scenario programs, e.g. `DEVM_CXXFLAGS='-O2 -fsanitize=address,undefined'`. */
+const EXTRA_FLAGS = (process.env.DEVM_CXXFLAGS ?? '').split(/\s+/).filter(flag => flag);
 /** Number of scenarios compiled into one program. */
 const BATCH_SIZE = 12;
 

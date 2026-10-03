@@ -74,7 +74,7 @@ packages/
     scripts/                    esbuild / Vite bundling and packaging of the .vsix
 examples/       sample state machines; tests: their unit tests; door-with-motor: imports and submachines;
                 cpp-types: C++ header types; cmake: CMake example; device: structure files and state machines of a garage door
-cmake/          CMake integration (HsmGenerate.cmake: hsm_generate, hsm_add_tests; HsmConfig.cmake)
+cmake/          CMake integration (DevmGenerate.cmake: devm_generate, devm_add_tests; DevmConfig.cmake)
 docs/           execution semantics, C++ integration, possible improvements, generated example docs
 ```
 

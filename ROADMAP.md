@@ -142,8 +142,8 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
   per target and per model options (output directory, namespace, class name, standard, prefix, file
   extensions, license header), only changed files are written; `devm generate` (no arguments),
   `--check` for CI, `--list-outputs` / `--list-inputs` for build systems
-- ✅ CMake integration (`cmake/HsmGenerate.cmake`): `hsm_generate()` regenerates the code at build time when a
-  model changes (only changed files are recompiled), `hsm_add_tests()` runs `.devmtest` files with CTest
+- ✅ CMake integration (`cmake/DevmGenerate.cmake`): `devm_generate()` regenerates the code at build time when a
+  model changes (only changed files are recompiled), `devm_add_tests()` runs `.devmtest` files with CTest
   (JUnit reports); example project `examples/cmake` built and tested by `npm test` (Ninja / Makefiles)
   - 📋 still missing: generated GoogleTest targets from `.devmtest` files, verification on Windows / MSVC,
     shipping the CMake module with the npm package (currently the `cmake/` directory of the repository)

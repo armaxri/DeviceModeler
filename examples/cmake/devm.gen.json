@@ -8,7 +8,7 @@
         "headerExtension": ".hpp",
         "sourceExtension": ".cc",
         "licenseHeader": [
-            "Copyright (c) 2026 The HSM example authors",
+            "Copyright (c) 2026 The Device Modeler example authors",
             "SPDX-License-Identifier: MIT"
         ]
     },
