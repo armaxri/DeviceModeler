@@ -50,7 +50,7 @@ which bundle the language package). Exported from `hsm-language`:
 | `parser.ts` | tolerant declaration parser: `parseCppHeader` |
 | `evaluator.ts` | constant expression evaluation with C++ integer semantics |
 | `type-index.ts` | `CppTypeIndex`: lookup, type resolution, classification, constant values |
-| `report.ts` | JSON report (`hsm cpp-header`), `describeCppType` |
+| `report.ts` | JSON report (`devm cpp-header`), `describeCppType` |
 
 ### 2.1 API
 
@@ -105,7 +105,7 @@ type CppResolvedType =
 type CppValue = bigint | number | boolean | string | readonly CppValue[] | { [field: string]: CppValue };
 
 function describeCppType(type: CppResolvedType): string;       // 'integer (u8)', 'enum motor::Mode', ...
-function cppHeaderReport(index: CppTypeIndex): unknown;          // JSON of `hsm cpp-header`
+function cppHeaderReport(index: CppTypeIndex): unknown;          // JSON of `devm cpp-header`
 ```
 
 Values use the representation of the HSM interpreter (`simulation/values.ts`): integers (and enum
@@ -118,7 +118,7 @@ for go-to-definition, and `doc` for hovers.
 ### 2.2 Debugging
 
 ```
-hsm cpp-header motor_types.h controller.hpp
+devm cpp-header motor_types.h controller.hpp
 ```
 
 prints the extracted and resolved model (declarations with resolved types, enumerator values,
@@ -197,7 +197,7 @@ The widths of `long`, `size_t` etc. depend on the target: `CppTypeIndex` uses LP
 
 ### 4.1 Syntax
 
-- **Import**: `import "motor_types.h"` (several paths, also `import: "a.h" "b.hsm"`) at the beginning of the
+- **Import**: `import "motor_types.h"` (several paths, also `import: "a.h" "b.devm"`) at the beginning of the
   state machine body, like the imports of state machines. Headers are searched relative to the model, then
   in the include paths (§4.7). The headers they include (`#include "x.h"` relative to the including header,
   then in the include paths; `#include <x.h>` in the include paths; not found: ignored, e.g. `<cstdint>`) are
@@ -288,7 +288,7 @@ Event payloads, operation parameters and return values may use all these types.
 
 - `#include "…"` of the imported headers in the generated header (after `sc_statemachine.h`). The path is the
   import path if the header was found in an include directory or the output directory is the model's
-  directory; otherwise the path relative to the output directory (`hsm generate` computes it,
+  directory; otherwise the path relative to the output directory (`devm generate` computes it,
   `CppGeneratorOptions.headerInclude` customizes it).
 - Declarations use the C++ spelling of the model (`motor::Rpm`, `::Color`; `<cstdint>` typedefs as
   `std::uint8_t`): members, getters / setters (structs and arrays by `const T&`), event values and observables,
@@ -337,16 +337,16 @@ Event payloads, operation parameters and return values may use all these types.
 
 Relative include paths are relative to the configuration file. For a model, the **nearest** `devm.gen.json` /
 `*.devm.gen.json` with a `headers` block in its directory or a parent directory applies (CLI, language server,
-VS Code webview; `hsm generate --config` uses the given configuration for its models). Global settings are
+VS Code webview; `devm generate --config` uses the given configuration for its models). Global settings are
 combined with it: their include paths come after those of the configuration, their defines and data model
 override it.
 
 | host | headers | settings |
 | --- | --- | --- |
-| CLI (`hsm validate`, `simulate`, `test`, `generate`, `layout`, `render`, `doc`) | read from disk (`installNodeHeaderSupport` in `src/node/cpp-headers-node.ts`: synchronous reader) | `devm.gen.json`; `-I <dir>`, `-D NAME[=VALUE]`, `--data-model lp64`/`llp64`/`ilp32`; `hsm generate --list-inputs` lists the imported headers (CMake dependencies); CMake `INCLUDE_DIRS` / `DEFINES` |
+| CLI (`devm validate`, `simulate`, `test`, `generate`, `layout`, `render`, `doc`) | read from disk (`installNodeHeaderSupport` in `src/node/cpp-headers-node.ts`: synchronous reader) | `devm.gen.json`; `-I <dir>`, `-D NAME[=VALUE]`, `--data-model lp64`/`llp64`/`ilp32`; `devm generate --list-inputs` lists the imported headers (CMake dependencies); CMake `INCLUDE_DIRS` / `DEFINES` |
 | API (`HsmModelLoader`, `HsmTestWorkspace`) | `files` / `readFile` (async, loaded before the build by `loadImports`, also the includes), header files given to `HsmTestWorkspace.load` | `HsmModelLoaderOptions.cppHeaders`, `cppHeaderStore(shared).settings` / `settingsProvider` |
 | VS Code language server | read from disk; the `**/*` file watcher of Langium invalidates changed headers and `devm.gen.json` files; importing models are relinked and validated again | `devm.gen.json`; settings `hsm.headers.includePaths` (relative to the workspace folder, `${workspaceFolder}`), `hsm.headers.defines`, `hsm.headers.dataModel` |
-| VS Code diagram webview | the extension sends the header texts (and their includes) with the imported `.hsm` files (`collectImportedFiles`) | the extension sends the effective settings (`headers` of the `text` message) |
+| VS Code diagram webview | the extension sends the header texts (and their includes) with the imported `.devm` files (`collectImportedFiles`) | the extension sends the effective settings (`headers` of the `text` message) |
 | Web app | the virtual file list: headers of the examples and headers opened with *Open…* (`.h`, `.hpp`, …; added to the list, not edited) | – |
 
 Unsaved changes of a header open in VS Code are not seen (headers are read from disk).

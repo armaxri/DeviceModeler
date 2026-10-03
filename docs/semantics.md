@@ -235,7 +235,7 @@ state machine.
 
 ## 9. Submachine instances
 
-A state machine may import other state machines (`import "motor.hsm"`, resolved relative to the
+A state machine may import other state machines (`import "motor.devm"`, resolved relative to the
 importing file). A variable whose type is an imported state machine (`var motor : Motor`) is a
 **submachine instance**; a state bound to it (`state Moving : motor`) runs the instance while it is
 active. The instance is a separate object – its state machine is not inlined: it has its own active

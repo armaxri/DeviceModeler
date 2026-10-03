@@ -1,6 +1,6 @@
 # Code generation (C++)
 
-C++ is the primary code generation target. `hsm generate cpp model.hsm -o gen` (or
+C++ is the primary code generation target. `devm generate cpp model.devm -o gen` (or
 `generateCpp(machine, options)` of `hsm-language`) generates code in the spirit of the itemis CREATE C++
 generator: one class per state machine in `<Class>.h` / `<Class>.cpp` (`TrafficLight.h`,
 `TrafficLight.cpp`) plus the shared runtime header `sc_statemachine.h` (`sc::integer` = `int64_t`,
@@ -20,7 +20,7 @@ only in `std::string` values and, for `@EventDriven` machines, in the `std::dequ
 state (`enter_…`, `exit_…`, `react_…`), region and transition, with comments naming them. It is not
 thread-safe: call it from one thread (or synchronize the calls).
 
-Generated API (for `TrafficLight` of [`examples/traffic-light.hsm`](../examples/traffic-light.hsm)):
+Generated API (for `TrafficLight` of [`examples/traffic-light.devm`](../examples/traffic-light.devm)):
 
 | Member | |
 |---|---|
@@ -158,7 +158,7 @@ int main() {
 ```
 
 ```bash
-node packages/language/bin/cli.js generate cpp examples/traffic-light.hsm -o gen
+node packages/language/bin/cli.js generate cpp examples/traffic-light.devm -o gen
 g++ -std=c++17 -Wall -Wextra -Igen -o traffic-light main.cpp gen/TrafficLight.cpp
 ```
 

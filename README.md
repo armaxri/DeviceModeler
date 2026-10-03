@@ -1,28 +1,32 @@
-# Device Modeling Framework
+# Device Modeler
 
 A [Langium](https://langium.org) based modeling environment for devices: the **structure of a product**
-(components with their ports, subsystems, threads, instances and connections – 🧪 the structure
-language, `.dmf`) and the **hierarchical state machines** that implement the behavior of its components
-(`.hsm`, the HSM Modeler). Both are edited as text and in graphical editors built on
+(components with their ports, subsystems, threads, instances and connections – 🧪 structure files) and
+the **hierarchical state machines** that implement the behavior of its components. Both are model files
+with the extension **`.devm`** – a file contains either a state machine or structure elements (structs,
+interfaces, components, subsystems, systems), never both – and unit tests of state machines are `.devmtest`
+files. Both are edited as text and in graphical editors built on
 [Sprotty](https://sprotty.org) and [ELK](https://eclipse.dev/elk/): the state machine diagrams look like
 PlantUML state diagrams, structures are shown as SysML internal block diagrams in the same themes – and you
 can edit them directly: add states, draw transitions, nest states by drag and drop, add instances and
 connect ports, rename in place, … Text and diagram always stay in sync, and the structure links to the
 state machines: double-click an instance to open its state machine.
 
-![HSM Modeler](docs/screenshot.png)
+![Device Modeler](docs/screenshot.png)
 
-## Structure of a product (`.dmf`)
+## Structure of a product (structure files)
 
-🧪 Experimental (branch `claude/device-modeling`): the structure language of the Device Modeling Framework
+🧪 Experimental (branch `claude/device-modeling`): the structure elements of `.devm` files
 ([docs/structure-language.md](docs/structure-language.md), example [`examples/device`](examples/device)).
+The kind of a `.devm` file is decided by its first word: a file starting with `statemachine` is a state
+machine, every other file is a structure file.
 
 ![The structure of a garage door: internal block diagram of the system GarageDoor](docs/examples/GarageDoor.svg)
 
 - **Component types** with `provides` / `requires` **ports**: sync ports carry data (a simple type, a
   struct or a C/C++ type of an imported header), async ports carry events (named groups of events:
   `interface DoorCmd { event open event close }`). A component can be implemented by a state machine
-  (`behavior "door.hsm"`): its ports are checked against the interfaces of the state machine (provided async
+  (`behavior "door.devm"`): its ports are checked against the interfaces of the state machine (provided async
   port = `in` events, required async port = `out` events, sync ports = variables and operations).
 - **Subsystems** (`subsystem`, composite component types) and the root **`system`**: **threads**
   (`@priority(5) @period(10 ms)`) with the instances of components running in them, instances of other
@@ -43,10 +47,10 @@ state machines: double-click an instance to open its state machine.
   text edit; **navigation** between systems, subsystems, component types, data types and state machines with a
   back / forward history.
 - **Tools**: the web editor, the VS Code extension (language server, diagram, navigation, edits across
-  files) and `hsm render` (SVG) support structure files. Not (yet) supported: simulation and code
+  files) and `devm render` (SVG) support structure files. Not (yet) supported: simulation and code
   generation of structure files.
 
-## State machines (`.hsm`)
+## State machines (state machine files)
 
 - **Textual DSL** (Langium): the structure of the state machine (states, regions, transitions) uses a
   PlantUML-like notation, the definition section and all reactions follow the statechart language of
@@ -104,21 +108,21 @@ state machines: double-click an instance to open its state machine.
   text selects the element in the diagram.
 - **Export** of the diagram as standalone SVG or PNG (*Export…* in the toolbar; the PNG has twice the
   screen resolution).
-- **CLI** for validation, layout computation, rendering and code generation.
-- **Rendering and documentation without a browser**: `hsm render` writes the diagrams as SVG files that look
-  like the editor's export, `hsm doc` generates Markdown or HTML documentation of models (diagram,
+- **CLI** (`devm`) for validation, layout computation, rendering and code generation.
+- **Rendering and documentation without a browser**: `devm render` writes the diagrams as SVG files that look
+  like the editor's export, `devm doc` generates Markdown or HTML documentation of models (diagram,
   interfaces, states, transitions and `/** … */` doc comments) – see [Rendering diagrams](docs/rendering.md#rendering-diagrams)
   and [Model documentation](docs/rendering.md#model-documentation), examples in [`docs/examples`](docs/examples/index.md).
-- **Unit tests** for state machines in the style of SCTUnit (`.hsmtest` files, see [Unit tests](docs/testing.md#unit-tests)),
+- **Unit tests** for state machines in the style of SCTUnit (`.devmtest` files, see [Unit tests](docs/testing.md#unit-tests)),
   executed by the interpreter, with JUnit XML reports for CI.
 - **Code generation** for **C++** (a class per state machine like itemis CREATE, see
   [Code generation (C++)](docs/cpp-generator.md)) and C99, both verified against the conformance suite of the
   interpreter by compiling and running every scenario.
-- **VS Code extension** (`packages/vscode`): language server for `.hsm` / `.hsmtest` / `.dmf`, the diagram
+- **VS Code extension** (`packages/vscode`): language server for `.devm` and `.devmtest` files, the diagram
   editors of the web app next to the text editor, C++ generation, tests in the Test Explorer (with model
   coverage) and the itemis CREATE import – see [VS Code extension](docs/vscode.md).
 - **Build integration**: a generator configuration file (`devm.gen.json`, like the `.sgen` files of itemis
-  CREATE), `hsm generate --check` for CI and CMake functions (`hsm_generate`, `hsm_add_tests`) that
+  CREATE), `devm generate --check` for CI and CMake functions (`hsm_generate`, `hsm_add_tests`) that
   regenerate the code when a model changes (see [Build integration (CMake)](docs/build-integration.md)).
 
 ## Getting started
@@ -141,19 +145,22 @@ npm run package:vscode   # packages/vscode/hsm-vscode-<version>.vsix
 
 ### Command line
 
+The command line tool is `devm` (`npm install -g ./packages/language` after the build, or
+`node packages/language/bin/cli.js` as below):
+
 ```bash
 npm run build -w packages/language
-node packages/language/bin/cli.js validate examples/cd-player.hsm
-node packages/language/bin/cli.js layout examples/keyboard.hsm --direction RIGHT
+node packages/language/bin/cli.js validate examples/cd-player.devm
+node packages/language/bin/cli.js layout examples/keyboard.devm --direction RIGHT
 node packages/language/bin/cli.js render examples -o out --theme modern     # SVG diagrams, see below
-node packages/language/bin/cli.js render examples/device/system.dmf -o system.svg   # internal block diagram of a structure
+node packages/language/bin/cli.js render examples/device/system.devm -o system.svg   # internal block diagram of a structure
 node packages/language/bin/cli.js doc examples -o docs/models --format html  # documentation, see below
-node packages/language/bin/cli.js import model.sct -o model.hsm   # itemis CREATE import, see below
-node packages/language/bin/cli.js simulate examples/cd-player.hsm -e play,eject,eject   # run the interpreter
-node packages/language/bin/cli.js simulate examples/door.hsm --script packages/language/test/scenarios/example-door.json
-node packages/language/bin/cli.js test examples/tests/*.hsmtest --machine examples --junit report.xml   # unit tests
-node packages/language/bin/cli.js generate cpp examples/traffic-light.hsm -o gen   # C++ code, see below
-node packages/language/bin/cli.js generate c examples/traffic-light.hsm -o gen     # C code
+node packages/language/bin/cli.js import model.sct -o model.devm   # itemis CREATE import, see below
+node packages/language/bin/cli.js simulate examples/cd-player.devm -e play,eject,eject   # run the interpreter
+node packages/language/bin/cli.js simulate examples/door.devm --script packages/language/test/scenarios/example-door.json
+node packages/language/bin/cli.js test examples/tests/*.devmtest --machine examples --junit report.xml   # unit tests
+node packages/language/bin/cli.js generate cpp examples/traffic-light.devm -o gen   # C++ code, see below
+node packages/language/bin/cli.js generate c examples/traffic-light.devm -o gen     # C code
 node packages/language/bin/cli.js generate                  # all models / targets of ./devm.gen.json, see below
 node packages/language/bin/cli.js generate --check          # exit 1 if generated files are out of date (CI)
 ```
@@ -163,13 +170,13 @@ node packages/language/bin/cli.js generate --check          # exit 1 if generate
 | Document | Content |
 | --- | --- |
 | [The language](docs/language.md) | syntax of the models: definition section, reactions, expressions, states, regions, pseudo states; imports and submachines; C/C++ header imports |
-| [Structure language](docs/structure-language.md) | 🧪 `.dmf` files: components, ports, subsystems, threads, instances, connections; port ↔ state machine rules; route analysis |
+| [Structure language](docs/structure-language.md) | 🧪 structure files: components, ports, subsystems, threads, instances, connections; port ↔ state machine rules; route analysis |
 | [Execution semantics](docs/semantics.md) | how a state machine executes – the specification implemented by the interpreter and the code generators |
 | [Web editor](docs/editor.md) | editing in the diagram, 🧪 structure diagrams and navigation, 🧪 manual layout, simulation |
 | [Manual layout](docs/manual-layout.md) | 🧪 experimental (branch `claude/layout-annotations`): layout annotations in the model (state machines and structure diagrams), layout computation, routing, editor integration, migration |
 | [VS Code extension](docs/vscode.md) | language server, diagrams, 🧪 structure files, generation, Test Explorer (details in [packages/vscode/README.md](packages/vscode/README.md)) |
-| [Rendering and model documentation](docs/rendering.md) | `hsm render` (SVG diagrams), `hsm doc` (Markdown / HTML documentation), doc comments |
-| [Unit tests and coverage](docs/testing.md) | the `.hsmtest` language, `hsm test`, model coverage, CI examples |
+| [Rendering and model documentation](docs/rendering.md) | `devm render` (SVG diagrams), `devm doc` (Markdown / HTML documentation), doc comments |
+| [Unit tests and coverage](docs/testing.md) | the `.devmtest` language, `devm test`, model coverage, CI examples |
 | [Code generation (C++)](docs/cpp-generator.md) | generated API, runtime errors, a complete host example |
 | [Code generation (C)](docs/c-generator.md) | C99 generator |
 | [Build integration (CMake)](docs/build-integration.md) | `devm.gen.json`, installing the command line tool, `hsm_generate` / `hsm_add_tests` |
@@ -181,10 +188,12 @@ node packages/language/bin/cli.js generate --check          # exit 1 if generate
 
 ## Architecture
 
-The repository is an npm workspace with three packages: `packages/language` (the Langium languages –
-state machines, unit tests and structures –, CLI, interpreter, test runner, renderer and code generators –
+The repository is an npm workspace with three packages: `packages/language` (the Langium languages – the
+`.devm` language of state machines and structures and the unit test language –, CLI `devm`, interpreter,
+test runner, renderer and code generators –
 no DOM dependencies, runs in Node.js and in the browser), `packages/web` (the Vite web app: Monaco editor
-and Sprotty diagram) and `packages/vscode` (the VS Code extension). The package names (`hsm-language`,
-`hsm-web`, `hsm-vscode`) and the command line tool `hsm` keep the name of the HSM Modeler. The text is the single source of truth: diagram edits become text edits, which run
+and Sprotty diagram) and `packages/vscode` (the VS Code extension). The npm package names (`hsm-language`,
+`hsm-web`, `hsm-vscode`) keep the former name *HSM Modeler*. The text is the single source of truth: diagram
+edits become text edits, which run
 through the same parse → validate → layout → render pipeline as typed changes. See
 [docs/architecture.md](docs/architecture.md) for the details.

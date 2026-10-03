@@ -4,7 +4,7 @@
 
 LEDs of a keyboard; suspending the keyboard keeps the lock states.
 
-Source: [`examples/keyboard.hsm`](../../examples/keyboard.hsm)
+Source: [`examples/keyboard.devm`](../../examples/keyboard.devm)
 
 ![Keyboard diagram](Keyboard.svg)
 

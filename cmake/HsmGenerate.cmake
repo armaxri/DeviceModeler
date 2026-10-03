@@ -1,7 +1,7 @@
 # HsmGenerate.cmake - build integration of the code generator of the Device Modeler (devm).
 #
-#   list(APPEND CMAKE_MODULE_PATH "<hsm>/cmake")
-#   include(HsmGenerate)            # or: find_package(Hsm CONFIG REQUIRED PATHS "<hsm>/cmake")
+#   list(APPEND CMAKE_MODULE_PATH "<repository>/cmake")
+#   include(HsmGenerate)            # or: find_package(Hsm CONFIG REQUIRED PATHS "<repository>/cmake")
 #
 #   add_library(statemachines STATIC)
 #   hsm_generate(TARGET statemachines MODELS models/traffic-light.devm NAMESPACE app STD 17)
@@ -47,7 +47,7 @@
 #   1. the cache variable HSM_EXECUTABLE (a command, e.g. "/usr/local/bin/devm" or "node;/path/to/cli.js")
 #   2. node + packages/language/bin/cli.js of the Device Modeler repository containing this file (after
 #      `npm ci && npm run build -w packages/language`)
-#   3. `devm` in the PATH (`npm install -g <hsm>/packages/language`, or a package made with `npm pack`)
+#   3. `devm` in the PATH (`npm install -g <repository>/packages/language`, or a package made with `npm pack`)
 #   4. `npx --no-install devm` in the source directory (hsm-language installed as a dev dependency)
 
 include_guard(GLOBAL)
@@ -100,8 +100,8 @@ function(_hsm_find_command)
         if(EXISTS "${repo_cli}")
             set(hint " The Device Modeler repository at ${_HSM_CMAKE_DIR}/.. is not built: run `npm ci && npm run build -w packages/language` there.")
         endif()
-        message(FATAL_ERROR "devm: command line tool not found.${hint} Install it with `npm install -g <hsm>/packages/language` "
-            "or set HSM_EXECUTABLE (e.g. -DHSM_EXECUTABLE=\"node;/path/to/hsm/packages/language/bin/cli.js\").")
+        message(FATAL_ERROR "devm: command line tool not found.${hint} Install it with `npm install -g <repository>/packages/language` "
+            "or set HSM_EXECUTABLE (e.g. -DHSM_EXECUTABLE=\"node;/path/to/repository/packages/language/bin/cli.js\").")
     endif()
     list(JOIN command " " text)
     message(STATUS "devm: using ${text}")

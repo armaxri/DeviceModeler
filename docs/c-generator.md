@@ -1,6 +1,6 @@
 # Code generation (C)
 
-C is also available: `hsm generate c model.hsm -o gen` (or `generateC(machine, options)`) generates C99
+C is also available: `devm generate c model.devm -o gen` (or `generateC(machine, options)`) generates C99
 code in the spirit of the itemis CREATE C generator – `sc_types.h` and one `.h` / `.c` pair per state
 machine named after it in snake case (`traffic_light.h`, prefix `traffic_light_`; option `--prefix`).
 It shares the implementation of the semantics with the C++ generator (`src/generator/common`) and passes

@@ -1,20 +1,27 @@
-# The structure language (`.dmf`)
+# The structure language (structure files, `.devm`)
 
-🧪 Experimental: the structure language of the **Device Modeling Framework**. A `.dmf` file describes
+🧪 Experimental: the structure elements of the **Device Modeler**. A structure file describes
 the structure of a product – component types, their ports, subsystems, threads, instances and
-connections – alongside the state machines (`.hsm`) that implement the behavior of its components. The
+connections – alongside the state machines that implement the behavior of its components. The
 validator checks the ports of a component against its state machine, and the route analysis follows a
 signal through all levels of the hierarchy.
 
+Structure files and state machine files are both `.devm` files: a file contains **either a state machine
+or structure elements** (structs, interfaces, components, subsystems, systems), never both. A file
+starting with `statemachine` (after comments) is a state machine file, every other file – also an empty
+one – is a structure file; structure elements after a state machine (or a state machine after structure
+elements) are reported: *A .devm file contains either a state machine or structure elements*. The keywords
+of state machines can be used as names in structure files (a field `state`, a port `in`) and vice versa.
+
 The complete example is in [`examples/device`](../examples/device): a garage door with a controller and
-a drive unit (a subsystem with threads of its own), implemented by `controller.hsm` and `drive.hsm`; `light.dmf`
+a drive unit (a subsystem with threads of its own), implemented by `controller.devm` and `drive.devm`; `light.devm`
 declares data types, components and a subsystem in one file.
 
 ```
-// system.dmf
-import "types.dmf"                          // structs, interfaces, component types of other files
-import "components.dmf"
-import "drive.dmf"
+// system.devm
+import "types.devm"                          // structs, interfaces, component types of other files
+import "components.devm"
+import "drive-unit.devm"
 
 /** The garage door: remote control commands in, statistics out. */
 system GarageDoor {
@@ -44,13 +51,13 @@ system GarageDoor {
 ```
 
 ```
-// components.dmf
-import "types.dmf"
+// components.devm
+import "types.devm"
 import "door_types.h"                       // C/C++ types (door::Position)
 
-/** Opens and closes the door; implemented by controller.hsm. */
+/** Opens and closes the door; implemented by controller.devm. */
 component DoorController {
-    behavior "controller.hsm"               // the state machine implementing the component
+    behavior "controller.devm"              // the state machine implementing the component
     provides async cmd : DoorCmd            // events (an interface) the component accepts
     provides async status : MotorStatus
     requires async motor : MotorCmd         // events the component sends
@@ -61,7 +68,7 @@ component DoorController {
 ```
 
 ```
-// types.dmf
+// types.devm
 package types                               // optional: elements can also be referenced as `types.Name`
 
 struct Diagnostics {
@@ -81,10 +88,10 @@ interface MotorCmd {                        // a named group of events: the type
 | Element | Syntax | Meaning |
 |---|---|---|
 | package | `package types` (first line, optional) | elements of the file can be referenced as `types.Name` |
-| import | `import "file.dmf" "door.hsm" "types.h"` | other structure files, state machines (for `behavior Door`), C/C++ headers |
+| import | `import "file.devm" "door.devm" "types.h"` | other structure files, state machine files (for `behavior Door`), C/C++ headers – the kind of a `.devm` file is its content |
 | struct | `struct Position { x : real  y : real }` | a data type (fields separated by line breaks, `,` or `;`) |
 | interface | `interface DoorCmd { event open  event close }` | a group of events: the type of async ports |
-| component | `component Name "description" { behavior "x.hsm"  ports… }` | an atomic component type |
+| component | `component Name "description" { behavior "x.devm"  ports… }` | an atomic component type |
 | subsystem | `subsystem Name { ports… threads… instances… connect… delegate… }` | a composite component type, can be instantiated |
 | system | `system Name { … }` | the root of a product (same body as `subsystem`, cannot be instantiated) |
 | port | `provides\|requires sync\|async name : Type` | see [Ports](#ports) |
@@ -159,8 +166,8 @@ the same type as a C++ struct with the same unqualified name (`Position` and `ge
 
 ## Components and state machines
 
-`behavior "door.hsm"` links a component to the state machine of a file (relative to the structure file);
-`behavior Door` names a state machine of an imported `.hsm` file. The ports must match the interfaces of
+`behavior "door.devm"` links a component to the state machine of a file (relative to the structure file;
+a structure file there is an error); `behavior Door` names a state machine of an imported state machine file. The ports must match the interfaces of
 the state machine's definition section (the internal scope does not count):
 
 | Port | State machine |
@@ -230,7 +237,7 @@ The diagram of a structure file is an internal block diagram (IBD) in the style 
 the state machine diagrams (PlantUML classic / modern, dark). It is shown and edited by the web editor and
 the VS Code extension (palette, rename in place, drag & drop into threads, connectors, properties,
 navigation into the state machines and subsystems of the instances – see
-[the editor](editor.md#structure-diagrams-dmf) and [VS Code](vscode.md)) and rendered by `hsm render`
+[the editor](editor.md#structure-diagrams) and [VS Code](vscode.md)) and rendered by `devm render`
 ([rendering](rendering.md)):
 
 ![The garage door system](examples/GarageDoor.svg)
@@ -250,7 +257,7 @@ the side facing the ports they are connected to (by default provided ports left,
 ordered by the position of their partners, so a reply (`drive.status -> door.status`) needs no detour.
 
 **Manual layout.** The diagram can be arranged by hand, with the same concept and syntax as the state
-machine diagrams ([Manual layout](manual-layout.md#structure-diagrams-dmf)): layout annotations in the text
+machine diagrams ([Manual layout](manual-layout.md#structure-diagrams)): layout annotations in the text
 place the frame, threads, instances, component blocks and type boxes (`@at(x, y)`, `@size(w, h)`), the
 ports of an instance or the boundary ports (`@port(name, left | right | top | bottom, offset)`) and the
 waypoints of connections and delegations (`@via(x1, y1, …)`); a diagram without them is laid out
@@ -278,11 +285,11 @@ moving the text cursor into another subsystem shows that one.
 **Data types.** The structs and interfaces declared **in the file** are shown as separate value type boxes
 – `«struct» Position` with its fields, `«interface» DoorCmd` with its events – in rows below the frame (or
 the component blocks), never connected to anything: the ports show their type in the label instead. A file
-with data types only (like `types.dmf` of the example) shows only these boxes; a file mixing data types,
-components and a subsystem (like `light.dmf`) shows them next to its diagram. Clicking a box selects the
+with data types only (like `types.devm` of the example) shows only these boxes; a file mixing data types,
+components and a subsystem (like `light.devm`) shows them next to its diagram. Clicking a box selects the
 declaration in the text; double-clicking the type of a port opens the box of the type (also in another
 file). The boxes are part of the diagram model (kind `type`, ids `type:Position`, graph kind `types` for a
-file without component types), so the export and `hsm render` include them.
+file without component types), so the export and `devm render` include them.
 
 **Routes.** Selecting a port, a connection or an instance highlights the route of its signals
 (`ibdRouteElements`, based on `routeOf` / `portRoute` of the route analysis): the ports, connectors and
@@ -327,25 +334,26 @@ Elements are identified across the separately parsed files by URI and names: a `
 
 ## Editor support
 
-The structure language shares the services of the state machine languages (`createHsmServices` returns
-`Dmf` next to `Hsm` and `HsmTest`), so `.dmf` files reference `.hsm` files and are revalidated when a
-state machine they use changes. Language server features: formatter, completion (keywords, references,
+Structure files and state machine files are one language (see
+[Architecture](architecture.md#one-language-for-two-kinds-of-model-files); `createHsmServices` returns it as
+`Hsm` and as `Dmf`), so structure files reference state machine files and are revalidated when a state
+machine they use changes. Language server features: formatter, completion (keywords, references,
 type names), go to definition (component types, instances, ports, type names – also into C++ headers –,
 import paths and the behavior file), go to implementation = go to the provider of a required port, hover
 (signature and documentation comment) and document symbols. `DmfModelLoader` (hsm-document.ts) loads a
 structure file with everything it imports outside of a language server.
 
-The web app highlights `.dmf` files (generated Monarch grammar), offers completion, hover, formatting and
+The web app highlights structure files like state machines (one generated Monarch grammar), offers completion, hover, formatting and
 go to definition, and shows and edits their diagram (see [Diagram](#diagram) and
-[the editor](editor.md#structure-diagrams-dmf)); all files of `examples/device` are in its list of
+[the editor](editor.md#structure-diagrams)); all files of `examples/device` are in its list of
 examples and resolve their imports against each other. State machines used as the behavior of components
 link back to the instances (*Used by*).
 
-The VS Code extension serves `.dmf` files with the same language server as the state machines (all
-`.dmf` files of the workspace are indexed: references, renames and go to provider across files), a
-TextMate grammar, and opens the structure diagram with **HSM: Open Diagram** like the diagram of a state
+The VS Code extension serves structure files with the same language server as the state machines (all
+`.devm` files of the workspace are indexed: references, renames and go to provider across files), a
+TextMate grammar, and opens the structure diagram with **Device Modeler: Open Diagram** like the diagram of a state
 machine; navigation between the diagrams and edits of several files go through the extension
-([VS Code extension](vscode.md#structure-files-dmf)).
+([VS Code extension](vscode.md#structure-files)).
 
 Not (yet) supported: simulation and code generation of structure files; state machines cannot use the structs
 of structure files (share C/C++ headers instead).

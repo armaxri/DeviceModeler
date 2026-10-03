@@ -1,29 +1,29 @@
 # Manual layout (experimental)
 
 Status: 🧪 experiment on the branch `claude/layout-annotations` (based on `claude/manual-layout`, which
-stored the layout in a sidecar file `<model>.hsm.layout`). The automatic layout (ELK) stays the default:
+stored the layout in a sidecar file `<model>.layout`). The automatic layout (ELK) stays the default:
 a model without layout annotations is exactly the diagram computed by `layoutStateMachine`.
 
 This note describes how hand-arranged diagrams are stored and computed, and the trade-offs behind the
-design, so the experiment can be evaluated (and removed again) easily. The structure diagrams of `.dmf`
-files are arranged with the same concept and syntax, see [Structure diagrams](#structure-diagrams-dmf);
+design, so the experiment can be evaluated (and removed again) easily. The structure diagrams of `.devm`
+files are arranged with the same concept and syntax, see [Structure diagrams](#structure-diagrams);
 the parts both share are in `packages/language/src/diagram/layout-core/` (see
 [Architecture](architecture.md#manual-layout-shared-core)).
 
 ## Where the layout lives
 
-**Decision:** in **layout annotations** in the `.hsm` text. A model with at least one layout annotation
+**Decision:** in **layout annotations** in the `.devm` text. A model with at least one layout annotation
 has a manual layout, a model without has the automatic one – there is no separate mode switch.
 
 | Option | Pro | Contra |
 | --- | --- | --- |
 | Annotations in the text (chosen) | one file; renames (also typed in the text or via *Rename Symbol*) keep the layout, because the annotation belongs to the element; layout changes are text edits: one undo history, dirty marker and *Save* as for any other change; travels with the model through git, copy & paste, the web app | coordinates in the text and in diffs / reviews; rearranging the same diagram in two branches gives merge conflicts in the model; every drag changes the model text |
-| Sidecar file `<model>.hsm.layout` (previous experiment) | the text stays free of layout information | two files to keep together; renames in the text lose the position; a second undo history and file synchronization in the editors |
+| Sidecar file `<model>.layout` (previous experiment) | the text stays free of layout information | two files to keep together; renames in the text lose the position; a second undo history and file synchronization in the editors |
 | Separate section at the end of the text | one file | still noise in the text, fragile when editing by hand, keys by name like the sidecar |
 
 Compatibility: models with layout annotations cannot be opened by builds of the main branch (the
 grammar there does not accept annotations in front of states and transitions) until the experiment
-is merged. Generated code does not depend on the annotations (`hsm generate --check` stays stable when
+is merged. Generated code does not depend on the annotations (`devm generate --check` stays stable when
 only the layout changes).
 
 ### Syntax
@@ -166,35 +166,36 @@ the layout of every parsed model with `layoutFromModel` and turns every layout c
 ## VS Code extension
 
 The extension of this branch is packaged as `hsm-vscode-0.1.0-manual-layout.vsix` (display name
-*HSM Modeler (manual layout)*). It has the same extension id as the build of the main branch, so only
+*Device Modeler (manual layout)*). It has the same extension id as the build of the main branch, so only
 one of them can be installed at a time (uninstall the other one first, or install with `--force`).
 
 - **Toolbar and commands:** the diagram webview shows *Auto-arrange* and *Automatic layout* like the web app; the
-  same actions are the commands **HSM: Auto-arrange Diagram** and **HSM: Use Automatic Diagram Layout** (command
+  same actions are the commands **Device Modeler: Auto-arrange Diagram** and **Device Modeler: Use Automatic Diagram Layout** (command
   palette and the *…* menu of the diagram panel).
-  **HSM: Convert Layout File to Annotations** writes an old `<model>.hsm.layout` into the model.
+  **Device Modeler: Convert Layout File to Annotations** writes an old `<model>.devm.layout` into the model.
 - The layout is part of the document: diagram edits and layout changes are `WorkspaceEdit`s, undone
   with VS Code's undo, they make the model dirty and are saved with it. The extension no longer reads,
-  writes or watches `.hsm.layout` files.
-- **Import and export:** **HSM: Import itemis CREATE Model** writes the arrangement of the itemis
-  diagram as layout annotations into the imported model; **HSM: Export Diagram…** (SVG / PNG) applies them.
+  writes or watches `.devm.layout` files.
+- **Import and export:** **Device Modeler: Import itemis CREATE Model** writes the arrangement of the itemis
+  diagram as layout annotations into the imported model; **Device Modeler: Export Diagram…** (SVG / PNG) applies them.
 
 Limitation: no tests in a real VS Code instance (the webview bundle is checked in Chromium with a
 mocked VS Code API, the extension code with a `vscode` mock).
 
 ## Command line
 
-`hsm layout`, `hsm render`, `hsm doc` and the coverage diagrams of `hsm test` use the layout annotations
-(`--auto` ignores them for `layout`, `render` and `doc`); `hsm render` also those of structure files. `hsm import model.sct` writes the itemis
+`devm layout`, `devm render`, `devm doc` and the coverage diagrams of `devm test` use the layout annotations
+(`--auto` ignores them for `layout`, `render` and `doc`); `devm render` also those of structure files. `devm import model.sct` writes the itemis
 diagram as annotations (`--no-layout` to skip them).
 
-## Migration from `.hsm.layout`
+## Migration from sidecar layout files
 
-`hsm migrate-layout model.hsm [--layout <file>]` reads the layout file of the previous experiment
-(default `model.hsm.layout`) and writes it into the model as layout annotations (the keys are the same
+`devm migrate-layout model.devm [--layout <file>]` reads the layout file of the previous experiment
+(default `model.devm.layout`; the files of that experiment were named after the former extension, e.g.
+`model.hsm.layout`: pass them with `--layout`) and writes it into the model as layout annotations (the keys are the same
 diagram ids: qualified names, `<state>#region<n>`, `<container>#initial` / `#final`, `#definitions`,
 `<source>-><target>~<n>`). The layout file is kept; delete it once the model looks right.
-In VS Code, **HSM: Convert Layout File to Annotations** does the same for the model of the active editor.
+In VS Code, **Device Modeler: Convert Layout File to Annotations** does the same for the model of the active editor.
 
 ## Import from itemis CREATE
 
@@ -208,10 +209,10 @@ transitions between vertices of the same container become `@via` waypoints. Sinc
 usually wider than in itemis (the text is not wrapped at the itemis width), overlapping states are
 pushed apart; the relative arrangement is kept.
 
-## Structure diagrams (`.dmf`)
+## Structure diagrams
 
 The internal block diagrams of structure files are arranged by hand the same way: layout annotations in
-the `.dmf` text, no mode switch (a diagram with at least one layout annotation is arranged by hand),
+the `.devm` text, no mode switch (a diagram with at least one layout annotation is arranged by hand),
 applied on top of the automatic ELK layout, the same editor gestures, *Auto-arrange* / *Automatic layout*,
 undo of the text.
 
@@ -264,7 +265,7 @@ subsystem CourtesyLight {
   reused while only the layout annotations change (dragging re-runs only the manual step).
 - **Layout settings**: structure diagrams are always laid out from left to right with orthogonal
   connectors, so the *Layout* direction and *Edges* settings do not apply to them (they are disabled for
-  `.dmf` files); *Auto-arrange* and *Automatic layout* do.
+  `.devm` files); *Auto-arrange* and *Automatic layout* do.
 
 Editing (web app and VS Code, `StructureDiagram` with the shared `LayoutEditor` and mouse listener):
 
@@ -283,7 +284,7 @@ Editing (web app and VS Code, `StructureDiagram` with the shared `LayoutEditor` 
   a waypoint to remove it (`@via`).
 - *Auto-arrange* writes the automatic layout of the diagram as annotations, *Automatic layout* removes the
   layout annotations of the diagram (other annotations such as `@priority` stay).
-- `hsm render` and the SVG / PNG export (web app and VS Code) use the annotations (`hsm render --auto`
+- `devm render` and the SVG / PNG export (web app and VS Code) use the annotations (`devm render --auto`
   ignores them).
 
 ## Limitations and risks

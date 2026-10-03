@@ -3,7 +3,7 @@
 ## Generator configuration (`devm.gen.json`)
 
 Like the `.sgen` files of itemis CREATE, a generator configuration says which models are generated for
-which targets with which options. `hsm generate` without arguments reads `devm.gen.json` in the current
+which targets with which options. `devm generate` without arguments reads `devm.gen.json` in the current
 directory (`--config <file>` for another file; `<name>.devm.gen.json` is the recommended name for further
 configurations). Relative paths are relative to the configuration file. The JSON schema
 [`packages/language/schemas/devm-gen.schema.json`](../packages/language/schemas/devm-gen.schema.json) gives
@@ -13,8 +13,8 @@ completion and validation in editors (`"$schema"`); unknown properties are error
 {
     "$schema": "node_modules/hsm-language/schemas/devm-gen.schema.json",
     "models": [
-        "models/**/*.hsm",
-        { "path": "models/door.hsm", "cpp": { "namespace": "legacy", "className": "DoorController" } }
+        "models/**/*.devm",
+        { "path": "models/door.devm", "cpp": { "namespace": "legacy", "className": "DoorController" } }
     ],
     "cpp": {
         "outDir": "src-gen",
@@ -32,7 +32,7 @@ completion and validation in editors (`"$schema"`); unknown properties are error
 
 | Property | |
 |---|---|
-| `models` | paths or globs (`*`, `?`, `**`; hidden directories and `node_modules` are skipped) of `.hsm` files; an entry can be an object `{ "path": …, "cpp": {…}, "c": {…} }` whose options override the target options for these models (entries are applied in order). A glob matching nothing is an error |
+| `models` | paths or globs (`*`, `?`, `**`; hidden directories and `node_modules` are skipped) of `.devm` files; an entry can be an object `{ "path": …, "cpp": {…}, "c": {…} }` whose options override the target options for these models (entries are applied in order). A glob matching nothing is an error |
 | `cpp`, `c` | the targets: a target is generated if its key is present (`"c": {}` for the defaults) |
 | `outDir` | output directory (default: the directory of each model) |
 | `namespace`, `className`, `std` (cpp) | like `--namespace`, `--class-name`, `--std` (17 or 11) |
@@ -48,13 +48,13 @@ file with different contents (e.g. the same class name) is an error. Nothing is 
 errors.
 
 ```bash
-hsm generate                       # all targets of ./devm.gen.json ("Generated …" / "Unchanged …")
-hsm generate cpp                   # only the cpp target
-hsm generate --config sm.devm.gen.json -o build/gen   # another configuration, all outputs into build/gen
-hsm generate --check               # writes nothing, exit 1 if a file is missing or out of date (for CI)
-hsm generate --list-outputs        # writes nothing, prints the absolute paths of the generated files
-hsm generate --list-inputs         # prints the configuration, the models, imported files (.hsm, C/C++ headers) and license header files
-hsm generate cpp model.hsm -o gen  # without configuration (as before; --config adds its cpp options)
+devm generate                       # all targets of ./devm.gen.json ("Generated …" / "Unchanged …")
+devm generate cpp                   # only the cpp target
+devm generate --config sm.devm.gen.json -o build/gen   # another configuration, all outputs into build/gen
+devm generate --check               # writes nothing, exit 1 if a file is missing or out of date (for CI)
+devm generate --list-outputs        # writes nothing, prints the absolute paths of the generated files
+devm generate --list-inputs         # prints the configuration, the models, imported files (.devm, C/C++ headers) and license header files
+devm generate cpp model.devm -o gen  # without configuration (as before; --config adds its cpp options)
 ```
 
 `--namespace`, `--class-name`, `--std` and `--prefix` override the configuration. From code, the format
@@ -64,7 +64,7 @@ is available as `parseGeneratorConfig(json)` and `generateTarget(machine, target
 
 ## Installing the command line tool
 
-The CMake functions need the `hsm` command line tool (Node.js ≥ 20.10):
+The CMake functions need the `devm` command line tool (Node.js ≥ 20.10):
 
 - **In this repository**: `npm ci && npm run build -w packages/language`. `cmake/HsmGenerate.cmake` finds
   `packages/language/bin/cli.js` next to it automatically.
@@ -72,7 +72,7 @@ The CMake functions need the `hsm` command line tool (Node.js ≥ 20.10):
   `cd packages/language && npm pack` and `npm install -g hsm-language-0.1.0.tgz` on any machine (the
   package includes `schemas/`).
 - **As a dev dependency** of a project with a `package.json`: `npm install -D <path or tarball>`; CMake then
-  uses `npx --no-install hsm`.
+  uses `npx --no-install devm`.
 - Or set the CMake cache variable `HSM_EXECUTABLE` to the command, e.g.
   `-DHSM_EXECUTABLE="node;/opt/hsm/packages/language/bin/cli.js"`.
 
@@ -84,21 +84,21 @@ include(HsmGenerate)                                  # or: find_package(Hsm CON
 
 add_library(statemachines STATIC)
 hsm_generate(TARGET statemachines
-    MODELS models/traffic-light.hsm models/door.hsm   # and / or CONFIG devm.gen.json
+    MODELS models/traffic-light.devm models/door.devm   # and / or CONFIG devm.gen.json
     NAMESPACE app                                    # cpp: namespace ("" for the global namespace)
     STD 17)                                          # also required from the target (cxx_std_17)
 
 enable_testing()
-hsm_add_tests(TARGET statemachines TESTS tests/traffic-light.hsmtest MODELS models/traffic-light.hsm)
+hsm_add_tests(TARGET statemachines TESTS tests/traffic-light.devmtest MODELS models/traffic-light.devm)
 ```
 
-`hsm_generate(TARGET <target> [MODELS <file.hsm>...] [CONFIG <file>] [GENERATOR cpp|c] [OUTPUT_DIR <dir>]
+`hsm_generate(TARGET <target> [MODELS <file.devm>...] [CONFIG <file>] [GENERATOR cpp|c] [OUTPUT_DIR <dir>]
 [NAMESPACE <ns>] [STD 17|11] [PREFIX <prefix>] [INCLUDE_DIRS <dir>...] [DEFINES <NAME[=VALUE]>...])`:
 
 - generates the code **at build time** into `OUTPUT_DIR` (default
   `${CMAKE_CURRENT_BINARY_DIR}/hsm_generated/<target>`), adds the generated files to the sources of the
   target and `OUTPUT_DIR` to its include directories (`PUBLIC` for libraries, `PRIVATE` for executables);
-- the generated files are determined at configure time (`hsm generate --list-outputs`); the models, the
+- the generated files are determined at configure time (`devm generate --list-outputs`); the models, the
   configuration and license header files are dependencies of the generation (custom target
   `<target>_hsm_generate`), so changing a model regenerates the code. Thanks to `writeOnlyIfChanged` only
   files whose content changed are recompiled: a changed comment in the model recompiles nothing, a changed
@@ -111,12 +111,12 @@ hsm_add_tests(TARGET statemachines TESTS tests/traffic-light.hsmtest MODELS mode
   other arguments override its options); its `outDir` is ignored in favor of `OUTPUT_DIR`. Globs are
   expanded at configure time: re-run CMake after adding a model file;
 - models importing **C/C++ headers**: the headers (and the headers they include) are dependencies, too.
-  `INCLUDE_DIRS` / `DEFINES` are passed to `hsm` (`-I` / `-D`) and added to the include directories / compile
+  `INCLUDE_DIRS` / `DEFINES` are passed to `devm` (`-I` / `-D`) and added to the include directories / compile
   definitions of the target; the generated header includes a header by its import path if it is found in
   an include directory, otherwise by its path relative to `OUTPUT_DIR`.
 
-`hsm_add_tests(TARGET <name> TESTS <file.hsmtest>... [MODELS <file.hsm>...] [JUNIT_DIR <dir>] [INCLUDE_DIRS <dir>...] [DEFINES …])` registers
-a CTest test `<name>.<file stem>` (label `hsm`) per test file that runs `hsm test` with a JUnit report in
+`hsm_add_tests(TARGET <name> TESTS <file.devmtest>... [MODELS <file.devm>...] [JUNIT_DIR <dir>] [INCLUDE_DIRS <dir>...] [DEFINES …])` registers
+a CTest test `<name>.<file stem>` (label `devm`) per test file that runs `devm test` with a JUnit report in
 `JUNIT_DIR` (default `${CMAKE_CURRENT_BINARY_DIR}/hsm_test_results`).
 
 ## Example
@@ -125,7 +125,7 @@ a CTest test `<name>.<file stem>` (label `hsm`) per test file that runs `hsm tes
 (generated with the configuration [`examples/cmake/devm.gen.json`](../examples/cmake/devm.gen.json): `.hpp` /
 `.cc` files with a license header) as static libraries, an application with a `std::chrono` timer service
 and operation callbacks ([`main.cpp`](../examples/cmake/main.cpp)), a C++ test driving both classes with a
-virtual clock and the `.hsmtest` unit tests of both models. The conveyor of
+virtual clock and the `.devmtest` unit tests of both models. The conveyor of
 [`examples/cpp-types`](../examples/cpp-types) imports a C++ header; its generated class uses the header's types
 (tested by [`tests/conveyor_test.cpp`](../examples/cmake/tests/conveyor_test.cpp)):
 

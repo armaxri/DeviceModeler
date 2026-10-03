@@ -4,7 +4,7 @@
 
 Automatic door with obstacle detection and a service mode.
 
-Source: [`examples/door.hsm`](../../examples/door.hsm)
+Source: [`examples/door.devm`](../../examples/door.devm)
 
 ![Door diagram](Door.svg)
 

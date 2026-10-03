@@ -7,7 +7,7 @@
 CD player with a history state: after closing the lid the player
 resumes the mode it was in before.
 
-Source: [`examples/cd-player.hsm`](../../examples/cd-player.hsm)
+Source: [`examples/cd-player.devm`](../../examples/cd-player.devm)
 
 ![CdPlayer diagram](CdPlayer.svg)
 

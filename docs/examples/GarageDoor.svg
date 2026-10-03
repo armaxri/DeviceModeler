@@ -582,7 +582,7 @@
     stroke-width: 1px;
 }
 
-/* ---- internal block diagrams of subsystems and systems (.dmf, ibd-layout.ts) ---- */
+/* ---- internal block diagrams of subsystems and systems (.devm, ibd-layout.ts) ---- */
 
 .theme-classic {
     --ibd-thread-fill: #f4f7fb;
@@ -920,7 +920,7 @@
 <text class="ibd-thread-title" x="10" y="16.55"><tspan class="ibd-stereotype">«thread»</tspan> <tspan class="ibd-thread-name">ControlTask</tspan></text>
 <text class="ibd-thread-details" x="10" y="31.85">priority 5 · period 10 ms</text>
 <g class="ibd-node ibd-instance has-behavior" transform="translate(26, 52)">
-<title>Opens and closes the door; implemented by controller.hsm.</title>
+<title>Opens and closes the door; implemented by controller.devm.</title>
 <rect class="ibd-instance-shape" x="0" y="0" rx="2" ry="2" width="260" height="162"/>
 <text class="ibd-stereotype ibd-block-stereotype" x="120" y="15.35">«component»</text>
 <text class="ibd-instance-name" x="120" y="31.55">door : DoorController</text>

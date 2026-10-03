@@ -1,5 +1,9 @@
 # The language
 
+State machines are written in `.devm` files, one state machine per file; a `.devm` file contains either a
+state machine or the structure elements of a product ([structure language](structure-language.md)), never
+both. A file starting with `statemachine` (after comments) is a state machine file.
+
 ```
 // comments like in Java / TypeScript
 statemachine CdPlayer "optional description" {
@@ -96,8 +100,8 @@ statemachine CdPlayer "optional description" {
 - **Priorities**: the outgoing transitions of a vertex are checked in the order of the text; the first
   enabled one is taken.
 - The execution semantics are specified in [`docs/semantics.md`](semantics.md). See
-  [`examples/`](../examples) for more: `door.hsm` shows entry points, exit nodes and fork / join,
-  `traffic-light.hsm` time events and named interfaces, `keyboard.hsm` orthogonal regions,
+  [`examples/`](../examples) for more: `door.devm` shows entry points, exit nodes and fork / join,
+  `traffic-light.devm` time events and named interfaces, `keyboard.devm` orthogonal regions,
   [`door-with-motor/`](../examples/door-with-motor) imports and submachines, [`cpp-types/`](../examples/cpp-types)
   the types and constants of a C++ header.
 
@@ -108,9 +112,9 @@ is an imported state machine is an **instance** of it, a state bound to the inst
 state is active (the instance is a separate object with its own states and variables – it is not inlined).
 
 ```
-// motor.hsm                                      // gate.hsm
+// motor.devm                                      // gate.devm
 statemachine Motor {                              statemachine Gate {
-    interface:                                        import "motor.hsm"   // relative to this file
+    interface:                                        import "motor.devm"   // relative to this file
         in event start                                interface:
         in event stop                                     in event open
         out event stopped                                 in event fast
@@ -128,7 +132,7 @@ statemachine Motor {                              statemachine Gate {
 }
 ```
 
-- **Imports**: `import "path"` (several allowed, also the itemis CREATE form `import: "a.hsm" "b.hsm"`) at
+- **Imports**: `import "path"` (several allowed, also the itemis CREATE form `import: "a.devm" "b.devm"`) at
   the beginning of the state machine body (before or after `namespace`). Paths are resolved relative to the
   importing file; the name of the imported state machine is a type. Missing files, import cycles, duplicate
   machine names and imports of the importing machine itself are errors. C/C++ headers (`import "types.h"`,
@@ -152,9 +156,9 @@ statemachine Motor {                              statemachine Gate {
   mode and order of the parent (a warning if its machine declares others), shares the virtual clock and keeps
   its variables when it is entered again. States of instances are reported as `motor.On` (`activeStates`,
   scenarios, traces), their operations are implemented by the host as `motor.setPwm`.
-- **Where imports are resolved**: CLI (`hsm validate/simulate/test/render/doc`) and API (`HsmModelLoader`,
+- **Where imports are resolved**: CLI (`devm validate/simulate/test/render/doc`) and API (`HsmModelLoader`,
   `HsmTestWorkspace`) read imported files transitively from disk (or from given texts); the VS Code language
-  server resolves them in the workspace (a change of `motor.hsm` updates the diagnostics of `gate.hsm`, go to
+  server resolves them in the workspace (a change of `motor.devm` updates the diagnostics of `gate.devm`, go to
   definition works on `Motor` and on the import path); the diagram webview gets the imported files from the
   extension; the web editor resolves imports against a virtual file list (the examples and the opened files;
   "Open…" accepts several files, the example list also lists the files). Double-clicking a submachine state
@@ -171,7 +175,7 @@ Example: [`examples/cpp-types`](../examples/cpp-types) (a header, a model and it
 the [CMake example](build-integration.md#example)).
 
 ```
-// motor_types.h                                   // controller.hsm
+// motor_types.h                                   // controller.devm
 namespace motor {                                  statemachine Controller {
 /// Operating mode.                                    import "motor_types.h"
 enum class Mode : std::uint8_t { Off, Slow, Fast };    interface:
@@ -221,16 +225,16 @@ constexpr Position kHome{10, 20};                          operation drive(p : m
   on microcontrollers):
 
   ```json
-  { "models": ["models/*.hsm"], "cpp": {},
+  { "models": ["models/*.devm"], "cpp": {},
     "headers": { "includePaths": ["include"], "defines": { "USE_CAN": "1" }, "dataModel": { "longBits": 32, "pointerBits": 32 } } }
   ```
 
   The nearest `devm.gen.json` / `*.devm.gen.json` in the directory of a model or a parent directory applies (CLI,
-  language server); `hsm validate|simulate|test|generate|layout` add `-I <dir>`, `-D NAME[=VALUE]` and
+  language server); `devm validate|simulate|test|generate|layout` add `-I <dir>`, `-D NAME[=VALUE]` and
   `--data-model lp64|llp64|ilp32`, VS Code the settings `hsm.headers.includePaths` / `hsm.headers.defines` /
   `hsm.headers.dataModel`, CMake `hsm_generate(… INCLUDE_DIRS … DEFINES …)`. A missing header is an error at
   the import, errors in the header are reported there with their location (`motor_types.h:12:5: …`);
-  `hsm cpp-header <files>` prints what the analyzer extracts. The supported C++ subset is described in
+  `devm cpp-header <files>` prints what the analyzer extracts. The supported C++ subset is described in
   [docs/cpp-integration.md](cpp-integration.md).
 - **Tools**: hover shows the declaration, value and documentation comment of the header, go to definition
   opens the header (VS Code), completion after `motor::` lists the names of the namespace / enum and after

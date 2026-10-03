@@ -2,20 +2,20 @@
 
 ## Rendering diagrams
 
-`hsm render` computes the layout with ELK and renders the diagram as a standalone SVG file – in Node.js, without
+`devm render` computes the layout with ELK and renders the diagram as a standalone SVG file – in Node.js, without
 a browser, e.g. for reviews or in CI. The SVG has the shapes, classes and style sheet of the web editor
 (`DIAGRAM_CSS`, shared by both), so it looks like the SVG of *Export…* in the editor.
 
 ```bash
-hsm render model.hsm                            # writes model.svg next to the model
-hsm render model.hsm -o diagram.svg --theme dark --direction RIGHT --routing ORTHOGONAL
-hsm render models/ 'src/**/*.hsm' -o build/diagrams   # directories and glob patterns (also when not expanded by the shell)
+devm render model.devm                            # writes model.svg next to the model
+devm render model.devm -o diagram.svg --theme dark --direction RIGHT --routing ORTHOGONAL
+devm render models/ 'src/**/*.devm' -o build/diagrams   # directories and glob patterns (also when not expanded by the shell)
 ```
 
-Structure files (`.dmf`, see [the structure language](structure-language.md#diagram)) are rendered as internal
-block diagrams: `hsm render system.dmf` shows the first system (else the first structure, else all component
-types of the file), `--element DriveUnit` another structure or a component type. If a directory contains
-`drive.dmf` and `drive.hsm`, the structure is written to `drive.dmf.svg`. The layout options do not apply to
+Structure files (see [the structure language](structure-language.md#diagram)) are rendered as internal
+block diagrams: `devm render system.devm` shows the first system (else the first structure, else all component
+types of the file), `--element DriveUnit` another structure or a component type. Whether a `.devm` file is a
+state machine or a structure file is its content. The layout options do not apply to
 structures (always left to right, orthogonal); their layout annotations (manual layout, `@at`, `@port`, …) are
 applied like those of state machines (`--auto` ignores them).
 
@@ -58,11 +58,11 @@ classes `hsm-covered` and `hsm-uncovered` are defined in `DIAGRAM_CSS` for all t
 
 ## Model documentation
 
-`hsm doc` generates a documentation page per state machine and an index page:
+`devm doc` generates a documentation page per state machine and an index page:
 
 ```bash
-hsm doc examples -o docs/examples                 # Markdown (GitHub flavored) + one SVG per machine
-hsm doc 'models/**/*.hsm' -o site --format html   # self-contained HTML pages (inline SVG and styles)
+devm doc examples -o docs/examples                 # Markdown (GitHub flavored) + one SVG per machine
+devm doc 'models/**/*.devm' -o site --format html   # self-contained HTML pages (inline SVG and styles)
 ```
 
 Each page contains the description and doc comment of the state machine, the diagram, the execution semantics
@@ -71,7 +71,7 @@ internal scope) tables of the events (direction, type), variables and constants 
 and operations (signature, return type), a table of all states and pseudo states (qualified name, kind,
 description, entry / exit actions, other local reactions, sub states per region) and of all transitions
 (source, target, trigger, guard, effect, priority, entry / exit point). Options: `--format md|html`, `--title`
-of the index page and the diagram options of `hsm render`. `npm run docs:examples` regenerates
+of the index page and the diagram options of `devm render`. `npm run docs:examples` regenerates
 [`docs/examples`](examples/index.md).
 
 **Doc comments**: a `/** … */` comment directly before the state machine, an interface, a declaration, a

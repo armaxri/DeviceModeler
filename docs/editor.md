@@ -23,10 +23,11 @@ The web app (`npm run dev`, `packages/web`) edits the text and the diagram side 
 | Undo / redo | `Ctrl+Z` / `Ctrl+Y` (shared with the text editor) |
 | Keep a tool active | hold `Shift` while choosing it, `Esc` to go back to selection |
 
-## Structure diagrams (`.dmf`)
+## Structure diagrams
 
 The internal block diagram of a structure file ([the structure language](structure-language.md#diagram))
-is edited like the state machine diagrams: every action is a minimal text edit of the `.dmf` file
+is shown instead of the state machine diagram when the edited `.devm` file contains structure elements
+(decided by its text: a file starting with `statemachine` is a state machine). It is edited like the state machine diagrams: every action is a minimal text edit of the `.devm` file
 (comments and formatting are kept, `Ctrl+Z` undoes it, the text editor shows the change at once).
 
 | Action | How |
@@ -40,15 +41,15 @@ is edited like the state machine diagrams: every action is a minimal text edit o
 | Edit a port | properties panel: name, direction, kind, type (with completion of the built-in types, structs and interfaces) |
 | Edit a thread | properties panel: name, priority, period (`10 ms`), stack size – the annotations `@priority(5) @period(10 ms) @stack(4096)` on the line before the thread |
 | Change the type or the thread of an instance | properties panel (the thread of a component instance; a subsystem instance has no thread) |
-| Set the behavior of a component | properties panel of the component (`behavior "door.hsm"`, completion of the state machine files) |
+| Set the behavior of a component | properties panel of the component (`behavior "door.devm"`, completion of the state machine files) |
 | Add a component type | properties panel of the overview (*Add component / subsystem / system*) |
 | Delete | `Del` / the trash button: an instance with its connections, delegations and assignments; a port with the connections and delegations using it (also in the other structure files of the workspace); a thread together with its instances and their connections and delegations (instances of components only exist in threads); connections, delegations, component types. Ports shown at an instance belong to its type: they are edited and deleted in the type |
 
 ### Layout of structure diagrams
 
 Structure diagrams are arranged by hand like the state machines (see [Manual layout](#manual-layout-experimental)
-and [Manual layout: structure diagrams](manual-layout.md#structure-diagrams-dmf)): the first drag stores
-the positions of all nodes as layout annotations in the `.dmf` text (`@at`, `@size`, `@port`, `@via`),
+and [Manual layout: structure diagrams](manual-layout.md#structure-diagrams)): the first drag stores
+the positions of all nodes as layout annotations in the `.devm` text (`@at`, `@size`, `@port`, `@via`),
 *Auto-arrange* and *Automatic layout* in the toolbar apply to the shown diagram, `Ctrl+Z` undoes layout
 changes. The *Layout* direction and *Edges* settings do not apply (structure diagrams are always laid out
 from left to right with orthogonal connectors).
@@ -65,14 +66,14 @@ from left to right with orthogonal connectors).
 
 | From | Action | Shows |
 | --- | --- | --- |
-| an instance with a behavior | double-click it, click its behavior icon or *Open state machine* | the state machine (`.hsm`) of its component |
+| an instance with a behavior | double-click it, click its behavior icon or *Open state machine* | the state machine (`.devm`) of its component |
 | a subsystem instance | double-click it, click its rake icon or *Open DriveUnit* | the internal block diagram of the subsystem, as the part of the shown diagram (breadcrumb *Part of GarageDoor › drive : DriveUnit*) |
 | the type name of an instance | double-click it or *Go to type* | the definition of the component type (its file, the type shown and selected) |
 | the type of a port (`cmd : DoorCmd`) | double-click the type | the «struct» / «interface» box of the type in the diagram of the file declaring it, the declaration selected |
 | a «struct» / «interface» box | click it | the declaration selected in the text (double-click: the cursor into it) |
 | a selected port, connection or instance | *Follow into drive ▸* (properties panel) | the subsystem the highlighted route continues into – the route stays highlighted there, also across files |
 | the same, inside a subsystem | *◂ Follow out to GarageDoor* | the subsystem or system using it, the route highlighted |
-| a required (provided) port | the *Providers* (*Requirers*) links, *Go to provider* | the port at the end of the route – also in another file (e.g. from `drive.dmf` to the door controller in `system.dmf`) |
+| a required (provided) port | the *Providers* (*Requirers*) links, *Go to provider* | the port at the end of the route – also in another file (e.g. from `drive-unit.devm` to the door controller in `system.devm`) |
 | a state machine | *Used by* (breadcrumb at the top of the diagram, properties panel) | the instances of the components implemented by the state machine, in the diagram of their subsystem or system |
 | anywhere | *◀* / *▶* in the toolbar, `Alt+←` / `Alt+→` | back / forward in the navigation history |
 
@@ -110,9 +111,9 @@ mode switch. Design and trade-offs: [Manual layout](manual-layout.md).
 | Arrange automatically / back to the automatic layout | *Auto-arrange* / *Automatic layout* in the toolbar |
 
 Importing an itemis CREATE `.sct` file keeps the arrangement of its diagram (also when several
-statecharts are imported together). On the command line, `hsm layout`, `hsm render` and `hsm doc` use
-the annotations (`--auto` ignores them), `hsm import` writes them (`--no-layout` to skip them), and
-`hsm migrate-layout model.hsm` converts a `model.hsm.layout` file of the earlier sidecar experiment
+statecharts are imported together). On the command line, `devm layout`, `devm render` and `devm doc` use
+the annotations (`--auto` ignores them), `devm import` writes them (`--no-layout` to skip them), and
+`devm migrate-layout model.devm` converts a `model.devm.layout` file of the earlier sidecar experiment
 into annotations.
 
 ## Simulation

@@ -3,7 +3,7 @@
 ## Unit tests
 
 State machines are tested with a small test language modeled after **SCTUnit** of itemis CREATE
-(files `*.hsmtest`). A test class tests one state machine; every operation annotated with `@Test` is
+(files `*.devmtest`). A test class tests one state machine; every operation annotated with `@Test` is
 executed on a fresh instance of the interpreter, after the `@SetUp` operation (if any):
 
 ```
@@ -40,7 +40,7 @@ testclass CdPlayerTest for statemachine CdPlayer {
   assignments (`=`, `+=`, …, `++`, `--`), `if` / `else if` / `else`, `while`, calls of helper operations.
   Statements are separated by line breaks or `;`. The keywords of the test language (`enter`, `proceed`,
   `called`, `mock`, `returns`, `times`, `with`, `message`, `if`, `while`, …) cannot be used as names in tests.
-- **Expressions** are the expressions of the HSM language. Names are resolved in the tested state machine
+- **Expressions** are the expressions of the state machine language. Names are resolved in the tested state machine
   like inside the state machine (`x`, `Iface.x`, states by (partially) qualified name, optionally prefixed
   with the name of the state machine), local variables and parameters shadow them. An **out event** is
   `true` if it was raised by the last `enter` / `raise` (event driven) / `proceed` / `exit`; `valueof(e)`
@@ -54,7 +54,7 @@ testclass CdPlayerTest for statemachine CdPlayer {
 - **Submachine instances**: members of instances are used like in the state machine – `assert active(motor.On)`,
   `assert motor.speed == 3`, `motor.maxSpeed = 2`, `assert motor.failed` / `valueof(motor.failed)` (out events
   of the instance raised by the last call), `mock motor.setPwm returns (...)` and `assert called motor.setPwm`
-  (see [`examples/door-with-motor/gate.hsmtest`](../examples/door-with-motor/gate.hsmtest)). Events of
+  (see [`examples/door-with-motor/gate.devmtest`](../examples/door-with-motor/gate.devmtest)). Events of
   instances cannot be raised by a test.
 - The validator checks the references and the types (asserted expressions and conditions are boolean,
   event values, mocked values and arguments match the declarations, units of `proceed`, `@Test` / `@SetUp`
@@ -64,11 +64,11 @@ testclass CdPlayerTest for statemachine CdPlayer {
   raised before `enter`) are reported as **errors**.
 
 ```bash
-hsm test examples/tests/door.hsmtest                    # loads the .hsm files next to the test file (or in its parent directory)
-hsm test tests/*.hsmtest --machine models/ --junit report.xml -v
+devm test examples/tests/door.devmtest                    # loads the .devm files next to the test file (or in its parent directory)
+devm test tests/*.devmtest --machine models/ --junit report.xml -v
 ```
 
-`--machine` adds `.hsm` files or directories, `--junit` writes a JUnit XML report, `-v` prints the trace of
+`--machine` adds `.devm` files or directories, `--junit` writes a JUnit XML report, `-v` prints the trace of
 every test. The exit code is 1 if a test failed or a file has errors. The examples in
 [`examples/tests/`](../examples/tests) test all example state machines. The runner is available as API
 (`runTests`, `HsmTestWorkspace`, `toJUnitXml` in `hsm-language`); it runs in the browser as well.
@@ -79,7 +79,7 @@ order of calls, mocks with sequences of values, calling operations of the state 
 
 ## Coverage
 
-`hsm test --coverage` measures which parts of the state machines the unit tests exercise (like the
+`devm test --coverage` measures which parts of the state machines the unit tests exercise (like the
 coverage view of SCTUnit in itemis CREATE). Coverage is aggregated over all tests of all test files:
 
 | Metric | Covered when |
@@ -90,9 +90,9 @@ coverage view of SCTUnit in itemis CREATE). Coverage is aggregated over all test
 | **Guard decisions** | each guard of a transition or local reaction counts twice: covered once it was evaluated to `true` and once to `false` (guards are evaluated only when a trigger matched) |
 
 ```bash
-hsm test examples/tests/*.hsmtest --coverage                          # text summary + coverage/lcov.info + coverage/html/
-hsm test tests/*.hsmtest --coverage-format text,cobertura --coverage-dir build/coverage
-hsm test tests/*.hsmtest --coverage-threshold states=100,transitions=90   # exit code 1 if not reached
+devm test examples/tests/*.devmtest --coverage                          # text summary + coverage/lcov.info + coverage/html/
+devm test tests/*.devmtest --coverage-format text,cobertura --coverage-dir build/coverage
+devm test tests/*.devmtest --coverage-threshold states=100,transitions=90   # exit code 1 if not reached
 ```
 
 Any `--coverage-*` option implies `--coverage`. Formats (`--coverage-format`, default `text,lcov,html`):
@@ -101,7 +101,7 @@ Any `--coverage-*` option implies `--coverage`. Formats (`--coverage-format`, de
 | --- | --- | --- |
 | `text` | table per state machine (states, transitions, reactions, guard decisions) and the uncovered elements with line numbers, on stdout | console, CI logs |
 | `json` | `coverage.json`: totals and every element with id, kind, name, line, diagram id, hits and the covering tests, every guard with its true / false counts (schema version 1, see `toCoverageJson`) | own tooling |
-| `lcov` | `lcov.info`: one record per `.hsm` file; lines (`DA`) are the lines of states, transitions and reactions (a line counts as covered only if all its elements are), functions (`FN`) are the states, branches (`BRDA`) the guard decisions | VS Code (e.g. *Coverage Gutters*), GitHub (Codecov, Coveralls), `genhtml` |
+| `lcov` | `lcov.info`: one record per `.devm` file; lines (`DA`) are the lines of states, transitions and reactions (a line counts as covered only if all its elements are), functions (`FN`) are the states, branches (`BRDA`) the guard decisions | VS Code (e.g. *Coverage Gutters*), GitHub (Codecov, Coveralls), `genhtml` |
 | `cobertura` | `cobertura-coverage.xml` with the same lines and branches, paths relative to the working directory | GitLab merge request coverage, Jenkins |
 | `html` | `html/index.html` and one self-contained page per state machine with all elements (covered / uncovered, hits, tests) and guards | browsing, CI artifacts |
 
@@ -117,7 +117,7 @@ CI examples:
 # GitLab: test report and coverage in merge requests
 model-tests:
   script:
-    - npx hsm test tests/*.hsmtest --junit report.xml --coverage-format text,cobertura --coverage-threshold transitions=90
+    - npx devm test tests/*.devmtest --junit report.xml --coverage-format text,cobertura --coverage-threshold transitions=90
   artifacts:
     when: always
     reports:
@@ -129,7 +129,7 @@ model-tests:
 
 ```yaml
 # GitHub Actions
-- run: npx hsm test tests/*.hsmtest --junit report.xml --coverage-format text,lcov,html --coverage-threshold states=100
+- run: npx devm test tests/*.devmtest --junit report.xml --coverage-format text,lcov,html --coverage-threshold states=100
 - uses: actions/upload-artifact@v4
   if: always()
   with: { name: model-coverage, path: coverage/ }

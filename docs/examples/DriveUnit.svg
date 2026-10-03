@@ -582,7 +582,7 @@
     stroke-width: 1px;
 }
 
-/* ---- internal block diagrams of subsystems and systems (.dmf, ibd-layout.ts) ---- */
+/* ---- internal block diagrams of subsystems and systems (.devm, ibd-layout.ts) ---- */
 
 .theme-classic {
     --ibd-thread-fill: #f4f7fb;
@@ -920,7 +920,7 @@
 <text class="ibd-thread-title" x="10" y="16.55"><tspan class="ibd-stereotype">«thread»</tspan> <tspan class="ibd-thread-name">MotorTask</tspan></text>
 <text class="ibd-thread-details" x="10" y="31.85">priority 8 · period 1 ms · stack 2048</text>
 <g class="ibd-node ibd-instance has-behavior" transform="translate(26, 52)">
-<title>Motor control; implemented by drive.hsm.</title>
+<title>Motor control; implemented by drive.devm.</title>
 <rect class="ibd-instance-shape" x="0" y="0" rx="2" ry="2" width="222" height="118"/>
 <text class="ibd-stereotype ibd-block-stereotype" x="101" y="15.35">«component»</text>
 <text class="ibd-instance-name" x="101" y="31.55">motor : MotorController</text>
