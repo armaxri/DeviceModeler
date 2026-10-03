@@ -7,7 +7,7 @@ import {
 } from './cpp-types.js';
 
 /**
- * Type system of the HSM language (the statechart language of itemis CREATE).
+ * Type system of the models (the expressions follow the statechart language of itemis CREATE).
  *
  * Types are identified by their name. `error` is an internal type which is used for expressions
  * whose type cannot be determined (unresolved references, invalid operands, unknown type names).

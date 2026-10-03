@@ -6,9 +6,9 @@ import { cppImports } from './imports.js';
 import type { DevmType } from './typesystem.js';
 
 /**
- * The C++ types and constants of imported headers in the HSM language (see docs/cpp-integration.md).
+ * The C++ types and constants of imported headers in the models (see docs/cpp-integration.md).
  *
- * Mapping of the resolved C++ types (`CppResolvedType`) onto the HSM type system:
+ * Mapping of the resolved C++ types (`CppResolvedType`) onto the type system of the models:
  * - integer types (`std::uint8_t`, `int`, `char`, ...) are `integer`; their width is kept as the
  *   *storage type* of variables, members, event values and parameters: values are converted to the
  *   storage type on assignment (wrap-around like the generated C++ code), literals out of range are
@@ -52,12 +52,12 @@ export function isUnscopedEnum(type: DevmType | undefined): boolean {
     return isEnumType(type) && !type.resolved.scoped;
 }
 
-/** The HSM type of a C++ type, or the reason why it cannot be used. */
+/** The model type of a C++ type, or the reason why it cannot be used. */
 export type CppTypeMapping = { readonly type: DevmType, readonly error?: undefined } | { readonly error: string, readonly type?: undefined };
 
 const typeCache = new WeakMap<object, CppDevmType>();
 
-/** The HSM type of a resolved C++ type. */
+/** The model type of a resolved C++ type. */
 export function devmTypeOfCpp(resolved: CppResolvedType, index: CppTypeIndex): CppTypeMapping {
     switch (resolved.kind) {
         case 'integer':
@@ -135,14 +135,14 @@ export function cppIndexAt(node: AstNode | undefined): CppTypeIndex {
 export interface CppTypeResolution {
     /** The C++ type (aliases resolved). */
     readonly resolved: CppResolvedType;
-    /** The HSM type, or the reason why the type cannot be used. */
+    /** The model type, or the reason why the type cannot be used. */
     readonly mapping: CppTypeMapping;
     /** The declaration of the name (enum, class, alias), `undefined` for fundamental / library types. */
     readonly declaration?: CppDeclaration;
 }
 
 /**
- * C++ keywords naming fundamental types are not type names of the HSM language: models use `integer`,
+ * C++ keywords naming fundamental types are not type names of the models: models use `integer`,
  * `real`, `boolean` or the `<cstdint>` typedefs (`int32_t`, `uint8_t`, ...), which are always known.
  * (Fundamental types are of course used inside the headers.)
  */

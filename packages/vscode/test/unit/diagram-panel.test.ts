@@ -117,7 +117,7 @@ describe('DiagramPanel and its commands', () => {
         h.panel.disposeResources();
     });
 
-    it('HSM: Import itemis CREATE model writes the itemis arrangement as layout annotations, SVG export applies them', async () => {
+    it('Device Modeler: Import itemis CREATE model writes the itemis arrangement as layout annotations, SVG export applies them', async () => {
         const sct = path.join(dir, 'Choice.sct');
         await fs.copyFile(path.resolve(__dirname, '../../../language/test/importer/fixtures/Choice.sct'), sct);
         const { importSctFile, renderModelSvg } = await import('../../src/extension/commands.js');
@@ -135,7 +135,7 @@ describe('DiagramPanel and its commands', () => {
         expect(manual).not.toBe(auto);
     });
 
-    it('HSM: Convert Layout File to Annotations writes the layout file into the model and keeps the file', async () => {
+    it('Device Modeler: Convert Layout File to Annotations writes the layout file into the model and keeps the file', async () => {
         await fs.writeFile(modelPath + '.layout', LAYOUT);
         const { convertLayoutFile } = await import('../../src/extension/commands.js');
         const layoutFile = await convertLayoutFile(Uri.file(modelPath) as unknown as vscode.Uri);
@@ -200,7 +200,7 @@ describe('DiagramPanel and its commands', () => {
         expect(h.posted.pop()).toEqual({ type: 'locationResult', requestId: 8, ok: false });
     });
 
-    it('HSM: Export Diagram renders the shown structure of a structure file', async () => {
+    it('Device Modeler: Export Diagram renders the shown structure of a structure file', async () => {
         await fs.writeFile(path.join(dir, 'parts.devm'), PARTS);
         const { renderStructureSvg } = await import('../../src/extension/commands.js');
         const document = { uri: Uri.file(path.join(dir, 'system.devm')), getText: () => SYSTEM } as unknown as vscode.TextDocument;

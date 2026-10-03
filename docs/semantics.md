@@ -1,6 +1,6 @@
 # Execution semantics
 
-This document defines how an HSM state machine executes. The interpreter (simulation) and all
+This document defines how a state machine of the Device Modeler executes. The interpreter (simulation) and all
 code generators implement exactly these rules, and they share the scenario tests in
 `packages/language/test/scenarios`. The rules follow the statechart semantics of itemis CREATE
 (formerly YAKINDU Statechart Tools) where that is practical; deliberate differences are marked
@@ -35,7 +35,7 @@ as **Deviation**.
   **empty string**: `s = null` sets `s` to `""`, `s == null` is `true` iff `s` is empty, `null == null`
   is `true`. The type of a variable cannot be inferred from `null`.
   **Deviation:** in itemis CREATE the type of `null` is not compatible with `string` in the default
-  domain (it is meant for pointer types of the C/C++ domains, `null == null` is valid); HSM allows it
+  domain (it is meant for pointer types of the C/C++ domains, `null == null` is valid); the Device Modeler allows it
   for strings because `std::string` in the generated C++ code and the string buffers in C cannot be
   null, all implementations use the empty string. Pointer types may follow with C/C++ header types.
 - `+` on two strings concatenates them. `%` and the bitwise and shift operators apply to integers
@@ -264,7 +264,7 @@ independent.
 declared). They **keep their values** when the instance is exited and entered again, as do its event
 values and the history of its regions (entering the instance again re-enters its states, it does not
 reset its data). **Deviation:** in the multi-state-machine models of itemis CREATE the parent controls the
-lifecycle of an instance explicitly (`motor.enter()`, `motor.exit()`); HSM binds it to the state.
+lifecycle of an instance explicitly (`motor.enter()`, `motor.exit()`); the Device Modeler binds it to the state.
 
 **Entering and exiting** (extends §5 and §8)
 

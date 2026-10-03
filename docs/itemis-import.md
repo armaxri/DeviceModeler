@@ -18,7 +18,7 @@ syntax); the diagram of the `.sct` file becomes a manual layout – layout annot
 `@via`, …) in the generated model (🧪 experimental, `--no-layout` to skip them, see
 [Manual layout](editor.md#manual-layout-experimental)). The structure is mapped as follows:
 
-| itemis CREATE                                   | HSM                                                                 |
+| itemis CREATE                                   | Device Modeler                                                                 |
 |-------------------------------------------------|---------------------------------------------------------------------|
 | statechart `specification`                      | definition section (`namespace`, annotations and scopes re-ordered) |
 | single top-level region                         | body of the `statemachine`                                          |
@@ -62,5 +62,5 @@ Details and limitations (each of them is reported as a warning):
   linking errors (the other two use outdated syntax or an unqualified member of a named interface, which current
   itemis CREATE rejects as well); the remaining
   validation errors are mostly in itemis validation test models that are invalid on purpose, or in
-  features HSM checks more strictly (raising `in` events internally, operations called without
+  features the Device Modeler checks more strictly (raising `in` events internally, operations called without
   parentheses, `out` events as triggers, `%` on reals).

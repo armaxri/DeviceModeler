@@ -16,7 +16,7 @@
  *       }
  *   }
  *
- * The expressions are the expressions of the HSM language (imported from `statemachine.langium`). Names are
+ * The expressions are the expressions of the state machine language (imported from `statemachine.langium`). Names are
  * resolved against the declarations of the referenced state machine and the local variables and
  * parameters of the test operation.
  */

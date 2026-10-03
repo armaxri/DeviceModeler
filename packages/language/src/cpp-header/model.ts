@@ -426,7 +426,7 @@ export interface CppStructValue {
 }
 
 /**
- * A constant value. Like the runtime values of the HSM interpreter, integers (and enum values,
+ * A constant value. Like the runtime values of the interpreter, integers (and enum values,
  * i.e. the enumerator's numeric value) are `bigint` and reals are `number`; structs are plain
  * objects and arrays are arrays.
  */

@@ -190,7 +190,7 @@ describe('sct importer', () => {
         expect(text).toContain('Door_Open -> entry_ : go');
         expect(warnings).toContain(`State 'Door Open' was renamed to 'Door_Open'.`);
         expect(warnings).toContain(`State 'Door-Open' was renamed to 'Door_Open_2' (duplicate name).`);
-        // `active(...)`: itemis uses region names, HSM does not
+        // `active(...)`: itemis uses region names, the Device Modeler does not
         expect(transitionTexts(allTransitions(parsed.model))).toContain('entry_ -> Door_Open_2 : go [active(Closed) || active(Locked)]');
     });
 

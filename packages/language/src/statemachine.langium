@@ -1,5 +1,5 @@
 /*
- * Grammar for hierarchical state machines (HSM): the state machine files of the Device Modeler
+ * Grammar for hierarchical state machines: the state machine files of the Device Modeler
  * (`.devm`, see devm.langium, which combines this grammar with the structure grammar structure.langium).
  *
  * The structure (states, regions, transitions) uses a PlantUML-like notation, the definition

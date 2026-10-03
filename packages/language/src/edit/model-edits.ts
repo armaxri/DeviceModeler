@@ -68,7 +68,7 @@ export function isValidIdentifier(name: string): boolean {
     return ID_REGEX.test(name) && !STATE_MACHINE_KEYWORDS.has(name);
 }
 
-/** Encodes the given text as a string literal of the HSM language. */
+/** Encodes the given text as a string literal of the `.devm` language. */
 export function quote(value: string): string {
     return JSON.stringify(value);
 }

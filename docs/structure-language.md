@@ -323,20 +323,20 @@ connections and delegations using it – in the file by `StructureEditor`, in th
 
 **Workspace** (`src/structure-workspace.ts`): `StructureWorkspace` loads all structure files of a workspace (with
 their imports) into Langium services of its own for questions across files: `behaviorUsages(uri)` (the
-instances implemented by a state machine), `contextsOf(structure)` (where a structure is used in the
+instances implemented by a state machine), `contextsOf(composite)` (where a subsystem is used in the
 systems), `endpoint` / `route` / `routeEnds` (routes and providers through all levels and files),
 `routeIdsAt` / `routeContinuations` (the diagram ids of a route at a level of the instance tree, the
 composite parts it continues into), `renameEdits` (renames updating the files that use an element),
 `portDeletionEdits` (the connections of other files using deleted ports).
 Elements are identified across the separately parsed files by URI and names: a `StructureContext`
-(`{ rootUri, root, path }`, the shown structure as the part `path` of the root) and a
+(`{ rootUri, root, path }`, the shown subsystem or system as the part `path` of the root) and a
 `StructureLocation` (`{ uri, element, id, context }`, what navigation opens and selects).
 
 ## Editor support
 
 Structure files and state machine files are one language (see
 [Architecture](architecture.md#one-language-for-two-kinds-of-model-files); `createDevmServices` returns it as
-`Devm` and as `Devm`), so structure files reference state machine files and are revalidated when a state
+`Devm`), so structure files reference state machine files and are revalidated when a state
 machine they use changes. Language server features: formatter, completion (keywords, references,
 type names), go to definition (component types, instances, ports, type names – also into C++ headers –,
 import paths and the behavior file), go to implementation = go to the provider of a required port, hover

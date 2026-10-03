@@ -203,7 +203,7 @@ constexpr Position kHome{10, 20};                          operation drive(p : m
   are not type names of models (use `integer`, `real` or a typedef).
 - **Types**: integer types are `integer`, whose values are converted to the C++ type when they are stored
   (a variable, member, event value or parameter of type `uint8_t` wraps around like in C++; constant values
-  out of range are warnings); arithmetic uses 64-bit integers like all HSM integers. `float` / `double` are
+  out of range are warnings); arithmetic uses 64-bit integers like all integers of the models. `float` / `double` are
   `real` (`float` rounds to single precision), `bool` is `boolean`, `std::string` is `string`
   (`const char*` / `std::string_view` constants can be read). **Enums** are types of their own: values are
   compared with `==` / `!=`; unscoped enum values convert to `integer` (flags: `faults | motor::kJam`);

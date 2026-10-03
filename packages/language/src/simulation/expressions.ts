@@ -34,7 +34,7 @@ export interface EvaluationContext {
 }
 
 /**
- * Evaluates expressions and executes effects of the HSM expression language.
+ * Evaluates expressions and executes effects of the expression language of the models.
  *
  * Integers are 64-bit signed (`bigint`, wrapping on overflow), reals are doubles. Integer division
  * truncates toward zero, `%` has the sign of the dividend; integer division by zero and shift

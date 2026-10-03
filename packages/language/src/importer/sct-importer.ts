@@ -2,12 +2,12 @@
  * Importer for itemis CREATE / YAKINDU Statechart Tools models (`.sct` files).
  *
  * An `.sct` file is an EMF XMI document which contains the statechart (`sgraph:Statechart`) and
- * its diagram (`notation:Diagram`). The statechart is converted into HSM text, the positions and sizes
+ * its diagram (`notation:Diagram`). The statechart is converted into state machine text, the positions and sizes
  * of the diagram into layout annotations in that text (`@at(x, y)`, ..., see `model-annotations.ts`).
- * The definition section and all reactions use the same syntax as the HSM language, so they are
+ * The definition section and all reactions use the same syntax as the state machine language, so they are
  * copied (re-indented and slightly normalized). The structure is translated as follows:
  *
- * | itemis CREATE                        | HSM                                   |
+ * | itemis CREATE                        | Device Modeler                                   |
  * |--------------------------------------|---------------------------------------|
  * | statechart                           | `statemachine Name`                   |
  * | several top-level regions            | `state Main { region r1 {} ... }`     |
@@ -57,7 +57,7 @@ export function sctStatechartName(xml: string): string | undefined {
 }
 
 export interface SctImportResult {
-    /** The generated HSM text. */
+    /** The generated state machine text. */
     text: string;
     /** Everything that could not be imported 1:1 (renamed states, unsupported features, ...). */
     warnings: string[];
@@ -68,7 +68,7 @@ export interface SctImportResult {
     layout?: ManualLayout;
 }
 
-/** Converts the content of an itemis CREATE `.sct` file into HSM text. */
+/** Converts the content of an itemis CREATE `.sct` file into state machine text. */
 export function importSct(xml: string, options: SctImportOptions = {}): SctImportResult {
     return new SctImporter(options).run(xml);
 }
@@ -101,7 +101,7 @@ export function importSctFiles(files: Array<{ fileName: string, xml: string }>, 
 }
 
 // ---------------------------------------------------------------------------------------------
-// Intermediate model (mirrors the structure of the HSM language)
+// Intermediate model (mirrors the structure of the state machine language)
 
 type Container = MachineNode | StateNode | RegionNode;
 
@@ -156,7 +156,7 @@ interface PseudoNode extends VertexBase {
 
 type VertexNode = StateNode | PseudoNode;
 
-/** Vertices of the itemis model that do not become vertices in HSM. */
+/** Vertices of the itemis model that do not become vertices in the Device Modeler. */
 interface ImplicitVertex {
     kind: 'initial' | 'final';
     container: Container;
@@ -519,11 +519,11 @@ class SctImporter {
         if (entries.length > 0) {
             const history = this.namedHistory(target, entries[0]);
             if (history) {
-                // itemis CREATE can enter a state through a named history entry: HSM targets the history pseudo state
+                // itemis CREATE can enter a state through a named history entry: the Device Modeler targets the history pseudo state
                 target = history;
                 targetContainer = history.container;
             } else if (entries[0] !== 'default' && this.namedPoints(target, 'entry').some(p => p.originalName === entries[0])) {
-                // itemis CREATE uses only the first entry point; the others are kept (HSM warns about them, like itemis)
+                // itemis CREATE uses only the first entry point; the others are kept (the Device Modeler warns about them, like itemis)
                 const entryTarget = target;
                 const known = entries.slice(1).filter(name => name !== 'default' && this.namedPoints(entryTarget, 'entry').some(p => p.originalName === name));
                 if (known.length < entries.length - 1) {
@@ -611,7 +611,7 @@ class SctImporter {
         return this.namedPoints(state, kind).filter(p => !p.originalName).map(p => p.name);
     }
 
-    /** Maps the name of an entry point / exit node used in a transition specification to its HSM name. */
+    /** Maps the name of an entry point / exit node used in a transition specification to its name in the Device Modeler. */
     private resolvePointName(state: VertexNode | 'final', kind: 'entry' | 'exit', name: string): string {
         const matches = this.namedPoints(state, kind).filter(p => p.originalName === name);
         if (matches.length === 0) {
@@ -752,7 +752,7 @@ class SctImporter {
                 // local reactions of the statechart itself are placed after the definition section
                 machineReactions.push(...this.normalizeReaction([trimmed], 'the statechart'));
             } else {
-                // itemis CREATE allows `event e : void` for events without value; HSM omits the type
+                // itemis CREATE allows `event e : void` for events without value; the Device Modeler omits the type
                 converted = mapCode(converted, code => code.replace(/^(\s*(?:(?:in|out)\s+)?event\s+\w+)\s*:\s*void\b/, '$1'));
                 scopes.push(trimmed ? this.indentUnit + converted : '');
             }
@@ -977,7 +977,7 @@ class SctImporter {
         return undefined;
     }
 
-    /** The shortest name which resolves to `vertex` from `context` (same rules as the HSM scope provider). */
+    /** The shortest name which resolves to `vertex` from `context` (same rules as the state machine scope provider). */
     private referenceName(vertex: VertexNode, context: Container): string {
         const segments = qualifiedSegments(vertex);
         for (let i = segments.length - 1; i >= 0; i--) {
@@ -1088,7 +1088,7 @@ function qualifiedSegments(vertex: VertexNode): string[] {
 // ---------------------------------------------------------------------------------------------
 // Names
 
-/** Converts an itemis name into a valid HSM identifier (`Door Open` -> `Door_Open`, `entry` -> `entry_`). */
+/** Converts an itemis name into a valid identifier of the Device Modeler (`Door Open` -> `Door_Open`, `entry` -> `entry_`). */
 export function sanitizeName(name: string): string {
     let result = name.trim().replace(/[^A-Za-z0-9_]+/g, '_');
     if (result === '' || /^_+$/.test(result) && name.trim() !== result) {
@@ -1264,7 +1264,7 @@ function hasTrigger(reaction: string): boolean {
     return code.substring(0, end).trim() !== '';
 }
 
-/** Removes the type suffixes of itemis number literals (`1.5f`, `2.0d`, `10l`), which HSM does not support. */
+/** Removes the type suffixes of itemis number literals (`1.5f`, `2.0d`, `10l`), which the Device Modeler does not support. */
 function convertNumbers(code: string): string {
     return code.replace(/\b(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)[fFdDlL]\b/g, '$1');
 }
@@ -1329,7 +1329,7 @@ interface Bounds {
 
 /**
  * Converts the `notation:Diagram` of an `.sct` file into a manual layout. Shapes in itemis CREATE are
- * positioned relative to the compartment of their region; in HSM relative to their composite state
+ * positioned relative to the compartment of their region; in the Device Modeler relative to their composite state
  * (or region), below its name. The positions are therefore offset by the padding of the container;
  * the layout engine moves the content further down if the state has a taller body compartment.
  * Bend points are imported for transitions between vertices of the same container.
@@ -1403,7 +1403,7 @@ class NotationImporter {
         return { x: pad, y: pad + (region.name ? DiagramMetrics.lineHeight.body : 0) };
     }
 
-    /** Stores the positions of the vertices of a container (relative to the container in HSM). */
+    /** Stores the positions of the vertices of a container (relative to the container in the Device Modeler). */
     private placeContent(container: Container, containerId: string, offset: Point): void {
         for (const vertex of container.vertices) {
             const bounds = boundsOf(this.views.get(vertex.id));
@@ -1529,7 +1529,7 @@ function anchorPoint(bounds: Bounds, pseudo: boolean, anchor: XmlElement | undef
     return { x: bounds.x + width * fx, y: bounds.y + height * fy };
 }
 
-/** Id of a vertex in the HSM diagram: its qualified name. */
+/** Id of a vertex in the state machine diagram: its qualified name. */
 /** Coordinates of a layout annotation (rounded to integers). */
 function coordinates(...values: number[]): string {
     return values.map(v => Math.round(v) || 0).join(', ');
@@ -1539,7 +1539,7 @@ function diagramId(vertex: VertexNode): string {
     return qualifiedSegments(vertex).join('.');
 }
 
-/** Id of a container in the HSM diagram (`#machine`, a state or `<state>#region<n>`). */
+/** Id of a container in the state machine diagram (`#machine`, a state or `<state>#region<n>`). */
 function containerId(container: Container): string {
     switch (container.kind) {
         case 'machine': return MACHINE_ID;

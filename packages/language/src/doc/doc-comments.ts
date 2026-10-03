@@ -10,7 +10,7 @@ const COMMENT_RULES = ['ML_COMMENT'];
  * not documentation.
  *
  * This is what Langium's `JSDocDocumentationProvider` returns for the element, without the need for
- * the language services (works on any AST produced by the HSM parser).
+ * the language services (works on any AST produced by the parser of the `.devm` language).
  */
 export function docComment(node: AstNode | undefined): string | undefined {
     const comment = CstUtils.findCommentNode(node?.$cstNode, COMMENT_RULES)?.text;

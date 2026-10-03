@@ -5,12 +5,12 @@ import { baseTypeReference, inferType, typeOfVariable } from './typesystem.js';
 
 /**
  * Storage types: the C++ type of a place a value is stored in (a variable, a struct member, an array
- * element, an event value, a parameter). They refine the HSM type (`integer` -> `std::uint8_t`):
+ * element, an event value, a parameter). They refine the model type (`integer` -> `std::uint8_t`):
  * values are converted to the storage type on assignment (integers wrap around to the width,
  * `float` rounds to single precision), like in the generated C++ code.
  */
 
-/** The C++ storage type of a type reference (through aliases), `undefined` for HSM types. */
+/** The C++ storage type of a type reference (through aliases), `undefined` for model types. */
 export function storageOfTypeReference(reference: ast.TypeReference | undefined): CppResolvedType | undefined {
     const base = baseTypeReference(reference);
     return base ? cppTypeOfReference(base)?.resolved : undefined;
@@ -50,7 +50,7 @@ export function lvalueOf(expression: ast.Expression | undefined): LValue | undef
     return { variable, reference: current, partial: partial || referenceMembers(current).length > 0 };
 }
 
-/** The C++ storage type of an assignable expression (`undefined` for HSM typed places). */
+/** The C++ storage type of an assignable expression (`undefined` for places with a model type). */
 export function storageOfTarget(expression: ast.Expression | undefined): CppResolvedType | undefined {
     if (ast.isMemberAccessExpression(expression)) {
         const member = memberOf(inferType(expression.receiver), expression.member);

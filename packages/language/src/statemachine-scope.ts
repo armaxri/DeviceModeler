@@ -20,7 +20,7 @@ interface MachineScopes {
 }
 
 /**
- * Name resolution of the HSM language.
+ * Name resolution of state machine files.
  *
  * - Vertices are referenced by (partially) qualified names built from the names of the enclosing
  *   states (regions are transparent): `Playing`, `Active.Playing`, `Closed.Active.Playing`.

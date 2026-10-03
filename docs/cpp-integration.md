@@ -108,7 +108,7 @@ function describeCppType(type: CppResolvedType): string;       // 'integer (u8)'
 function cppHeaderReport(index: CppTypeIndex): unknown;          // JSON of `devm cpp-header`
 ```
 
-Values use the representation of the HSM interpreter (`simulation/values.ts`): integers (and enum
+Values use the representation of the interpreter (`simulation/values.ts`): integers (and enum
 values, i.e. the numeric value of the enumerator) are `bigint`, reals are `number`. Structs are
 plain objects in field order, arrays are arrays.
 
@@ -208,9 +208,9 @@ The widths of `long`, `size_t` etc. depend on the target: `CppTypeIndex` uses LP
   - values (grammar `CppReference: name=CppName`, `CppName: '::' ID ('::' ID)* | ID '::' ID ('::' ID)*`, a
     primary expression): enumerators `motor::Mode::Fast` (of unscoped enums also `motor::kStall`), constants
     `motor::kMaxSpeed`, static members `motor::Limits::kVersion`. **Decision:** names of the global namespace
-    need the leading `::` in expressions (`::HAL_OK`) – a plain identifier is an HSM declaration; the
+    need the leading `::` in expressions (`::HAL_OK`) – a plain identifier is a declaration of the model; the
     linking error of an unresolved all-caps / `k…` name suggests `::NAME`.
-  - `::` does not clash with the `.`-qualified names of HSM (`Iface.x`, `motor.start`, `Active.Playing`).
+  - `::` does not clash with the `.`-qualified names of the models (`Iface.x`, `motor.start`, `Active.Playing`).
 - **Member and element access**: a postfix `AccessExpression` (`receiver.member`, `receiver[index]`) after
   primary expressions: `valueof(e).x`, `measure().y`, `motor::kHome.x`, `a[i]`, `cfg.gains[1]`.
   **Decision:** after a name, `pos.x.y` is still parsed as the (`.`-qualified) name of the `ElementReference`
@@ -236,10 +236,10 @@ The widths of `long`, `size_t` etc. depend on the target: `CppTypeIndex` uses LP
   (`cppImports(machine)`, cached by the versions of the header texts and the settings). Without header
   imports an empty index is used (it knows the fundamental and `<cstdint>` types).
 - **Test documents** use the imports of the tested state machine (`contextMachine(node)`).
-- Type references are resolved in this order: built-in type, HSM alias, imported state machine, C++ type
+- Type references are resolved in this order: built-in type, alias of the model, imported state machine, C++ type
   (`cppTypeOfReference`). **Decision:** the `<cstdint>` / `<cstddef>` typedefs are always known (no import
   needed); C++ keywords of fundamental types (`int`, `long`, `double`, `bool`, `char`, …) are **not** type
-  names of models (the error lists the HSM types; use `integer` / `real` / `int32_t`).
+  names of models (the error lists the model types; use `integer` / `real` / `int32_t`).
 - Validation of imports: a missing header is an error at the import path (with the searched locations and a
   hint to the include path settings); errors of the analysis of the header (and its includes) are errors at
   the import with the location (`motor_types.h:12:5: …`, at most 5), warnings are summarized as one info.
@@ -254,7 +254,7 @@ The widths of `long`, `size_t` etc. depend on the target: `CppTypeIndex` uses LP
 `{ kind: 'enum' | 'struct' | 'array', cppName, resolved, index }` (identity: kind and qualified C++ name,
 compare with `sameType`). Mapping of `CppResolvedType` (`devmTypeOfCpp`):
 
-| C++ | HSM | decisions |
+| C++ | Device Modeler | decisions |
 | --- | --- | --- |
 | `integer` (≤ 64 bits) | `integer` | the width is the **storage type** of places (variables, members, elements, event values, parameters: `storageOfTarget` / `storageOfTypeReference` in `cpp-storage.ts`); assignments of constants out of range are **warnings** (`The value 300 is out of the range of uint8_t (0..255) of 'small'; it is converted to 44.`); 128-bit integers are unsupported |
 | `real` | `real` | `float` places round to single precision |
@@ -325,7 +325,7 @@ Event payloads, operation parameters and return values may use all these types.
 
 **Decision:** the settings of the analysis are a `headers` block of the generator configuration
 `devm.gen.json` (one configuration file per project, already used by the CLI, CMake and VS Code; a separate
-`hsm.config.json` would have duplicated the lookup):
+`devm.config.json` would have duplicated the lookup):
 
 ```json
 "headers": {

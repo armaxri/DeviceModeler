@@ -191,8 +191,8 @@ diagram as annotations (`--no-layout` to skip them).
 ## Migration from sidecar layout files
 
 `devm migrate-layout model.devm [--layout <file>]` reads the layout file of the previous experiment
-(default `model.devm.layout`; the files of that experiment were named after the former extension, e.g.
-`model.hsm.layout`: pass them with `--layout`) and writes it into the model as layout annotations (the keys are the same
+(default `model.devm.layout`; files of that experiment named after the formerly used extension
+`.hsm`, e.g. `model.hsm.layout`, are passed with `--layout`) and writes it into the model as layout annotations (the keys are the same
 diagram ids: qualified names, `<state>#region<n>`, `<container>#initial` / `#final`, `#definitions`,
 `<source>-><target>~<n>`). The layout file is kept; delete it once the model looks right.
 In VS Code, **Device Modeler: Convert Layout File to Annotations** does the same for the model of the active editor.
@@ -201,11 +201,11 @@ In VS Code, **Device Modeler: Convert Layout File to Annotations** does the same
 
 `importSct(xml)` writes the diagram (`notation:Diagram`) into the generated text as layout annotations
 (option `layout: false` to skip them; the result still contains the `layout`): the bounds become
-positions (itemis positions are relative to the compartment of their region; the HSM positions are
+positions (itemis positions are relative to the compartment of their region; the Device Modeler positions are
 offset by the padding of the container, the layout engine moves the content below the state's name),
 explicit state sizes become `@size`, `isHorizontal` of a state becomes `@regions`, the bounds of several
 top-level regions define the generated `Main` state and its regions, and GMF relative bend points of
-transitions between vertices of the same container become `@via` waypoints. Since HSM states are
+transitions between vertices of the same container become `@via` waypoints. Since the states of the Device Modeler are
 usually wider than in itemis (the text is not wrapped at the itemis width), overlapping states are
 pushed apart; the relative arrangement is kept.
 

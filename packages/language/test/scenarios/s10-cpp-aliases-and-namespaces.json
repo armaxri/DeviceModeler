@@ -1,6 +1,6 @@
 {
     "name": "s10-cpp-aliases-and-namespaces",
-    "description": "typedef / using aliases, HSM aliases of C++ types, nested namespaces, using-declarations, names of the global namespace (::Color) and <cstdint> typedefs, which are known without an include.",
+    "description": "typedef / using aliases, model aliases of C++ types, nested namespaces, using-declarations, names of the global namespace (::Color) and <cstdint> typedefs, which are known without an include.",
     "text": [
         "statemachine M {",
         "    import \"types.h\"",

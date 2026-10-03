@@ -153,7 +153,7 @@ npm run build -w packages/language
 node packages/language/bin/cli.js validate examples/cd-player.devm
 node packages/language/bin/cli.js layout examples/keyboard.devm --direction RIGHT
 node packages/language/bin/cli.js render examples -o out --theme modern     # SVG diagrams, see below
-node packages/language/bin/cli.js render examples/device/system.devm -o system.svg   # internal block diagram of a structure
+node packages/language/bin/cli.js render examples/device/system.devm -o system.svg   # internal block diagram of a system
 node packages/language/bin/cli.js doc examples -o docs/models --format html  # documentation, see below
 node packages/language/bin/cli.js import model.sct -o model.devm   # itemis CREATE import, see below
 node packages/language/bin/cli.js simulate examples/cd-player.devm -e play,eject,eject   # run the interpreter
@@ -192,8 +192,8 @@ The repository is an npm workspace with three packages: `packages/language` (the
 `.devm` language of state machines and structures and the unit test language –, CLI `devm`, interpreter,
 test runner, renderer and code generators –
 no DOM dependencies, runs in Node.js and in the browser), `packages/web` (the Vite web app: Monaco editor
-and Sprotty diagram) and `packages/vscode` (the VS Code extension). The npm package names (`devm-language`,
-`devm-web`, `devm-vscode`) keep the former name *HSM Modeler*. The text is the single source of truth: diagram
+and Sprotty diagram) and `packages/vscode` (the VS Code extension). The npm packages are named
+`devm-language`, `devm-web` and `devm-vscode`. The text is the single source of truth: diagram
 edits become text edits, which run
 through the same parse → validate → layout → render pipeline as typed changes. See
 [docs/architecture.md](docs/architecture.md) for the details.

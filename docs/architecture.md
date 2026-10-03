@@ -3,75 +3,75 @@
 ```
 packages/
   language/     Langium language and tooling (no DOM dependencies, runs in Node.js and in the browser)
-    src/devm.langium            grammar of the .devm language: a state machine file or a structure file (entry rule)
-    src/statemachine.langium             grammar of state machine files (imported by devm.langium and devm-test.langium)
-    src/structure.langium             grammar of structure files (imported by devm.langium, docs/structure-language.md)
-    src/devm-test.langium        grammar of the unit test language (.devmtest), reuses the expressions of statemachine.langium
-    src/devm-parser.ts          parser of .devm files: empty files, messages of mixed kinds, isStructureText
-    src/generated/              Langium generated AST, grammar and module (`npm run langium:generate`)
-    src/syntaxes/               generated Monarch grammar (syntax highlighting in Monaco)
-    src/devm-module.ts           dependency injection: services of .devm and .devmtest, relinking of importing documents
-    src/statemachine-scope.ts            name resolution: qualified state names (nearest first), declarations, imported machines
-    src/statemachine-linker.ts           ambiguous vertex names, member access of C++ structs and submachine instances
-    src/typesystem.ts       type system (integer, real, boolean, string, void, C++ types of headers)
-    src/statemachine-validator.ts        validation rules of the model structure
-    src/expression-validator.ts  type checks of guards, effects and definitions
-    src/statemachine-import-validator.ts checks of imports and submachine instances
-    src/statemachine-formatter.ts        formatter
-    src/model-loader.ts         StateMachineModelLoader: parses, links and validates texts outside a language server
-    src/imports.ts              `import "motor.devm"`: path resolution, imported machines, submachine instances
-    src/cpp-headers.ts          `import "motor_types.h"`: header store, settings, path resolution
-    src/cpp-types.ts            C++ types and constants of headers in the HSM type system
-    src/cpp-storage.ts          storage types (`std::uint8_t`, …): width preserving values
-    src/cpp-header/             C++ header analyzer: lexer, preprocessor, parser, type index, constant evaluation
-    src/node/                   Node.js host of header imports (file system, `headers` of devm.gen.json)
-    src/lsp/                    hover, go to definition and completion of C++ names (VS Code and web)
-    src/model-utils.ts          AST helpers (containers, composite states, …)
-    src/structure-*.ts                structure language: module, imports, types, scoping / linking, validation,
-                                port <-> state machine mapping (structure-behavior.ts), route analysis (structure-routes.ts),
-                                formatter; src/lsp/structure-lsp.ts: definition, "go to provider", hover, completion
-    src/diagram/                AST -> PlantUML-like diagram model (layout.ts), laid out with ELK; font metrics;
-                                structures: internal block diagram (ibd-model.ts, ibd-layout.ts);
-                                manual layouts: layout-core/ (shared), manual-layout.ts + layout-annotations.ts
-                                (state machines), ibd-manual-layout.ts + ibd-layout-annotations.ts (structures)
-    src/edit/model-edits.ts     ModelEditor: structural edits (add, move, rename, delete, …) as text edits
-    src/edit/structure-edits.ts       StructureEditor: the edits of structure diagrams (threads, instances, ports, connections, …)
-    src/structure-workspace.ts        StructureWorkspace: all structure files loaded together (navigation, routes and renames across files)
-    src/render/                 SVG renderer without DOM (renderSvg, renderIbdSvg), diagram style sheet shared with the web app
-    src/doc/                    model documentation (Markdown / HTML), doc comments, hover documentation
-    src/simulation/             interpreter (docs/semantics.md) with virtual clock, scenario runner
-    src/testing/                unit test language: scoping, validation, runner, workspace, JUnit XML, coverage reports
-    src/generator/common/       shared part of the C / C++ generators (analysis, states, transitions, expressions)
-    src/generator/cpp/          C++ code generator and scenario test harness generator
-    src/generator/c/            C code generator and scenario test harness generator
-    src/generator/config.ts     generator configuration (devm.gen.json): format, validation, file names (no fs)
-    src/generator/generate-command.ts  `devm generate`: loads the configuration, writes / checks the files (Node)
-    src/importer/               itemis CREATE (.sct) importer with a small XML parser
-    src/cli/                    command line interface (`devm`): validate, generate, test, simulate, render, doc, import, …
-    schemas/                    JSON schema of devm.gen.json
-    test/                       unit tests; test/scenarios: conformance suite shared with the code generators
+    src/devm.langium                      grammar of the .devm language: a state machine file or a structure file (entry rule)
+    src/statemachine.langium              grammar of state machine files (imported by devm.langium and devm-test.langium)
+    src/structure.langium                 grammar of structure files (imported by devm.langium, docs/structure-language.md)
+    src/devm-test.langium                 grammar of the unit test language (.devmtest), reuses the expressions of statemachine.langium
+    src/devm-parser.ts                    parser of .devm files: empty files, messages of mixed kinds, isStructureText
+    src/generated/                        Langium generated AST, grammar and module (`npm run langium:generate`)
+    src/syntaxes/                         generated Monarch grammar (syntax highlighting in Monaco)
+    src/devm-module.ts                    dependency injection: services of .devm and .devmtest, relinking of importing documents
+    src/statemachine-scope.ts             name resolution: qualified state names (nearest first), declarations, imported machines
+    src/statemachine-linker.ts            ambiguous vertex names, member access of C++ structs and submachine instances
+    src/typesystem.ts                     type system (integer, real, boolean, string, void, C++ types of headers)
+    src/statemachine-validator.ts         validation rules of the model structure
+    src/expression-validator.ts           type checks of guards, effects and definitions
+    src/statemachine-import-validator.ts  checks of imports and submachine instances
+    src/statemachine-formatter.ts         formatter
+    src/model-loader.ts                   StateMachineModelLoader: parses, links and validates texts outside a language server
+    src/imports.ts                        `import "motor.devm"`: path resolution, imported machines, submachine instances
+    src/cpp-headers.ts                    `import "motor_types.h"`: header store, settings, path resolution
+    src/cpp-types.ts                      C++ types and constants of headers in the type system of the models
+    src/cpp-storage.ts                    storage types (`std::uint8_t`, …): width preserving values
+    src/cpp-header/                       C++ header analyzer: lexer, preprocessor, parser, type index, constant evaluation
+    src/node/                             Node.js host of header imports (file system, `headers` of devm.gen.json)
+    src/lsp/                              hover, go to definition and completion of C++ names (VS Code and web)
+    src/model-utils.ts                    AST helpers (containers, composite states, …)
+    src/structure-*.ts                    structure language: module, imports, types, scoping / linking, validation,
+                                          port <-> state machine mapping (structure-behavior.ts), route analysis (structure-routes.ts),
+                                          formatter; src/lsp/structure-lsp.ts: definition, "go to provider", hover, completion
+    src/diagram/                          AST -> PlantUML-like diagram model (layout.ts), laid out with ELK; font metrics;
+                                          structures: internal block diagram (ibd-model.ts, ibd-layout.ts);
+                                          manual layouts: layout-core/ (shared), manual-layout.ts + layout-annotations.ts
+                                          (state machines), ibd-manual-layout.ts + ibd-layout-annotations.ts (structures)
+    src/edit/model-edits.ts               ModelEditor: structural edits (add, move, rename, delete, …) as text edits
+    src/edit/structure-edits.ts           StructureEditor: the edits of structure diagrams (threads, instances, ports, connections, …)
+    src/structure-workspace.ts            StructureWorkspace: all structure files loaded together (navigation, routes and renames across files)
+    src/render/                           SVG renderer without DOM (renderSvg, renderIbdSvg), diagram style sheet shared with the web app
+    src/doc/                              model documentation (Markdown / HTML), doc comments, hover documentation
+    src/simulation/                       interpreter (docs/semantics.md) with virtual clock, scenario runner
+    src/testing/                          unit test language: scoping, validation, runner, workspace, JUnit XML, coverage reports
+    src/generator/common/                 shared part of the C / C++ generators (analysis, states, transitions, expressions)
+    src/generator/cpp/                    C++ code generator and scenario test harness generator
+    src/generator/c/                      C code generator and scenario test harness generator
+    src/generator/config.ts               generator configuration (devm.gen.json): format, validation, file names (no fs)
+    src/generator/generate-command.ts     `devm generate`: loads the configuration, writes / checks the files (Node)
+    src/importer/                         itemis CREATE (.sct) importer with a small XML parser
+    src/cli/                              command line interface (`devm`): validate, generate, test, simulate, render, doc, import, …
+    schemas/                              JSON schema of devm.gen.json
+    test/                                 unit tests; test/scenarios: conformance suite shared with the code generators
   web/          Vite app: Monaco editor + Sprotty diagram
-    src/app.ts                  the web app: Monaco editor, toolbar, files; host of the diagram controller
-    src/examples.ts             virtual file list (examples, imported models and headers)
-    src/diagram-controller.ts   graphical editor: text -> Langium -> ELK (web worker) -> Sprotty, diagram edits -> text
-                                (independent of Monaco: also used by the VS Code webview via the DiagramHost interface);
-                                structure files: structure-diagram.ts (editing, route highlighting, navigation)
-    src/layout-editing.ts       manual layout editing shared by both diagrams (LayoutEditor: moves, sizes, waypoints)
-    src/model-service.ts        Langium parsing / validation of the model text (and its imports) in the browser
-    src/language-support.ts     Langium services wired into Monaco (markers, completion, hover, formatting, …)
-    src/diagram/                Sprotty model, views (PlantUML look), ELK worker, mouse / selection listeners;
-                                ibd-model.ts / ibd-views.tsx: internal block diagrams of structures
-    src/simulation/             simulation session: interpreter, real-time clock, logs, operation mocks, breakpoints
-    src/ui/                     properties and simulation panels, value editor, inline editor, SVG / PNG export
-    src/styles/                 style sheets of the app, the diagram and the simulation
+    src/app.ts                            the web app: Monaco editor, toolbar, files; host of the diagram controller
+    src/examples.ts                       virtual file list (examples, imported models and headers)
+    src/diagram-controller.ts             graphical editor: text -> Langium -> ELK (web worker) -> Sprotty, diagram edits -> text
+                                          (independent of Monaco: also used by the VS Code webview via the DiagramHost interface);
+                                          structure files: structure-diagram.ts (editing, route highlighting, navigation)
+    src/layout-editing.ts                 manual layout editing shared by both diagrams (LayoutEditor: moves, sizes, waypoints)
+    src/model-service.ts                  Langium parsing / validation of the model text (and its imports) in the browser
+    src/language-support.ts               Langium services wired into Monaco (markers, completion, hover, formatting, …)
+    src/diagram/                          Sprotty model, views (PlantUML look), ELK worker, mouse / selection listeners;
+                                          ibd-model.ts / ibd-views.tsx: internal block diagrams of structures
+    src/simulation/                       simulation session: interpreter, real-time clock, logs, operation mocks, breakpoints
+    src/ui/                               properties and simulation panels, value editor, inline editor, SVG / PNG export
+    src/styles/                           style sheets of the app, the diagram and the simulation
   vscode/       VS Code extension
-    src/extension/              extension host: language client, commands, diagram panels (navigation history,
-                                workspace edits), workspace files sent to the diagrams, test controller
-                                (src/extension/logic: VS Code independent parts, unit tested)
-    src/server/                 Langium language server of .devm and .devmtest (with C++ header support)
-    src/webview/                diagram webview: the DiagramController of packages/web with a VS Code DiagramHost
-    src/common/                 messages between extension host and webview (protocol.ts), text hashes
-    scripts/                    esbuild / Vite bundling and packaging of the .vsix
+    src/extension/                        extension host: language client, commands, diagram panels (navigation history,
+                                          workspace edits), workspace files sent to the diagrams, test controller
+                                          (src/extension/logic: VS Code independent parts, unit tested)
+    src/server/                           Langium language server of .devm and .devmtest (with C++ header support)
+    src/webview/                          diagram webview: the DiagramController of packages/web with a VS Code DiagramHost
+    src/common/                           messages between extension host and webview (protocol.ts), text hashes
+    scripts/                              esbuild / Vite bundling and packaging of the .vsix
 examples/       sample state machines; tests: their unit tests; door-with-motor: imports and submachines;
                 cpp-types: C++ header types; cmake: CMake example; device: structure files and state machines of a garage door
 cmake/          CMake integration (DevmGenerate.cmake: devm_generate, devm_add_tests; DevmConfig.cmake)
@@ -89,7 +89,7 @@ model, which triggers the same pipeline again – so undo / redo, comments and f
 
 Structure files run through the same pipeline: the diagram controller switches to its structure
 mode (`structure-diagram.ts`), the internal block diagram is computed by `layoutStructure` (ELK) and
-diagram interactions become text edits by `StructureEditor`. Questions across files – the structures using a state
+diagram interactions become text edits by `StructureEditor`. Questions across files – the components and composites using a state
 machine, routes through composites of other files, renames and deletions updating other files – are
 answered by `StructureWorkspace`, which loads all structure files of the workspace together; the hosts pass the
 texts of all `.devm` files for this, open other files on navigation (`DiagramHost.openLocation`,
@@ -128,10 +128,10 @@ elements, never both.
   `StructureCompletionProvider` → `StateMachineCompletionProvider`, `StructureDefinitionProvider` → `StateMachineDefinitionProvider`
   (lsp/cpp-lsp.ts: C++ names, imported machines), `StructureDocumentationProvider` → `StateMachineDocumentationProvider`.
   References, rename and document symbols are the Langium defaults. `createDevmServices` returns the
-  language as `Devm` and – the same object – as `Devm`.
+  language as `Devm` (and the unit test language as `DevmTest`).
 - **Imports across files:** an import path ending in `.devm` is a model import; whether it is a state
   machine or a structure file is the kind of the loaded file (`importKind` = `model`, `structureImportKind`
-  resolves to `hsm` / `dmf`). A state machine cannot import a structure file, the behavior of a component
+  resolves to `statemachine` / `structure`). A state machine cannot import a structure file, the behavior of a component
   must be a state machine file (both reported). The loaders (`loadImports`, `StructureWorkspace`) load all
   `.devm` files and use the root of each.
 - **Hosts:** the diagram controller shows the structure diagram when the text is a structure file

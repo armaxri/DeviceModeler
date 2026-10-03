@@ -227,7 +227,7 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
   - simulation of the composed system (several state machines connected through the ports, threads and
     their periods / priorities) and code generation of the composition (instances, wiring of the generated
     state machine classes, thread setup)
-  - several contexts of a structure: a structure used in several systems (or several times) is shown in the
+  - several contexts of a subsystem: a subsystem used in several systems (or several times) is shown in the
     context of the first system only; choosing the context in the diagram
   - `devm doc` for structure files (structure documentation with the diagrams, port tables, routes)
   - ports of an instance whose type is declared in another file are not editable in the diagram (edit them in
@@ -248,7 +248,7 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
   files; `claude/layout-annotations`: layout annotations in the model; dragging / resizing, positions
   imported from `.sct` notation models). The main branch
   keeps the automatic layout; the experiment is merged only if it proves worthwhile.
-- **No exchange with itemis is planned.** HSM replaces itemis CREATE for our own models; remaining
+- **No exchange with itemis is planned.** The Device Modeler replaces itemis CREATE for our own models; remaining
   differences to the itemis language are only closed if our models need them.
 - **The structure language is evaluated on a separate branch** (`claude/device-modeling`); it is merged
   only if modeling the structure alongside the state machines proves worthwhile.

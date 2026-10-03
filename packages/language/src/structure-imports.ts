@@ -11,7 +11,7 @@ import { HEADER_EXTENSIONS, MODEL_EXTENSION, resolveImportUri, type ResolvedHead
  * become visible, by simple name and by `package.Name`), state machine files (for `behavior Door`)
  * and C/C++ headers. Both kinds of model files have the extension `.devm`: whether an import is a
  * structure file or a state machine file is known when the imported file is loaded (its root), so the
- * kind of a model import is `model` before and `dmf` / `hsm` after its resolution. The types of C/C++
+ * kind of a model import is `model` before and `structure` / `statemachine` after its resolution. The types of C/C++
  * headers can be used as data types. Paths are resolved relative to the importing file like the imports of state machines (see imports.ts); the imported documents must be
  * loaded into the Langium workspace (the language server loads all files of the workspace,
  * {@link StructureModelLoader} loads imported files transitively).
@@ -22,7 +22,7 @@ import { HEADER_EXTENSIONS, MODEL_EXTENSION, resolveImportUri, type ResolvedHead
  */
 
 /**
- * `dmf`: a structure file; `hsm`: a state machine file; `model`: a `.devm` file that is not loaded
+ * `structure`: a structure file; `statemachine`: a state machine file; `model`: a `.devm` file that is not loaded
  * (the kind before the resolution); `header`: a C/C++ header; `unsupported`: any other file.
  */
 export type StructureImportKind = 'structure' | 'statemachine' | 'model' | 'header' | 'unsupported';
@@ -43,9 +43,9 @@ export interface ResolvedStructureImport {
     readonly kind: StructureImportKind;
     /** URI of the imported file (resolved relative to the importing document). */
     readonly uri?: URI;
-    /** `dmf`: the imported model, `undefined` if the file is not loaded. */
+    /** `structure`: the imported model, `undefined` if the file is not loaded. */
     readonly model?: ast.StructureModel;
-    /** `hsm`: the imported state machine, `undefined` if the file is not loaded. */
+    /** `statemachine`: the imported state machine, `undefined` if the file is not loaded. */
     readonly machine?: ast.StateMachine;
     /** `header`: the result of the header resolution. */
     readonly header?: ResolvedHeader;

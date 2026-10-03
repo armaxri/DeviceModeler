@@ -71,7 +71,7 @@ No exchange with itemis is planned. The importer converts itemis models as far a
 remaining language differences found in the upstream itemis models are kept as known differences
 and only changed if our own models need them:
 
-- raising `in` events inside the state machine (rejected by HSM),
+- raising `in` events inside the state machine (rejected by the Device Modeler),
 - calling operations without parentheses,
 - `out` events as triggers,
 - `%` on real numbers,

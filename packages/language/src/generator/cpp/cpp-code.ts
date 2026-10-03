@@ -49,8 +49,8 @@ export function cppSpelling(type: CppResolvedType): string {
 
 /**
  * The C++ type of a declaration with the given type reference: the name of an imported C++ type as
- * written in the model (`motor::Rpm`, `::Color`; through HSM aliases), `std::uint8_t` for `<cstdint>`
- * typedefs, otherwise the type of the HSM type ({@link cppType}).
+ * written in the model (`motor::Rpm`, `::Color`; through aliases of the model), `std::uint8_t` for `<cstdint>`
+ * typedefs, otherwise the C++ type of the model type ({@link cppType}).
  */
 export function cppDeclaredType(reference: ast.TypeReference | undefined, type: DevmType): string {
     const base = baseTypeReference(reference);

@@ -10,7 +10,7 @@ import { resolvedImports } from './imports.js';
 import { setReferenceMembers } from './cpp-types.js';
 
 /**
- * Linker of the HSM language. Improves the error message of vertex references that cannot be
+ * Linker of state machine files. Improves the error message of vertex references that cannot be
  * resolved because the name denotes several vertices (e.g. `X` for `A.X` and `B.X`).
  */
 export class StateMachineLinker extends DefaultLinker {

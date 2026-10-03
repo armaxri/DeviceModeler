@@ -244,7 +244,7 @@ function open(relative: string, languageId: string, text: string, version = 1): 
     connection.sendNotification('textDocument/didOpen', { textDocument: { uri: uriOf(relative), languageId, version, text } });
 }
 
-describe('HSM language server', () => {
+describe('Device Modeler language server', () => {
     it('links a test file to the state machine of another file of the workspace', async () => {
         open('tests/lamp.devmtest', 'devmtest', LAMP_TEST);
         const result = await diagnosticsFor(uriOf('tests/lamp.devmtest'));

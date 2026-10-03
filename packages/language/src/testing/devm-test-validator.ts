@@ -29,7 +29,7 @@ export function registerTestValidationChecks(services: DevmTestServices): void {
         WhileStatement: validator.checkCondition,
         OperationCallStatement: validator.checkOperationCall,
         ElementReference: validator.checkTestElementReference,
-        // checks shared with the HSM language
+        // checks shared with the state machine language
         TypeReference: validator.checkTypeReference,
         VariableDeclaration: validator.checkVariable,
         ValueOfExpression: validator.checkValueOf,
@@ -47,7 +47,7 @@ export function registerTestValidationChecks(services: DevmTestServices): void {
 }
 
 /**
- * Semantic checks of the test language. The checks of expressions are inherited from the HSM
+ * Semantic checks of the test language. The checks of expressions are inherited from the state machine
  * language; the type checks use `typesystem.ts`.
  */
 export class DevmTestValidator extends ExpressionValidator {

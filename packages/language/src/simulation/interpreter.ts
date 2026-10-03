@@ -121,7 +121,7 @@ const NS_PER_UNIT: Record<string, number> = { s: 1e9, ms: 1e6, us: 1e3, ns: 1 };
 const NS_PER_MS = 1e6;
 
 /**
- * Interpreter (simulation engine) for HSM state machines, implementing the execution semantics of
+ * Interpreter (simulation engine) for the state machines, implementing the execution semantics of
  * `docs/semantics.md`. It has no DOM or Node dependencies and uses a virtual clock.
  *
  * ```ts
