@@ -127,9 +127,14 @@ export class StructureDiagram {
     private updateVersion = 0;
     /** The element chosen with the selector, the text cursor or a navigation (by file). */
     private readonly chosen = new Map<string, string>();
-    /** The contexts of shown structures given by a navigation (by `uri#element`). */
-    private readonly contexts = new Map<string, StructureContext>();
-    /** The context of the shown structure (explicit or the first use in a system of the workspace). */
+    /**
+     * The context of the shown structure given by the navigation that opened it (from a containing
+     * subsystem or system: "follow into", double-click a subsystem instance, go to provider, history).
+     * A structure shown in any other way (file opened, selector, text cursor) has no context: it is shown
+     * on its own, its routes end at its boundary ports.
+     */
+    private navigationContext?: { uri: string, element: string, context: StructureContext };
+    /** The context of the shown structure if it is shown as a part of another one (the navigation context, if it still exists). */
     private shownContext?: StructureContext;
     private route?: Set<string>;
     private routeInfo?: RouteInfo;
@@ -179,6 +184,8 @@ export class StructureDiagram {
     /** Leaves the structure mode: hides the selector. */
     deactivate(): void {
         this.state = undefined;
+        this.navigationContext = undefined;
+        this.shownContext = undefined;
         this.route = undefined;
         this.routeInfo = undefined;
         this.cancelConnector();
@@ -198,8 +205,14 @@ export class StructureDiagram {
             uri: this.uri,
             element: this.state?.element,
             id: single,
-            context: this.state ? this.contexts.get(`${normalizeUri(this.uri)}#${this.state.element}`) : undefined
+            context: this.state ? this.navigationContextOf(this.state.element) : undefined
         };
+    }
+
+    /** The navigation context of the shown element of the edited file (see {@link navigationContext}). */
+    private navigationContextOf(element: string): StructureContext | undefined {
+        const nav = this.navigationContext;
+        return nav && nav.uri === normalizeUri(this.uri) && nav.element === element ? nav.context : undefined;
     }
 
     /** Parses the text and updates the diagram. */
@@ -221,14 +234,13 @@ export class StructureDiagram {
         banner.hidden = true;
         const uri = this.uri;
         const pending = this.pendingLocation && normalizeUri(this.pendingLocation.uri) === normalizeUri(uri) ? this.pendingLocation : undefined;
+        if (pending) {
+            // only a navigation gives a context (a structure opened in any other way is shown on its own)
+            this.navigationContext = pending.element && pending.context
+                ? { uri: normalizeUri(uri), element: pending.element, context: pending.context } : undefined;
+        }
         if (pending?.element) {
             this.chosen.set(uri, pending.element);
-            const key = `${normalizeUri(uri)}#${pending.element}`;
-            if (pending.context) {
-                this.contexts.set(key, pending.context);
-            } else {
-                this.contexts.delete(key);
-            }
             force = true;
         }
         const choices = ibdChoices(parsed.model);
@@ -262,11 +274,18 @@ export class StructureDiagram {
             banner.textContent = 'The file declares no components, subsystems, systems or data types – there is nothing to show in the diagram. '
                 + 'Add one with the buttons of the properties panel.';
             await this.context.show({ type: 'graph:ibd', id: '#empty', children: [] } as SModelRoot);
+            this.navigationContext = undefined;
+            this.shownContext = undefined;
             this.renderProperties();
             renderBreadcrumb([]);
             return;
         }
         this.state = { parsed, layout, auto: layout.auto ?? layout.graph, issues: this.computeIssues(parsed, layout), element: elementOf(layout) };
+        // another file or element shown (selector, text cursor, file opened): no context any more
+        this.shownContext = this.navigationContextOf(this.state.element);
+        if (!this.shownContext) {
+            this.navigationContext = undefined;
+        }
         this.context.layoutChanged();
         for (const id of [...this.context.selection]) {
             if (!layout.elements.has(id)) {
@@ -499,20 +518,20 @@ export class StructureDiagram {
         }
     }
 
-    /** The context of the shown structure: given by a navigation, else its first use in a system of the workspace. */
-    private async contextOf(ws: StructureWorkspace, state: StructureState): Promise<{ context: StructureContext, structure: CompositeType } | undefined> {
+    /**
+     * The context of the shown structure: given by the navigation that opened it (if it still exists),
+     * else the structure itself as the root (shown on its own: routes end at its boundary ports).
+     */
+    private contextOf(ws: StructureWorkspace, state: StructureState): { context: StructureContext, structure: CompositeType } | undefined {
         const structure = ws.componentType(this.uri, state.element);
         if (!isCompositeType(structure)) {
             return undefined;
         }
-        const explicit = this.contexts.get(`${normalizeUri(this.uri)}#${state.element}`);
-        if (explicit) {
-            const resolved = ws.resolveContext(explicit);
-            if (resolved?.structure === structure) {
-                return { context: explicit, structure };
-            }
+        const explicit = this.navigationContextOf(state.element);
+        if (explicit && ws.resolveContext(explicit)?.structure === structure) {
+            return { context: explicit, structure };
         }
-        return { context: ws.contextsOf(structure)[0], structure };
+        return { context: { rootUri: normalizeUri(this.uri), root: structure.name, path: [] }, structure };
     }
 
     /** Updates the breadcrumb (the shown structure as a part of a root structure). */
@@ -525,9 +544,9 @@ export class StructureDiagram {
         if (state !== this.state) {
             return;
         }
-        const found = await this.contextOf(ws, state);
-        this.shownContext = found?.context;
+        const found = this.contextOf(ws, state);
         const context = found?.context;
+        this.shownContext = context && context.path.length > 0 ? context : undefined;
         if (!context || context.path.length === 0) {
             renderBreadcrumb([]);
             return;
@@ -558,7 +577,7 @@ export class StructureDiagram {
         if (state !== this.state || this.single() !== id) {
             return;
         }
-        const found = await this.contextOf(ws, state);
+        const found = this.contextOf(ws, state);
         if (!found) {
             return;
         }

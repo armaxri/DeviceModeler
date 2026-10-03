@@ -220,7 +220,9 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
   web editor and VS Code; graphical editing as text edits (threads, instances, ports, connectors with
   compatibility feedback, rename across files, delete with the connections in other files, properties),
   route highlighting, navigation between systems, subsystems, component types and state machines
-  (*Used by*, *Follow into*, back / forward), markers for problems in imported files; the structs and
+  (*Used by*, *Follow into*, back / forward; like in PlantUML a subsystem opened directly is shown on its
+  own – routes end at its boundary ports –, reached from a containing structure it is shown as that part,
+  with the navigation path as breadcrumb and *Follow out*), markers for problems in imported files; the structs and
   interfaces of a file as unconnected «struct» / «interface» boxes (types-only files show only them),
   port labels with their type
 - 🧪 VS Code: structure files in the language server (references, renames and go to provider across files), the
@@ -235,8 +237,6 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
   - simulation of the composed system (several state machines connected through the ports, threads and
     their periods / priorities) and code generation of the composition (instances, wiring of the generated
     state machine classes, thread setup)
-  - several contexts of a subsystem: a subsystem used in several systems (or several times) is shown in the
-    context of the first system only; choosing the context in the diagram
   - `devm doc` for structure files (structure documentation with the diagrams, port tables, routes)
   - ports of an instance whose type is declared in another file are not editable in the diagram (edit them in
     the type); incompatible connections are created with a warning

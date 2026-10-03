@@ -67,20 +67,26 @@ from left to right with orthogonal connectors).
 | From | Action | Shows |
 | --- | --- | --- |
 | an instance with a behavior | double-click it, click its behavior icon or *Open state machine* | the state machine (`.devm`) of its component |
-| a subsystem instance | double-click it, click its rake icon or *Open DriveUnit* | the internal block diagram of the subsystem, as the part of the shown diagram (breadcrumb *Part of GarageDoor › drive : DriveUnit*) |
+| a subsystem instance | double-click it, click its rake icon or *Open DriveUnit* | the internal block diagram of the subsystem, as the part of the shown diagram (breadcrumb *Part of GarageDoor › drive : DriveUnit*, the path of the navigation) |
 | the type name of an instance | double-click it or *Go to type* | the definition of the component type (its file, the type shown and selected) |
 | the type of a port (`cmd : DoorCmd`) | double-click the type | the «struct» / «interface» box of the type in the diagram of the file declaring it, the declaration selected |
 | a «struct» / «interface» box | click it | the declaration selected in the text (double-click: the cursor into it) |
 | a selected port, connection or instance | *Follow into drive ▸* (properties panel) | the subsystem the highlighted route continues into – the route stays highlighted there, also across files |
-| the same, inside a subsystem | *◂ Follow out to GarageDoor* | the subsystem or system using it, the route highlighted |
+| the same, inside a subsystem reached by navigation | *◂ Follow out to GarageDoor* | the subsystem or system the navigation came from, the route highlighted |
 | a required (provided) port | the *Providers* (*Requirers*) links, *Go to provider* | the port at the end of the route – also in another file (e.g. from `drive-unit.devm` to the door controller in `system.devm`) |
 | a state machine | *Used by* (breadcrumb at the top of the diagram, properties panel) | the instances of the components implemented by the state machine, in the diagram of their subsystem or system |
 | anywhere | *◀* / *▶* in the toolbar, `Alt+←` / `Alt+→` | back / forward in the navigation history |
 
-Routes are followed through the levels of the hierarchy and the files of the workspace: a subsystem
-shown on its own is seen as part of the first system that contains it (its breadcrumb), so the
-providers of a required port of the drive unit are found in the system. The target of a navigation is
-selected in the diagram and its text highlighted.
+Routes are followed through the levels of the hierarchy and the files of the workspace. Like in
+PlantUML, a subsystem opened directly (its file opened, chosen in the list of examples or with the *Show*
+selector, or by moving the text cursor into it) is shown **on its own**: its routes end at its boundary
+ports, there is no breadcrumb and no *Follow out*. It is shown as a part of another structure only when
+it is reached by navigation from a containing system or subsystem – double-click a subsystem instance,
+*Follow into*, a provider at a deeper level, or *Back* / *Forward* to such a place: then the breadcrumb
+shows the path of the navigation (*Part of GarageDoor › drive : DriveUnit*), the routes continue into the
+containing structures (the providers of a required port of the drive unit are found in the system) and
+*Follow out* returns to it. The target of a navigation is selected in the diagram and its text
+highlighted.
 
 ## Manual layout (experimental)
 

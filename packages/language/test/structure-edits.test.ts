@@ -377,8 +377,10 @@ describe('structure workspace: navigation across files', () => {
     test('contexts of a structure, routes into composites and providers across files', async () => {
         const ws = await workspace();
         const drive = ws.componentType('memory:///drive-unit.devm', 'DriveUnit') as ast.CompositeType;
-        const contexts = ws.contextsOf(drive);
-        expect(contexts).toEqual([{ rootUri: 'memory:/system.devm', root: 'GarageDoor', path: ['drive'] }]);
+        // the context given by a navigation from the system into its part drive
+        const contexts = [{ rootUri: 'memory:/system.devm', root: 'GarageDoor', path: ['drive'] }];
+        expect(ws.resolveContext(contexts[0])?.structure).toBe(drive);
+        expect(ws.resolveContext({ ...contexts[0], path: ['door'] })).toBeUndefined();
         // the route of door.motor in the system continues into the drive
         const root = { rootUri: 'memory:///system.devm', root: 'GarageDoor', path: [] };
         const start = ws.endpoint(root, 'door', 'motor')!;
@@ -390,5 +392,13 @@ describe('structure workspace: navigation across files', () => {
         const status = ws.endpoint(contexts[0], 'motor', 'status')!;
         const providers = ws.routeEnds(status, contexts[0]);
         expect(providers).toEqual([{ uri: 'memory:/system.devm', element: 'GarageDoor', id: 'GarageDoor/door.status', context: { rootUri: 'memory:/system.devm', root: 'GarageDoor', path: [] } }]);
+    });
+
+    test('a subsystem shown on its own: routes end at its boundary ports', async () => {
+        const ws = await workspace();
+        const standalone = { rootUri: 'memory:/drive-unit.devm', root: 'DriveUnit', path: [] };
+        const status = ws.endpoint(standalone, 'motor', 'status')!;
+        const providers = ws.routeEnds(status, standalone);
+        expect(providers.map(l => l.id)).toEqual(['DriveUnit.status']);
     });
 });

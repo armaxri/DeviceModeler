@@ -2,7 +2,7 @@ import { AstUtils, URI, type AstNode, type LangiumDocument } from 'langium';
 import * as ast from './generated/ast.js';
 import { resolvedBehavior } from './structure-imports.js';
 import { instanceType, compositeInstances } from './structure-model.js';
-import { findProviders, findRequirers, portEndpoint, portRoute, structureContexts, type PortEndpoint, type Route } from './structure-routes.js';
+import { findProviders, findRequirers, portEndpoint, portRoute, type PortEndpoint, type Route } from './structure-routes.js';
 import { StructureEditor, structureRenameEdits } from './edit/structure-edits.js';
 import type { TextEdit } from './edit/model-edits.js';
 import { loadImports, replaceDocument } from './model-loader.js';
@@ -99,22 +99,6 @@ export class StructureWorkspace {
     /** All structures and systems of the workspace. */
     get structures(): ast.CompositeType[] {
         return this.models.flatMap(m => m.elements.filter(ast.isCompositeType));
-    }
-
-    /**
-     * The contexts of a structure in the instance trees of the systems of the workspace (the systems
-     * containing it, with the instance path); the structure itself as root if no system contains it.
-     */
-    contextsOf(structure: ast.CompositeType): StructureContext[] {
-        const result: StructureContext[] = [];
-        for (const root of this.structures.filter(s => s.kind === 'system')) {
-            for (const { path, structure: s } of structureContexts(root)) {
-                if (s === structure) {
-                    result.push({ rootUri: uriOf(root), root: root.name, path: path.map(i => i.name) });
-                }
-            }
-        }
-        return result.length > 0 ? result : [{ rootUri: uriOf(structure), root: structure.name, path: [] }];
     }
 
     /** The root structure and the instances of a context (undefined if it does not exist (any more)). */
