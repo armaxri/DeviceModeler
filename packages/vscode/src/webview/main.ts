@@ -35,4 +35,4 @@ controller.start();
 host.ready();
 
 // exposed for debugging and automated tests
-(window as unknown as { hsmDiagram: DiagramController }).hsmDiagram = controller;
+(window as unknown as { devmDiagram: DiagramController }).devmDiagram = controller;

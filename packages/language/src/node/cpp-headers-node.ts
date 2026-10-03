@@ -10,7 +10,7 @@ import { parseHeaderConfig, type HeaderConfig } from '../generator/config.js';
  * headers are read synchronously from the file system when a model is linked, the settings come
  * from the `headers` block of the nearest generator configuration (`devm.gen.json` or
  * `<name>.devm.gen.json` in the directory of the model or a parent directory) and from the command
- * line (`-I`, `-D`, `--data-model`) or the VS Code settings (`hsm.headers.*`). Not exported from the
+ * line (`-I`, `-D`, `--data-model`) or the VS Code settings (`devm.headers.*`). Not exported from the
  * package index (the web app bundles the index).
  */
 
@@ -145,14 +145,14 @@ export function dataModelNamed(name: string | undefined): Partial<CppDataModel> 
     }
 }
 
-/** The VS Code settings `hsm.headers.*`. */
+/** The VS Code settings `devm.headers.*`. */
 export interface HeaderSettingsSection {
     includePaths?: string[];
     defines?: Record<string, string | number>;
     dataModel?: string;
 }
 
-/** The header settings of the VS Code settings `hsm.headers.*`: include paths relative to the workspace folder (`${workspaceFolder}` supported). */
+/** The header settings of the VS Code settings `devm.headers.*`: include paths relative to the workspace folder (`${workspaceFolder}` supported). */
 export function headerSettingsFromSection(section: HeaderSettingsSection | undefined, workspaceFolder: string | undefined): CppHeaderSettings {
     const base = workspaceFolder ?? process.cwd();
     let dataModel: Partial<CppDataModel> | undefined;

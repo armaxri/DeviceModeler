@@ -21,7 +21,7 @@
   "keywords": [
     "statechart",
     "state machine",
-    "hsm",
+    "devm",
     "itemis CREATE",
     "YAKINDU",
     "PlantUML",
@@ -36,8 +36,8 @@
     "workspaceContains:**/*.devmtest",
     "onLanguage:devm",
     "onLanguage:devmtest",
-    "onWebviewPanel:hsm.diagram",
-    "onCommand:hsm.importSct"
+    "onWebviewPanel:devm.diagram",
+    "onCommand:devm.importSct"
   ],
   "contributes": {
     "languages": [
@@ -78,57 +78,57 @@
     ],
     "commands": [
       {
-        "command": "hsm.openDiagram",
+        "command": "devm.openDiagram",
         "title": "Open Diagram",
         "category": "Device Modeler",
         "icon": "$(type-hierarchy)"
       },
       {
-        "command": "hsm.generateCpp",
+        "command": "devm.generateCpp",
         "title": "Generate C++",
         "category": "Device Modeler"
       },
       {
-        "command": "hsm.runTests",
+        "command": "devm.runTests",
         "title": "Run Tests",
         "category": "Device Modeler",
         "icon": "$(run-all)"
       },
       {
-        "command": "hsm.importSct",
+        "command": "devm.importSct",
         "title": "Import itemis CREATE Model (.sct)",
         "category": "Device Modeler"
       },
       {
-        "command": "hsm.exportDiagram",
+        "command": "devm.exportDiagram",
         "title": "Export Diagram…",
         "category": "Device Modeler"
       },
       {
-        "command": "hsm.autoArrange",
+        "command": "devm.autoArrange",
         "title": "Auto-arrange Diagram",
         "category": "Device Modeler",
         "icon": "$(layout)"
       },
       {
-        "command": "hsm.resetLayout",
+        "command": "devm.resetLayout",
         "title": "Use Automatic Diagram Layout",
         "category": "Device Modeler",
         "icon": "$(discard)"
       },
       {
-        "command": "hsm.convertLayoutFile",
+        "command": "devm.convertLayoutFile",
         "title": "Convert Layout File to Annotations",
         "category": "Device Modeler"
       },
       {
-        "command": "hsm.navigateBack",
+        "command": "devm.navigateBack",
         "title": "Diagram: Go Back",
         "category": "Device Modeler",
         "icon": "$(arrow-left)"
       },
       {
-        "command": "hsm.navigateForward",
+        "command": "devm.navigateForward",
         "title": "Diagram: Go Forward",
         "category": "Device Modeler",
         "icon": "$(arrow-right)"
@@ -137,116 +137,116 @@
     "menus": {
       "editor/title": [
         {
-          "command": "hsm.openDiagram",
+          "command": "devm.openDiagram",
           "when": "editorLangId == devm",
           "group": "navigation"
         },
         {
-          "command": "hsm.runTests",
+          "command": "devm.runTests",
           "when": "editorLangId == devmtest",
           "group": "navigation"
         }
       ],
       "editor/context": [
         {
-          "command": "hsm.openDiagram",
+          "command": "devm.openDiagram",
           "when": "editorLangId == devm",
-          "group": "hsm@1"
+          "group": "devm@1"
         },
         {
-          "command": "hsm.generateCpp",
-          "when": "editorLangId == devm && !hsm.structureEditorActive",
-          "group": "hsm@2"
+          "command": "devm.generateCpp",
+          "when": "editorLangId == devm && !devm.structureEditorActive",
+          "group": "devm@2"
         },
         {
-          "command": "hsm.exportDiagram",
+          "command": "devm.exportDiagram",
           "when": "editorLangId == devm",
-          "group": "hsm@3"
+          "group": "devm@3"
         }
       ],
       "explorer/context": [
         {
-          "command": "hsm.openDiagram",
+          "command": "devm.openDiagram",
           "when": "resourceExtname == .devm",
-          "group": "hsm@1"
+          "group": "devm@1"
         },
         {
-          "command": "hsm.generateCpp",
+          "command": "devm.generateCpp",
           "when": "resourceExtname == .devm",
-          "group": "hsm@2"
+          "group": "devm@2"
         },
         {
-          "command": "hsm.exportDiagram",
+          "command": "devm.exportDiagram",
           "when": "resourceExtname == .devm",
-          "group": "hsm@3"
+          "group": "devm@3"
         },
         {
-          "command": "hsm.runTests",
+          "command": "devm.runTests",
           "when": "resourceExtname == .devmtest",
-          "group": "hsm@1"
+          "group": "devm@1"
         },
         {
-          "command": "hsm.importSct",
+          "command": "devm.importSct",
           "when": "resourceExtname == .sct",
-          "group": "hsm@1"
+          "group": "devm@1"
         }
       ],
       "commandPalette": [
         {
-          "command": "hsm.openDiagram",
-          "when": "editorLangId == devm || activeWebviewPanelId == hsm.diagram"
+          "command": "devm.openDiagram",
+          "when": "editorLangId == devm || activeWebviewPanelId == devm.diagram"
         },
         {
-          "command": "hsm.generateCpp",
-          "when": "editorLangId == devm && !hsm.structureEditorActive || activeWebviewPanelId == hsm.diagram && !hsm.structureDiagramActive"
+          "command": "devm.generateCpp",
+          "when": "editorLangId == devm && !devm.structureEditorActive || activeWebviewPanelId == devm.diagram && !devm.structureDiagramActive"
         },
         {
-          "command": "hsm.exportDiagram",
-          "when": "editorLangId == devm || activeWebviewPanelId == hsm.diagram"
+          "command": "devm.exportDiagram",
+          "when": "editorLangId == devm || activeWebviewPanelId == devm.diagram"
         },
         {
-          "command": "hsm.autoArrange",
-          "when": "editorLangId == devm || activeWebviewPanelId == hsm.diagram"
+          "command": "devm.autoArrange",
+          "when": "editorLangId == devm || activeWebviewPanelId == devm.diagram"
         },
         {
-          "command": "hsm.resetLayout",
-          "when": "editorLangId == devm || activeWebviewPanelId == hsm.diagram"
+          "command": "devm.resetLayout",
+          "when": "editorLangId == devm || activeWebviewPanelId == devm.diagram"
         },
         {
-          "command": "hsm.convertLayoutFile",
-          "when": "editorLangId == devm && !hsm.structureEditorActive || activeWebviewPanelId == hsm.diagram && !hsm.structureDiagramActive"
+          "command": "devm.convertLayoutFile",
+          "when": "editorLangId == devm && !devm.structureEditorActive || activeWebviewPanelId == devm.diagram && !devm.structureDiagramActive"
         },
         {
-          "command": "hsm.navigateBack",
-          "when": "hsm.diagramCanGoBack"
+          "command": "devm.navigateBack",
+          "when": "devm.diagramCanGoBack"
         },
         {
-          "command": "hsm.navigateForward",
-          "when": "hsm.diagramCanGoForward"
+          "command": "devm.navigateForward",
+          "when": "devm.diagramCanGoForward"
         }
       ],
       "webview/title": [
         {
-          "command": "hsm.autoArrange",
-          "when": "activeWebviewPanelId == hsm.diagram",
-          "group": "hsmLayout@1"
+          "command": "devm.autoArrange",
+          "when": "activeWebviewPanelId == devm.diagram",
+          "group": "devmLayout@1"
         },
         {
-          "command": "hsm.resetLayout",
-          "when": "activeWebviewPanelId == hsm.diagram",
-          "group": "hsmLayout@2"
+          "command": "devm.resetLayout",
+          "when": "activeWebviewPanelId == devm.diagram",
+          "group": "devmLayout@2"
         }
       ]
     },
     "configuration": {
       "title": "Device Modeler",
       "properties": {
-        "hsm.diagram.autoOpen": {
+        "devm.diagram.autoOpen": {
           "type": "boolean",
           "default": false,
           "description": "Open the diagram beside the editor whenever a .devm file (state machine or structure file) is opened in an editor."
         },
-        "hsm.diagram.theme": {
+        "devm.diagram.theme": {
           "type": "string",
           "enum": [
             "auto",
@@ -255,7 +255,7 @@
             "dark"
           ],
           "enumDescriptions": [
-            "Follow the VS Code color theme: light themes use `#hsm.diagram.lightTheme#`, dark and high contrast themes the dark diagram theme",
+            "Follow the VS Code color theme: light themes use `#devm.diagram.lightTheme#`, dark and high contrast themes the dark diagram theme",
             "PlantUML classic (yellow / red)",
             "PlantUML modern (gray)",
             "Dark"
@@ -263,7 +263,7 @@
           "default": "auto",
           "markdownDescription": "Theme of the diagram. `auto` follows the VS Code color theme."
         },
-        "hsm.diagram.lightTheme": {
+        "devm.diagram.lightTheme": {
           "type": "string",
           "enum": [
             "classic",
@@ -271,9 +271,9 @@
             "dark"
           ],
           "default": "classic",
-          "markdownDescription": "Diagram theme used with light VS Code color themes when `#hsm.diagram.theme#` is `auto`."
+          "markdownDescription": "Diagram theme used with light VS Code color themes when `#devm.diagram.theme#` is `auto`."
         },
-        "hsm.diagram.direction": {
+        "devm.diagram.direction": {
           "type": "string",
           "enum": [
             "DOWN",
@@ -286,7 +286,7 @@
           "default": "DOWN",
           "description": "Layout direction of the diagram."
         },
-        "hsm.diagram.edgeRouting": {
+        "devm.diagram.edgeRouting": {
           "type": "string",
           "enum": [
             "SPLINES",
@@ -296,22 +296,22 @@
           "default": "SPLINES",
           "description": "Routing of the transitions in the diagram."
         },
-        "hsm.diagram.priorities": {
+        "devm.diagram.priorities": {
           "type": "boolean",
           "default": true,
           "description": "Show the priorities of transitions leaving a vertex with several outgoing transitions."
         },
-        "hsm.diagram.showProperties": {
+        "devm.diagram.showProperties": {
           "type": "boolean",
           "default": true,
           "description": "Show the properties panel next to the diagram."
         },
-        "hsm.cpp.outputDirectory": {
+        "devm.cpp.outputDirectory": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Output directory of **Device Modeler: Generate C++**, relative to the model file (absolute paths and `${workspaceFolder}` are supported). Empty: the directory of the model. A generator configuration (`devm.gen.json` or `*.devm.gen.json` in the directory of the model or a parent directory) that lists the model takes precedence over all `hsm.cpp.*` settings."
+          "markdownDescription": "Output directory of **Device Modeler: Generate C++**, relative to the model file (absolute paths and `${workspaceFolder}` are supported). Empty: the directory of the model. A generator configuration (`devm.gen.json` or `*.devm.gen.json` in the directory of the model or a parent directory) that lists the model takes precedence over all `devm.cpp.*` settings."
         },
-        "hsm.cpp.namespace": {
+        "devm.cpp.namespace": {
           "type": [
             "string",
             "null"
@@ -319,7 +319,7 @@
           "default": null,
           "markdownDescription": "Namespace of the generated C++ class (e.g. `app::sm`). `null`: the namespace of the model; empty string: the global namespace."
         },
-        "hsm.cpp.standard": {
+        "devm.cpp.standard": {
           "type": "string",
           "enum": [
             "17",
@@ -328,7 +328,7 @@
           "default": "17",
           "description": "C++ standard of the generated code."
         },
-        "hsm.headers.includePaths": {
+        "devm.headers.includePaths": {
           "type": "array",
           "items": {
             "type": "string"
@@ -336,7 +336,7 @@
           "default": [],
           "markdownDescription": "Include directories for imported C/C++ headers (`import \"motor_types.h\"`), searched after the directory of the model; relative to the workspace folder (`${workspaceFolder}` is supported). They are added to the `includePaths` of the `headers` block of the nearest `devm.gen.json`."
         },
-        "hsm.headers.defines": {
+        "devm.headers.defines": {
           "type": "object",
           "additionalProperties": {
             "type": [
@@ -347,7 +347,7 @@
           "default": {},
           "markdownDescription": "Predefined macros for the analysis of imported C/C++ headers (like `-D`): `\"NAME\": \"value\"` (`\"\"` for a macro without value). They override the `defines` of `devm.gen.json`."
         },
-        "hsm.headers.dataModel": {
+        "devm.headers.dataModel": {
           "type": "string",
           "enum": [
             "",
@@ -358,7 +358,7 @@
           "default": "",
           "markdownDescription": "Data model of the target for imported C/C++ headers (widths of `long` and `size_t`): `lp64` (Linux / macOS 64-bit, the default), `llp64` (Windows 64-bit), `ilp32` (32-bit targets like ARM Cortex-M). Empty: the `dataModel` of `devm.gen.json` or LP64."
         },
-        "hsm.trace.server": {
+        "devm.trace.server": {
           "type": "string",
           "enum": [
             "off",

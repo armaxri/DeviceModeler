@@ -35,7 +35,7 @@ export default defineConfig({
         lib: {
             entry: path.resolve(__dirname, 'src/webview/main.ts'),
             formats: ['iife'],
-            name: 'hsmDiagramWebview',
+            name: 'devmDiagramWebview',
             fileName: () => 'webview.js',
             cssFileName: 'webview'
         }

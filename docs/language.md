@@ -231,8 +231,8 @@ constexpr Position kHome{10, 20};                          operation drive(p : m
 
   The nearest `devm.gen.json` / `*.devm.gen.json` in the directory of a model or a parent directory applies (CLI,
   language server); `devm validate|simulate|test|generate|layout` add `-I <dir>`, `-D NAME[=VALUE]` and
-  `--data-model lp64|llp64|ilp32`, VS Code the settings `hsm.headers.includePaths` / `hsm.headers.defines` /
-  `hsm.headers.dataModel`, CMake `hsm_generate(… INCLUDE_DIRS … DEFINES …)`. A missing header is an error at
+  `--data-model lp64|llp64|ilp32`, VS Code the settings `devm.headers.includePaths` / `devm.headers.defines` /
+  `devm.headers.dataModel`, CMake `hsm_generate(… INCLUDE_DIRS … DEFINES …)`. A missing header is an error at
   the import, errors in the header are reported there with their location (`motor_types.h:12:5: …`);
   `devm cpp-header <files>` prints what the analyzer extracts. The supported C++ subset is described in
   [docs/cpp-integration.md](cpp-integration.md).

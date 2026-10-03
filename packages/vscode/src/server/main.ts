@@ -10,6 +10,6 @@ import { createHsmLanguageServerServices, installHeaderSupport } from './hsm-lsp
 // and state machines of other files (references and renames across files).
 const connection = createConnection(ProposedFeatures.all);
 const { shared } = createHsmLanguageServerServices({ connection, ...NodeFileSystem });
-// imported C/C++ headers: read from the file system, settings of devm.gen.json and hsm.headers.*
+// imported C/C++ headers: read from the file system, settings of devm.gen.json and devm.headers.*
 installHeaderSupport(shared);
 startLanguageServer(shared);

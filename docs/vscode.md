@@ -14,7 +14,7 @@
   tools, inline rename, delete, drag to nest, properties panel and simulation. Diagram edits are
   computed with `ModelEditor` and applied to the document as `WorkspaceEdit`s, so undo, the dirty
   state and git behave as for typed changes. The diagram follows the VS Code color theme (light:
-  PlantUML classic, configurable with `hsm.diagram.lightTheme`; dark: dark theme).
+  PlantUML classic, configurable with `devm.diagram.lightTheme`; dark: dark theme).
 - 🧪 **Manual layout** (only on the branches `claude/manual-layout` / `claude/layout-annotations`): the
   diagram is arranged by hand as soon as a state is dragged; the positions are layout annotations in the
   model (`@at(x, y)`, `@via(…)`, …, see [Manual layout](manual-layout.md)). *Auto-arrange* and *Automatic layout* in
@@ -30,12 +30,12 @@
 - **C/C++ header imports**: headers are read from disk (and re-read when they change: the importing models are
   validated again), hover shows their declarations with documentation, go to definition opens the header,
   completion after `ns::`. Include paths, defines and the data model come from the `headers` block of the
-  nearest `devm.gen.json` and the settings `hsm.headers.includePaths` / `hsm.headers.defines` /
-  `hsm.headers.dataModel`; the diagram webview gets the headers from the extension.
+  nearest `devm.gen.json` and the settings `devm.headers.includePaths` / `devm.headers.defines` /
+  `devm.headers.dataModel`; the diagram webview gets the headers from the extension.
 - **Device Modeler: Generate C++** uses a generator configuration (`devm.gen.json` / `*.devm.gen.json` that lists
   the model, searched from the model directory up to the workspace folder) with the same generator code
-  as `devm generate`, otherwise the settings `hsm.cpp.outputDirectory`, `hsm.cpp.namespace` and
-  `hsm.cpp.standard`. `devm.gen.json` files are validated with the JSON schema.
+  as `devm generate`, otherwise the settings `devm.cpp.outputDirectory`, `devm.cpp.namespace` and
+  `devm.cpp.standard`. `devm.gen.json` files are validated with the JSON schema.
 - **Tests** in the Test Explorer (all `@Test` operations of the workspace; failures with location and
   trace; **Device Modeler: Run Tests** for the active file) and a **Run with Model Coverage** profile that shows
   covered states / transitions / reactions and guard decisions in the coverage view.
@@ -50,7 +50,7 @@ same extension:
 
 - **Language**: structure files are `.devm` files of the language `devm` like the state machines (one
   TextMate grammar and language configuration, the diagram and the code generation menus follow the
-  content of the file: the context key `hsm.structureEditorActive` is set for an editor showing a
+  content of the file: the context key `devm.structureEditorActive` is set for an editor showing a
   structure file) – diagnostics (port ↔ state machine rules, connections, threads),
   completion, hover, formatting, outline, go to definition (component types, ports, type names, import
   paths, the state machine of a `behavior`), **Go to Implementation** = go to the provider of a required
@@ -58,7 +58,7 @@ same extension:
   indexed). The providers of the language dispatch on the kind of the file or node (see
   [Architecture](architecture.md#one-language-for-two-kinds-of-model-files)), so the definition provider
   of state machines (C++ names, imported machines) and the one of structure files work side by side.
-- **Diagram**: **Device Modeler: Open Diagram** (editor title, context menus, `hsm.diagram.autoOpen`) opens the
+- **Diagram**: **Device Modeler: Open Diagram** (editor title, context menus, `devm.diagram.autoOpen`) opens the
   internal block diagram beside the text, in the same webview as the state machine diagrams (structure
   mode of the diagram controller, the styles of the web app): palette, rename, drag into threads,
   connectors, properties, route highlighting, the selector of the shown subsystem or system, the structs
@@ -70,7 +70,7 @@ same extension:
   diagram panel and the commands **Device Modeler: Auto-arrange Diagram** / **Device Modeler: Use Automatic Diagram Layout**, also
   with the `.devm` editor active) apply to the shown diagram, and **Device Modeler: Export Diagram…** uses the layout. The
   controls of the state machines (layout direction and edge routing, simulation, C++) are disabled; the
-  context key `hsm.structureDiagramActive` hides *Generate C++* and *Convert Layout File to Annotations* for
+  context key `devm.structureDiagramActive` hides *Generate C++* and *Convert Layout File to Annotations* for
   structure diagrams.
 - **Navigation** (double-click an instance, its type name, the type of a port, *Go to provider*, *Follow into*, *Used by* of a
   state machine, …): the extension opens the target file in the text editor column of the diagram and

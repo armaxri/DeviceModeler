@@ -153,7 +153,7 @@ with the macros defined so far in the header, the predefined macros (`__cplusplu
 
 Consequence: a header whose declarations depend on configuration macros defined in other headers
 (`#if CONFIG_USE_CAN`) is analyzed with the macro undefined, unless it is passed in `defines`
-(`headers.defines` of `devm.gen.json`, `-D`, `hsm.headers.defines`, see §4.7).
+(`headers.defines` of `devm.gen.json`, `-D`, `devm.headers.defines`, see §4.7).
 
 ### 3.2 Constant expressions
 
@@ -345,7 +345,7 @@ override it.
 | --- | --- | --- |
 | CLI (`devm validate`, `simulate`, `test`, `generate`, `layout`, `render`, `doc`) | read from disk (`installNodeHeaderSupport` in `src/node/cpp-headers-node.ts`: synchronous reader) | `devm.gen.json`; `-I <dir>`, `-D NAME[=VALUE]`, `--data-model lp64`/`llp64`/`ilp32`; `devm generate --list-inputs` lists the imported headers (CMake dependencies); CMake `INCLUDE_DIRS` / `DEFINES` |
 | API (`HsmModelLoader`, `HsmTestWorkspace`) | `files` / `readFile` (async, loaded before the build by `loadImports`, also the includes), header files given to `HsmTestWorkspace.load` | `HsmModelLoaderOptions.cppHeaders`, `cppHeaderStore(shared).settings` / `settingsProvider` |
-| VS Code language server | read from disk; the `**/*` file watcher of Langium invalidates changed headers and `devm.gen.json` files; importing models are relinked and validated again | `devm.gen.json`; settings `hsm.headers.includePaths` (relative to the workspace folder, `${workspaceFolder}`), `hsm.headers.defines`, `hsm.headers.dataModel` |
+| VS Code language server | read from disk; the `**/*` file watcher of Langium invalidates changed headers and `devm.gen.json` files; importing models are relinked and validated again | `devm.gen.json`; settings `devm.headers.includePaths` (relative to the workspace folder, `${workspaceFolder}`), `devm.headers.defines`, `devm.headers.dataModel` |
 | VS Code diagram webview | the extension sends the header texts (and their includes) with the imported `.devm` files (`collectImportedFiles`) | the extension sends the effective settings (`headers` of the `text` message) |
 | Web app | the virtual file list: headers of the examples and headers opened with *Open…* (`.h`, `.hpp`, …; added to the list, not edited) | – |
 

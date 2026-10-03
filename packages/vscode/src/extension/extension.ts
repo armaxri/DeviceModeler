@@ -27,7 +27,7 @@ export async function deactivate(): Promise<void> {
 }
 
 /**
- * The context key `hsm.structureEditorActive` of the menus: whether the active editor shows a structure
+ * The context key `devm.structureEditorActive` of the menus: whether the active editor shows a structure
  * file (`.devm` files are state machines or structure files, decided by their text): no code generation.
  */
 function trackStructureEditor(context: vscode.ExtensionContext): void {
@@ -37,7 +37,7 @@ function trackStructureEditor(context: vscode.ExtensionContext): void {
         const structure = editor?.document.languageId === 'devm' && isStructureDocument(editor.document.uri);
         if (structure !== current) {
             current = structure;
-            vscode.commands.executeCommand('setContext', 'hsm.structureEditorActive', structure);
+            vscode.commands.executeCommand('setContext', 'devm.structureEditorActive', structure);
         }
     };
     context.subscriptions.push(
@@ -70,5 +70,5 @@ function startLanguageClient(context: vscode.ExtensionContext): LanguageClient {
             fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{devm,devmtest}')
         }
     };
-    return new LanguageClient('hsm', 'Device Modeler Language Server', serverOptions, clientOptions);
+    return new LanguageClient('devm', 'Device Modeler Language Server', serverOptions, clientOptions);
 }

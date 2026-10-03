@@ -53,7 +53,7 @@ export async function renderStructureSvg(document: vscode.TextDocument, element?
     if (!layout) {
         throw new Error(`${path.basename(document.uri.path)} declares no components, subsystems, systems or data types.`);
     }
-    const config = vscode.workspace.getConfiguration('hsm.diagram', document.uri);
+    const config = vscode.workspace.getConfiguration('devm.diagram', document.uri);
     return renderIbdSvg(layout.graph, { theme: effectiveTheme(config.get<string>('theme', 'auto'), config.get<string>('lightTheme', 'classic'), false) });
 }
 
@@ -69,7 +69,7 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
         }
     }));
 
-    register('hsm.openDiagram', async (arg?: unknown) => {
+    register('devm.openDiagram', async (arg?: unknown) => {
         const uri = modelUri(arg, commands.diagrams);
         if (!uri) {
             vscode.window.showWarningMessage('Device Modeler: Open a .devm file to show its diagram.');
@@ -78,7 +78,7 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
         await commands.diagrams.open(uri);
     });
 
-    register('hsm.generateCpp', async (arg?: unknown) => {
+    register('devm.generateCpp', async (arg?: unknown) => {
         const uri = modelUri(arg, commands.diagrams);
         if (!uri || await isStructureFile(uri)) {
             vscode.window.showWarningMessage('Device Modeler: Select the .devm file of a state machine to generate C++ code for.');
@@ -87,13 +87,13 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
         await generateCppFor(uri, commands.output);
     });
 
-    register('hsm.runTests', async (arg?: unknown) => {
+    register('devm.runTests', async (arg?: unknown) => {
         const uri = arg instanceof vscode.Uri ? arg : vscode.window.activeTextEditor?.document.languageId === 'devmtest'
             ? vscode.window.activeTextEditor.document.uri : undefined;
         await commands.tests.runFile(uri);
     });
 
-    register('hsm.importSct', async (arg?: unknown) => {
+    register('devm.importSct', async (arg?: unknown) => {
         let uri = arg instanceof vscode.Uri && arg.path.toLowerCase().endsWith('.sct') ? arg : undefined;
         if (!uri) {
             const picked = await vscode.window.showOpenDialog({
@@ -109,7 +109,7 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
         }
     });
 
-    register('hsm.exportDiagram', async (arg?: unknown, element?: unknown) => {
+    register('devm.exportDiagram', async (arg?: unknown, element?: unknown) => {
         const uri = modelUri(arg, commands.diagrams);
         if (!uri) {
             vscode.window.showWarningMessage('Device Modeler: Open a .devm file to export its diagram.');
@@ -142,8 +142,8 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
     // manual layout (layout annotations in the model, state machines and structure files): commands of the
     // diagram (also buttons in its toolbar)
     const layoutCommands: Record<string, LayoutCommand> = {
-        'hsm.autoArrange': 'arrange',
-        'hsm.resetLayout': 'reset'
+        'devm.autoArrange': 'arrange',
+        'devm.resetLayout': 'reset'
     };
     for (const [id, command] of Object.entries(layoutCommands)) {
         register(id, async (arg?: unknown) => {
@@ -161,14 +161,14 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
 
     // Back / Forward of the navigation between diagrams (also buttons and Alt+← / Alt+→ in the diagram)
     for (const direction of ['back', 'forward'] as const) {
-        register(direction === 'back' ? 'hsm.navigateBack' : 'hsm.navigateForward', () => {
+        register(direction === 'back' ? 'devm.navigateBack' : 'devm.navigateForward', () => {
             if (!commands.diagrams.requestNavigation(direction)) {
                 vscode.window.showWarningMessage('Device Modeler: Open a diagram first.');
             }
         });
     }
 
-    register('hsm.convertLayoutFile', async (arg?: unknown) => {
+    register('devm.convertLayoutFile', async (arg?: unknown) => {
         const uri = modelUri(arg, commands.diagrams);
         if (!uri || await isStructureFile(uri)) {
             vscode.window.showWarningMessage('Device Modeler: Open the .devm file of a state machine to convert its layout file.');
@@ -227,7 +227,7 @@ export async function convertLayoutFile(uri: vscode.Uri): Promise<vscode.Uri | u
 
 /**
  * The diagram of a model as SVG document (`renderSvg` of the language package: the same look as the
- * diagram view, styles embedded). Layout options follow the `hsm.diagram.*` settings; with the theme
+ * diagram view, styles embedded). Layout options follow the `devm.diagram.*` settings; with the theme
  * `auto` the light theme is used (exported files are usually embedded in light documents). The layout
  * annotations of the model (manual layout) are applied.
  */
@@ -236,7 +236,7 @@ export async function renderModelSvg(document: vscode.TextDocument): Promise<str
     if (parsed.hasSyntaxErrors || !parsed.model?.name) {
         throw new Error(`${path.basename(document.uri.path)} contains syntax errors.`);
     }
-    const config = vscode.workspace.getConfiguration('hsm.diagram', document.uri);
+    const config = vscode.workspace.getConfiguration('devm.diagram', document.uri);
     const { graph } = await layoutStateMachineWithLayout(parsed.model, {
         direction: config.get<string>('direction') === 'RIGHT' ? 'RIGHT' : 'DOWN',
         routing: (['SPLINES', 'ORTHOGONAL', 'POLYLINE'] as const).find(r => r === config.get<string>('edgeRouting')) ?? 'SPLINES',
@@ -246,7 +246,7 @@ export async function renderModelSvg(document: vscode.TextDocument): Promise<str
 }
 
 function cppSettings(uri: vscode.Uri): CppSettings {
-    const config = vscode.workspace.getConfiguration('hsm.cpp', uri);
+    const config = vscode.workspace.getConfiguration('devm.cpp', uri);
     return {
         outputDirectory: config.get<string>('outputDirectory', ''),
         namespace: config.get<string | null>('namespace', null),

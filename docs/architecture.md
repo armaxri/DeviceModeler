@@ -136,7 +136,7 @@ elements, never both.
   `.devm` files and use the root of each.
 - **Hosts:** the diagram controller shows the structure diagram when the text is a structure file
   (`isStructureText`: the first token, without parsing); the VS Code extension sets the context key
-  `hsm.structureEditorActive` the same way (menus of code generation), the CLI decides by the parsed root.
+  `devm.structureEditorActive` the same way (menus of code generation), the CLI decides by the parsed root.
 
 ## Manual layout: shared core
 

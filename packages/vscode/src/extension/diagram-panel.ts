@@ -13,7 +13,7 @@ import {
     HeaderConfigFinder, headerSettingsForModel, headerSettingsFromSection, type HeaderSettingsSection
 } from '../../../language/src/node/cpp-headers-node.js';
 
-export const DIAGRAM_VIEW_TYPE = 'hsm.diagram';
+export const DIAGRAM_VIEW_TYPE = 'devm.diagram';
 
 /** How long (ms) text changes are collected before the text is sent to the webview. */
 const TEXT_DEBOUNCE_MS = 120;
@@ -26,7 +26,7 @@ function isDarkColorTheme(kind: vscode.ColorThemeKind): boolean {
 }
 
 function readSettings(): WebviewSettings {
-    const config = vscode.workspace.getConfiguration('hsm.diagram');
+    const config = vscode.workspace.getConfiguration('devm.diagram');
     return {
         direction: config.get<string>('direction') === 'RIGHT' ? 'RIGHT' : 'DOWN',
         routing: (['SPLINES', 'ORTHOGONAL', 'POLYLINE'] as const).find(r => r === config.get<string>('edgeRouting')) ?? 'SPLINES',
@@ -116,7 +116,7 @@ export class DiagramManager implements vscode.Disposable {
                 }
             }),
             vscode.workspace.onDidChangeConfiguration(event => {
-                if (event.affectsConfiguration('hsm.diagram')) {
+                if (event.affectsConfiguration('devm.diagram')) {
                     this.broadcastSettings();
                 }
             }),
@@ -194,7 +194,7 @@ export class DiagramManager implements vscode.Disposable {
 
     /** Context keys of the menus: whether the active diagram is a structure diagram (no code generation, no layout file conversion). */
     private updateContext(active: DiagramPanel | undefined): void {
-        vscode.commands.executeCommand('setContext', 'hsm.structureDiagramActive', active !== undefined && isStructureDocument(active.uri));
+        vscode.commands.executeCommand('setContext', 'devm.structureDiagramActive', active !== undefined && isStructureDocument(active.uri));
     }
 
     // -----------------------------------------------------------------------------------------
@@ -262,13 +262,13 @@ export class DiagramManager implements vscode.Disposable {
         for (const panel of this.panels.values()) {
             panel.post({ type: 'history', state });
         }
-        vscode.commands.executeCommand('setContext', 'hsm.diagramCanGoBack', state.back !== undefined);
-        vscode.commands.executeCommand('setContext', 'hsm.diagramCanGoForward', state.forward !== undefined);
+        vscode.commands.executeCommand('setContext', 'devm.diagramCanGoBack', state.back !== undefined);
+        vscode.commands.executeCommand('setContext', 'devm.diagramCanGoForward', state.forward !== undefined);
     }
 
     private autoOpen(editor: vscode.TextEditor | undefined): void {
         const language = editor?.document.languageId;
-        if (!editor || language !== 'devm' || !vscode.workspace.getConfiguration('hsm.diagram').get<boolean>('autoOpen', false)) {
+        if (!editor || language !== 'devm' || !vscode.workspace.getConfiguration('devm.diagram').get<boolean>('autoOpen', false)) {
             return;
         }
         const key = editor.document.uri.toString();
@@ -474,11 +474,11 @@ export class DiagramPanel {
                 break;
             case 'updateSetting': {
                 const key = message.key === 'routing' ? 'edgeRouting' : message.key;
-                await vscode.workspace.getConfiguration('hsm.diagram').update(key, message.value, vscode.ConfigurationTarget.Global);
+                await vscode.workspace.getConfiguration('devm.diagram').update(key, message.value, vscode.ConfigurationTarget.Global);
                 break;
             }
             case 'command':
-                await vscode.commands.executeCommand(`hsm.${message.command}`, this.document.uri, message.element);
+                await vscode.commands.executeCommand(`devm.${message.command}`, this.document.uri, message.element);
                 break;
             case 'png': {
                 const request = this.rasterizeRequests.get(message.requestId);
@@ -641,7 +641,7 @@ const headerConfigs = new HeaderConfigFinder();
 
 /**
  * The settings of imported C/C++ headers for a model, like the language server uses them: the
- * `headers` block of the nearest `devm.gen.json` and the settings `hsm.headers.*`.
+ * `headers` block of the nearest `devm.gen.json` and the settings `devm.headers.*`.
  */
 export function headerSettingsFor(uri: vscode.Uri): CppHeaderSettings {
     if (uri.scheme !== 'file') {
@@ -651,10 +651,10 @@ export function headerSettingsFor(uri: vscode.Uri): CppHeaderSettings {
     return headerSettingsForModel(uri.fsPath, headerConfigs, vscodeHeaderSettings(uri));
 }
 
-/** The VS Code settings `hsm.headers.*` for a resource (without the settings of `devm.gen.json`). */
+/** The VS Code settings `devm.headers.*` for a resource (without the settings of `devm.gen.json`). */
 export function vscodeHeaderSettings(uri: vscode.Uri | undefined): CppHeaderSettings {
     const folder = uri ? vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    const section = vscode.workspace.getConfiguration('hsm', uri).get<HeaderSettingsSection>('headers');
+    const section = vscode.workspace.getConfiguration('devm', uri).get<HeaderSettingsSection>('headers');
     return headerSettingsFromSection(section, folder);
 }
 

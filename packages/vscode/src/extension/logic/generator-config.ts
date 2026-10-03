@@ -10,12 +10,12 @@ import { loadGeneratorConfig, type GenerateDiagnostic } from '../../../../langua
  * A generator configuration file (`devm.gen.json` or `<name>.devm.gen.json`, the format of
  * `devm generate`, see `packages/language/src/generator/config.ts`) in the directory of the model or
  * in a parent directory up to the workspace folder takes precedence if it lists the model (directly
- * or via a glob) and configures the `cpp` target. Otherwise the VS Code settings `hsm.cpp.*` are
+ * or via a glob) and configures the `cpp` target. Otherwise the VS Code settings `devm.cpp.*` are
  * used. The result is a configuration for `runGeneration` of the language package that contains only
  * this model, so the files are generated exactly as `devm generate` would generate them.
  */
 
-/** The `hsm.cpp.*` settings. */
+/** The `devm.cpp.*` settings. */
 export interface CppSettings {
     /** Relative to the model file; absolute paths and `${workspaceFolder}` are supported; empty: the directory of the model. */
     outputDirectory: string;
@@ -76,7 +76,7 @@ export function generationFromConfig(config: GeneratorConfig, configFile: string
     };
 }
 
-/** The generation of the model with the `hsm.cpp.*` settings. */
+/** The generation of the model with the `devm.cpp.*` settings. */
 export function generationFromSettings(modelPath: string, settings: CppSettings, workspaceFolder: string | undefined): ResolvedGeneration {
     const cpp: CppTargetConfig = {
         outDir: resolveOutputDirectory(modelPath, settings.outputDirectory, workspaceFolder),

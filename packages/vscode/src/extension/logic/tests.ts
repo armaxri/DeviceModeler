@@ -75,7 +75,7 @@ export interface HsmTestRunOptions {
     onTrace?: (line: string) => void;
     /** Collects the model coverage of the executed tests. */
     coverage?: CoverageCollector;
-    /** Settings of imported C/C++ headers (the VS Code settings `hsm.headers.*`). */
+    /** Settings of imported C/C++ headers (the VS Code settings `devm.headers.*`). */
     headers?: CppHeaderSettings;
 }
 

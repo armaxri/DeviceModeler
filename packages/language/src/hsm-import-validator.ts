@@ -111,7 +111,7 @@ export class HsmImportValidator {
         if (!header?.found) {
             const searched = (header?.searched ?? []).map(uri => displayPath(uri.toString(), base));
             accept('error', `Cannot resolve the import '${resolved.path}': the header was not found${searched.length > 0 ? ` (searched: ${searched.join(', ')})` : ''}. `
-                + 'Include directories are configured in the "headers" block of devm.gen.json, with -I (CLI) or the setting hsm.headers.includePaths (VS Code).', target);
+                + 'Include directories are configured in the "headers" block of devm.gen.json, with -I (CLI) or the setting devm.headers.includePaths (VS Code).', target);
             return;
         }
         const files = new Set(header.headers.map(h => h.uri.toString()));

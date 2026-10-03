@@ -22,7 +22,7 @@ interface ItemData {
  */
 export class HsmTestController implements vscode.Disposable {
 
-    readonly controller = vscode.tests.createTestController('hsmTests', 'Device Modeler Tests');
+    readonly controller = vscode.tests.createTestController('devmTests', 'Device Modeler Tests');
     private readonly data = new WeakMap<vscode.TestItem, ItemData>();
     private readonly disposables: vscode.Disposable[] = [];
     private readonly runProfile: vscode.TestRunProfile;
