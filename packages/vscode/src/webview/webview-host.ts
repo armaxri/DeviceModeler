@@ -1,8 +1,13 @@
-import type { DiagramSubmachine, TextEdit } from 'hsm-language';
-import type { DiagramController, DiagramHost, StatusSeverity, TextRange } from '@hsm-web/diagram-controller.js';
+import { normalizeUri, type DiagramSubmachine, type TextEdit } from 'hsm-language';
+import type { DiagramController, DiagramHost, DiagramLocation, StatusSeverity, TextRange } from '@hsm-web/diagram-controller.js';
+import { isStructureFile } from '@hsm-web/model-service.js';
 import { byId, h } from '@hsm-web/ui/dom.js';
 import { svgToPng } from '@hsm-web/ui/export-svg.js';
-import type { FromWebview, LayoutCommand, ToWebview, WebviewSettings } from '../common/protocol.js';
+import type { FromWebview, LayoutCommand, NavigationState, OffsetEdit, ToWebview, WebviewSettings } from '../common/protocol.js';
+import { textHash } from '../common/text-hash.js';
+
+/** Controls of the toolbar that do not apply to structure files (`.dmf`). */
+const STATE_MACHINE_CONTROLS = ['direction-select', 'routing-select', 'priorities-toggle', 'btn-simulate', 'btn-arrange', 'btn-reset-layout', 'btn-cpp'];
 
 export interface VsCodeApi {
     postMessage(message: unknown): void;
@@ -14,7 +19,9 @@ export interface VsCodeApi {
  * The text side of the diagram in the webview: a copy of the document text, kept up to date by the
  * extension. Diagram operations are sent to the extension as text edits, which applies them to the
  * real document. The manual layout (experimental) consists of layout annotations in the text, so layout
- * changes are text edits as well (undone with the document).
+ * changes are text edits as well (undone with the document). Navigation to other files (structures, state
+ * machines) and edits of several files (renames, deletions in structure files) go through the extension,
+ * which owns the navigation history shared by all diagrams.
  */
 export class WebviewHost implements DiagramHost {
 
@@ -28,10 +35,22 @@ export class WebviewHost implements DiagramHost {
     private settings?: WebviewSettings;
     /** The imported files of the last text message (JSON), to detect changes. */
     private filesKey = '';
+    /** The other files of the last text message (the workspace), by URI. */
+    private files: Record<string, string> = {};
+    private uri = '';
+    private readonly locationRequests = new Map<number, (ok: boolean) => void>();
 
     constructor(private readonly vscode: VsCodeApi) {
         this.buildLayout();
         window.addEventListener('message', event => this.receive(event.data as ToWebview));
+        // Back / Forward (as in the web app)
+        document.addEventListener('keydown', event => {
+            if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+                this.navigate(event.key === 'ArrowLeft' ? 'back' : 'forward');
+                event.preventDefault();
+                event.stopImmediatePropagation();
+            }
+        }, { capture: true });
     }
 
     connect(controller: DiagramController): void {
@@ -61,6 +80,9 @@ export class WebviewHost implements DiagramHost {
         priorities.addEventListener('change', () => this.post({ type: 'updateSetting', key: 'priorities', value: priorities.checked }));
         properties.addEventListener('change', () => this.post({ type: 'updateSetting', key: 'showProperties', value: properties.checked }));
         const toolbar = h('header', { class: 'toolbar' },
+            h('div', { class: 'group' },
+                h('button', { id: 'btn-back', title: 'Back (Alt+←)', 'aria-label': 'Back', disabled: true, onClick: () => this.navigate('back') }, '◀'),
+                h('button', { id: 'btn-forward', title: 'Forward (Alt+→)', 'aria-label': 'Forward', disabled: true, onClick: () => this.navigate('forward') }, '▶')),
             h('span', { id: 'file-name', class: 'file-name' }),
             h('div', { class: 'group' },
                 h('button', { id: 'btn-simulate', class: 'simulate', title: 'Simulate the state machine (the model must not contain errors)', onClick: () => this.toggleSimulation() }, '▶ Simulate')),
@@ -74,7 +96,7 @@ export class WebviewHost implements DiagramHost {
                 h('button', { id: 'btn-reset-layout', title: 'Remove all layout annotations from the model and return to the automatic layout (an earlier arrangement is restored with undo)' }, 'Automatic layout')),
             h('div', { class: 'spacer' }),
             h('div', { class: 'group' },
-                h('button', { id: 'btn-export', title: 'Export the diagram as SVG or PNG', onClick: () => this.post({ type: 'command', command: 'exportDiagram' }) }, 'Export…'),
+                h('button', { id: 'btn-export', title: 'Export the diagram as SVG or PNG', onClick: () => this.exportDiagram() }, 'Export…'),
                 h('button', { id: 'btn-cpp', title: 'Generate C++ code', onClick: () => this.post({ type: 'command', command: 'generateCpp' }) }, 'C++')));
         const main = h('main', {},
             h('section', { id: 'diagram-pane' },
@@ -87,6 +109,45 @@ export class WebviewHost implements DiagramHost {
                 h('aside', { id: 'properties' })));
         const status = h('footer', { id: 'statusbar' }, h('span', { id: 'status-message' }), h('span', { class: 'spacer' }), h('span', { id: 'status-problems' }));
         document.body.replaceChildren(toolbar, main, status);
+    }
+
+    private exportDiagram(): void {
+        // structure files: the shown structure or component type
+        const element = this.controller.structureMode ? this.controller.currentLocation().element : undefined;
+        this.post({ type: 'command', command: 'exportDiagram', element });
+    }
+
+    /** Back / Forward in the navigation history of the extension (shared by all diagrams). */
+    private navigate(direction: 'back' | 'forward'): void {
+        const button = byId<HTMLButtonElement>(direction === 'back' ? 'btn-back' : 'btn-forward');
+        if (!button.disabled) {
+            this.post({ type: 'navigate', direction, from: this.controller.currentLocation() });
+        }
+    }
+
+    private updateHistory(state: NavigationState): void {
+        const back = byId<HTMLButtonElement>('btn-back');
+        const forward = byId<HTMLButtonElement>('btn-forward');
+        back.disabled = state.back === undefined;
+        forward.disabled = state.forward === undefined;
+        back.title = state.back ? `Back to ${state.back} (Alt+←)` : 'Back (Alt+←)';
+        forward.title = state.forward ? `Forward to ${state.forward} (Alt+→)` : 'Forward (Alt+→)';
+    }
+
+    /**
+     * Structure files have no layout settings, simulation, layout annotations and code generation (yet); called
+     * when the document of the diagram is set (the layout buttons are also updated by the controller).
+     */
+    private updateFileControls(): void {
+        const structure = isStructureFile(this.uri);
+        for (const id of STATE_MACHINE_CONTROLS) {
+            const control = document.getElementById(id) as HTMLButtonElement | null;
+            if (control) {
+                control.disabled = structure;
+            }
+        }
+        byId('btn-simulate').title = structure ? 'Structures cannot be simulated – open the state machine of a component'
+            : 'Simulate the state machine (the model must not contain errors)';
     }
 
     private toggleSimulation(): void {
@@ -133,11 +194,34 @@ export class WebviewHost implements DiagramHost {
                 const filesChanged = key !== this.filesKey;
                 if (filesChanged) {
                     this.filesKey = key;
+                    this.files = files;
                     this.controller.language.setWorkspace(message.uri, files, message.headers);
+                }
+                if (message.uri !== this.uri) {
+                    this.uri = message.uri;
+                    this.updateFileControls();
                 }
                 this.textChanged(message.text, message.version, message.fileName, filesChanged);
                 break;
             }
+            case 'reveal':
+                this.controller.revealLocation(message.location);
+                if (this.received) {
+                    this.controller.update(true);
+                }
+                break;
+            case 'locationResult': {
+                const resolve = this.locationRequests.get(message.requestId);
+                this.locationRequests.delete(message.requestId);
+                resolve?.(message.ok);
+                break;
+            }
+            case 'history':
+                this.updateHistory(message.state);
+                break;
+            case 'navigateRequest':
+                this.navigate(message.direction);
+                break;
             case 'layoutCommand':
                 this.layoutCommand(message.command);
                 break;
@@ -251,6 +335,39 @@ export class WebviewHost implements DiagramHost {
 
     redo(): void {
         this.post({ type: 'redo' });
+    }
+
+    /** Navigation from the diagram: the extension opens the file and its diagram and records the history. */
+    openLocation(location: DiagramLocation): Promise<boolean> {
+        const requestId = ++this.requestId;
+        return new Promise<boolean>(resolve => {
+            this.locationRequests.set(requestId, resolve);
+            this.post({ type: 'openLocation', requestId, location, from: this.controller.currentLocation() });
+        });
+    }
+
+    /**
+     * Edits of several files as one workspace edit of the extension (undone together). The other files are
+     * identified by the hashes of the texts the edits were computed on.
+     */
+    applyWorkspaceEdits(edits: ReadonlyMap<string, readonly TextEdit[]>): Promise<boolean> {
+        const requestId = ++this.requestId;
+        const byUri: Record<string, OffsetEdit[]> = {};
+        const hashes: Record<string, number> = {};
+        const known = new Map(Object.entries(this.files).map(([uri, text]) => [normalizeUri(uri), text]));
+        known.set(normalizeUri(this.uri), this.text);
+        for (const [uri, list] of edits) {
+            const text = known.get(normalizeUri(uri));
+            if (text === undefined) {
+                return Promise.resolve(false);
+            }
+            byUri[uri] = list.map(e => ({ offset: e.offset, length: e.length, text: e.text }));
+            hashes[uri] = textHash(text);
+        }
+        return new Promise<boolean>(resolve => {
+            this.pending.set(requestId, resolve);
+            this.post({ type: 'workspaceEdit', requestId, version: this.version, edits: byUri, hashes });
+        });
     }
 
     openStateMachine(submachine: DiagramSubmachine): boolean {

@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
 import {
-    cppHeaderStore, HsmModelLoader, importSct, layoutFileName, layoutStateMachineWithLayout, layoutTextEdits, parseManualLayout,
-    renderSvg, type ParsedModel
+    cppHeaderStore, DmfModelLoader, HsmModelLoader, importSct, layoutFileName, layoutStateMachineWithLayout, layoutStructure, layoutTextEdits,
+    parseManualLayout, renderIbdSvg, renderSvg, type ParsedModel
 } from 'hsm-language';
 import { runGeneration } from '../../../language/src/generator/generate-command.js';
 import { installNodeHeaderSupport } from '../../../language/src/node/cpp-headers-node.js';
-import { readText, vscodeHeaderSettings, type DiagramManager } from './diagram-panel.js';
+import { isStructureDocument, readText, vscodeHeaderSettings, type DiagramManager } from './diagram-panel.js';
 import type { HsmTestController } from './test-controller.js';
 import { effectiveTheme } from './logic/webview.js';
 import { resolveGeneration, type CppSettings } from './logic/generator-config.js';
@@ -20,6 +20,7 @@ export interface CommandContext {
 }
 
 let loader: HsmModelLoader | undefined;
+let structureLoader: DmfModelLoader | undefined;
 
 /** Parses and validates the text of a model (in the extension host, independent of the language server). */
 export async function parseModel(document: vscode.TextDocument): Promise<ParsedModel> {
@@ -31,6 +32,29 @@ export async function parseModel(document: vscode.TextDocument): Promise<ParsedM
     }
     cppHeaderStore(loader.services.shared).updateSettings(vscodeHeaderSettings(document.uri));
     return loader.load(document.getText(), document.uri.toString());
+}
+
+/**
+ * The diagram of a structure file (`.dmf`) as SVG document (`renderIbdSvg` of the language package, like
+ * `hsm render`): the internal block diagram of `element` (a structure, system or component type; default:
+ * the first system, else the first structure, else the component types).
+ */
+export async function renderStructureSvg(document: vscode.TextDocument, element?: string): Promise<string> {
+    if (!structureLoader) {
+        structureLoader = new DmfModelLoader(undefined, { readFile: uri => readText(uri.toString()) });
+        installNodeHeaderSupport(structureLoader.services.shared);
+    }
+    cppHeaderStore(structureLoader.services.shared).updateSettings(vscodeHeaderSettings(document.uri));
+    const parsed = await structureLoader.load(document.getText(), document.uri.toString());
+    if (parsed.hasSyntaxErrors) {
+        throw new Error(`${path.basename(document.uri.path)} contains syntax errors.`);
+    }
+    const layout = await layoutStructure(parsed.model, { element: element || undefined });
+    if (!layout) {
+        throw new Error(`${path.basename(document.uri.path)} declares no components, structures or systems.`);
+    }
+    const config = vscode.workspace.getConfiguration('hsm.diagram', document.uri);
+    return renderIbdSvg(layout.graph, { theme: effectiveTheme(config.get<string>('theme', 'auto'), config.get<string>('lightTheme', 'classic'), false) });
 }
 
 export function registerCommands(context: vscode.ExtensionContext, commands: CommandContext): void {
@@ -48,7 +72,7 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
     register('hsm.openDiagram', async (arg?: unknown) => {
         const uri = modelUri(arg, commands.diagrams);
         if (!uri) {
-            vscode.window.showWarningMessage('HSM: Open an .hsm file to show its diagram.');
+            vscode.window.showWarningMessage('HSM: Open an .hsm or .dmf file to show its diagram.');
             return;
         }
         await commands.diagrams.open(uri);
@@ -56,7 +80,7 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
 
     register('hsm.generateCpp', async (arg?: unknown) => {
         const uri = modelUri(arg, commands.diagrams);
-        if (!uri) {
+        if (!uri || isStructureDocument(uri)) {
             vscode.window.showWarningMessage('HSM: Select an .hsm file to generate C++ code for.');
             return;
         }
@@ -85,10 +109,10 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
         }
     });
 
-    register('hsm.exportDiagram', async (arg?: unknown) => {
+    register('hsm.exportDiagram', async (arg?: unknown, element?: unknown) => {
         const uri = modelUri(arg, commands.diagrams);
         if (!uri) {
-            vscode.window.showWarningMessage('HSM: Open an .hsm file to export its diagram.');
+            vscode.window.showWarningMessage('HSM: Open an .hsm or .dmf file to export its diagram.');
             return;
         }
         const format = await vscode.window.showQuickPick([
@@ -99,9 +123,10 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
             return;
         }
         const document = await vscode.workspace.openTextDocument(uri);
-        const svg = await renderModelSvg(document);
+        // structure files: the structure shown in the diagram (`element`, from its toolbar)
+        const svg = isStructureDocument(uri) ? await renderStructureSvg(document, typeof element === 'string' ? element : undefined) : await renderModelSvg(document);
         const target = await vscode.window.showSaveDialog({
-            defaultUri: uri.with({ path: uri.path.replace(/\.hsm$/i, '') + '.' + format.format }),
+            defaultUri: uri.with({ path: uri.path.replace(/\.(hsm|dmf)$/i, '') + '.' + format.format }),
             filters: format.format === 'svg' ? { SVG: ['svg'] } : { PNG: ['png'] },
             title: `Export diagram as ${format.label}`
         });
@@ -133,9 +158,18 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
         });
     }
 
+    // Back / Forward of the navigation between diagrams (also buttons and Alt+← / Alt+→ in the diagram)
+    for (const direction of ['back', 'forward'] as const) {
+        register(direction === 'back' ? 'hsm.navigateBack' : 'hsm.navigateForward', () => {
+            if (!commands.diagrams.requestNavigation(direction)) {
+                vscode.window.showWarningMessage('HSM: Open a diagram first.');
+            }
+        });
+    }
+
     register('hsm.convertLayoutFile', async (arg?: unknown) => {
         const uri = modelUri(arg, commands.diagrams);
-        if (!uri) {
+        if (!uri || isStructureDocument(uri)) {
             vscode.window.showWarningMessage('HSM: Open an .hsm file to convert its layout file.');
             return;
         }
@@ -147,13 +181,13 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
     });
 }
 
-/** The model a command applies to: the argument (explorer), the active .hsm editor or the active diagram. */
+/** The model a command applies to: the argument (explorer), the active .hsm / .dmf editor or the active diagram. */
 function modelUri(arg: unknown, diagrams: DiagramManager): vscode.Uri | undefined {
     if (arg instanceof vscode.Uri) {
         return arg;
     }
     const editor = vscode.window.activeTextEditor;
-    if (editor?.document.languageId === 'hsm') {
+    if (editor?.document.languageId === 'hsm' || editor?.document.languageId === 'dmf') {
         return editor.document.uri;
     }
     return diagrams.active?.uri;

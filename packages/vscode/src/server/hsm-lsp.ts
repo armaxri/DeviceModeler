@@ -159,7 +159,7 @@ export class HsmDefinitionProvider extends DefaultDefinitionProvider {
     }
 }
 
-/** Language server features added to both languages. */
+/** Language server features added to the state machine and test languages. */
 export const HsmLspModule: Module<LangiumServices, PartialLangiumServices> = {
     lsp: {
         SemanticTokenProvider: services => new HsmSemanticTokenProvider(services),
@@ -168,7 +168,12 @@ export const HsmLspModule: Module<LangiumServices, PartialLangiumServices> = {
     }
 };
 
-/** The services of the language server: the HSM languages with the additional LSP features. */
+/**
+ * The services of the language server: the HSM languages with the additional LSP features. The structure
+ * language (`.dmf`) brings its own LSP services (dmf-module.ts of the language package: definition, go to
+ * provider as implementation, completion, hover, formatting); {@link HsmLspModule} must not be added to it
+ * (its definition provider would replace the one of the structure language).
+ */
 export function createHsmLanguageServerServices(context: DefaultSharedModuleContext) {
     const extensions: HsmServiceExtensions = { hsm: HsmLspModule, hsmTest: HsmLspModule };
     return createHsmServices(context, extensions);

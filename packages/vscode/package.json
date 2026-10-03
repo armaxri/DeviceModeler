@@ -1,7 +1,7 @@
 {
   "name": "hsm-vscode",
-  "displayName": "HSM Modeler (manual layout)",
-  "description": "Hierarchical state machines (.hsm) and their unit tests (.hsmtest): language server, PlantUML-style diagram editor, C++ code generation, test runner and itemis CREATE import – experimental build with hand-arranged diagrams (layout annotations in the model)",
+  "displayName": "Device Modeling Framework – HSM Modeler (manual layout)",
+  "description": "Device Modeling Framework: the structure of a product (.dmf: components, ports, threads, instances, connections) as SysML internal block diagrams and its hierarchical state machines (.hsm) with their unit tests (.hsmtest): language server, PlantUML-style diagram editors, C++ code generation, test runner and itemis CREATE import – experimental build with hand-arranged state machine diagrams (layout annotations in the model)",
   "version": "0.1.0-manual-layout",
   "private": true,
   "publisher": "hsm-modeler",
@@ -24,14 +24,19 @@
     "hsm",
     "itemis CREATE",
     "YAKINDU",
-    "PlantUML"
+    "PlantUML",
+    "SysML",
+    "internal block diagram",
+    "device modeling"
   ],
   "main": "./dist/extension.cjs",
   "activationEvents": [
     "workspaceContains:**/*.hsm",
     "workspaceContains:**/*.hsmtest",
+    "workspaceContains:**/*.dmf",
     "onLanguage:hsm",
     "onLanguage:hsmtest",
+    "onLanguage:dmf",
     "onWebviewPanel:hsm.diagram",
     "onCommand:hsm.importSct"
   ],
@@ -58,6 +63,18 @@
           ".hsmtest"
         ],
         "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "dmf",
+        "aliases": [
+          "DMF",
+          "Device Modeling Framework",
+          "dmf"
+        ],
+        "extensions": [
+          ".dmf"
+        ],
+        "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
@@ -70,6 +87,11 @@
         "language": "hsmtest",
         "scopeName": "source.hsmtest",
         "path": "./syntaxes/hsmtest.tmLanguage.json"
+      },
+      {
+        "language": "dmf",
+        "scopeName": "source.dmf",
+        "path": "./syntaxes/dmf.tmLanguage.json"
       }
     ],
     "commands": [
@@ -116,13 +138,25 @@
         "command": "hsm.convertLayoutFile",
         "title": "Convert Layout File to Annotations",
         "category": "HSM"
+      },
+      {
+        "command": "hsm.navigateBack",
+        "title": "Diagram: Go Back",
+        "category": "HSM",
+        "icon": "$(arrow-left)"
+      },
+      {
+        "command": "hsm.navigateForward",
+        "title": "Diagram: Go Forward",
+        "category": "HSM",
+        "icon": "$(arrow-right)"
       }
     ],
     "menus": {
       "editor/title": [
         {
           "command": "hsm.openDiagram",
-          "when": "editorLangId == hsm",
+          "when": "editorLangId == hsm || editorLangId == dmf",
           "group": "navigation"
         },
         {
@@ -134,7 +168,7 @@
       "editor/context": [
         {
           "command": "hsm.openDiagram",
-          "when": "editorLangId == hsm",
+          "when": "editorLangId == hsm || editorLangId == dmf",
           "group": "hsm@1"
         },
         {
@@ -144,14 +178,14 @@
         },
         {
           "command": "hsm.exportDiagram",
-          "when": "editorLangId == hsm",
+          "when": "editorLangId == hsm || editorLangId == dmf",
           "group": "hsm@3"
         }
       ],
       "explorer/context": [
         {
           "command": "hsm.openDiagram",
-          "when": "resourceExtname == .hsm",
+          "when": "resourceExtname == .hsm || resourceExtname == .dmf",
           "group": "hsm@1"
         },
         {
@@ -161,7 +195,7 @@
         },
         {
           "command": "hsm.exportDiagram",
-          "when": "resourceExtname == .hsm",
+          "when": "resourceExtname == .hsm || resourceExtname == .dmf",
           "group": "hsm@3"
         },
         {
@@ -178,38 +212,46 @@
       "commandPalette": [
         {
           "command": "hsm.openDiagram",
-          "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram"
+          "when": "editorLangId == hsm || editorLangId == dmf || activeWebviewPanelId == hsm.diagram"
         },
         {
           "command": "hsm.generateCpp",
-          "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram"
+          "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram && !hsm.structureDiagramActive"
         },
         {
           "command": "hsm.exportDiagram",
-          "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram"
+          "when": "editorLangId == hsm || editorLangId == dmf || activeWebviewPanelId == hsm.diagram"
         },
         {
           "command": "hsm.autoArrange",
-          "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram"
+          "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram && !hsm.structureDiagramActive"
         },
         {
           "command": "hsm.resetLayout",
-          "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram"
+          "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram && !hsm.structureDiagramActive"
         },
         {
           "command": "hsm.convertLayoutFile",
-          "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram"
+          "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram && !hsm.structureDiagramActive"
+        },
+        {
+          "command": "hsm.navigateBack",
+          "when": "hsm.diagramCanGoBack"
+        },
+        {
+          "command": "hsm.navigateForward",
+          "when": "hsm.diagramCanGoForward"
         }
       ],
       "webview/title": [
         {
           "command": "hsm.autoArrange",
-          "when": "activeWebviewPanelId == hsm.diagram",
+          "when": "activeWebviewPanelId == hsm.diagram && !hsm.structureDiagramActive",
           "group": "hsmLayout@1"
         },
         {
           "command": "hsm.resetLayout",
-          "when": "activeWebviewPanelId == hsm.diagram",
+          "when": "activeWebviewPanelId == hsm.diagram && !hsm.structureDiagramActive",
           "group": "hsmLayout@2"
         }
       ]
@@ -220,7 +262,7 @@
         "hsm.diagram.autoOpen": {
           "type": "boolean",
           "default": false,
-          "description": "Open the diagram beside the editor whenever an .hsm file is opened in an editor."
+          "description": "Open the diagram beside the editor whenever an .hsm or .dmf file is opened in an editor."
         },
         "hsm.diagram.theme": {
           "type": "string",

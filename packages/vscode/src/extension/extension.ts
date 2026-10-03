@@ -25,7 +25,7 @@ export async function deactivate(): Promise<void> {
     client = undefined;
 }
 
-/** The language server (both languages) runs in a separate Node process, connected via IPC. */
+/** The language server (all three languages) runs in a separate Node process, connected via IPC. */
 function startLanguageClient(context: vscode.ExtensionContext): LanguageClient {
     const serverModule = context.asAbsolutePath('dist/server.cjs');
     const serverOptions: ServerOptions = {
@@ -36,12 +36,15 @@ function startLanguageClient(context: vscode.ExtensionContext): LanguageClient {
         documentSelector: [
             { scheme: 'file', language: 'hsm' },
             { scheme: 'file', language: 'hsmtest' },
+            { scheme: 'file', language: 'dmf' },
             { scheme: 'untitled', language: 'hsm' },
-            { scheme: 'untitled', language: 'hsmtest' }
+            { scheme: 'untitled', language: 'hsmtest' },
+            { scheme: 'untitled', language: 'dmf' }
         ],
         synchronize: {
-            // the server indexes all models and tests of the workspace (cross-file references of .hsmtest files)
-            fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{hsm,hsmtest}')
+            // the server indexes all models, tests and structure files of the workspace (cross-file references
+            // of .hsmtest and .dmf files)
+            fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{hsm,hsmtest,dmf}')
         }
     };
     return new LanguageClient('hsm', 'HSM Language Server', serverOptions, clientOptions);

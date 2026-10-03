@@ -1,14 +1,17 @@
-# HSM Modeler for VS Code
+# Device Modeling Framework (HSM Modeler) for VS Code
 
 > 🧪 This is the build of the branch `claude/layout-annotations` (version `0.1.0-manual-layout`, display name
-> *HSM Modeler (manual layout)*) with hand-arranged diagrams, see [Manual layout](#manual-layout-experimental).
+> *Device Modeling Framework – HSM Modeler (manual layout)*) with hand-arranged diagrams, see
+> [Manual layout](#manual-layout-experimental), and the 🧪 structure files of the Device Modeling Framework
+> (branch `claude/device-modeling`), see [Structure files](#structure-files-dmf-experimental).
 > It has the same extension id as the regular build (`hsm-modeler.hsm-vscode`), so only one of them can
 > be installed at a time: uninstall the other one first (`code --uninstall-extension hsm-modeler.hsm-vscode`)
 > or install with `code --install-extension <file>.vsix --force`.
 
-Hierarchical state machines (`.hsm`) and their unit tests (`.hsmtest`) in VS Code: a language
-server, the PlantUML-style diagram editor of the HSM web app, C++ code generation, a test runner in
-the Test Explorer and the import of itemis CREATE models.
+Hierarchical state machines (`.hsm`), their unit tests (`.hsmtest`) and the structure of a product
+(`.dmf`: components, ports, threads, instances and connections) in VS Code: a language server, the
+PlantUML-style diagram editors of the web app (state machines, SysML internal block diagrams), C++ code
+generation, a test runner in the Test Explorer and the import of itemis CREATE models.
 
 ## Features
 
@@ -17,7 +20,8 @@ the Test Explorer and the import of itemis CREATE models.
   document symbols (outline, breadcrumbs), folding and semantic highlighting. All `.hsm` / `.hsmtest`
   files of the workspace are indexed, so `testclass T for statemachine Lamp` resolves `Lamp` in
   another file. TextMate grammars provide the basic highlighting.
-- **Diagram** (**HSM: Open Diagram**, button in the editor title bar of `.hsm` files): the diagram of
+- **Diagram** (**HSM: Open Diagram**, button in the editor title bar of `.hsm` files; structure files see
+  [below](#structure-files-dmf-experimental)): the diagram of
   the web app next to the text editor, updated while typing. Selecting an element in the diagram
   highlights its text; moving the cursor in the text selects the element in the diagram.
   The diagram can be edited like in the web app – palette tools (states, regions, pseudo states,
@@ -76,6 +80,31 @@ label of a selected transition. The first drag turns the diagram into a manual l
 - **HSM: Import itemis CREATE Model** writes the arrangement of the itemis diagram as annotations;
   **HSM: Export Diagram…** applies them.
 
+## Structure files (`.dmf`, experimental)
+
+🧪 The structure language of the Device Modeling Framework (`docs/structure-language.md` of the
+repository): component types with `provides` / `requires` ports (sync data, async events), implemented by
+state machines (`behavior "door.hsm"`), composite structures and the `system`, threads and connections.
+
+- **Language server**: diagnostics (ports checked against the state machine, connection kinds, types and
+  directions, threads), completion, hover, formatting, outline, go to definition (component types, ports,
+  types, imports, the state machine of a behavior), **Go to Implementation** = go to the provider of a
+  required port, find references and rename across all `.dmf` files of the workspace.
+- **Diagram** (**HSM: Open Diagram**): the internal block diagram of the structure next to the text, edited
+  like in the web app – palette (thread, instance, ports, connector), rename (`F2`), drag instances into
+  threads, `Del`, properties panel; selecting a port, connector or instance highlights the route of its
+  signals through all levels. A file with data types only shows an overview of its structs and
+  interfaces. **HSM: Export Diagram…** exports the shown structure (SVG / PNG).
+- **Navigation**: double-click an instance to open its state machine or the diagram of its structure, its
+  type name to open the type; *Go to provider*, *Follow into*, *Used by* (on a state machine diagram: the
+  instances implementing it). The target file is opened with its diagram; *◀* / *▶* in the diagram toolbar,
+  `Alt+←` / `Alt+→` and **HSM: Diagram: Go Back / Go Forward** move through the navigation history shared
+  by all diagrams.
+- **Several files at once**: a rename of a component type or port in the diagram changes all structure files
+  using it, deleting a port also deletes its connections in other files – one workspace edit, undone
+  together. The diagrams get the texts of all `.hsm` / `.dmf` files of the workspace (updated on every
+  change) for these queries across files.
+
 ## Settings
 
 | Setting | Default | |
@@ -86,7 +115,7 @@ label of a selected transition. The first drag turns the diagram into a manual l
 | `hsm.diagram.edgeRouting` | `SPLINES` | `SPLINES`, `ORTHOGONAL`, `POLYLINE` |
 | `hsm.diagram.priorities` | `true` | show transition priorities |
 | `hsm.diagram.showProperties` | `true` | properties panel next to the diagram |
-| `hsm.diagram.autoOpen` | `false` | open the diagram whenever an `.hsm` file is opened |
+| `hsm.diagram.autoOpen` | `false` | open the diagram whenever an `.hsm` or `.dmf` file is opened |
 | `hsm.cpp.outputDirectory` | `""` | relative to the model; `${workspaceFolder}` and absolute paths work |
 | `hsm.cpp.namespace` | `null` | `null`: namespace of the model, `""`: global namespace |
 | `hsm.cpp.standard` | `17` | `17` or `11` |
@@ -97,13 +126,15 @@ label of a selected transition. The first drag turns the diagram into a manual l
 | Process | Bundle | Content |
 | --- | --- | --- |
 | Extension host | `dist/extension.cjs` (esbuild, CJS) | language client, commands, diagram panels, test controller; the language package (generators, test runner, SVG renderer) is bundled |
-| Language server | `dist/server.cjs` (esbuild, CJS) | Langium services of both languages (`createHsmServices` of the language package) plus semantic tokens and hover signatures; started via IPC, `--stdio` for other clients |
+| Language server | `dist/server.cjs` (esbuild, CJS) | Langium services of the three languages (`createHsmServices` of the language package) plus semantic tokens and hover signatures of the state machine languages; started via IPC, `--stdio` for other clients |
 | Diagram webview | `dist/webview/webview.js`, `webview.css` (Vite, IIFE) | `DiagramController`, views, properties / simulation panels and styles of the web app (`packages/web/src`), ELK in a blob web worker |
 
 The webview parses the text of the document itself (the same code as the web app) and computes the
 text edits of diagram operations with `ModelEditor`; the extension applies them with a
 `WorkspaceEdit` to the document version they were computed for (otherwise the edit is rejected and
-the diagram is refreshed). The protocol is in `src/common/protocol.ts`.
+the diagram is refreshed). Edits of several files (structure files) are checked against the texts the
+webview computed them on (hashes) and applied as one `WorkspaceEdit`; navigation between diagrams and its
+history are handled by the extension. The protocol is in `src/common/protocol.ts`.
 
 ## Development
 
@@ -125,6 +156,8 @@ rebuilds the extension and the server on changes).
 - Generate C++ generates the model on disk (unsaved changes are saved first); the `c` target of a
   generator configuration is not generated by the extension (use `hsm generate`).
 - Tests run in the extension host on the interpreter of the language package (no compiled C++).
+- Structure files: no manual layout (layout annotations) of structure diagrams, no simulation or code
+  generation of structures; the diagrams get at most 1000 workspace files.
 - The extension has no end-to-end tests in a real VS Code instance yet (`@vscode/test-electron`
   needs to download VS Code); the language server is tested over stdio, the extension logic by unit
   tests.

@@ -1,9 +1,12 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
-import type { FromWebview, LayoutCommand, OffsetEdit, TextRange, ToWebview, WebviewSettings } from '../common/protocol.js';
+import type { FromWebview, LayoutCommand, NavigationLocation, OffsetEdit, TextRange, ToWebview, WebviewSettings } from '../common/protocol.js';
+import { textHash } from '../common/text-hash.js';
 import { canApplyEdit, toRangeEdits } from './logic/edits.js';
 import { effectiveTheme, webviewHtml } from './logic/webview.js';
 import { collectImportedFiles } from './logic/imports.js';
+import { NavigationHistory } from './logic/navigation.js';
+import { WorkspaceFiles } from './workspace-files.js';
 import type { CppHeaderSettings } from 'hsm-language';
 // Node-only part of the language package (not exported from its index because the web app bundles the index)
 import {
@@ -14,6 +17,8 @@ export const DIAGRAM_VIEW_TYPE = 'hsm.diagram';
 
 /** How long (ms) text changes are collected before the text is sent to the webview. */
 const TEXT_DEBOUNCE_MS = 120;
+/** How long (ms) changes of other files of the workspace (not imported by the document) are collected. */
+const WORKSPACE_DEBOUNCE_MS = 400;
 const CURSOR_DEBOUNCE_MS = 200;
 
 function isDarkColorTheme(kind: vscode.ColorThemeKind): boolean {
@@ -31,7 +36,15 @@ function readSettings(): WebviewSettings {
     };
 }
 
-/** Manages the diagram panels: one per `.hsm` document. */
+/** Whether the document is a structure file (`.dmf`) with a structure diagram. */
+export function isStructureDocument(uri: vscode.Uri): boolean {
+    return /\.dmf$/i.test(uri.path);
+}
+
+/**
+ * Manages the diagram panels: one per `.hsm` or `.dmf` document. Holds the navigation history shared by
+ * all diagrams (Back / Forward) and the texts of the workspace files sent to them.
+ */
 export class DiagramManager implements vscode.Disposable {
 
     private readonly panels = new Map<string, DiagramPanel>();
@@ -39,6 +52,10 @@ export class DiagramManager implements vscode.Disposable {
     /** Documents whose diagram was closed by the user (not opened again automatically). */
     private readonly closedByUser = new Set<string>();
     private lastActive?: DiagramPanel;
+    /** Back / Forward of the navigation between diagrams. */
+    readonly history = new NavigationHistory();
+    /** The `.hsm` and `.dmf` files of the workspace (sent to the diagrams). */
+    readonly workspaceFiles = new WorkspaceFiles();
     readonly highlight = vscode.window.createTextEditorDecorationType({
         backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
         borderRadius: '2px'
@@ -47,6 +64,15 @@ export class DiagramManager implements vscode.Disposable {
     constructor(readonly context: vscode.ExtensionContext) {
         this.disposables.push(
             this.highlight,
+            this.workspaceFiles,
+            // another state machine or structure file changed: the diagrams get the new texts
+            this.workspaceFiles.onDidChange(uri => {
+                for (const panel of this.panels.values()) {
+                    if (panel.key !== uri) {
+                        panel.importsChanged(panel.imports(uri) ? TEXT_DEBOUNCE_MS : WORKSPACE_DEBOUNCE_MS);
+                    }
+                }
+            }),
             vscode.window.registerWebviewPanelSerializer(DIAGRAM_VIEW_TYPE, {
                 deserializeWebviewPanel: async (panel, state: unknown) => {
                     const uri = (state as { uri?: string } | undefined)?.uri;
@@ -65,9 +91,9 @@ export class DiagramManager implements vscode.Disposable {
             vscode.workspace.onDidChangeTextDocument(event => {
                 const uri = event.document.uri.toString();
                 this.panels.get(uri)?.documentChanged(event.document);
-                // diagrams of models importing the changed file
+                // diagrams of models importing the changed file (headers; models: see workspaceFiles)
                 for (const panel of this.panels.values()) {
-                    if (panel.imports(uri)) {
+                    if (panel.imports(uri) && panel.key !== uri) {
                         panel.importsChanged();
                     }
                 }
@@ -119,15 +145,15 @@ export class DiagramManager implements vscode.Disposable {
         return this.lastActive && this.panels.has(this.lastActive.key) ? this.lastActive : undefined;
     }
 
-    /** Opens (or reveals) the diagram of the document beside the text editor. */
-    async open(uri: vscode.Uri, preserveFocus = false): Promise<DiagramPanel> {
+    /** Opens (or reveals) the diagram of the document beside the text editor (or in the given column). */
+    async open(uri: vscode.Uri, preserveFocus = false, viewColumn: vscode.ViewColumn = vscode.ViewColumn.Beside): Promise<DiagramPanel> {
         const existing = this.panels.get(uri.toString());
         if (existing) {
-            existing.panel.reveal(undefined, preserveFocus);
+            existing.panel.reveal(viewColumn === vscode.ViewColumn.Beside ? undefined : viewColumn, preserveFocus);
             return existing;
         }
         const document = await vscode.workspace.openTextDocument(uri);
-        const panel = vscode.window.createWebviewPanel(DIAGRAM_VIEW_TYPE, DiagramPanel.title(document), { viewColumn: vscode.ViewColumn.Beside, preserveFocus }, {
+        const panel = vscode.window.createWebviewPanel(DIAGRAM_VIEW_TYPE, DiagramPanel.title(document), { viewColumn, preserveFocus }, {
             enableScripts: true,
             retainContextWhenHidden: true,
             localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'), vscode.Uri.joinPath(this.context.extensionUri, 'media')]
@@ -139,10 +165,12 @@ export class DiagramManager implements vscode.Disposable {
     private register(panel: DiagramPanel): DiagramPanel {
         this.panels.set(panel.key, panel);
         this.lastActive = panel;
+        this.updateContext(panel);
         panel.panel.onDidChangeViewState(event => {
             if (event.webviewPanel.active) {
                 this.lastActive = panel;
             }
+            this.updateContext(event.webviewPanel.active ? panel : undefined);
         });
         panel.panel.onDidDispose(() => {
             if (this.panels.get(panel.key) === panel) {
@@ -154,8 +182,83 @@ export class DiagramManager implements vscode.Disposable {
         return panel;
     }
 
+    /** Context keys of the menus: whether the active diagram is a structure diagram (no layout commands). */
+    private updateContext(active: DiagramPanel | undefined): void {
+        vscode.commands.executeCommand('setContext', 'hsm.structureDiagramActive', active !== undefined && isStructureDocument(active.uri));
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Navigation between diagrams and its history
+
+    /**
+     * Navigation from a diagram (`source`): opens the document of the location and its diagram (in the column
+     * of the source diagram, the text in the column of its text editor) and shows the location there. `from`
+     * (the location of the source diagram) is recorded for Back. Returns false if the file cannot be opened.
+     */
+    async openLocation(location: NavigationLocation, source: DiagramPanel | undefined, from?: NavigationLocation): Promise<boolean> {
+        if (!await this.show(location, source)) {
+            return false;
+        }
+        if (from) {
+            this.history.record(from);
+            this.historyChanged();
+        }
+        return true;
+    }
+
+    /** Back / Forward: `from` is the current location of the diagram the navigation started in. */
+    async navigate(direction: 'back' | 'forward', from: NavigationLocation, source: DiagramPanel | undefined): Promise<void> {
+        const target = direction === 'back' ? this.history.goBack(from) : this.history.goForward(from);
+        this.historyChanged();
+        if (target && !await this.show(target, source)) {
+            vscode.window.setStatusBarMessage(`$(warning) HSM: ${decodeURIComponent(target.uri.replace(/^.*\//, ''))} is not available.`, 6000);
+        }
+    }
+
+    /** Back / Forward of the commands: the active diagram sends its location (`navigate` message). */
+    requestNavigation(direction: 'back' | 'forward'): boolean {
+        const panel = this.active;
+        panel?.post({ type: 'navigateRequest', direction });
+        return panel !== undefined;
+    }
+
+    private async show(location: NavigationLocation, source: DiagramPanel | undefined): Promise<boolean> {
+        let uri: vscode.Uri;
+        try {
+            uri = vscode.Uri.parse(location.uri, true);
+        } catch {
+            return false;
+        }
+        const existing = this.panels.get(uri.toString());
+        if (existing && existing === source) {
+            existing.post({ type: 'reveal', location });
+            return true;
+        }
+        let document: vscode.TextDocument;
+        try {
+            document = await vscode.workspace.openTextDocument(uri);
+        } catch {
+            return false;
+        }
+        await vscode.window.showTextDocument(document, { viewColumn: source?.textColumn() ?? vscode.ViewColumn.One, preserveFocus: true, preview: false });
+        const panel = await this.open(uri, false, source?.panel.viewColumn ?? vscode.ViewColumn.Beside);
+        await panel.whenReady();
+        panel.post({ type: 'reveal', location });
+        return true;
+    }
+
+    private historyChanged(): void {
+        const state = this.history.state;
+        for (const panel of this.panels.values()) {
+            panel.post({ type: 'history', state });
+        }
+        vscode.commands.executeCommand('setContext', 'hsm.diagramCanGoBack', state.back !== undefined);
+        vscode.commands.executeCommand('setContext', 'hsm.diagramCanGoForward', state.forward !== undefined);
+    }
+
     private autoOpen(editor: vscode.TextEditor | undefined): void {
-        if (!editor || editor.document.languageId !== 'hsm' || !vscode.workspace.getConfiguration('hsm.diagram').get<boolean>('autoOpen', false)) {
+        const language = editor?.document.languageId;
+        if (!editor || (language !== 'hsm' && language !== 'dmf') || !vscode.workspace.getConfiguration('hsm.diagram').get<boolean>('autoOpen', false)) {
             return;
         }
         const key = editor.document.uri.toString();
@@ -193,7 +296,7 @@ export class DiagramManager implements vscode.Disposable {
     }
 }
 
-/** The diagram of one `.hsm` document in a webview panel. */
+/** The diagram of one `.hsm` or `.dmf` document in a webview panel. */
 export class DiagramPanel {
 
     private textTimer?: ReturnType<typeof setTimeout>;
@@ -283,10 +386,10 @@ export class DiagramPanel {
         return this.importedUris.has(uri);
     }
 
-    /** An imported file changed: the webview gets its new text. */
-    importsChanged(): void {
+    /** An imported file or another file of the workspace changed: the webview gets its new text. */
+    importsChanged(delay = TEXT_DEBOUNCE_MS): void {
         clearTimeout(this.textTimer);
-        this.textTimer = setTimeout(() => this.sendText(), TEXT_DEBOUNCE_MS);
+        this.textTimer = setTimeout(() => this.sendText(), delay);
     }
 
     cursorMoved(offset: number): void {
@@ -299,19 +402,23 @@ export class DiagramPanel {
         const document = this.document;
         const text = document.getText();
         const version = document.version;
-        // the texts of the imported state machines (open documents with their unsaved changes, else the files)
+        // the texts of the imported files (open documents with their unsaved changes, else the files) and of
+        // all state machines and structure files of the workspace (queries across files)
         const headers = headerSettingsFor(document.uri);
-        const files = collectImportedFiles(document.uri.toString(), text, readText, 100, headers).catch(() => ({}));
+        const imports = collectImportedFiles(document.uri.toString(), text, readText, 100, headers).catch(() => ({}));
+        const workspace = this.manager.workspaceFiles.texts().catch(() => ({}));
         // posted in order (an older text must not overwrite a newer one)
-        this.sendQueue = this.sendQueue.then(() => files).then(imported => {
+        this.sendQueue = this.sendQueue.then(() => Promise.all([imports, workspace])).then(([imported, all]) => {
             this.importedUris = new Set(Object.keys(imported));
+            const files: Record<string, string> = { ...all, ...imported };
+            delete files[document.uri.toString()];
             this.post({
                 type: 'text',
                 text,
                 version,
                 fileName: path.basename(document.uri.path),
                 uri: document.uri.toString(),
-                files: imported,
+                files,
                 headers
             });
         });
@@ -329,6 +436,7 @@ export class DiagramPanel {
             case 'ready':
                 this.ready = true;
                 this.post({ type: 'settings', settings: this.manager.settings() });
+                this.post({ type: 'history', state: this.manager.history.state });
                 this.sendText();
                 this.readyWaiters.splice(0).forEach(resolve => resolve());
                 break;
@@ -360,7 +468,7 @@ export class DiagramPanel {
                 break;
             }
             case 'command':
-                await vscode.commands.executeCommand(`hsm.${message.command}`, this.document.uri);
+                await vscode.commands.executeCommand(`hsm.${message.command}`, this.document.uri, message.element);
                 break;
             case 'png': {
                 const request = this.rasterizeRequests.get(message.requestId);
@@ -381,7 +489,58 @@ export class DiagramPanel {
                 await this.manager.open(uri);
                 break;
             }
+            case 'openLocation': {
+                const ok = await this.manager.openLocation(message.location, this, message.from).catch(() => false);
+                this.post({ type: 'locationResult', requestId: message.requestId, ok });
+                break;
+            }
+            case 'navigate':
+                await this.manager.navigate(message.direction, message.from, this);
+                break;
+            case 'workspaceEdit':
+                await this.applyWorkspaceEdit(message.requestId, message.version, message.edits, message.hashes);
+                break;
         }
+    }
+
+    /**
+     * Applies the edits of several files (e.g. a rename in a structure file that updates the files using the
+     * element) as one workspace edit, undone together. The edits of this document must be based on its
+     * current version, those of the other files on their current texts (`hashes`).
+     */
+    private async applyWorkspaceEdit(requestId: number, version: number, edits: Record<string, OffsetEdit[]>, hashes: Record<string, number>): Promise<void> {
+        const document = await this.currentDocument();
+        const answer = (ok: boolean, message?: string) => this.post({
+            type: 'editResult', requestId, ok, text: document.getText(), version: document.version, message
+        });
+        const workspaceEdit = new vscode.WorkspaceEdit();
+        try {
+            for (const [key, list] of Object.entries(edits)) {
+                const uri = vscode.Uri.parse(key, true);
+                const own = uri.toString() === this.key;
+                const target = own ? document : await vscode.workspace.openTextDocument(uri);
+                const text = target.getText();
+                if (own ? !canApplyEdit(version, document.version) : textHash(text) !== hashes[key]) {
+                    answer(false, `${path.basename(uri.path)} was changed in the meantime – please try again.`);
+                    return;
+                }
+                for (const edit of toRangeEdits(list, text.length, offset => target.positionAt(offset))) {
+                    workspaceEdit.replace(uri, new vscode.Range(edit.start, edit.end), edit.text);
+                }
+            }
+        } catch (error) {
+            answer(false, error instanceof Error ? error.message : String(error));
+            return;
+        }
+        this.applyingEdit = true;
+        let ok = false;
+        try {
+            ok = await vscode.workspace.applyEdit(workspaceEdit);
+        } finally {
+            this.applyingEdit = false;
+        }
+        // (the changed texts of the other files are sent with the next text message, see WorkspaceFiles)
+        answer(ok, ok ? undefined : 'The edit could not be applied.');
     }
 
     /** Applies the text edits of a diagram operation to the document (undoable, marks the document dirty). */
@@ -421,7 +580,7 @@ export class DiagramPanel {
     }
 
     /** The column for the text editor: not the one of the diagram. */
-    private textColumn(): vscode.ViewColumn {
+    textColumn(): vscode.ViewColumn {
         const visible = this.textEditors()[0];
         if (visible?.viewColumn) {
             return visible.viewColumn;

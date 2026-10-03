@@ -13,7 +13,8 @@ import { bundleOptions } from '../../scripts/bundles.mjs';
  * Starts the bundled language server (built into a temporary directory with the options of the
  * extension build) with `--stdio` and talks LSP to it: diagnostics, cross-file linking of test files
  * via the workspace index, hover with documentation, definition, references, rename, formatting,
- * symbols, folding, completion and semantic tokens.
+ * symbols, folding, completion and semantic tokens; structure files (.dmf) with links to the component
+ * types, ports and state machines of other files of the workspace.
  */
 
 interface Diagnostic {
@@ -101,6 +102,49 @@ const VALVE = `statemachine Valve {
 }
 `;
 
+const PUMP = `statemachine Pump {
+    interface:
+        in event start : integer
+        in event stop
+        out event done
+    [*] -> Idle
+    state Idle
+    state Running
+    Idle -> Running : start
+    Running -> Idle : stop / raise done
+}
+`;
+
+const PARTS = `interface PumpCmd {
+    event start : integer
+    event stop
+}
+
+/** The pump control. */
+component PumpControl {
+    behavior "pump.hsm"
+    provides async cmd : PumpCmd
+    requires async done : event done
+}
+
+component Panel {
+    requires async pump : PumpCmd
+    provides async done : event done
+}
+`;
+
+const PLANT = `import "parts.dmf"
+
+system Plant {
+    thread Main {
+        panel : Panel
+        pump : PumpControl
+    }
+    connect panel.pump -> pump.cmd
+    connect pump.done -> panel.done
+}
+`;
+
 let dir: string;
 let server: ChildProcess;
 let connection: MessageConnection;
@@ -151,6 +195,11 @@ beforeAll(async () => {
     // a header found through the include paths of the headers block of hsm.gen.json
     await fs.mkdir(path.join(dir, 'include'));
     await fs.writeFile(path.join(dir, 'include/shared.h'), 'namespace shared { constexpr int kOffset = 1; }\n');
+    // structure files: the system links the component types of another file (not opened by the tests first)
+    await fs.mkdir(path.join(dir, 'device'));
+    await fs.writeFile(path.join(dir, 'device/pump.hsm'), PUMP);
+    await fs.writeFile(path.join(dir, 'device/parts.dmf'), PARTS);
+    await fs.writeFile(path.join(dir, 'device/plant.dmf'), PLANT);
     await fs.writeFile(path.join(dir, 'hsm.gen.json'), JSON.stringify({ models: ['models/*.hsm'], cpp: {}, headers: { includePaths: ['include'] } }));
     await esbuild.build({ ...bundleOptions('server', { outdir: path.join(dir, 'out') }), logLevel: 'warning', sourcemap: false });
 
@@ -342,5 +391,96 @@ describe('HSM language server', () => {
         await fs.writeFile(path.join(dir, 'models/types.h'), TYPES_H);
         connection.sendNotification('workspace/didChangeWatchedFiles', { changes: [{ uri: uriOf('models/types.h'), type: 2 }] });
         await diagnosticsFor(valveUri, d => !d.some(e => e.severity === 1));
+    });
+});
+
+describe('structure files (.dmf) in the language server', () => {
+    const plantUri = () => uriOf('device/plant.dmf');
+    const partsUri = () => uriOf('device/parts.dmf');
+
+    it('links component types of other files of the workspace and reports problems', async () => {
+        open('device/plant.dmf', 'dmf', PLANT);
+        expect((await diagnosticsFor(plantUri())).filter(d => d.severity === 1)).toEqual([]);
+        // a port that does not exist in the component type of the other file
+        connection.sendNotification('textDocument/didChange', {
+            textDocument: { uri: plantUri(), version: 2 }, contentChanges: [{ text: PLANT.replace('panel.pump ->', 'panel.pumps ->') }]
+        });
+        const errors = await diagnosticsFor(plantUri(), d => d.some(e => e.severity === 1));
+        expect(errors.some(d => /pumps/.test(d.message))).toBe(true);
+        connection.sendNotification('textDocument/didChange', { textDocument: { uri: plantUri(), version: 3 }, contentChanges: [{ text: PLANT }] });
+        await diagnosticsFor(plantUri(), d => !d.some(e => e.severity === 1));
+    });
+
+    it('checks the ports of a component against its state machine', async () => {
+        open('device/parts.dmf', 'dmf', PARTS);
+        expect((await diagnosticsFor(partsUri())).filter(d => d.severity === 1)).toEqual([]);
+        connection.sendNotification('textDocument/didChange', {
+            textDocument: { uri: partsUri(), version: 2 }, contentChanges: [{ text: PARTS.replace('requires async done : event done', 'requires async done : event finished') }]
+        });
+        const problems = await diagnosticsFor(partsUri(), d => d.some(e => /finished/.test(e.message)));
+        expect(problems.some(d => /finished/.test(d.message))).toBe(true);
+        connection.sendNotification('textDocument/didChange', { textDocument: { uri: partsUri(), version: 3 }, contentChanges: [{ text: PARTS }] });
+        await diagnosticsFor(partsUri(), d => !d.some(e => /finished/.test(e.message)));
+    });
+
+    it('navigates to component types, state machines and providers (implementation)', async () => {
+        // the type of an instance: the component type in the other file
+        const definition = await connection.sendRequest<Array<{ targetUri?: string, uri?: string }>>('textDocument/definition', {
+            textDocument: { uri: plantUri() }, position: position(PLANT, 'PumpControl', 0, 2)
+        });
+        const target = Array.isArray(definition) ? definition[0] : definition;
+        expect(target.targetUri ?? target.uri).toBe(partsUri());
+
+        // the behavior of a component: its state machine
+        const behavior = await connection.sendRequest<Array<{ targetUri?: string, uri?: string }>>('textDocument/definition', {
+            textDocument: { uri: partsUri() }, position: position(PARTS, 'pump.hsm', 0, 2)
+        });
+        const machine = Array.isArray(behavior) ? behavior[0] : behavior;
+        expect(machine.targetUri ?? machine.uri).toBe(uriOf('device/pump.hsm'));
+
+        // go to provider (implementation) of a required port: the instance providing it (through the connection)
+        const providers = await connection.sendRequest<Array<{ targetUri: string, targetSelectionRange: { start: { line: number } } }> | null>('textDocument/implementation', {
+            textDocument: { uri: plantUri() }, position: position(PLANT, 'panel.pump', 0, 8)
+        });
+        expect(providers).toHaveLength(1);
+        expect(providers![0].targetUri).toBe(plantUri());
+        expect(providers![0].targetSelectionRange.start.line).toBe(position(PLANT, 'pump : PumpControl').line);
+    });
+
+    it('finds references and renames a component type across files', async () => {
+        const references = await connection.sendRequest<Array<{ uri: string }>>('textDocument/references', {
+            textDocument: { uri: partsUri() }, position: position(PARTS, 'PumpControl', 0, 2), context: { includeDeclaration: true }
+        });
+        expect(new Set(references.map(r => r.uri))).toEqual(new Set([partsUri(), plantUri()]));
+
+        const edit = await connection.sendRequest<{ changes: Record<string, Array<{ newText: string }>> }>('textDocument/rename', {
+            textDocument: { uri: partsUri() }, position: position(PARTS, 'PumpControl', 0, 2), newName: 'PumpUnit'
+        });
+        expect(edit.changes[partsUri()].map(e => e.newText)).toEqual(['PumpUnit']);
+        expect(edit.changes[plantUri()].map(e => e.newText)).toEqual(['PumpUnit']);
+    });
+
+    it('hovers, completes, formats and lists the symbols of structure files', async () => {
+        const hover = await connection.sendRequest<{ contents: { value: string } } | null>('textDocument/hover', {
+            textDocument: { uri: plantUri() }, position: position(PLANT, 'PumpControl', 0, 2)
+        });
+        expect(hover?.contents.value).toContain('The pump control.');
+
+        const completion = await connection.sendRequest<{ items: Array<{ label: string }> } | Array<{ label: string }>>('textDocument/completion', {
+            textDocument: { uri: plantUri() }, position: position(PLANT, 'panel.pump ->', 0, 6)
+        });
+        const labels = (Array.isArray(completion) ? completion : completion.items).map(item => item.label);
+        expect(labels).toContain('pump');
+
+        const unformatted = 'system Fmt {\nthread T {\n        }\n}\n';
+        open('device/fmt.dmf', 'dmf', unformatted);
+        await diagnosticsFor(uriOf('device/fmt.dmf'));
+        const edits = await connection.sendRequest<unknown[]>('textDocument/formatting', {
+            textDocument: { uri: uriOf('device/fmt.dmf') }, options: { tabSize: 4, insertSpaces: true }
+        });
+        expect(edits.length).toBeGreaterThan(0);
+
+        const symbols = await connection.sendRequest<Array<{ name: string }>>('textDocument/documentSymbol', { textDocument: { uri: partsUri() } });
+        expect(symbols.map(s => s.name)).toEqual(expect.arrayContaining(['PumpCmd', 'PumpControl', 'Panel']));
     });
 });

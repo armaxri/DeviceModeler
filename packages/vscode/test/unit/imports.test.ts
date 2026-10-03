@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectImportedFiles, hsmImportPaths } from '../../src/extension/logic/imports.js';
+import { collectImportedFiles, dmfReferencedPaths, hsmImportPaths } from '../../src/extension/logic/imports.js';
 
 describe('imported files of the webview', () => {
     it('finds the .hsm import paths of a text (not headers)', () => {
@@ -28,5 +28,22 @@ describe('imported files of the webview', () => {
         const files = await collectImportedFiles('file:///w/valve.hsm', 'statemachine Valve {\n    import "types.h" "shared.h"\n}', read, 100,
             { includePaths: ['file:///inc'] });
         expect(Object.keys(files).sort()).toEqual(['file:///inc/motor/limits.h', 'file:///inc/shared.h', 'file:///w/base/errors.h', 'file:///w/types.h']);
+    });
+
+    it('finds the files a structure file refers to: imports and the state machines of behaviors', () => {
+        const text = 'import "types.dmf" "door_types.h"\nimport "lamp.hsm"\ncomponent Door {\n    behavior "door.hsm"\n}\ncomponent Lamp {\n    behavior Lamp\n}\n';
+        expect(dmfReferencedPaths(text)).toEqual({ models: ['types.dmf', 'lamp.hsm', 'door.hsm'], headers: ['door_types.h'] });
+        expect(dmfReferencedPaths('system {')).toEqual({ models: [], headers: [] });
+    });
+
+    it('collects the files of a structure file transitively: structure files, state machines and their headers', async () => {
+        const disk: Record<string, string> = {
+            'file:///w/types.dmf': 'struct Position { x : real }',
+            'file:///w/door.hsm': 'statemachine Door {\n    import "door_types.h"\n    [*] -> S\n    state S\n}',
+            'file:///w/door_types.h': 'namespace door { enum class Mode { A }; }'
+        };
+        const read = async (uri: string) => disk[uri];
+        const files = await collectImportedFiles('file:///w/system.dmf', 'import "types.dmf"\ncomponent Door {\n    behavior "door.hsm"\n}\n', read);
+        expect(Object.keys(files).sort()).toEqual(['file:///w/door.hsm', 'file:///w/door_types.h', 'file:///w/types.dmf']);
     });
 });
