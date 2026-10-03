@@ -3,7 +3,7 @@ import * as ast from './generated/ast.js';
 import { resolvedBehavior } from './dmf-imports.js';
 import { instanceType, structureInstances } from './dmf-model.js';
 import { findProviders, findRequirers, portEndpoint, portRoute, structureContexts, type PortEndpoint, type Route } from './dmf-routes.js';
-import { dmfRenameEdits } from './edit/dmf-edits.js';
+import { DmfEditor, dmfRenameEdits } from './edit/dmf-edits.js';
 import type { TextEdit } from './edit/model-edits.js';
 import { loadImports, replaceDocument } from './hsm-document.js';
 import { createHsmServices } from './hsm-module.js';
@@ -216,6 +216,32 @@ export class DmfWorkspace {
         const node = this.nodeAt(uri, offset, n => 'name' in n && typeof (n as { name: unknown }).name === 'string'
             && (ast.isComponentType(n) || ast.isPort(n) || ast.isComponentInstance(n) || ast.isThread(n) || ast.isPortInterface(n) || ast.isStructDeclaration(n)));
         return node ? dmfRenameEdits(this.services.Dmf, node as AstNode & { name: string }, newName) : undefined;
+    }
+
+    /**
+     * The edits of the other structure files of the workspace that delete the connections and delegations
+     * using ports of the file `uri` (identified by the offsets of their declarations), by URI: deleting a
+     * port of a component type also deletes its connections in the structures of other files. Files
+     * without such connections are not in the result.
+     */
+    portDeletionEdits(uri: string, portOffsets: readonly number[]): Map<string, TextEdit[]> {
+        const ports = new Set(portOffsets.map(offset => this.nodeAt(uri, offset, ast.isPort)).filter((p): p is ast.Port => p !== undefined));
+        const result = new Map<string, TextEdit[]>();
+        const own = normalizeUri(uri);
+        for (const document of this.roots) {
+            if (ports.size === 0 || document.uri.toString() === own) {
+                continue;
+            }
+            const model = document.parseResult.value;
+            const uses = (reference: ast.PortReference | undefined) => reference?.port?.ref !== undefined && ports.has(reference.port.ref);
+            const statements = model.elements.filter(ast.isStructure)
+                .flatMap(structure => [...structure.connections, ...structure.delegations])
+                .filter(statement => uses(statement.source) || uses(statement.target));
+            if (statements.length > 0) {
+                result.set(document.uri.toString(), new DmfEditor(document.textDocument.getText(), model).deleteElements(statements).edits);
+            }
+        }
+        return result;
     }
 }
 

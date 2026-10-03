@@ -153,9 +153,12 @@ export interface DiagramHost {
     openStateMachine?(submachine: DiagramSubmachine): boolean;
     setStatus(message: string, severity?: StatusSeverity): void;
     /**
-     * Applies edits to other files of the workspace (by URI, offsets relative to their texts as passed to
-     * the language service), e.g. a rename in a structure file that updates the files referencing the
-     * element. Without it such renames are refused.
+     * Applies edits to several files of the workspace (by URI, offsets relative to their texts as passed to
+     * the language service; the edited file may be among them, with offsets relative to {@link getText}),
+     * as one step where possible (VS Code: one workspace edit, undone together), e.g. a rename in a
+     * structure file that updates the files referencing the element, or the deletion of a port with its
+     * connections in other files. Resolves once {@link getText} returns the changed text. Without it such
+     * renames are refused (and deletions change the edited file only).
      */
     applyWorkspaceEdits?(edits: ReadonlyMap<string, readonly TextEdit[]>): Promise<boolean>;
     /**

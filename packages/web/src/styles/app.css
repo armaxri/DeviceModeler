@@ -499,6 +499,81 @@ body:not(.structure-mode) .ibd-element-choice {
     display: none;
 }
 
+/* a structure file of data types and interfaces only: an overview of them */
+#ibd-types {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+    padding: 18px 20px;
+    color: var(--ui-text, inherit);
+    font-size: 13px;
+}
+
+.ibd-types-title {
+    margin-bottom: 12px;
+    font-weight: 600;
+    color: var(--ui-muted, #6a737d);
+}
+
+.ibd-types-cards {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 14px;
+}
+
+.ibd-type-card {
+    min-width: 170px;
+    max-width: 320px;
+    padding: 8px 12px 10px;
+    border: 1px solid var(--ui-border);
+    border-radius: 4px;
+    background: var(--ui-panel);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    cursor: pointer;
+}
+
+.ibd-type-card:hover {
+    border-color: var(--ui-accent, #a80036);
+}
+
+.ibd-type-kind {
+    text-align: center;
+    font-size: 11px;
+    color: var(--ui-muted, #6a737d);
+}
+
+.ibd-type-name {
+    text-align: center;
+    font-weight: 700;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--ui-border);
+}
+
+.ibd-type-description {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--ui-muted, #6a737d);
+}
+
+.ibd-type-card ul {
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.ibd-type-card .member-name {
+    font-weight: 600;
+}
+
+.ibd-type-card li.empty {
+    color: var(--ui-muted, #6a737d);
+    font-style: italic;
+}
+
 /* ---- properties ---- */
 
 #properties {

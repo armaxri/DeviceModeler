@@ -30,16 +30,6 @@ export function instanceType(instance: ast.ComponentInstance | undefined): ast.C
     return instance?.type?.ref;
 }
 
-/** The ports of a component type. */
-export function componentPorts(type: ast.ComponentType | undefined): readonly ast.Port[] {
-    return type?.ports ?? [];
-}
-
-/** The component type (component or structure) declaring a port. */
-export function portOwner(port: ast.Port): ast.ComponentType {
-    return port.$container;
-}
-
 /** Whether the component type is a composite (structure or system). */
 export function isCompositeType(type: ast.ComponentType | undefined): type is ast.Structure {
     return ast.isStructure(type);

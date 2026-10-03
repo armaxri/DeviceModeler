@@ -2,7 +2,7 @@ import type { AstNode, LangiumDocument } from 'langium';
 import type { SModelElementImpl } from 'sprotty';
 import type { SModelRoot } from 'sprotty-protocol';
 import {
-    BUILTIN_TYPES, DmfEditor, EditError, IBD_OVERVIEW_ID, applyEdits, checkRename, endpointLabel, findProviders, findRequirers, ibdChoices, ibdElementAt,
+    BUILTIN_TYPES, DmfEditor, EditError, IBD_OVERVIEW_ID, applyEdits, behaviorMachine, checkRename, docComment, mapOffset, endpointLabel, findProviders, findRequirers, ibdChoices, ibdElementAt,
     ibdNodes, ibdRouteElements, instanceType, isComponent, isComponentInstance, isComponentType, isConnection, isDelegation, isPort, isPortInterface,
     isStructDeclaration, isStructure, isThread, layoutStructure, normalizeUri, planConnection, portEndpoint, portTypeLabel, routeContinuations, routeIdsAt,
     threadInstances, threadOf, threadSettings, visibleElements,
@@ -149,6 +149,7 @@ export class StructureDiagram {
         this.routeInfo = undefined;
         this.cancelConnector();
         document.getElementById('ibd-element-select')?.parentElement?.setAttribute('hidden', '');
+        this.renderTypes(undefined);
         byId('diagram-area').classList.remove('route-highlight', 'structure-diagram');
     }
 
@@ -218,7 +219,9 @@ export class StructureDiagram {
         this.updateSelector(choices.map(c => ({ id: c.id, label: c.label })), layout ? elementOf(layout) : undefined);
         if (!layout) {
             this.state = undefined;
-            banner.hidden = false;
+            // a file of data types and interfaces: an overview of them instead of a diagram
+            const types = this.renderTypes(parsed);
+            banner.hidden = types;
             banner.textContent = 'The file declares no components, structures or systems – there is nothing to show in the diagram. '
                 + 'Add one with the buttons of the properties panel.';
             await this.context.show({ type: 'graph:ibd', id: '#empty', children: [] } as SModelRoot);
@@ -226,6 +229,7 @@ export class StructureDiagram {
             renderBreadcrumb([]);
             return;
         }
+        this.renderTypes(undefined);
         this.state = { parsed, layout, issues: this.computeIssues(parsed, layout), element: elementOf(layout) };
         for (const id of [...this.context.selection]) {
             if (!layout.elements.has(id)) {
@@ -282,6 +286,40 @@ export class StructureDiagram {
         this.renderProperties();
     }
 
+    /**
+     * The overview of the structs and interfaces of a file without component types (cards with their
+     * fields and events; a click selects the declaration in the text). Without `parsed` (or types) the
+     * overview is removed. Returns whether it is shown.
+     */
+    private renderTypes(parsed: ParsedDmfModel | undefined): boolean {
+        const types = parsed?.model.elements.filter(e => isStructDeclaration(e) || isPortInterface(e)) ?? [];
+        document.getElementById('ibd-types')?.remove();
+        if (types.length === 0) {
+            return false;
+        }
+        const text = (node: AstNode | undefined) => node?.$cstNode?.text.replace(/\s+/g, ' ') ?? '';
+        const cards = types.map(type => {
+            const rows = isStructDeclaration(type)
+                ? type.fields.map(f => h('li', {}, h('span', { class: 'member-name' }, f.name), ` : ${text(f.type)}`))
+                : isPortInterface(type) ? type.events.map(e => h('li', {}, 'event ', h('span', { class: 'member-name' }, e.name), e.type ? ` : ${text(e.type)}` : '')) : [];
+            const card = h('section', { class: 'ibd-type-card', title: 'Show the declaration in the text' },
+                h('div', { class: 'ibd-type-kind' }, isStructDeclaration(type) ? '«struct»' : '«interface»'),
+                h('div', { class: 'ibd-type-name' }, type.name),
+                ...[type.description, docComment(type)].filter(d => d).map(d => h('div', { class: 'ibd-type-description' }, d!)),
+                h('ul', {}, ...(rows.length > 0 ? rows : [h('li', { class: 'empty' }, isStructDeclaration(type) ? 'no fields' : 'no events')])));
+            card.addEventListener('click', () => {
+                if (type.$cstNode) {
+                    this.context.host.selectText({ offset: type.$cstNode.offset, end: type.$cstNode.end });
+                }
+            });
+            return card;
+        });
+        const overview = h('div', { id: 'ibd-types' },
+            h('div', { class: 'ibd-types-title' }, `Data types and interfaces of ${fileName(this.uri)}`), h('div', { class: 'ibd-types-cards' }, ...cards));
+        byId('diagram-area').append(overview);
+        return true;
+    }
+
     /** The selector of the shown element (hidden if there is only one). */
     private updateSelector(choices: Array<{ id: string, label: string }>, current: string | undefined): void {
         let select = document.getElementById('ibd-element-select') as HTMLSelectElement | null;
@@ -330,6 +368,19 @@ export class StructureDiagram {
             }
             issue.messages.push(typeof diagnostic.message === 'string' ? diagnostic.message : diagnostic.message.value);
             issues.set(id, issue);
+        }
+        // problems of other files: an instance whose component type (in an imported file) or state machine has errors
+        for (const [id, node] of layout.elements) {
+            if (!isComponentInstance(node)) {
+                continue;
+            }
+            const messages = importedProblems(node, parsed);
+            if (messages.length > 0) {
+                const issue = issues.get(id) ?? { severity: 'error', messages: [] };
+                issue.severity = 'error';
+                issue.messages.push(...messages);
+                issues.set(id, issue);
+            }
         }
         return issues;
     }
@@ -1117,18 +1168,38 @@ export class StructureDiagram {
                 this.context.setStatus(`'${node.name}' is also used in other files – rename it in the text editor.`, 'warning');
                 return;
             }
-            if (!await this.context.host.applyWorkspaceEdits(others)) {
+            // all files in one step (VS Code: one workspace edit, undone together)
+            if (!await this.applyWorkspaceEdits(edits, own.length > 0 ? mapOffset(node.$cstNode.offset, [...own]) : undefined)) {
                 this.context.setStatus(`The other files using '${node.name}' could not be changed.`, 'error');
                 return;
             }
-        }
-        if (own.length > 0) {
+        } else if (own.length > 0) {
             await this.applyEdit(() => ({ edits: own }));
         } else {
             await this.update(true);
         }
-        const files = [...others.keys()].map(uri => decodeURIComponent(uri.replace(/^.*\//, '')));
-        this.context.setStatus(`Renamed '${node.name}' to '${name}'${files.length > 0 ? ` (also in ${files.join(', ')})` : ''}.`);
+        this.context.setStatus(`Renamed '${node.name}' to '${name}'${others.size > 0 ? ` (also in ${fileNames(others.keys())})` : ''}.`);
+    }
+
+    /**
+     * Applies edits of several files (including the edited one, by normalized URI) through the host, then
+     * updates the diagram and selects the element at `selectOffset` of the changed text.
+     */
+    private async applyWorkspaceEdits(edits: ReadonlyMap<string, readonly TextEdit[]>, selectOffset?: number): Promise<boolean> {
+        if (this.editing || !this.context.host.applyWorkspaceEdits) {
+            return false;
+        }
+        this.editing = true;
+        try {
+            if (!await this.context.host.applyWorkspaceEdits(edits)) {
+                return false;
+            }
+        } finally {
+            this.editing = false;
+        }
+        this.pendingSelectOffset = selectOffset;
+        await this.update(true);
+        return true;
     }
 
     /** Deletes the selected elements of the edited file (an instance with its connections, a thread keeping its instances, …). */
@@ -1157,7 +1228,42 @@ export class StructureDiagram {
             return;
         }
         this.context.selection.clear();
-        this.applyEdit(editor => editor.deleteElements(nodes));
+        const ports = nodes.flatMap(node => isPort(node) ? [node] : isComponentType(node) ? node.ports : []);
+        if (ports.length > 0 && this.context.host.applyWorkspaceEdits) {
+            this.deleteWithUsages(state, nodes, ports);
+        } else {
+            this.applyEdit(editor => editor.deleteElements(nodes));
+        }
+    }
+
+    /**
+     * Deletes elements including ports: the connections and delegations using the ports in other files of
+     * the workspace are deleted as well (one step with the edits of the edited file).
+     */
+    private async deleteWithUsages(state: StructureState, nodes: AstNode[], ports: Port[]): Promise<void> {
+        const text = this.context.host.getText();
+        const ws = await this.context.language.structureWorkspace(text);
+        const others = text === state.parsed.text && this.state === state
+            ? ws.portDeletionEdits(this.uri, ports.filter(p => p.$cstNode).map(p => p.$cstNode!.offset)) : new Map<string, TextEdit[]>();
+        if (others.size === 0) {
+            await this.applyEdit(editor => editor.deleteElements(nodes));
+            return;
+        }
+        let own: TextEdit[];
+        try {
+            own = new DmfEditor(state.parsed.text, state.parsed.model).deleteElements(nodes).edits;
+        } catch (error) {
+            if (error instanceof EditError) {
+                this.context.setStatus(error.message, 'error');
+                return;
+            }
+            throw error;
+        }
+        if (await this.applyWorkspaceEdits(new Map([[normalizeUri(this.uri), own], ...others]))) {
+            this.context.setStatus(`Deleted, with the connections in ${fileNames(others.keys())}.`);
+        } else {
+            this.context.setStatus(`The connections in ${fileNames(others.keys())} could not be deleted.`, 'error');
+        }
     }
 
     // -----------------------------------------------------------------------------------------
@@ -1532,4 +1638,47 @@ function endLabel(location: StructureLocation): string {
     const id = location.id ?? location.element;
     const local = id.includes('/') ? id.substring(id.indexOf('/') + 1) : id.substring(id.indexOf('.') + 1);
     return [...(location.context?.path ?? []), local].join('.');
+}
+
+/** The file names of URIs, for messages. */
+function fileNames(uris: Iterable<string>): string {
+    return [...uris].map(fileName).join(', ');
+}
+
+/**
+ * The errors of other files concerning an instance: errors in the declaration of its component type in an
+ * imported structure file and errors of the state machine implementing it (`behavior`), as messages
+ * naming the file.
+ */
+function importedProblems(instance: ComponentInstance, parsed: ParsedDmfModel): string[] {
+    const type = instanceType(instance);
+    const typeDocument = type ? documentOf(type) : undefined;
+    const messages: string[] = [];
+    const errorsOf = (document: LangiumDocument | undefined, range?: { start: number, end: number }) => {
+        if (!document || document === parsed.document) {
+            return [];
+        }
+        const errors = (document.diagnostics ?? []).filter(d => d.severity === 1);
+        const syntax = document.parseResult.lexerErrors.length + document.parseResult.parserErrors.length;
+        return [
+            ...(syntax > 0 && !range ? ['syntax errors'] : []),
+            ...errors.filter(d => !range || inRange(document.textDocument.offsetAt(d.range.start), range)).map(d => d.message)
+        ];
+    };
+    if (type?.$cstNode && typeDocument) {
+        for (const message of errorsOf(typeDocument, { start: type.$cstNode.offset, end: type.$cstNode.end })) {
+            messages.push(`${type.name} (${fileName(typeDocument.uri.toString())}): ${message}`);
+        }
+    }
+    const machine = isComponent(type) ? behaviorMachine(type) : undefined;
+    const machineDocument = machine ? documentOf(machine) : undefined;
+    const machineErrors = errorsOf(machineDocument);
+    if (machine && machineDocument && machineErrors.length > 0) {
+        messages.push(`State machine ${machine.name} (${fileName(machineDocument.uri.toString())}) has ${machineErrors.length === 1 ? 'an error' : `${machineErrors.length} errors`}: ${machineErrors[0]}`);
+    }
+    return messages;
+}
+
+function inRange(offset: number, range: { start: number, end: number }): boolean {
+    return offset >= range.start && offset <= range.end;
 }

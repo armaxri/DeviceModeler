@@ -509,15 +509,21 @@ export class HsmApp implements DiagramHost {
     }
 
     /**
-     * Edits of other files of the virtual workspace (e.g. a rename of a component type updating the
-     * structures using it). They are not undone with the edited file (undo them in that file).
+     * Edits of several files of the virtual workspace (e.g. a rename of a component type updating the
+     * structures using it). The edits of the edited file are an undoable step of the editor; the other
+     * files are changed directly (they are not undone with the edited file).
      */
     async applyWorkspaceEdits(edits: ReadonlyMap<string, readonly TextEdit[]>): Promise<boolean> {
         const changed = new Map<string, string>();
+        let own: readonly TextEdit[] | undefined;
         for (const [uri, list] of edits) {
             const name = fileNameOf(uri);
-            const text = name === this.fileName ? this.editor.getValue() : this.files.get(name) ?? EXAMPLES.find(e => e.fileName === name)?.text;
-            if (text === undefined || name === this.fileName) {
+            if (name === this.fileName) {
+                own = list;
+                continue;
+            }
+            const text = this.files.get(name) ?? EXAMPLES.find(e => e.fileName === name)?.text;
+            if (text === undefined) {
                 return false;
             }
             changed.set(name, applyEdits(text, [...list]));
@@ -527,7 +533,7 @@ export class HsmApp implements DiagramHost {
         }
         this.saveFiles();
         this.updateWorkspace();
-        return true;
+        return own === undefined || own.length === 0 || this.applyTextEdits(own);
     }
 
     /** Double-click on a submachine state: opens the file of its state machine if it is available. */

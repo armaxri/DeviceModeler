@@ -312,6 +312,25 @@ describe('structure edits: rename and delete', () => {
         expect(text).toContain('structure DriveUnit {\n    requires async status : MotorStatus\n');
     });
 
+    test('delete a port of a component type: its connections in the structures of other files', async () => {
+        const workspace = new DmfWorkspace();
+        const files: Record<string, string> = {};
+        for (const file of DEVICE_FILES) {
+            files[`file:///ws/${file}`] = deviceFile(file);
+        }
+        await workspace.update(files);
+        const components = workspace.model('file:///ws/components.dmf')!;
+        const motor = components.elements.find(e => e.name === 'MotorController') as ast.Component;
+        const ports = ['pwm', 'ctrl'].map(name => motor.ports.find(p => p.name === name)!.$cstNode!.offset);
+        const edits = workspace.portDeletionEdits('file:///ws/components.dmf', ports);
+        expect([...edits.keys()]).toEqual(['file:///ws/drive.dmf']);
+        const drive = applyEdits(files['file:///ws/drive.dmf'], edits.get('file:///ws/drive.dmf')!);
+        expect(drive).not.toContain('motor.pwm');
+        expect(drive).not.toContain('delegate ctrl -> motor.ctrl');
+        expect(drive).toContain('    connect switches.events -> motor.sensors\n    delegate motor.status -> status\n}');
+        expect(workspace.portDeletionEdits('file:///ws/components.dmf', [])).toEqual(new Map());
+    });
+
     test('delete a thread: its instances stay in the structure', async () => {
         const { text, errors } = await edit('drive.dmf', (e, m) => e.deleteElements([structure(m, 'DriveUnit').threads[0]]));
         expect(errors).toEqual([]);
