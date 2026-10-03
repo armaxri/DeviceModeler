@@ -1,8 +1,8 @@
 /**
  * Manual ("hand-arranged") diagram layouts (experimental).
  *
- * A manual layout is stored next to the model in a sidecar file `<model>.hsm.layout` (JSON), so the
- * `.hsm` text stays free of layout noise. Elements are identified by their diagram ids, which are
+ * A manual layout is stored next to the model in a sidecar file `<model>.devm.layout` (JSON), so the
+ * `.devm` text stays free of layout noise. Elements are identified by their diagram ids, which are
  * derived from the model and stable while other elements are added or removed:
  *
  * - vertices: qualified name (`Closed.Active.Playing`)
@@ -29,7 +29,7 @@ import {
     type BaseEdgeLayout, type BaseManualLayout, type BaseNodeLayout, type LayoutMode, type OrthogonalRoute, type Rect
 } from './layout-core/index.js';
 
-/** File name extension of layout sidecar files (`model.hsm` -> `model.hsm.layout`). */
+/** File name extension of layout sidecar files (`model.devm` -> `model.devm.layout`). */
 export const LAYOUT_FILE_EXTENSION = '.layout';
 
 export type RegionOrientation = 'vertical' | 'horizontal';
@@ -65,7 +65,7 @@ export function isManualLayout(layout: ManualLayout | undefined): layout is Manu
     return layout?.mode === 'manual';
 }
 
-/** `model.hsm` -> `model.hsm.layout` */
+/** `model.devm` -> `model.devm.layout` */
 export function layoutFileName(modelFile: string): string {
     return modelFile + LAYOUT_FILE_EXTENSION;
 }
@@ -87,7 +87,7 @@ function parsePoint(value: unknown, what: string): Point {
     return { x: point.x, y: point.y };
 }
 
-/** Parses and validates the content of a `.hsm.layout` file. */
+/** Parses and validates the content of a `.devm.layout` file. */
 export function parseManualLayout(text: string): ManualLayout {
     let json: unknown;
     try {

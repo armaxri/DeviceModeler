@@ -442,13 +442,13 @@ describe('sct importer', () => {
             vertex('State', 'b', { name: 'Parking', referencedStatechart: 'Motor.sct#_root' })));
         const motor = statechart('interface:\nin event start', region('main', entry('m'), state('m', 'Off'))).replace('name="Test"', 'name="Motor"');
         const [door, imported] = importSctFiles([{ fileName: 'dir/Door.sct', xml: parent }, { fileName: 'dir/Motor.sct', xml: motor }]);
-        expect(door.fileName).toBe('dir/Door.hsm');
-        expect(imported.fileName).toBe('dir/Motor.hsm');
-        expect(door.text).toContain('    import "Motor.hsm"\n');
+        expect(door.fileName).toBe('dir/Door.devm');
+        expect(imported.fileName).toBe('dir/Motor.devm');
+        expect(door.text).toContain('    import "Motor.devm"\n');
         expect(door.text).toContain('    internal:\n        var motor : Motor\n        var motor2 : Motor');
         expect(door.text).toContain('state Driving : motor');
         expect(door.text).toContain('state Parking : motor2');
-        const parsed = await parse(door.text, { 'Motor.hsm': imported.text });
+        const parsed = await parse(door.text, { 'Motor.devm': imported.text });
         expect(errors(parsed)).toEqual([]);
     });
 });

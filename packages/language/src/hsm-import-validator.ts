@@ -29,7 +29,7 @@ function executionSemantics(machine: ast.StateMachine): { mode: string, order: s
 }
 
 /**
- * Checks of imports (`import "motor.hsm"`) and submachine instances (`var motor : Motor`,
+ * Checks of imports (`import "motor.devm"`) and submachine instances (`var motor : Motor`,
  * `state Moving : motor`), see imports.ts and docs/semantics.md §9.
  */
 export class HsmImportValidator {
@@ -61,7 +61,7 @@ export class HsmImportValidator {
                 continue;
             }
             if (resolved.kind === 'unsupported') {
-                accept('error', `Cannot import '${resolved.path}': only state machines ('.hsm') and C/C++ headers ('.h', '.hpp') can be imported.`, target);
+                accept('error', `Cannot import '${resolved.path}': only state machine files ('.devm') and C/C++ headers ('.h', '.hpp') can be imported.`, target);
                 continue;
             }
             const key = resolved.uri?.toString() ?? resolved.path;
@@ -71,6 +71,10 @@ export class HsmImportValidator {
             }
             byUri.add(key);
             const imported = resolved.machine;
+            if (!imported && resolved.structureFile) {
+                accept('error', `Cannot import '${resolved.path}': it is a structure file; a state machine imports state machine files and C/C++ headers.`, target);
+                continue;
+            }
             if (!imported) {
                 const location = resolved.uri ? (resolved.uri.scheme === 'file' ? resolved.uri.fsPath : resolved.uri.path) : resolved.path;
                 accept('error', `Cannot resolve the import '${resolved.path}': the file '${location}' was not found.`, target);
@@ -118,12 +122,12 @@ export class HsmImportValidator {
             accept('error', `Error in the imported header: ${headerDiagnosticMessage(error, base)}`, target);
         }
         if (errors.length > shown.length) {
-            accept('error', `The imported header has ${errors.length - shown.length} further errors (hsm cpp-header ${resolved.path} lists all).`, target);
+            accept('error', `The imported header has ${errors.length - shown.length} further errors (devm cpp-header ${resolved.path} lists all).`, target);
         }
         const warnings = diagnostics.filter(d => d.severity === 'warning');
         if (warnings.length > 0) {
             accept('info', `The analysis of '${resolved.path}' reported ${warnings.length === 1 ? 'a warning' : `${warnings.length} warnings`}: `
-                + `${headerDiagnosticMessage(warnings[0], base)}${warnings.length > 1 ? ' (hsm cpp-header lists all)' : ''}`, target);
+                + `${headerDiagnosticMessage(warnings[0], base)}${warnings.length > 1 ? ' (devm cpp-header lists all)' : ''}`, target);
         }
     }
 

@@ -13,7 +13,7 @@ import { bundleOptions } from '../../scripts/bundles.mjs';
  * Starts the bundled language server (built into a temporary directory with the options of the
  * extension build) with `--stdio` and talks LSP to it: diagnostics, cross-file linking of test files
  * via the workspace index, hover with documentation, definition, references, rename, formatting,
- * symbols, folding, completion and semantic tokens; structure files (.dmf) with links to the component
+ * symbols, folding, completion and semantic tokens; structure files (.devm) with links to the component
  * types, ports and state machines of other files of the workspace.
  */
 
@@ -64,7 +64,7 @@ const MOTOR = `statemachine Motor {
 `;
 
 const GATE = `statemachine Gate {
-    import "parts/motor.hsm"
+    import "parts/motor.devm"
     interface:
         in event open
     internal:
@@ -122,7 +122,7 @@ const PARTS = `interface PumpCmd {
 
 /** The pump control. */
 component PumpControl {
-    behavior "pump.hsm"
+    behavior "pump.devm"
     provides async cmd : PumpCmd
     requires async done : event done
 }
@@ -133,7 +133,7 @@ component Panel {
 }
 `;
 
-const PLANT = `import "parts.dmf"
+const PLANT = `import "parts.devm"
 
 system Plant {
     thread Main {
@@ -186,21 +186,21 @@ beforeAll(async () => {
     dir = await fs.mkdtemp(path.join(os.tmpdir(), 'hsm-lsp-'));
     await fs.mkdir(path.join(dir, 'models'));
     await fs.mkdir(path.join(dir, 'tests'));
-    await fs.writeFile(path.join(dir, 'models/lamp.hsm'), LAMP);
-    await fs.writeFile(path.join(dir, 'tests/lamp.hsmtest'), LAMP_TEST);
+    await fs.writeFile(path.join(dir, 'models/lamp.devm'), LAMP);
+    await fs.writeFile(path.join(dir, 'tests/lamp.devmtest'), LAMP_TEST);
     await fs.mkdir(path.join(dir, 'models/parts'));
-    await fs.writeFile(path.join(dir, 'models/parts/motor.hsm'), MOTOR);
-    await fs.writeFile(path.join(dir, 'models/gate.hsm'), GATE);
+    await fs.writeFile(path.join(dir, 'models/parts/motor.devm'), MOTOR);
+    await fs.writeFile(path.join(dir, 'models/gate.devm'), GATE);
     await fs.writeFile(path.join(dir, 'models/types.h'), TYPES_H);
     // a header found through the include paths of the headers block of hsm.gen.json
     await fs.mkdir(path.join(dir, 'include'));
     await fs.writeFile(path.join(dir, 'include/shared.h'), 'namespace shared { constexpr int kOffset = 1; }\n');
     // structure files: the system links the component types of another file (not opened by the tests first)
     await fs.mkdir(path.join(dir, 'device'));
-    await fs.writeFile(path.join(dir, 'device/pump.hsm'), PUMP);
-    await fs.writeFile(path.join(dir, 'device/parts.dmf'), PARTS);
-    await fs.writeFile(path.join(dir, 'device/plant.dmf'), PLANT);
-    await fs.writeFile(path.join(dir, 'hsm.gen.json'), JSON.stringify({ models: ['models/*.hsm'], cpp: {}, headers: { includePaths: ['include'] } }));
+    await fs.writeFile(path.join(dir, 'device/pump.devm'), PUMP);
+    await fs.writeFile(path.join(dir, 'device/parts.devm'), PARTS);
+    await fs.writeFile(path.join(dir, 'device/plant.devm'), PLANT);
+    await fs.writeFile(path.join(dir, 'hsm.gen.json'), JSON.stringify({ models: ['models/*.devm'], cpp: {}, headers: { includePaths: ['include'] } }));
     await esbuild.build({ ...bundleOptions('server', { outdir: path.join(dir, 'out') }), logLevel: 'warning', sourcemap: false });
 
     server = spawn(process.execPath, [path.join(dir, 'out/server.cjs'), '--stdio'], { stdio: ['pipe', 'pipe', 'inherit'] });
@@ -246,17 +246,17 @@ function open(relative: string, languageId: string, text: string, version = 1): 
 
 describe('HSM language server', () => {
     it('links a test file to the state machine of another file of the workspace', async () => {
-        open('tests/lamp.hsmtest', 'hsmtest', LAMP_TEST);
-        const result = await diagnosticsFor(uriOf('tests/lamp.hsmtest'));
+        open('tests/lamp.devmtest', 'devmtest', LAMP_TEST);
+        const result = await diagnosticsFor(uriOf('tests/lamp.devmtest'));
         expect(result.filter(d => d.severity === 1)).toEqual([]);
     });
 
     it('reports errors of models and test files and updates them on changes', async () => {
-        open('models/broken.hsm', 'hsm', 'statemachine Broken {\n    [*] -> Missing\n    state A\n}\n');
-        const errors = await diagnosticsFor(uriOf('models/broken.hsm'), d => d.length > 0);
+        open('models/broken.devm', 'devm', 'statemachine Broken {\n    [*] -> Missing\n    state A\n}\n');
+        const errors = await diagnosticsFor(uriOf('models/broken.devm'), d => d.length > 0);
         expect(errors.some(d => d.severity === 1 && /Missing/.test(d.message))).toBe(true);
 
-        const uri = uriOf('tests/lamp.hsmtest');
+        const uri = uriOf('tests/lamp.devmtest');
         connection.sendNotification('textDocument/didChange', {
             textDocument: { uri, version: 2 },
             contentChanges: [{ text: LAMP_TEST.replace('active(On)', 'active(Dimmed)') }]
@@ -268,10 +268,10 @@ describe('HSM language server', () => {
     });
 
     it('shows the signature and documentation comment on hover', async () => {
-        open('models/lamp.hsm', 'hsm', LAMP);
-        await diagnosticsFor(uriOf('models/lamp.hsm'));
+        open('models/lamp.devm', 'devm', LAMP);
+        await diagnosticsFor(uriOf('models/lamp.devm'));
         const hover = await connection.sendRequest<{ contents: { value: string } }>('textDocument/hover', {
-            textDocument: { uri: uriOf('models/lamp.hsm') }, position: position(LAMP, 'toggle', 1, 2)
+            textDocument: { uri: uriOf('models/lamp.devm') }, position: position(LAMP, 'toggle', 1, 2)
         });
         expect(hover.contents.value).toContain('in event toggle');
         expect(hover.contents.value).toContain('Switches the lamp on or off.');
@@ -279,32 +279,32 @@ describe('HSM language server', () => {
 
     it('navigates from a test file to the model (definition) and finds references across files', async () => {
         const definition = await connection.sendRequest<Array<{ targetUri?: string, uri?: string }>>('textDocument/definition', {
-            textDocument: { uri: uriOf('tests/lamp.hsmtest') }, position: position(LAMP_TEST, 'toggle', 0, 2)
+            textDocument: { uri: uriOf('tests/lamp.devmtest') }, position: position(LAMP_TEST, 'toggle', 0, 2)
         });
         const target = Array.isArray(definition) ? definition[0] : definition;
-        expect(target.targetUri ?? target.uri).toBe(uriOf('models/lamp.hsm'));
+        expect(target.targetUri ?? target.uri).toBe(uriOf('models/lamp.devm'));
 
         const references = await connection.sendRequest<Array<{ uri: string }>>('textDocument/references', {
-            textDocument: { uri: uriOf('models/lamp.hsm') }, position: position(LAMP, 'toggle', 0, 2), context: { includeDeclaration: false }
+            textDocument: { uri: uriOf('models/lamp.devm') }, position: position(LAMP, 'toggle', 0, 2), context: { includeDeclaration: false }
         });
-        expect(new Set(references.map(r => r.uri))).toEqual(new Set([uriOf('models/lamp.hsm'), uriOf('tests/lamp.hsmtest')]));
+        expect(new Set(references.map(r => r.uri))).toEqual(new Set([uriOf('models/lamp.devm'), uriOf('tests/lamp.devmtest')]));
     });
 
     it('renames an event in the model and in the tests', async () => {
         const edit = await connection.sendRequest<{ changes: Record<string, unknown[]> }>('textDocument/rename', {
-            textDocument: { uri: uriOf('models/lamp.hsm') }, position: position(LAMP, 'toggle', 0, 2), newName: 'press'
+            textDocument: { uri: uriOf('models/lamp.devm') }, position: position(LAMP, 'toggle', 0, 2), newName: 'press'
         });
-        expect(edit.changes[uriOf('models/lamp.hsm')]).toHaveLength(3);
-        expect(edit.changes[uriOf('tests/lamp.hsmtest')]).toHaveLength(1);
+        expect(edit.changes[uriOf('models/lamp.devm')]).toHaveLength(3);
+        expect(edit.changes[uriOf('tests/lamp.devmtest')]).toHaveLength(1);
     });
 
     it('formats, lists symbols, folds, completes and highlights', async () => {
-        const uri = uriOf('models/lamp.hsm');
+        const uri = uriOf('models/lamp.devm');
         const unformatted = 'statemachine Fmt {\n[*] -> A\n        state A\n}\n';
-        open('models/fmt.hsm', 'hsm', unformatted);
-        await diagnosticsFor(uriOf('models/fmt.hsm'));
+        open('models/fmt.devm', 'devm', unformatted);
+        await diagnosticsFor(uriOf('models/fmt.devm'));
         const edits = await connection.sendRequest<unknown[]>('textDocument/formatting', {
-            textDocument: { uri: uriOf('models/fmt.hsm') }, options: { tabSize: 4, insertSpaces: true }
+            textDocument: { uri: uriOf('models/fmt.devm') }, options: { tabSize: 4, insertSpaces: true }
         });
         expect(edits.length).toBeGreaterThan(0);
 
@@ -318,7 +318,7 @@ describe('HSM language server', () => {
         expect(folding.length).toBeGreaterThan(0);
 
         const completion = await connection.sendRequest<{ items: Array<{ label: string }> } | Array<{ label: string }>>('textDocument/completion', {
-            textDocument: { uri: uriOf('tests/lamp.hsmtest') }, position: position(LAMP_TEST, 'active(On)', 0, 7)
+            textDocument: { uri: uriOf('tests/lamp.devmtest') }, position: position(LAMP_TEST, 'active(On)', 0, 7)
         });
         const labels = (Array.isArray(completion) ? completion : completion.items).map(item => item.label);
         expect(labels).toEqual(expect.arrayContaining(['On', 'Off']));
@@ -328,8 +328,8 @@ describe('HSM language server', () => {
     });
 
     it('resolves imports of other state machines of the workspace and relinks on changes', async () => {
-        open('models/gate.hsm', 'hsm', GATE);
-        const gateUri = uriOf('models/gate.hsm');
+        open('models/gate.devm', 'devm', GATE);
+        const gateUri = uriOf('models/gate.devm');
         expect((await diagnosticsFor(gateUri)).filter(d => d.severity === 1)).toEqual([]);
 
         // go to definition from the type name of the instance to the imported state machine
@@ -337,11 +337,11 @@ describe('HSM language server', () => {
             textDocument: { uri: gateUri }, position: position(GATE, 'Motor', 0, 2)
         });
         const target = Array.isArray(definition) ? definition[0] : definition;
-        expect(target.targetUri ?? target.uri).toBe(uriOf('models/parts/motor.hsm'));
+        expect(target.targetUri ?? target.uri).toBe(uriOf('models/parts/motor.devm'));
 
         // the motor loses its in event: the gate is relinked and reports the unresolved reference
-        const motorUri = uriOf('models/parts/motor.hsm');
-        open('models/parts/motor.hsm', 'hsm', MOTOR);
+        const motorUri = uriOf('models/parts/motor.devm');
+        open('models/parts/motor.devm', 'devm', MOTOR);
         connection.sendNotification('textDocument/didChange', {
             textDocument: { uri: motorUri, version: 2 }, contentChanges: [{ text: MOTOR.replace(/start/g, 'go') }]
         });
@@ -351,14 +351,14 @@ describe('HSM language server', () => {
         await diagnosticsFor(gateUri, d => !d.some(e => e.severity === 1));
 
         // an import of a file that does not exist
-        open('models/lost.hsm', 'hsm', 'statemachine Lost {\n    import "nowhere.hsm"\n    [*] -> A\n    state A\n}\n');
-        const lost = await diagnosticsFor(uriOf('models/lost.hsm'), d => d.length > 0);
-        expect(lost.some(d => d.severity === 1 && /nowhere\.hsm/.test(d.message))).toBe(true);
+        open('models/lost.devm', 'devm', 'statemachine Lost {\n    import "nowhere.devm"\n    [*] -> A\n    state A\n}\n');
+        const lost = await diagnosticsFor(uriOf('models/lost.devm'), d => d.length > 0);
+        expect(lost.some(d => d.severity === 1 && /nowhere\.devm/.test(d.message))).toBe(true);
     });
 
     it('resolves C++ header imports (include paths of hsm.gen.json), hovers and navigates into headers and revalidates when a header changes', async () => {
-        open('models/valve.hsm', 'hsm', VALVE);
-        const valveUri = uriOf('models/valve.hsm');
+        open('models/valve.devm', 'devm', VALVE);
+        const valveUri = uriOf('models/valve.devm');
         expect((await diagnosticsFor(valveUri)).filter(d => d.severity === 1)).toEqual([]);
 
         const hover = await connection.sendRequest<{ contents: { value: string } }>('textDocument/hover', {
@@ -394,12 +394,12 @@ describe('HSM language server', () => {
     });
 });
 
-describe('structure files (.dmf) in the language server', () => {
-    const plantUri = () => uriOf('device/plant.dmf');
-    const partsUri = () => uriOf('device/parts.dmf');
+describe('structure files (.devm) in the language server', () => {
+    const plantUri = () => uriOf('device/plant.devm');
+    const partsUri = () => uriOf('device/parts.devm');
 
     it('links component types of other files of the workspace and reports problems', async () => {
-        open('device/plant.dmf', 'dmf', PLANT);
+        open('device/plant.devm', 'devm', PLANT);
         expect((await diagnosticsFor(plantUri())).filter(d => d.severity === 1)).toEqual([]);
         // a port that does not exist in the component type of the other file
         connection.sendNotification('textDocument/didChange', {
@@ -412,7 +412,7 @@ describe('structure files (.dmf) in the language server', () => {
     });
 
     it('checks the ports of a component against its state machine', async () => {
-        open('device/parts.dmf', 'dmf', PARTS);
+        open('device/parts.devm', 'devm', PARTS);
         expect((await diagnosticsFor(partsUri())).filter(d => d.severity === 1)).toEqual([]);
         connection.sendNotification('textDocument/didChange', {
             textDocument: { uri: partsUri(), version: 2 }, contentChanges: [{ text: PARTS.replace('requires async done : event done', 'requires async done : event finished') }]
@@ -433,10 +433,10 @@ describe('structure files (.dmf) in the language server', () => {
 
         // the behavior of a component: its state machine
         const behavior = await connection.sendRequest<Array<{ targetUri?: string, uri?: string }>>('textDocument/definition', {
-            textDocument: { uri: partsUri() }, position: position(PARTS, 'pump.hsm', 0, 2)
+            textDocument: { uri: partsUri() }, position: position(PARTS, 'pump.devm', 0, 2)
         });
         const machine = Array.isArray(behavior) ? behavior[0] : behavior;
-        expect(machine.targetUri ?? machine.uri).toBe(uriOf('device/pump.hsm'));
+        expect(machine.targetUri ?? machine.uri).toBe(uriOf('device/pump.devm'));
 
         // go to provider (implementation) of a required port: the instance providing it (through the connection)
         const providers = await connection.sendRequest<Array<{ targetUri: string, targetSelectionRange: { start: { line: number } } }> | null>('textDocument/implementation', {
@@ -473,10 +473,10 @@ describe('structure files (.dmf) in the language server', () => {
         expect(labels).toContain('pump');
 
         const unformatted = 'system Fmt {\nthread T {\n        }\n}\n';
-        open('device/fmt.dmf', 'dmf', unformatted);
-        await diagnosticsFor(uriOf('device/fmt.dmf'));
+        open('device/fmt.devm', 'devm', unformatted);
+        await diagnosticsFor(uriOf('device/fmt.devm'));
         const edits = await connection.sendRequest<unknown[]>('textDocument/formatting', {
-            textDocument: { uri: uriOf('device/fmt.dmf') }, options: { tabSize: 4, insertSpaces: true }
+            textDocument: { uri: uriOf('device/fmt.devm') }, options: { tabSize: 4, insertSpaces: true }
         });
         expect(edits.length).toBeGreaterThan(0);
 

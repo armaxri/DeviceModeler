@@ -1,6 +1,6 @@
 // The drive unit of the garage door (examples/device): a subsystem with its own threads.
-import "types.dmf"
-import "components.dmf"
+import "types.devm"
+import "components.devm"
 
 /** Motor control, PWM output and end switches. */
 subsystem DriveUnit {

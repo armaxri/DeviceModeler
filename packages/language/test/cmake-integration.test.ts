@@ -52,7 +52,7 @@ describe.skipIf(!HAS_CMAKE)(`CMake integration (${GENERATOR})`, () => {
         dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cmake-'));
         build = path.join(dir, 'build');
         fs.cpSync(path.join(repoDir, 'cmake'), path.join(dir, 'cmake'), { recursive: true });
-        for (const entry of ['cmake', 'tests', 'traffic-light.hsm', 'cd-player.hsm', 'cpp-types']) {
+        for (const entry of ['cmake', 'tests', 'traffic-light.devm', 'cd-player.devm', 'cpp-types']) {
             fs.cpSync(path.join(repoDir, 'examples', entry), path.join(dir, 'examples', entry), { recursive: true });
         }
         fs.rmSync(path.join(dir, 'examples/cmake/generated'), { recursive: true, force: true });
@@ -66,7 +66,7 @@ describe.skipIf(!HAS_CMAKE)(`CMake integration (${GENERATOR})`, () => {
 
     test('configure, build, ctest and incremental regeneration', () => {
         const configure = run('cmake', ['-S', path.join(dir, 'examples/cmake'), '-B', build, '-G', GENERATOR, `-DHSM_EXECUTABLE=${process.execPath};${cli}`]);
-        expect(configure.output).toContain('hsm: using');
+        expect(configure.output).toContain('devm: using');
         expect(configure.status, configure.output).toBe(0);
 
         const first = cmakeBuild();
@@ -80,15 +80,15 @@ describe.skipIf(!HAS_CMAKE)(`CMake integration (${GENERATOR})`, () => {
         expect(fs.readFileSync(path.join(build, 'hsm_test_results/traffic-light.xml'), 'utf-8')).toContain('<testsuite');
 
         // a comment: the code is regenerated but nothing is recompiled
-        editModel('traffic-light.hsm', '// A pedestrian traffic light', '// A changed pedestrian traffic light');
+        editModel('traffic-light.devm', '// A pedestrian traffic light', '// A changed pedestrian traffic light');
         const comment = cmakeBuild();
         expect(comment.status, comment.output).toBe(0);
         expect(comment.output).toContain('Generating state machine code for traffic_light_sm');
         expect(comment.output).not.toContain('Building CXX');
 
         // behavior: only the traffic light is regenerated and recompiled
-        editModel('traffic-light.hsm', 'every 500 ms', 'every 400 ms');
-        const check = run(process.execPath, [cli, 'generate', 'cpp', path.join(dir, 'examples/traffic-light.hsm'), '--namespace', 'example',
+        editModel('traffic-light.devm', 'every 500 ms', 'every 400 ms');
+        const check = run(process.execPath, [cli, 'generate', 'cpp', path.join(dir, 'examples/traffic-light.devm'), '--namespace', 'example',
             '--std', '17', '-o', path.join(build, 'hsm_generated/traffic_light_sm'), '--check']);
         expect(check.status, check.output).toBe(1);
         expect(check.output).toContain('TrafficLight.cpp');

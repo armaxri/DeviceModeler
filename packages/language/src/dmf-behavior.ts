@@ -5,7 +5,7 @@ import { eventDirection, returnTypeOf, typeOfEvent, typeOfParameter, typeOfVaria
 
 /**
  * The mapping of the ports of a component onto the definition section of its state machine
- * (`behavior "door.hsm"`), see docs/structure-language.md:
+ * (`behavior "door.devm"`), see docs/structure-language.md:
  *
  * - async provided port `p`: every event `e` of the port is an `in event e` of the state machine,
  * - async required port `r`: every event `e` of the port is an `out event e`,

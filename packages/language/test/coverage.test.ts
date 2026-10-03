@@ -94,8 +94,8 @@ interface Loaded {
 async function load(model: string, tests: string): Promise<Loaded> {
     const id = counter++;
     const documents = await workspace.load([
-        { uri: `file:///cov${id}/model.hsm`, text: model },
-        { uri: `file:///cov${id}/test.hsmtest`, text: tests }
+        { uri: `file:///cov${id}/model.devm`, text: model },
+        { uri: `file:///cov${id}/test.devmtest`, text: tests }
     ]);
     for (const loaded of documents) {
         expect(loaded.diagnostics.filter(d => d.severity === 1).map(d => d.message)).toEqual([]);
@@ -215,7 +215,7 @@ testclass T for statemachine Regions {
 
     test('entry / exit points and join of the door example', async () => {
         const examples = path.resolve(__dirname, '../../../examples');
-        const loaded = await load(fs.readFileSync(path.join(examples, 'door.hsm'), 'utf-8'), `
+        const loaded = await load(fs.readFileSync(path.join(examples, 'door.devm'), 'utf-8'), `
 testclass T for statemachine Door {
     @Test
     operation all() {
@@ -266,7 +266,7 @@ testclass T for statemachine Choice {
 
     test('diagram ids equal the ids of the diagram layout', async () => {
         const examples = path.resolve(__dirname, '../../../examples');
-        const models = [...fs.readdirSync(examples).filter(f => f.endsWith('.hsm')).map(f => fs.readFileSync(path.join(examples, f), 'utf-8')),
+        const models = [...fs.readdirSync(examples).filter(f => f.endsWith('.devm')).map(f => fs.readFileSync(path.join(examples, f), 'utf-8')),
             CHOICE, HISTORY, REGIONS];
         for (const text of models) {
             const loaded = await load(text, '');
@@ -296,9 +296,9 @@ testclass T for statemachine Choice {
 
     test('text summary lists uncovered elements with lines', async () => {
         const { report } = await sampleReport();
-        const text = toCoverageText(report, { fileName: () => 'choice.hsm' });
+        const text = toCoverageText(report, { fileName: () => 'choice.devm' });
         expect(text).toMatch(/\nChoice\s+3\/4 75\.0%\s+5\/6 83\.3%\s+1\/2 50\.0%\s+3\/6 50\.0%\n/);
-        expect(text).toContain('Not covered in Choice (choice.hsm):');
+        expect(text).toContain('Not covered in Choice (choice.devm):');
         expect(text).toContain('    15: state Unused');
         expect(text).toContain('    20: transition B -> A : back [x > 0]');
         expect(text).toContain('    11: guard [x > 5] of A: back [x > 5] / x = 0: never true');
@@ -307,19 +307,19 @@ testclass T for statemachine Choice {
 
     test('JSON', async () => {
         const { report } = await sampleReport();
-        const json = JSON.parse(toCoverageJson(report, { fileName: () => 'choice.hsm' }));
+        const json = JSON.parse(toCoverageJson(report, { fileName: () => 'choice.devm' }));
         expect(json.version).toBe(1);
-        expect(json.machines[0].file).toBe('choice.hsm');
+        expect(json.machines[0].file).toBe('choice.devm');
         expect(json.machines[0].totals.states).toEqual({ covered: 3, total: 4, percent: 75 });
         expect(json.totals).toEqual(report.totals);
     });
 
     test('LCOV', async () => {
         const { report } = await sampleReport();
-        const lcov = toLcov(report, { fileName: () => 'choice.hsm' });
+        const lcov = toLcov(report, { fileName: () => 'choice.devm' });
         const lines = lcov.trim().split('\n');
         expect(lines[0]).toBe('TN:');
-        expect(lines[1]).toBe('SF:choice.hsm');
+        expect(lines[1]).toBe('SF:choice.devm');
         expect(lines[lines.length - 1]).toBe('end_of_record');
         for (const line of lines) {
             expect(line).toMatch(/^(TN:.*|SF:.+|FN:\d+,\S+|FNDA:\d+,\S+|FNF:\d+|FNH:\d+|BRDA:\d+,\d+,[01],(\d+|-)|BRF:\d+|BRH:\d+|DA:\d+,\d+|LF:\d+|LH:\d+|end_of_record)$/);
@@ -340,11 +340,11 @@ testclass T for statemachine Choice {
 
     test('Cobertura', async () => {
         const { report } = await sampleReport();
-        const xml = toCobertura(report, { fileName: () => 'models/choice.hsm', sourceRoot: '/work', timestamp: 1 });
+        const xml = toCobertura(report, { fileName: () => 'models/choice.devm', sourceRoot: '/work', timestamp: 1 });
         expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBe(true);
         expectWellFormed(xml);
         expect(xml).toContain('<source>/work</source>');
-        expect(xml).toContain('<class name="Choice" filename="models/choice.hsm"');
+        expect(xml).toContain('<class name="Choice" filename="models/choice.devm"');
         expect(xml).toContain('<line number="15" hits="0" branch="false"/>');
         expect(xml).toContain('<line number="18" hits="1" branch="true" condition-coverage="100% (2/2)"/>');
         expect(xml).toContain('<line number="20" hits="0" branch="true" condition-coverage="0% (0/2)"/>');
@@ -353,7 +353,7 @@ testclass T for statemachine Choice {
 
     test('HTML with and without diagram', async () => {
         const { report, collector } = await sampleReport();
-        const plain = await toCoverageHtml(report, { fileName: () => 'choice.hsm' });
+        const plain = await toCoverageHtml(report, { fileName: () => 'choice.devm' });
         expect(plain.map(f => f.path)).toEqual(['index.html', 'Choice.html']);
         expect(plain[0].content).toContain('<a href="Choice.html">Choice</a>');
         expect(plain[1].content).toContain('<tr class="uncovered" id="Unused">');
@@ -381,7 +381,7 @@ testclass T for statemachine Choice {
     });
 });
 
-describe('hsm test --coverage', () => {
+describe('devm test --coverage', () => {
     const examples = path.resolve(__dirname, '../../../examples');
 
     async function run(args: Parameters<typeof runTestCommand>[1], testFiles?: string[]): Promise<{ code: number, output: string, dir: string }> {
@@ -390,7 +390,7 @@ describe('hsm test --coverage', () => {
         const log = vi.spyOn(console, 'log').mockImplementation((...parts: unknown[]) => { output.push(parts.join(' ')); });
         const error = vi.spyOn(console, 'error').mockImplementation((...parts: unknown[]) => { output.push(parts.join(' ')); });
         try {
-            const files = testFiles ?? fs.readdirSync(path.join(examples, 'tests')).filter(f => f.endsWith('.hsmtest'))
+            const files = testFiles ?? fs.readdirSync(path.join(examples, 'tests')).filter(f => f.endsWith('.devmtest'))
                 .map(f => path.join(examples, 'tests', f));
             const code = await runTestCommand(files, { coverageDir: dir, ...args });
             return { code, output: output.join('\n'), dir };
@@ -427,9 +427,9 @@ describe('hsm test --coverage', () => {
     test('thresholds which are not met fail the run', async () => {
         // a test which only enters the door covers 1 of its 9 states
         const partial = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-partial-'));
-        fs.copyFileSync(path.join(examples, 'door.hsm'), path.join(partial, 'door.hsm'));
-        fs.writeFileSync(path.join(partial, 'enter.hsmtest'), 'testclass EnterOnly for statemachine Door {\n    @Test\n    operation enters() {\n        enter\n        assert active(Closed)\n    }\n}\n');
-        const failing = await run({ coverageFormat: 'text', coverageThreshold: 'states=100' }, [path.join(partial, 'enter.hsmtest')]);
+        fs.copyFileSync(path.join(examples, 'door.devm'), path.join(partial, 'door.devm'));
+        fs.writeFileSync(path.join(partial, 'enter.devmtest'), 'testclass EnterOnly for statemachine Door {\n    @Test\n    operation enters() {\n        enter\n        assert active(Closed)\n    }\n}\n');
+        const failing = await run({ coverageFormat: 'text', coverageThreshold: 'states=100' }, [path.join(partial, 'enter.devmtest')]);
         expect(failing.code).toBe(1);
         expect(failing.output).toContain('Coverage threshold not met: states coverage 11.11% (1/9) is below the threshold of 100%');
         const passing = await run({ coverageFormat: 'json', coverageThreshold: 'reactions=100,guards=100' });

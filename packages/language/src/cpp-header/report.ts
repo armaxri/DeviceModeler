@@ -41,7 +41,7 @@ export function cppValueToJson(value: CppValue): unknown {
 
 /**
  * The analyzed and resolved model of the headers of an index as a JSON compatible object (used by
- * `hsm cpp-header`): declarations with their resolved types and values, includes, macros and
+ * `devm cpp-header`): declarations with their resolved types and values, includes, macros and
  * diagnostics. Lines are 1-based.
  */
 export function cppHeaderReport(index: CppTypeIndex): unknown {

@@ -164,7 +164,7 @@ describe('manual layout: persistence', () => {
 
 describe('manual layout: computation', () => {
     test('without manual layout the result is the automatic layout', async () => {
-        const parsed = await parse(example('cd-player.hsm'));
+        const parsed = await parse(example('cd-player.devm'));
         const auto = await layoutStateMachine(parsed.model);
         const none = await layoutStateMachineWithLayout(parsed.model, {});
         expect(none.graph).toEqual(auto.graph);
@@ -172,7 +172,7 @@ describe('manual layout: computation', () => {
         expect(autoMode.graph).toEqual(auto.graph);
     });
 
-    for (const file of ['traffic-light.hsm', 'cd-player.hsm', 'keyboard.hsm', 'door.hsm']) {
+    for (const file of ['traffic-light.devm', 'cd-player.devm', 'keyboard.devm', 'door.devm']) {
         for (const direction of ['DOWN', 'RIGHT'] as const) {
             test(`captured automatic layout reproduces the diagram: ${file} (${direction})`, async () => {
                 const parsed = await parse(example(file));
@@ -318,7 +318,7 @@ describe('manual layout: computation', () => {
     });
 
     test('transitions of a moved vertex are routed around the other vertices', async () => {
-        const parsed = await parse(example('cd-player.hsm'));
+        const parsed = await parse(example('cd-player.devm'));
         const auto = await layoutStateMachine(parsed.model, { routing: 'ORTHOGONAL' });
         const layout = captureLayout(auto.graph);
         // the open state below left of the closed state (its transitions would cross the states inside)
@@ -356,7 +356,7 @@ describe('manual layout: computation', () => {
 
     for (const [routing, shape] of [['SPLINES', 'spline'], ['POLYLINE', 'polyline']] as const) {
         test(`rerouted transitions follow the routing setting: ${routing}`, async () => {
-            const parsed = await parse(example('cd-player.hsm'));
+            const parsed = await parse(example('cd-player.devm'));
             const auto = await layoutStateMachine(parsed.model, { routing });
             const layout = captureLayout(auto.graph);
             layout.nodes['Open'] = { x: 20, y: layout.nodes['Closed'].y + 900 };
@@ -394,7 +394,7 @@ describe('manual layout: computation', () => {
 
     for (const [routing, shape] of [['SPLINES', 'spline'], ['POLYLINE', 'polyline'], ['ORTHOGONAL', 'orthogonal']] as const) {
         test(`transitions are routed through their waypoints: ${routing}`, async () => {
-            const parsed = await parse(example('cd-player.hsm'));
+            const parsed = await parse(example('cd-player.devm'));
             const auto = await layoutStateMachine(parsed.model, { routing });
             const layout = captureLayout(auto.graph);
             layout.nodes['Open'] = { x: 90, y: layout.nodes['Closed'].y + 820 };
@@ -448,7 +448,7 @@ describe('manual layout: computation', () => {
     });
 
     test('the definition section does not cover states', async () => {
-        const parsed = await parse(example('traffic-light.hsm'));
+        const parsed = await parse(example('traffic-light.devm'));
         const auto = await layoutStateMachine(parsed.model);
         const layout = captureLayout(auto.graph);
         // pretend the definition section was much narrower when the layout was stored
@@ -465,7 +465,7 @@ describe('manual layout: computation', () => {
     });
 
     test('regions are stacked in the stored orientation', async () => {
-        const parsed = await parse(example('keyboard.hsm'));
+        const parsed = await parse(example('keyboard.devm'));
         const auto = await layoutStateMachine(parsed.model);
         const layout = captureLayout(auto.graph);
         layout.nodes['Active'] = { ...layout.nodes['Active'], regions: 'horizontal' };

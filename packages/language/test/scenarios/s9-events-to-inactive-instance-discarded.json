@@ -3,7 +3,7 @@
     "description": "Events raised on an instance that is not active at the end of the step are discarded.",
     "text": [
         "statemachine Door {",
-        "    import \"motor.hsm\"",
+        "    import \"motor.devm\"",
         "    interface:",
         "        in event open",
         "        in event poke",
@@ -18,7 +18,7 @@
         "}"
     ],
     "files": {
-        "motor.hsm": [
+        "motor.devm": [
             "statemachine Motor {",
             "    interface:",
             "        in event start",

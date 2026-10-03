@@ -3,7 +3,7 @@
     "description": "Time events of an instance use the virtual clock of the state machine; its timers are started when its states are entered and are present in the next cycle after they expired.",
     "text": [
         "statemachine Door {",
-        "    import \"motor.hsm\"",
+        "    import \"motor.devm\"",
         "    @CycleBased(100)",
         "    interface:",
         "        in event open",
@@ -16,7 +16,7 @@
         "}"
     ],
     "files": {
-        "motor.hsm": [
+        "motor.devm": [
             "statemachine Motor {",
             "    @CycleBased(100)",
             "    [*] -> Off",

@@ -7,7 +7,7 @@ import { BUILTIN_TYPES } from '../hsm-typesystem.js';
 import { EditError, mapOffset, quote, type EditResult, type TextEdit } from './model-edits.js';
 
 /*
- * Text edits of structure files (`.dmf`): the graphical editing of the internal block diagram. Like the
+ * Text edits of structure files (`.devm`): the graphical editing of the internal block diagram. Like the
  * ModelEditor of the state machines (model-edits.ts), every diagram operation becomes a minimal text
  * change that keeps comments and the formatting of the unaffected parts; new text follows the style of
  * the formatter (dmf-formatter.ts): one member per line, bodies indented, annotations of threads on the
@@ -136,7 +136,7 @@ function inserted(edit: Insertion): EditResult {
 }
 
 /**
- * Computes the text edits of structural modifications of a structure file (`.dmf`): add, rename,
+ * Computes the text edits of structural modifications of a structure file (`.devm`): add, rename,
  * move and delete threads, instances, ports, connections, component types; edit ports, thread
  * annotations and the behavior of components. Renames of elements referenced from other files are
  * computed by {@link dmfRenameEdits} (Langium references across the loaded documents).
@@ -170,10 +170,10 @@ export class DmfEditor {
         return { edits: [{ offset, length: 0, text: `\n\n${text}` }], selectOffset: offset + 2, createdName: typeName };
     }
 
-    /** Sets (`behavior "door.hsm"`), replaces or (undefined / empty) removes the behavior of a component. */
+    /** Sets (`behavior "door.devm"`), replaces or (undefined / empty) removes the behavior of a component. */
     setBehavior(component: ast.Component, path: string | undefined): EditResult {
         const value = path?.trim() || undefined;
-        const text = value ? `behavior ${/^[_a-zA-Z][\w.]*$/.test(value) && !/\.hsm$/i.test(value) ? value : quote(value)}` : undefined;
+        const text = value ? `behavior ${/^[_a-zA-Z][\w.]*$/.test(value) && !/\.devm$/i.test(value) ? value : quote(value)}` : undefined;
         const existing = component.behavior?.$cstNode;
         if (existing) {
             return { edits: [text ? { offset: existing.offset, length: existing.length, text } : this.deletionEdit(existing)] };

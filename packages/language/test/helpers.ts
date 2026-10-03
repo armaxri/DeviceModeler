@@ -4,11 +4,16 @@ import { HsmModelLoader } from '../src/hsm-document.js';
 
 export const loader = new HsmModelLoader();
 
+/** Whether the text of a `.devm` file is a state machine (not a structure file). */
+export function isStateMachineText(text: string): boolean {
+    return /^statemachine\b/m.test(text);
+}
+
 export function example(name: string): string {
     return fs.readFileSync(path.resolve(__dirname, '../../../examples', name), 'utf-8');
 }
 
-/** Parses a model; `files` are further files it may import, by path relative to the model (`motor.hsm`). */
+/** Parses a model; `files` are further files it may import, by path relative to the model (`motor.devm`). */
 export async function parse(text: string, files?: Record<string, string>) {
     return loader.load(text, undefined, { files });
 }

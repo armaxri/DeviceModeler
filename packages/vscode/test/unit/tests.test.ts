@@ -38,8 +38,8 @@ describe('test discovery', () => {
 
 describe('running tests', () => {
     it('runs the tests of a file against the models of the workspace, with coverage', async () => {
-        const models = await Promise.all(['door.hsm', 'traffic-light.hsm', 'keyboard.hsm', 'cd-player.hsm'].map(file));
-        const test = await file('tests/door.hsmtest');
+        const models = await Promise.all(['door.devm', 'traffic-light.devm', 'keyboard.devm', 'cd-player.devm'].map(file));
+        const test = await file('tests/door.devmtest');
         const coverage = new CoverageCollector();
         const seen: string[] = [];
         const { results, problems } = await runHsmTests(models, [test], { coverage, onResult: result => seen.push(result.name) });
@@ -60,9 +60,9 @@ describe('running tests', () => {
     });
 
     it('filters tests and reports failures with location and trace', async () => {
-        const models = [await file('door.hsm')];
+        const models = [await file('door.devm')];
         const test = {
-            uri: 'file:///virtual/fail.hsmtest',
+            uri: 'file:///virtual/fail.devmtest',
             text: 'testclass F for statemachine Door {\n    @Test\n    operation fails() {\n        enter\n        assert active(Moving)\n    }\n    @Test\n    operation skipped() { enter }\n}\n'
         };
         const { results } = await runHsmTests(models, [test], { filter: (_uri, _c, name) => name === 'fails' });
@@ -73,7 +73,7 @@ describe('running tests', () => {
     });
 
     it('reports test files with errors as problems', async () => {
-        const { results, problems } = await runHsmTests([], [{ uri: 'file:///virtual/bad.hsmtest', text: 'testclass B for statemachine Missing {\n}\n' }]);
+        const { results, problems } = await runHsmTests([], [{ uri: 'file:///virtual/bad.devmtest', text: 'testclass B for statemachine Missing {\n}\n' }]);
         expect(results).toEqual([]);
         expect(problems[0].diagnostics.length).toBeGreaterThan(0);
     });

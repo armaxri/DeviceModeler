@@ -1,6 +1,6 @@
 {
     "$schema": "../../packages/language/schemas/hsm-gen.schema.json",
-    "models": ["../cd-player.hsm"],
+    "models": ["../cd-player.devm"],
     "cpp": {
         "outDir": "generated",
         "namespace": "example::player",

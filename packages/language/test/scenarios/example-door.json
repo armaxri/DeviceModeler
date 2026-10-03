@@ -1,7 +1,7 @@
 {
     "name": "example-door",
     "description": "Door: event driven, child first, entry point, exit node, fork and join.",
-    "model": "../../../../examples/door.hsm",
+    "model": "../../../../examples/door.devm",
     "steps": [
         {"enter": true},
         {"expect": {"configuration": ["Closed"], "variables": {"cycles": 1}}},

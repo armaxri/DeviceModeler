@@ -28,7 +28,7 @@ const loader = new DmfModelLoader();
 let counter = 0;
 
 async function load(text: string): Promise<ast.DmfModel> {
-    const parsed = await loader.load(text, `file:///ibd/model-${counter++}.dmf`);
+    const parsed = await loader.load(text, `file:///ibd/model-${counter++}.devm`);
     expect(parsed.hasSyntaxErrors).toBe(false);
     return parsed.model;
 }
@@ -52,7 +52,7 @@ describe('internal block diagram: the garage door system', () => {
     let layout: IbdLayoutResult;
 
     beforeAll(async () => {
-        model = await loadExample('system.dmf');
+        model = await loadExample('system.devm');
         layout = (await layoutStructure(model))!;
     });
 
@@ -108,10 +108,10 @@ describe('internal block diagram: the garage door system', () => {
         const door = node(layout, 'GarageDoor/door');
         expect([door.name, door.typeName, door.stereotype]).toEqual(['door', 'DoorController', 'component']);
         expect(door.behavior?.machine).toBe('DoorController');
-        expect(door.behavior?.uri).toMatch(/controller\.hsm$/);
+        expect(door.behavior?.uri).toMatch(/controller\.devm$/);
         const drive = node(layout, 'GarageDoor/drive');
         expect([drive.stereotype, drive.composite?.structure]).toEqual(['subsystem', 'DriveUnit']);
-        expect(drive.composite?.uri).toMatch(/drive\.dmf$/);
+        expect(drive.composite?.uri).toMatch(/drive-unit\.devm$/);
         expect(door.ports.map(p => p.name).sort()).toEqual(['alarm', 'cmd', 'cycles', 'motor', 'position', 'status']);
         for (const { node: n } of ibdNodes(layout.graph).filter(n => n.node.kind === 'instance')) {
             for (const port of n.ports) {
@@ -202,7 +202,7 @@ describe('internal block diagram: the garage door system', () => {
 
 describe('internal block diagram: other elements', () => {
     test('the drive unit: two threads, delegations to required boundary ports', async () => {
-        const layout = (await layoutStructure(await loadExample('drive.dmf')))!;
+        const layout = (await layoutStructure(await loadExample('drive-unit.devm')))!;
         const frame = layout.graph.children[0];
         expect(frame.details).toBe('ibd [subsystem] DriveUnit');
         expect(frame.children.map(n => n.id)).toEqual(['DriveUnit/thread:MotorTask', 'DriveUnit/thread:SwitchTask']);
@@ -218,7 +218,7 @@ describe('internal block diagram: other elements', () => {
     });
 
     test('component types: the overview and a single block', async () => {
-        const model = await loadExample('components.dmf');
+        const model = await loadExample('components.devm');
         expect(ibdChoices(model).map(c => c.id)).toEqual([
             'DoorController', 'MotorController', 'PwmDriver', 'EndSwitches', 'PositionSensor', 'Buzzer', 'Diagnosis', IBD_OVERVIEW_ID
         ]);
@@ -241,7 +241,7 @@ describe('internal block diagram: other elements', () => {
 
     test('data types: the structs and interfaces of the file as unconnected type boxes', async () => {
         // a file without component types: only the type boxes
-        const types = await loadExample('types.dmf');
+        const types = await loadExample('types.devm');
         expect(ibdChoices(types).map(c => `${c.kind} ${c.id}`)).toEqual([`types ${IBD_TYPES_ID}`]);
         const layout = (await layoutStructure(types))!;
         expect(layout.graph.kind).toBe('types');
@@ -253,7 +253,7 @@ describe('internal block diagram: other elements', () => {
         expect(layout.elements.get('type:Diagnostics')?.$type).toBe('StructDeclaration');
         expect(ibdRouteElements(layout, 'type:Diagnostics')).toBeUndefined();
         // a mixed file: the subsystem, the type boxes below its frame (automatic layout: the example is arranged by hand), nothing connected to them
-        const light = (await layoutStructure(await loadExample('light.dmf'), { layout: null }))!;
+        const light = (await layoutStructure(await loadExample('light.devm'), { layout: null }))!;
         const [frame, ...boxes] = light.graph.children;
         expect(frame.details).toBe('ibd [subsystem] CourtesyLight');
         expect(boxes.map(b => `${b.kind} ${b.name}`)).toEqual(['type LightLevel', 'type LightCmd']);
@@ -307,21 +307,20 @@ system Top {
     });
 });
 
-describe('hsm render: structure files', () => {
+describe('devm render: structure files', () => {
     test('renders the device example (structures and state machines)', async () => {
         const out = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-ibd-'));
         const messages: string[] = [];
         const code = await runRenderCommand([DEVICE], { out, theme: 'modern' }, { log: m => messages.push(m), error: m => messages.push(`error: ${m}`) });
         expect(code).toBe(0);
-        // drive.dmf and drive.hsm: the structure gets its own name
-        expect(fs.readdirSync(out).sort()).toEqual(['components.svg', 'controller.svg', 'drive.dmf.svg', 'drive.svg', 'light.svg', 'system.svg', 'types.svg']);
+        expect(fs.readdirSync(out).sort()).toEqual(['components.svg', 'controller.svg', 'drive-unit.svg', 'drive.svg', 'light.svg', 'system.svg', 'types.svg']);
         expect(fs.readFileSync(path.join(out, 'types.svg'), 'utf-8')).toContain('class="ibd-node ibd-type"');
         const system = fs.readFileSync(path.join(out, 'system.svg'), 'utf-8');
         expect(system).toMatch(/^<\?xml/);
         expect(system).toContain('theme-modern');
         expect(system).toContain('class="ibd-node ibd-frame"');
         expect(system).toContain('GarageDoor');
-        expect(fs.readFileSync(path.join(out, 'drive.dmf.svg'), 'utf-8')).toContain('DriveUnit');
+        expect(fs.readFileSync(path.join(out, 'drive-unit.svg'), 'utf-8')).toContain('DriveUnit');
         fs.rmSync(out, { recursive: true, force: true });
     });
 
@@ -329,9 +328,9 @@ describe('hsm render: structure files', () => {
         const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-ibd-')), 'buzzer.svg');
         const messages: string[] = [];
         const logger = { log: (m: string) => messages.push(m), error: (m: string) => messages.push(`error: ${m}`) };
-        expect(await runRenderCommand([path.join(DEVICE, 'components.dmf')], { out, element: 'Buzzer' }, logger)).toBe(0);
+        expect(await runRenderCommand([path.join(DEVICE, 'components.devm')], { out, element: 'Buzzer' }, logger)).toBe(0);
         expect(fs.readFileSync(out, 'utf-8')).toContain('Buzzer');
-        expect(await runRenderCommand([path.join(DEVICE, 'components.dmf')], { out, element: 'Nope' }, logger)).toBe(1);
+        expect(await runRenderCommand([path.join(DEVICE, 'components.devm')], { out, element: 'Nope' }, logger)).toBe(1);
         expect(messages.at(-1)).toMatch(/no subsystem, system or component type 'Nope'/);
     });
 });

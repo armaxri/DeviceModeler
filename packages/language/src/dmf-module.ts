@@ -1,11 +1,8 @@
-import type { Module } from 'langium';
-import type { LangiumServices, PartialLangiumServices } from 'langium/lsp';
-import { DmfFormatter } from './dmf-formatter.js';
-import { DmfImportResolver } from './dmf-imports.js';
-import { DmfLinker, DmfScopeProvider } from './dmf-scope.js';
-import { DmfValidator } from './dmf-validator.js';
-import { DmfCompletionProvider, DmfDefinitionProvider, DmfDocumentationProvider, DmfImplementationProvider } from './lsp/dmf-lsp.js';
+import type { DmfImportResolver } from './dmf-imports.js';
+import type { DmfValidator } from './dmf-validator.js';
+import type { HsmServices } from './hsm-module.js';
 
+/** The services of the structure part of the `.devm` language (see `HsmModule` in hsm-module.ts). */
 export type DmfAddedServices = {
     references: {
         DmfImportResolver: DmfImportResolver
@@ -15,25 +12,9 @@ export type DmfAddedServices = {
     }
 };
 
-/** Services of the structure language (`.dmf`, Device Modeling Framework). */
-export type DmfServices = LangiumServices & DmfAddedServices;
-
-export const DmfModule: Module<DmfServices, PartialLangiumServices & DmfAddedServices> = {
-    references: {
-        ScopeProvider: (services) => new DmfScopeProvider(services),
-        Linker: (services) => new DmfLinker(services),
-        DmfImportResolver: (services) => new DmfImportResolver(services)
-    },
-    validation: {
-        DmfValidator: () => new DmfValidator()
-    },
-    lsp: {
-        Formatter: () => new DmfFormatter(),
-        CompletionProvider: (services) => new DmfCompletionProvider(services),
-        DefinitionProvider: (services) => new DmfDefinitionProvider(services),
-        ImplementationProvider: () => new DmfImplementationProvider()
-    },
-    documentation: {
-        DocumentationProvider: (services) => new DmfDocumentationProvider(services)
-    }
-};
+/**
+ * Services of structure files. State machine files and structure files are one language (`.devm`), so
+ * these are the services of that language ({@link HsmServices}); the name is kept for the code of the
+ * structure part.
+ */
+export type DmfServices = HsmServices;

@@ -2,7 +2,7 @@ import type { AstNode } from 'langium';
 import type { DiagramLabel, Point, TextMeasure } from './diagram-model.js';
 
 /*
- * The diagram of a structure file (`.dmf`): an internal block diagram (IBD) in the style of SysML.
+ * The diagram of a structure file (`.devm`): an internal block diagram (IBD) in the style of SysML.
  * Computed by `layoutStructure` (ibd-layout.ts), rendered by the web editor (packages/web, Sprotty
  * views `Ibd*View`) and by `renderIbdSvg` (render/ibd-svg.ts) with the same CSS classes and themes as the
  * state machine diagrams.

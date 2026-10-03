@@ -1,7 +1,7 @@
 /**
  * @file conveyor_types.h
  * Types and constants of a conveyor belt controller, shared by the firmware and its state machine
- * (examples/cpp-types/conveyor.hsm imports this header).
+ * (examples/cpp-types/conveyor.devm imports this header).
  */
 #ifndef CONVEYOR_TYPES_H
 #define CONVEYOR_TYPES_H

@@ -1,4 +1,4 @@
-// Controller of the garage door (examples/device). The component DoorController (components.dmf)
+// Controller of the garage door (examples/device). The component DoorController (components.devm)
 // declares the ports; the structure language checks that they match the interfaces below.
 /** Opens and closes the door on request and stops at obstacles. */
 statemachine DoorController {

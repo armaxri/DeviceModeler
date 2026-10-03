@@ -1,5 +1,5 @@
 // Unit tests of the door (event driven): entry / exit points and fork / join.
-// Run with: hsm test examples/tests/door.hsmtest --machine examples/door.hsm
+// Run with: devm test examples/tests/door.devmtest --machine examples/door.devm
 testclass DoorTest for statemachine Door {
 
     @SetUp

@@ -84,11 +84,11 @@ describe('doc comments', () => {
         const parsed = await parse(MODEL);
         const provider = loader.services.Hsm.documentation.DocumentationProvider;
         const count = parsed.model.scopes[0].declarations[2];
-        expect(provider.getDocumentation(count)).toBe('```hsm\nvar count : integer = 1 + 2\n```\n\nA counter | with a pipe.');
+        expect(provider.getDocumentation(count)).toBe('```devm\nvar count : integer = 1 + 2\n```\n\nA counter | with a pipe.');
         const compute = parsed.model.scopes[0].declarations[5];
         expect(provider.getDocumentation(compute)).toContain('operation compute(a : integer, rest... : string) : real');
         const idle = allVertices(parsed.model).find(v => v.name === 'Idle')!;
-        expect(provider.getDocumentation(idle)).toBe('```hsm\nstate Idle\n```\n\nWaiting for start.');
+        expect(provider.getDocumentation(idle)).toBe('```devm\nstate Idle\n```\n\nWaiting for start.');
     });
 });
 
@@ -127,12 +127,12 @@ describe('model documentation', () => {
 
     test('Markdown page', async () => {
         const parsed = await parse(MODEL);
-        const md = generateModelDoc(parsed.model, { svgFile: 'Doc.svg', source: 'models/doc.hsm', sourceHref: '../models/doc.hsm', indexFile: 'index.md' });
+        const md = generateModelDoc(parsed.model, { svgFile: 'Doc.svg', source: 'models/doc.devm', sourceHref: '../models/doc.devm', indexFile: 'index.md' });
         expect(md).toContain('# Doc\n');
         expect(md).toContain('> short description');
         expect(md).toContain('A documented machine.\n\nSecond paragraph with `code`.');
         expect(md).toContain('![Doc diagram](Doc.svg)');
-        expect(md).toContain('Source: [`models/doc.hsm`](../models/doc.hsm)');
+        expect(md).toContain('Source: [`models/doc.devm`](../models/doc.devm)');
         expect(md).toContain('| Execution | event driven |');
         expect(md).toContain('| `start` | in | `integer` | Starts it. |');
         expect(md).toContain('| `count` | var | `integer` | `1 + 2` | A counter \\| with a pipe. |');
@@ -167,16 +167,16 @@ describe('model documentation', () => {
     });
 
     test('index page and Markdown to HTML', () => {
-        const entries = [{ name: 'A', file: 'A.md', description: 'first', documentation: 'Para 1.\n\nPara 2.', source: 'a.hsm', sourceHref: '../a.hsm' }];
+        const entries = [{ name: 'A', file: 'A.md', description: 'first', documentation: 'Para 1.\n\nPara 2.', source: 'a.devm', sourceHref: '../a.devm' }];
         expect(generateDocIndex(entries)).toBe('# State machines\n\n| State machine | Description | Source |\n| --- | --- | --- |\n'
-            + '| [A](A.md) | first<br>Para 1. | [`a.hsm`](../a.hsm) |\n');
+            + '| [A](A.md) | first<br>Para 1. | [`a.devm`](../a.devm) |\n');
         expect(generateDocIndex(entries, 'html', 'Models')).toContain('<h1>Models</h1>');
         expect(markdownToHtml('a **b** *c* `<d>`\n\n- x\n- [y](https://e.org)')).toBe(
             '<p>a <strong>b</strong> <em>c</em> <code>&lt;d&gt;</code></p>\n<ul><li>x</li><li><a href="https://e.org">y</a></li></ul>');
     });
 
     test('examples are documented', async () => {
-        for (const file of ['traffic-light.hsm', 'cd-player.hsm', 'keyboard.hsm', 'door.hsm']) {
+        for (const file of ['traffic-light.devm', 'cd-player.devm', 'keyboard.devm', 'door.devm']) {
             const parsed = await parse(example(file));
             const doc = describeStateMachine(parsed.model);
             expect(doc.documentation, file).toBeTruthy();
@@ -194,41 +194,42 @@ describe('CLI render and doc', () => {
 
     test('expands directories and glob patterns', async () => {
         const all = (await expandFiles([EXAMPLES_DIR])).map(f => path.basename(f));
-        // cpp-types/: the example importing a C++ header, device/: the state machines of the structure
-        // example, door-with-motor/: the submachine example (two files)
-        expect(all).toEqual(['cd-player.hsm', 'conveyor.hsm', 'controller.hsm', 'drive.hsm', 'gate.hsm', 'motor.hsm', 'door.hsm', 'keyboard.hsm', 'traffic-light.hsm']);
-        expect((await expandFiles([path.join(EXAMPLES_DIR, 'k*.hsm')])).map(f => path.basename(f))).toEqual(['keyboard.hsm']);
-        expect(await expandFiles([path.join(EXAMPLES_DIR, '**/*.hsm')])).toHaveLength(9);
+        // cpp-types/: the example importing a C++ header, device/: the structure example (structure files
+        // and state machines), door-with-motor/: the submachine example (two files)
+        expect(all).toEqual(['cd-player.devm', 'conveyor.devm', 'components.devm', 'controller.devm', 'drive-unit.devm', 'drive.devm', 'light.devm',
+            'system.devm', 'types.devm', 'gate.devm', 'motor.devm', 'door.devm', 'keyboard.devm', 'traffic-light.devm']);
+        expect((await expandFiles([path.join(EXAMPLES_DIR, 'k*.devm')])).map(f => path.basename(f))).toEqual(['keyboard.devm']);
+        expect(await expandFiles([path.join(EXAMPLES_DIR, '**/*.devm')])).toHaveLength(14);
         expect(await expandFiles([path.join(EXAMPLES_DIR, '*.nothing')])).toEqual([]);
     });
 
-    test('hsm render', async () => {
+    test('devm render', async () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cli-render-'));
         const log = logger();
         expect(await runRenderCommand([EXAMPLES_DIR], { out: dir, theme: 'dark', direction: 'right', routing: 'orthogonal' }, log)).toBe(0);
-        // (with the structure files of examples/device: drive.dmf is rendered as drive.dmf.svg next to drive.svg of drive.hsm)
-        expect(fs.readdirSync(dir).sort()).toEqual(['cd-player.svg', 'components.svg', 'controller.svg', 'conveyor.svg', 'door.svg', 'drive.dmf.svg', 'drive.svg',
+        // (with the structure files of examples/device)
+        expect(fs.readdirSync(dir).sort()).toEqual(['cd-player.svg', 'components.svg', 'controller.svg', 'conveyor.svg', 'door.svg', 'drive-unit.svg', 'drive.svg',
             'gate.svg', 'keyboard.svg', 'light.svg', 'motor.svg', 'system.svg', 'traffic-light.svg', 'types.svg']);
         const svg = fs.readFileSync(path.join(dir, 'door.svg'), 'utf-8');
         expect(parseXml(svg).attributes.class).toContain('theme-dark');
         const single = path.join(dir, 'sub', 'door-classic.svg');
-        expect(await runRenderCommand([path.join(EXAMPLES_DIR, 'door.hsm')], { out: single }, log)).toBe(0);
+        expect(await runRenderCommand([path.join(EXAMPLES_DIR, 'door.devm')], { out: single }, log)).toBe(0);
         expect(fs.existsSync(single)).toBe(true);
         expect(log.messages.filter(m => m.startsWith('ERROR'))).toEqual([]);
         // errors
         expect(await runRenderCommand([EXAMPLES_DIR], { theme: 'neon' }, log)).toBe(2);
         expect(await runRenderCommand([EXAMPLES_DIR], { format: 'png' }, log)).toBe(2);
-        const broken = path.join(dir, 'broken.hsm');
+        const broken = path.join(dir, 'broken.devm');
         fs.writeFileSync(broken, 'statemachine {');
         expect(await runRenderCommand([broken], { out: dir }, log)).toBe(1);
         expect(log.messages.some(m => m.includes('skipped (syntax errors)'))).toBe(true);
     });
 
-    test('hsm doc (Markdown and HTML)', async () => {
+    test('devm doc (Markdown and HTML)', async () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cli-doc-'));
         const log = logger();
         const md = path.join(dir, 'md');
-        expect(await runDocCommand([path.join(EXAMPLES_DIR, '*.hsm')], { out: md }, log)).toBe(0);
+        expect(await runDocCommand([path.join(EXAMPLES_DIR, '*.devm')], { out: md }, log)).toBe(0);
         expect(fs.readdirSync(md).sort()).toEqual(['CdPlayer.md', 'CdPlayer.svg', 'Door.md', 'Door.svg', 'Keyboard.md', 'Keyboard.svg',
             'TrafficLight.md', 'TrafficLight.svg', 'index.md']);
         const index = fs.readFileSync(path.join(md, 'index.md'), 'utf-8');

@@ -1,7 +1,7 @@
 {
     "name": "example-traffic-light-no-pedestrian",
     "description": "Traffic light: an after timer fires once; if the guard is false at that time, the transition is not taken later.",
-    "model": "../../../../examples/traffic-light.hsm",
+    "model": "../../../../examples/traffic-light.devm",
     "steps": [
         {"enter": true},
         {"raise": "powerOn"},

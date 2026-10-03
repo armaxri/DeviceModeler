@@ -19,11 +19,11 @@
  * | choice (dynamic / static)            | `choice` / `junction`                 |
  * | synchronization                      | `sync`                                |
  * | final state                          | `Source -> [*]`                       |
- * | submachine state (referenced chart)  | `import "M.hsm"`, `var m : M`, `state S : m` |
+ * | submachine state (referenced chart)  | `import "M.devm"`, `var m : M`, `state S : m` |
  *
  * Submachine states (states referencing another statechart) become submachine instances if the
  * referenced statechart is known ({@link SctImportOptions.referencedStatechart}, e.g. because it is
- * imported together): an import of its `.hsm` file, an instance variable in the internal scope and
+ * imported together): an import of its `.devm` file, an instance variable in the internal scope and
  * the binding of the state. Otherwise they are imported as simple states with a TODO comment.
  */
 import { HSM_KEYWORDS } from '../edit/model-edits.js';
@@ -42,8 +42,8 @@ export interface SctImportOptions {
     /**
      * Resolves a statechart referenced by a submachine state: `reference` is the referenced file
      * (the part of the `href` before `#`, e.g. `Motor.sct`, empty for a reference into the same
-     * file). Returns the name of the imported state machine and the path of its `.hsm` file relative
-     * to the generated file (e.g. `{ machine: 'Motor', path: 'Motor.hsm' }`), or `undefined` if the
+     * file). Returns the name of the imported state machine and the path of its `.devm` file relative
+     * to the generated file (e.g. `{ machine: 'Motor', path: 'Motor.devm' }`), or `undefined` if the
      * statechart is not imported (the state is imported as a simple state with a TODO comment).
      */
     referencedStatechart?: (reference: string) => { machine: string, path: string } | undefined;
@@ -76,7 +76,7 @@ export function importSct(xml: string, options: SctImportOptions = {}): SctImpor
 /**
  * Imports several `.sct` files together, so that submachine states referencing one of the other
  * statecharts become submachine instances (see {@link SctImportOptions.referencedStatechart}). The
- * generated files are named after the `.sct` files (`Motor.sct` -> `Motor.hsm`, in the same directory).
+ * generated files are named after the `.sct` files (`Motor.sct` -> `Motor.devm`, in the same directory).
  */
 export function importSctFiles(files: Array<{ fileName: string, xml: string }>, options: Omit<SctImportOptions, 'referencedStatechart'> = {}): Array<SctImportResult & { fileName: string }> {
     const baseName = (fileName: string) => fileName.replace(/^.*[\\/]/, '');
@@ -93,10 +93,10 @@ export function importSctFiles(files: Array<{ fileName: string, xml: string }>, 
             referencedStatechart: reference => {
                 const target = reference ? baseName(reference) : baseName(file.fileName);
                 const machine = machines.get(target);
-                return machine ? { machine, path: target.replace(/\.sct$/i, '.hsm') } : undefined;
+                return machine ? { machine, path: target.replace(/\.sct$/i, '.devm') } : undefined;
             }
         });
-        return { ...result, fileName: file.fileName.replace(/\.sct$/i, '.hsm') };
+        return { ...result, fileName: file.fileName.replace(/\.sct$/i, '.devm') };
     });
 }
 
@@ -201,7 +201,7 @@ class SctImporter {
     private layout?: ManualLayout;
     private edgeIds = new Map<TransitionNode, string>();
     private readonly options: SctImportOptions;
-    /** Imports (`.hsm` paths) and instance declarations of submachine states. */
+    /** Imports (`.devm` paths) and instance declarations of submachine states. */
     private readonly imports: string[] = [];
     private readonly instances: Array<{ name: string, machine: string }> = [];
 

@@ -6,7 +6,7 @@ expected along the way. The scenarios pin down the execution semantics of
 section N, `example-...` scenarios run the models in [`examples/`](../../../../examples).
 
 All implementations run the same scenarios: the interpreter (`test/scenarios.test.ts`, and
-`hsm simulate <model> --script <scenario>`) and the code generators (`test/cpp-generator.test.ts`,
+`devm simulate <model> --script <scenario>`) and the code generators (`test/cpp-generator.test.ts`,
 `test/c-generator.test.ts`), which compile a scenario into a test harness. The format therefore only
 uses plain JSON values and no JS specifics.
 
@@ -32,9 +32,9 @@ uses plain JSON values and no JS specifics.
 |---------------|---------|
 | `name`        | Name of the scenario (the file name without `.json`). |
 | `description` | The rule or behavior the scenario checks. |
-| `model`       | Path of a `.hsm` file, relative to the scenario file. Exactly one of `model` and `text` is required. |
+| `model`       | Path of a `.devm` file, relative to the scenario file. Exactly one of `model` and `text` is required. |
 | `text`        | Inline model; a string or an array of lines (joined with `\n`). |
-| `files`       | Optional inline texts of further files the model imports (`import "motor.hsm"`, `import "motor_types.h"`), by path relative to the model: `{ "motor.hsm": ["statemachine Motor {", "...", "}"] }` (strings or arrays of lines; headers may include each other, e.g. `include/base/errors.h`). Used by the submachine scenarios `s9-*`, which the C and C++ generator tests skip (explicit list `SUBMACHINE_SCENARIOS` in `test/helpers.ts`) because the generators do not support submachine instances yet, and by the scenarios of C/C++ header imports `s10-cpp-*`, which the C generator test skips (`CPP_TYPE_SCENARIOS`); the C++ generator test writes the headers next to the generated code and compiles each of these scenarios separately. |
+| `files`       | Optional inline texts of further files the model imports (`import "motor.devm"`, `import "motor_types.h"`), by path relative to the model: `{ "motor.devm": ["statemachine Motor {", "...", "}"] }` (strings or arrays of lines; headers may include each other, e.g. `include/base/errors.h`). Used by the submachine scenarios `s9-*`, which the C and C++ generator tests skip (explicit list `SUBMACHINE_SCENARIOS` in `test/helpers.ts`) because the generators do not support submachine instances yet, and by the scenarios of C/C++ header imports `s10-cpp-*`, which the C generator test skips (`CPP_TYPE_SCENARIOS`); the C++ generator test writes the headers next to the generated code and compiles each of these scenarios separately. |
 | `operations`  | Optional scripted results of operations by declared name (`op` or `Iface.op`, `motor.op` for an operation of the submachine instance `motor`): the values are returned in call order, the last value is repeated. Operations not listed return the default value of their return type (`0`, `0.0`, `false`, `""`). |
 | `steps`       | The steps, executed in order. |
 
@@ -88,6 +88,6 @@ comparison. The declared name is used for named interfaces: `Panel.shown(2)`.
 
 ```sh
 npm test                                                     # all scenarios against the interpreter
-node packages/language/bin/cli.js simulate examples/door.hsm \
+node packages/language/bin/cli.js simulate examples/door.devm \
     --script packages/language/test/scenarios/example-door.json   # after npm run build
 ```

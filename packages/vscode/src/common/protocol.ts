@@ -60,8 +60,8 @@ export type LayoutCommand = 'arrange' | 'reset';
 /** Messages from the extension to the webview. */
 export type ToWebview =
     /**
-     * The document text (on open and after every change, debounced) and, by URI, the texts of all `.hsm`
-     * and `.dmf` files of the workspace and of the files the document imports (transitively, also C/C++
+     * The document text (on open and after every change, debounced) and, by URI, the texts of all `.devm`
+     * files of the workspace and of the files the document imports (transitively, also C/C++
      * headers), so that the webview can resolve the imports and answer queries across files (the
      * structures using a state machine, routes, renames). Sent again when one of these files changes.
      */

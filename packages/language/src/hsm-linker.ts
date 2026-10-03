@@ -135,9 +135,9 @@ export function ambiguityMessage(name: string, qualifiedNames: string[]): string
 }
 
 /**
- * Document builder of the HSM languages: a document is also relinked if a file it imports changed
- * (or if it has an import that could not be resolved, a new file may resolve it). Structure files
- * (`.dmf`) are also relinked if the state machine of a component (`behavior "door.hsm"`) changed.
+ * Document builder of the Device Modeler languages: a document is also relinked if a file it imports
+ * changed (or if it has an import that could not be resolved, a new file may resolve it). Structure
+ * files are also relinked if the state machine of a component (`behavior "door.devm"`) changed.
  */
 export class HsmDocumentBuilder extends DefaultDocumentBuilder {
 
@@ -157,7 +157,7 @@ export class HsmDocumentBuilder extends DefaultDocumentBuilder {
         if (!ast.isStateMachine(root)) {
             return false;
         }
-        return resolvedImports(root).some(i => i.kind === 'hsm' && (!i.machine || (i.uri !== undefined && changedUris.has(i.uri.toString()))))
+        return resolvedImports(root).some(i => i.kind === 'model' && (!i.machine || (i.uri !== undefined && changedUris.has(i.uri.toString()))))
             || this.headersChanged(root);
     }
 

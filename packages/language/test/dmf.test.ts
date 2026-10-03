@@ -19,9 +19,9 @@ const services = loader.services as ReturnType<typeof createHsmServices>;
 
 const DEVICE_DIR = path.resolve(__dirname, '../../../examples/device');
 
-/** Loads a structure model; `files` are further files (`.dmf`, `.hsm`, headers) by path relative to it. */
+/** Loads a structure model; `files` are further files (`.devm` files, headers) by path relative to it. */
 async function load(text: string, files?: Record<string, string>) {
-    return loader.load(text, `file:///work/model-${counter++}/main.dmf`, { files });
+    return loader.load(text, `file:///work/model-${counter++}/main.devm`, { files });
 }
 let counter = 0;
 
@@ -52,8 +52,8 @@ async function system(body: string, extra = '') {
 
 describe('structure language: parsing', () => {
     test('import kinds', () => {
-        expect(dmfImportKind('a.dmf')).toBe('dmf');
-        expect(dmfImportKind('door.HSM')).toBe('hsm');
+        expect(dmfImportKind('a.devm')).toBe('model');
+        expect(dmfImportKind('door.DEVM')).toBe('model');
         expect(dmfImportKind('types.hpp')).toBe('header');
         expect(dmfImportKind('x.txt')).toBe('unsupported');
     });
@@ -61,12 +61,12 @@ describe('structure language: parsing', () => {
     test('the AST of all elements', async () => {
         const parsed = await load(`
 package demo
-import "a.dmf" "b.h"
+import "a.devm" "b.h"
 /** A point. */
 struct P { x : real; y : real }
 interface I { event a, event b : integer }
 component C "a component" {
-    behavior "c.hsm"
+    behavior "c.devm"
     provides async p : I
     requires async q : event a, event b : integer
     requires sync r : P
@@ -87,13 +87,13 @@ system S {
         expect(parsed.hasSyntaxErrors).toBe(false);
         const model = parsed.model;
         expect(model.package).toBe('demo');
-        expect(model.imports[0].paths.map(p => p.path)).toEqual(['a.dmf', 'b.h']);
+        expect(model.imports[0].paths.map(p => p.path)).toEqual(['a.devm', 'b.h']);
         expect(model.elements.map(e => `${e.$type}:${e.name}`)).toEqual([
             'StructDeclaration:P', 'PortInterface:I', 'Component:C', 'Structure:Sub', 'Structure:S'
         ]);
         const component = model.elements[2] as ast.Component;
         expect(component.description).toBe('a component');
-        expect(component.behavior?.path).toBe('c.hsm');
+        expect(component.behavior?.path).toBe('c.devm');
         expect(component.ports.map(p => `${p.direction} ${p.kind} ${p.name}`)).toEqual(['provides async p', 'requires async q', 'requires sync r']);
         expect(component.ports[1].events.map(e => `${e.name}:${e.type?.name ?? ''}`)).toEqual(['a:', 'b:integer']);
         const root = model.elements[4] as ast.Structure;
@@ -115,7 +115,7 @@ system S {
 });
 
 describe('structure language: the example', () => {
-    const files = ['system.dmf', 'components.dmf', 'drive.dmf', 'types.dmf', 'light.dmf'];
+    const files = ['system.devm', 'components.devm', 'drive-unit.devm', 'types.devm', 'light.devm'];
 
     test.each(files)('examples/device/%s has no errors or warnings', async file => {
         const device = new DmfModelLoader(createHsmServices(NodeFileSystem));
@@ -126,7 +126,7 @@ describe('structure language: the example', () => {
         for (const imported of parsed.imported) {
             expect(imported.hasErrors, imported.uri).toBe(false);
         }
-        if (file === 'system.dmf') {
+        if (file === 'system.devm') {
             // (drive is a subsystem outside of threads: its parts run in the MotorTask)
             expect(infos(parsed)).toEqual([
                 "The connection crosses threads ('ControlTask' -> 'MotorTask').",
@@ -148,32 +148,32 @@ describe('structure language: the example', () => {
 
 describe('structure language: linking across files', () => {
     const TYPES = 'package types\nstruct Position { x : real  y : real }\ninterface Cmd { event go }';
-    const PARTS = 'import "types.dmf"\ncomponent Motor { provides async ctrl : Cmd  provides sync pos : Position }';
+    const PARTS = 'import "types.devm"\ncomponent Motor { provides async ctrl : Cmd  provides sync pos : Position }';
 
     test('component types, structs and interfaces of imported files', async () => {
         const parsed = await load(`
-import "parts.dmf"
-import "types.dmf"
+import "parts.devm"
+import "types.devm"
 component Ctl { requires async m : types.Cmd  requires sync p : types.Position }
-system S { thread T { m : Motor  c : Ctl }  connect c.m -> m.ctrl  connect c.p -> m.pos }`, { 'parts.dmf': PARTS, 'types.dmf': TYPES });
+system S { thread T { m : Motor  c : Ctl }  connect c.m -> m.ctrl  connect c.p -> m.pos }`, { 'parts.devm': PARTS, 'types.devm': TYPES });
         expect(errors(parsed)).toEqual([]);
         const root = parsed.model.elements[1] as ast.Structure;
         const motor = root.threads[0].instances[0].type.ref!;
         expect(motor.name).toBe('Motor');
-        expect(AstUtils.getDocument(motor).uri.path).toBe(parsed.document.uri.path.replace('main.dmf', 'parts.dmf'));
+        expect(AstUtils.getDocument(motor).uri.path).toBe(parsed.document.uri.path.replace('main.devm', 'parts.devm'));
         expect(root.connections[0].target.port.ref?.name).toBe('ctrl');
         expect([...visibleElements(parsed.model).keys()]).toEqual(['Ctl', 'S', 'Motor', 'Position', 'types.Position', 'Cmd', 'types.Cmd']);
     });
 
     test('elements of files that are not imported are not visible', async () => {
-        const parsed = await load('system S { thread T { m : Motor } }', { 'parts.dmf': PARTS });
+        const parsed = await load('system S { thread T { m : Motor } }', { 'parts.devm': PARTS });
         expect(errors(parsed)).toEqual([expect.stringContaining("Could not resolve reference to ComponentType named 'Motor'")]);
     });
 
     test('imports that cannot be resolved', async () => {
-        const parsed = await load('import "missing.dmf"\nimport "notes.txt"\nimport "missing.h"\nsystem S {}');
+        const parsed = await load('import "missing.devm"\nimport "notes.txt"\nimport "missing.h"\nsystem S {}');
         expect(errors(parsed)).toEqual([
-            expect.stringMatching(/^Cannot resolve the import 'missing.dmf': the file '.*missing.dmf' was not found\.$/),
+            expect.stringMatching(/^Cannot resolve the import 'missing.devm': the file '.*missing.devm' was not found\.$/),
             expect.stringContaining("Cannot import 'notes.txt'"),
             expect.stringContaining("Cannot resolve the import 'missing.h': the header was not found")
         ]);
@@ -191,9 +191,9 @@ component C { provides sync pos : geo::Position  provides sync mode : geo::Mode 
         expect(resolvedDmfImports(parsed.model)[0].header?.found).toBe(true);
     });
 
-    test('behavior by state machine name (`import "door.hsm"`, `behavior Door`)', async () => {
-        const parsed = await load('import "door.hsm"\ncomponent C { behavior Door  provides async cmd : event open }', {
-            'door.hsm': 'statemachine Door { interface: in event open [*] -> A state A A -> A : open }'
+    test('behavior by state machine name (`import "door.devm"`, `behavior Door`)', async () => {
+        const parsed = await load('import "door.devm"\ncomponent C { behavior Door  provides async cmd : event open }', {
+            'door.devm': 'statemachine Door { interface: in event open [*] -> A state A A -> A : open }'
         });
         expect(errors(parsed)).toEqual([]);
         expect(behaviorMachine(parsed.model.elements[0] as ast.Component)?.name).toBe('Door');
@@ -202,16 +202,16 @@ component C { provides sync pos : geo::Position  provides sync mode : geo::Mode 
     });
 
     test('documents are relinked when a file they depend on changes', async () => {
-        const parsed = await load('import "parts.dmf"\ncomponent C { behavior "door.hsm" }', {
-            'parts.dmf': 'component P { }',
-            'door.hsm': 'statemachine Door { [*] -> A state A }'
+        const parsed = await load('import "parts.devm"\ncomponent C { behavior "door.devm" }', {
+            'parts.devm': 'component P { }',
+            'door.devm': 'statemachine Door { [*] -> A state A }'
         });
         const resolver = services.Dmf.references.DmfImportResolver;
-        const sibling = (name: string) => parsed.document.uri.toString().replace('main.dmf', name);
-        expect(resolver.dependenciesChanged(parsed.model, new Set([sibling('door.hsm')]))).toBe(true);
-        expect(resolver.dependenciesChanged(parsed.model, new Set([sibling('parts.dmf')]))).toBe(true);
-        expect(resolver.dependenciesChanged(parsed.model, new Set([sibling('other.hsm')]))).toBe(false);
-        const missing = await load('component C { behavior "door.hsm" }');
+        const sibling = (name: string) => parsed.document.uri.toString().replace('main.devm', name);
+        expect(resolver.dependenciesChanged(parsed.model, new Set([sibling('door.devm')]))).toBe(true);
+        expect(resolver.dependenciesChanged(parsed.model, new Set([sibling('parts.devm')]))).toBe(true);
+        expect(resolver.dependenciesChanged(parsed.model, new Set([sibling('other.devm')]))).toBe(false);
+        const missing = await load('component C { behavior "door.devm" }');
         expect(resolver.dependenciesChanged(missing.model, new Set())).toBe(true);
     });
 
@@ -481,7 +481,7 @@ statemachine Door {
 }`;
 
     async function component(ports: string) {
-        return load(`component C {\n    behavior "door.hsm"\n${ports}\n}`, { 'door.hsm': DOOR });
+        return load(`component C {\n    behavior "door.devm"\n${ports}\n}`, { 'door.devm': DOOR });
     }
 
     test('ports matching the state machine', async () => {
@@ -531,10 +531,10 @@ statemachine Door {
     });
 
     test('a missing behavior file', async () => {
-        const parsed = await load('component C { behavior "nothing.hsm" }\ncomponent D { behavior "door.txt" }');
+        const parsed = await load('component C { behavior "nothing.devm" }\ncomponent D { behavior "door.txt" }');
         expect(errors(parsed)).toEqual([
-            expect.stringMatching(/^Cannot resolve the behavior 'nothing.hsm': the state machine file '.*nothing.hsm' was not found\.$/),
-            "The behavior of a component is a state machine file ('.hsm'), not 'door.txt'."
+            expect.stringMatching(/^Cannot resolve the behavior 'nothing.devm': the state machine file '.*nothing.devm' was not found\.$/),
+            "The behavior of a component is a state machine file ('.devm'), not 'door.txt'."
         ]);
     });
 
@@ -543,9 +543,9 @@ statemachine Door {
         const parsed = await load(`
 import "geo.h"
 struct Position { x : real  y : real }
-component C { behavior "m.hsm"  provides sync pos : Position  provides sync other : geo::Position }`, {
+component C { behavior "m.devm"  provides sync pos : Position  provides sync other : geo::Position }`, {
             'geo.h': header,
-            'm.hsm': 'statemachine M { import "geo.h" interface: var pos : geo::Position var other : geo::Position [*] -> A state A }'
+            'm.devm': 'statemachine M { import "geo.h" interface: var pos : geo::Position var other : geo::Position [*] -> A state A }'
         });
         expect(errors(parsed)).toEqual([]);
         const [pos, other] = (parsed.model.elements[1] as ast.Component).ports;
@@ -570,8 +570,8 @@ describe('structure language: formatter and language server', () => {
     }
 
     test('formatter', async () => {
-        const text = 'import "a.dmf" "b.h"\nstruct P{x:real;y:real}\ninterface I{event a event b:integer}\ncomponent C "doc"{behavior "c.hsm" provides async p:I requires sync q : P\nrequires async r:event a,event b : integer}\n/** The system. */\nsystem S{provides async x:I\n@priority( 5 ) @period(10ms)\nthread T{c:C\n  /** doc */\nd : C}\n e:C\nthread U {e}\nconnect c.r->d.p delegate x->c.p}';
-        expect(await format(text)).toBe(`import "a.dmf" "b.h"
+        const text = 'import "a.devm" "b.h"\nstruct P{x:real;y:real}\ninterface I{event a event b:integer}\ncomponent C "doc"{behavior "c.devm" provides async p:I requires sync q : P\nrequires async r:event a,event b : integer}\n/** The system. */\nsystem S{provides async x:I\n@priority( 5 ) @period(10ms)\nthread T{c:C\n  /** doc */\nd : C}\n e:C\nthread U {e}\nconnect c.r->d.p delegate x->c.p}';
+        expect(await format(text)).toBe(`import "a.devm" "b.h"
 struct P {
     x : real;
     y : real
@@ -581,7 +581,7 @@ interface I {
     event b : integer
 }
 component C "doc" {
-    behavior "c.hsm"
+    behavior "c.devm"
     provides async p : I
     requires sync q : P
     requires async r : event a, event b : integer
@@ -605,16 +605,16 @@ system S {
     });
 
     test('the formatter keeps the examples', async () => {
-        for (const file of ['system.dmf', 'components.dmf', 'drive.dmf', 'types.dmf', 'light.dmf']) {
+        for (const file of ['system.devm', 'components.devm', 'drive-unit.devm', 'types.devm', 'light.devm']) {
             const text = fs.readFileSync(path.join(DEVICE_DIR, file), 'utf-8');
             expect(await format(text), file).toBe(text);
         }
     });
 
-    const LSP_MAIN = `import "parts.dmf"
+    const LSP_MAIN = `import "parts.devm"
 struct Position { x : real }
 /** Uses the motor. */
-component Ctl { behavior "door.hsm"  requires async m : Cmd  requires sync p : real }
+component Ctl { behavior "door.devm"  requires async m : Cmd  requires sync p : real }
 component Pos { provides sync where : Position }
 system S {
     @priority(3)
@@ -623,8 +623,8 @@ system S {
     connect c.m -> m.ctrl
 }`;
     const LSP_FILES = {
-        'parts.dmf': 'interface Cmd { event go }\n/** Drives. */\ncomponent Motor { provides async ctrl : Cmd }',
-        'door.hsm': 'statemachine Door { interface: out event go operation p() : real [*] -> A state A }'
+        'parts.devm': 'interface Cmd { event go }\n/** Drives. */\ncomponent Motor { provides async ctrl : Cmd }',
+        'door.devm': 'statemachine Door { interface: out event go operation p() : real [*] -> A state A }'
     };
 
     function offsetOf(document: LangiumDocument, text: string, occurrence = 0): { line: number, character: number } {
@@ -651,12 +651,12 @@ system S {
         expect(position?.[0].targetUri).toBe(document.uri.toString());
         expect(position?.[0].targetSelectionRange.start.line).toBe(1);
         const cmd = await definition(document, 'Cmd');
-        expect(cmd?.[0].targetUri).toMatch(/parts\.dmf$/);
+        expect(cmd?.[0].targetUri).toMatch(/parts\.devm$/);
         // component type of an instance, port of a connection, behavior file, import path
-        expect((await definition(document, 'Motor'))?.[0].targetUri).toMatch(/parts\.dmf$/);
+        expect((await definition(document, 'Motor'))?.[0].targetUri).toMatch(/parts\.devm$/);
         expect((await definition(document, 'ctrl'))?.[0].targetSelectionRange.start).toEqual({ line: 2, character: 33 });
-        expect((await definition(document, 'door.hsm'))?.[0].targetUri).toMatch(/door\.hsm$/);
-        expect((await definition(document, 'parts.dmf'))?.[0].targetUri).toMatch(/parts\.dmf$/);
+        expect((await definition(document, 'door.devm'))?.[0].targetUri).toMatch(/door\.devm$/);
+        expect((await definition(document, 'parts.devm'))?.[0].targetUri).toMatch(/parts\.devm$/);
     });
 
     test('go to implementation: the providers of a required port', async () => {
@@ -673,17 +673,17 @@ system S {
         const parsed = await load(LSP_MAIN, LSP_FILES);
         const root = parsed.model.elements[3] as ast.Structure;
         const ctl = parsed.model.elements[1] as ast.Component;
-        expect(dmfSignature(ctl)).toBe('component Ctl (behavior "door.hsm")');
+        expect(dmfSignature(ctl)).toBe('component Ctl (behavior "door.devm")');
         expect(dmfSignature(ctl.ports[0])).toBe('requires async m : Cmd');
         expect(dmfSignature(root.threads[0])).toBe('thread T (priority 3)');
         expect(dmfSignature(root.threads[0].instances[0])).toBe('c : component Ctl (thread T)');
         expect(dmfSignature(parsed.model.elements[0])).toBe('struct Position { x : real }');
         const hover = services.Dmf.documentation.DocumentationProvider.getDocumentation(ctl);
-        expect(hover).toBe('```dmf\ncomponent Ctl (behavior "door.hsm")\n```\n\nUses the motor.');
+        expect(hover).toBe('```devm\ncomponent Ctl (behavior "door.devm")\n```\n\nUses the motor.');
     });
 
     test('completion of type names', async () => {
-        const parsed = await load('import "parts.dmf"\nstruct Position { x : real }\ncomponent C { provides sync p : \n}', LSP_FILES);
+        const parsed = await load('import "parts.devm"\nstruct Position { x : real }\ncomponent C { provides sync p : \n}', LSP_FILES);
         const document = parsed.document;
         const list = await services.Dmf.lsp.CompletionProvider!.getCompletion(document, {
             textDocument: { uri: document.uri.toString() }, position: { line: 2, character: 32 }

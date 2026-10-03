@@ -1,7 +1,7 @@
 {
     "name": "example-keyboard",
     "description": "Keyboard: orthogonal regions, out event with value, exit reactions when the composite state is left.",
-    "model": "../../../../examples/keyboard.hsm",
+    "model": "../../../../examples/keyboard.devm",
     "steps": [
         {"enter": true},
         {"expect": {"configuration": ["Active.CapsOff", "Active.NumOff"], "variables": {"CAPS": 1, "NUM": 2}}},

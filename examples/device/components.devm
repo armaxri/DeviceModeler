@@ -1,11 +1,11 @@
 // Component types of the garage door (examples/device). Components with a `behavior` are implemented
 // by a state machine; their ports must match its interfaces (see docs/structure-language.md).
-import "types.dmf"
+import "types.devm"
 import "door_types.h"
 
-/** Opens and closes the door; implemented by controller.hsm. */
+/** Opens and closes the door; implemented by controller.devm. */
 component DoorController {
-    behavior "controller.hsm"
+    behavior "controller.devm"
     provides async cmd : DoorCmd
     provides async status : MotorStatus
     requires async motor : MotorCmd
@@ -14,9 +14,9 @@ component DoorController {
     requires sync position : door::Position
 }
 
-/** Motor control; implemented by drive.hsm. */
+/** Motor control; implemented by drive.devm. */
 component MotorController {
-    behavior "drive.hsm"
+    behavior "drive.devm"
     provides async ctrl : MotorCmd
     provides async sensors : event endSwitch, event overcurrent
     requires async status : MotorStatus

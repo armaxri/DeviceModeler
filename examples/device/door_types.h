@@ -1,7 +1,7 @@
 /**
  * @file door_types.h
- * Types shared by the structure model of the garage door (components.dmf) and its state machines
- * (controller.hsm).
+ * Types shared by the structure model of the garage door (components.devm) and its state machines
+ * (controller.devm).
  */
 #ifndef DOOR_TYPES_H
 #define DOOR_TYPES_H

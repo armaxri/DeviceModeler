@@ -1,15 +1,16 @@
-import { AstUtils, CstUtils, type CstNode, type LangiumDocument } from 'langium';
-import { DefaultCompletionProvider, type LangiumServices } from 'langium/lsp';
-import { CompletionItemKind, type CompletionItem, type CompletionList, type Range } from 'vscode-languageserver-types';
+import { AstUtils, CstUtils, GrammarAST, GrammarUtils, type CstNode, type LangiumDocument, type MaybePromise } from 'langium';
+import { DefaultCompletionProvider, DefaultDefinitionProvider, type CompletionContext, type LangiumServices } from 'langium/lsp';
+import { CompletionItemKind, LocationLink, type CompletionItem, type CompletionList, type Range } from 'vscode-languageserver-types';
 
 type CompletionParams = Parameters<DefaultCompletionProvider['getCompletion']>[1];
+type DefinitionParams = Parameters<DefaultDefinitionProvider['getDefinition']>[1];
 import * as ast from '../generated/ast.js';
 import type { CppDeclaration, CppRange, CppResolvedField } from '../cpp-header/model.js';
 import type { CppTypeIndex } from '../cpp-header/type-index.js';
 import { cppValueToJson, describeCppType } from '../cpp-header/report.js';
 import { displayPath } from '../cpp-headers.js';
 import { contextMachine, cppIndexAt, cppTypeOfReference, isStructType, memberOf, referenceMembers } from '../cpp-types.js';
-import { cppImports, resolvedImports } from '../imports.js';
+import { cppImports, machineType, resolvedImports } from '../imports.js';
 import { inferType, typeName, typeOfDeclaration, type HsmType } from '../hsm-typesystem.js';
 
 /**
@@ -344,10 +345,57 @@ export class HsmCompletionProvider extends DefaultCompletionProvider {
 
     override async getCompletion(document: LangiumDocument, params: CompletionParams): Promise<CompletionList | undefined> {
         const offset = document.textDocument.offsetAt(params.position);
-        const cpp = cppCompletionItems(document, offset);
+        const cpp = ast.isDmfModel(document.parseResult.value) ? undefined : cppCompletionItems(document, offset);
         if (cpp && cpp.length > 0) {
             return { isIncomplete: false, items: cpp };
         }
         return super.getCompletion(document, params);
+    }
+
+    /** The keywords of the other kind of `.devm` files, which are accepted as names, are not proposed. */
+    protected override filterKeyword(context: CompletionContext, keyword: GrammarAST.Keyword): boolean {
+        return !isSoftKeyword(keyword) && super.filterKeyword(context, keyword);
+    }
+}
+
+/**
+ * Whether a keyword of the grammar is an alternative of a name rule (`HsmId`, `DmfId`): a keyword of
+ * one kind of `.devm` files accepted as a name in the other kind.
+ */
+export function isSoftKeyword(keyword: GrammarAST.Keyword): boolean {
+    const rule = AstUtils.getContainerOfType(keyword, GrammarAST.isParserRule);
+    return rule?.name === 'HsmId' || rule?.name === 'DmfId';
+}
+
+/**
+ * Go to definition in state machine (and test) files: C++ names and header imports into the header,
+ * the name of an imported state machine used as a type (`var motor : Motor`) and an import path
+ * (`import "motor.devm"`) to the imported state machine, otherwise the default (cross-references).
+ */
+export class HsmDefinitionProvider extends DefaultDefinitionProvider {
+
+    override getDefinition(document: LangiumDocument, params: DefinitionParams): MaybePromise<LocationLink[] | undefined> {
+        const offset = document.textDocument.offsetAt(params.position);
+        const cpp = cppDefinition(document, offset);
+        if (cpp) {
+            return [LocationLink.create(cpp.uri, cpp.range, cpp.selection, cpp.origin)];
+        }
+        const root = document.parseResult.value.$cstNode;
+        const leaf = root ? CstUtils.findLeafNodeAtOffset(root, offset) : undefined;
+        const node = leaf?.astNode;
+        let machine: ast.StateMachine | undefined;
+        if (ast.isTypeReference(node)) {
+            machine = machineType(node);
+        } else if (ast.isImportPath(node)) {
+            const owner = AstUtils.getContainerOfType(node, ast.isStateMachine);
+            machine = owner ? resolvedImports(owner).find(i => i.node === node)?.machine : undefined;
+        }
+        const target = machine?.$cstNode;
+        const targetDocument = machine?.$document;
+        if (leaf && target && targetDocument) {
+            const name = GrammarUtils.findNodeForProperty(target, 'name') ?? target;
+            return [LocationLink.create(targetDocument.textDocument.uri, target.range, name.range, leaf.range)];
+        }
+        return super.getDefinition(document, params);
     }
 }

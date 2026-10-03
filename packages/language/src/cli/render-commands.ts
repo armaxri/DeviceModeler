@@ -6,17 +6,18 @@ import { NodeFileSystem } from 'langium/node';
 import type { EdgeRouting, LayoutDirection } from '../diagram/diagram-model.js';
 import { layoutStateMachineWithLayout } from '../diagram/manual-layout.js';
 import { describeStateMachine, generateDocIndex, generateModelDoc, type DocFormat, type DocIndexEntry } from '../doc/model-doc.js';
-import type { DmfModel, StateMachine } from '../generated/ast.js';
+import { isDmfModel, type DmfModel, type StateMachine } from '../generated/ast.js';
 import { layoutStructure } from '../diagram/ibd-layout.js';
 import { IBD_OVERVIEW_ID, IBD_TYPES_ID } from '../diagram/ibd-model.js';
-import { DmfModelLoader, HsmModelLoader } from '../hsm-document.js';
+import { HsmModelLoader } from '../hsm-document.js';
 import { createHsmServices } from '../hsm-module.js';
+import { MODEL_EXTENSION } from '../imports.js';
 import { installNodeHeaderSupport } from '../node/cpp-headers-node.js';
 import { DIAGRAM_THEMES, renderSvg, type DiagramTheme } from '../render/svg.js';
 import { renderIbdSvg } from '../render/ibd-svg.js';
 
 /*
- * Commands `hsm render` (diagrams as SVG files) and `hsm doc` (documentation pages).
+ * Commands `devm render` (diagrams as SVG files) and `devm doc` (documentation pages).
  */
 
 export interface DiagramCommandOptions {
@@ -34,7 +35,7 @@ export interface RenderCommandOptions extends DiagramCommandOptions {
     out?: string;
     format?: string;
     /**
-     * Structure files (`.dmf`): the subsystem, system or component type to show (default: the first
+     * Structure files: the subsystem, system or component type to show (default: the first
      * system, else the first subsystem, else all component types, else the data types).
      */
     element?: string;
@@ -70,11 +71,6 @@ interface LoadedStructure {
     model: DmfModel;
 }
 
-/** Whether the file is a structure file (`.dmf`, Device Modeling Framework). */
-function isStructureFile(file: string): boolean {
-    return file.toLowerCase().endsWith('.dmf');
-}
-
 /**
  * Loads the models; prints their problems. Models with syntax errors are skipped (and counted as
  * failures), validation errors are reported but the models are still rendered.
@@ -83,8 +79,8 @@ async function loadModels(files: string[], logger: Logger): Promise<{ models: Lo
     const services = createHsmServices(NodeFileSystem);
     // imported C/C++ headers: read from the file system, settings of the nearest hsm.gen.json
     installNodeHeaderSupport(services.shared);
+    // state machine files and structure files are one language: the kind of a file is the kind of its root
     const loader = new HsmModelLoader(services);
-    const structureLoader = new DmfModelLoader(services);
     const models: LoadedModel[] = [];
     const structures: LoadedStructure[] = [];
     let failures = 0;
@@ -97,22 +93,19 @@ async function loadModels(files: string[], logger: Logger): Promise<{ models: Lo
             failures++;
             continue;
         }
-        if (isStructureFile(file)) {
-            const parsed = await structureLoader.load(text, URI.file(path.resolve(file)).toString());
-            for (const d of parsed.diagnostics.filter(d => d.severity === 1)) {
-                logger.error(`${file}:${d.range.start.line + 1}:${d.range.start.character + 1}: error: ${d.message}`);
-            }
+        const parsed = await loader.load(text, URI.file(path.resolve(file)).toString());
+        for (const d of parsed.diagnostics.filter(d => d.severity === 1)) {
+            logger.error(`${file}:${d.range.start.line + 1}:${d.range.start.character + 1}: ${severities[d.severity ?? 1]}: ${d.message}`);
+        }
+        const root: StateMachine | DmfModel = parsed.model;
+        if (isDmfModel(root)) {
             if (parsed.hasSyntaxErrors) {
                 logger.error(`${file}: skipped (syntax errors)`);
                 failures++;
                 continue;
             }
-            structures.push({ file, model: parsed.model });
+            structures.push({ file, model: root });
             continue;
-        }
-        const parsed = await loader.load(text, `file://${path.resolve(file)}`);
-        for (const d of parsed.diagnostics.filter(d => d.severity === 1)) {
-            logger.error(`${file}:${d.range.start.line + 1}:${d.range.start.character + 1}: ${severities[d.severity ?? 1]}: ${d.message}`);
         }
         if (parsed.hasSyntaxErrors || !parsed.model?.name) {
             logger.error(`${file}: skipped (syntax errors)`);
@@ -147,7 +140,7 @@ async function renderModel(model: StateMachine, options: ReturnType<typeof diagr
     return renderSvg(graph, { theme: options.theme, xmlDeclaration });
 }
 
-/** `hsm render`: renders the diagrams of the given models (files, directories or glob patterns) as SVG files. Returns the exit code. */
+/** `devm render`: renders the diagrams of the given models (files, directories or glob patterns) as SVG files. Returns the exit code. */
 export async function runRenderCommand(patterns: string[], options: RenderCommandOptions, logger: Logger = consoleLogger): Promise<number> {
     let settings: ReturnType<typeof diagramOptions>;
     try {
@@ -160,9 +153,9 @@ export async function runRenderCommand(patterns: string[], options: RenderComman
         logger.error(error instanceof Error ? error.message : String(error));
         return 2;
     }
-    const files = await expandFiles(patterns, ['.hsm', '.dmf']);
+    const files = await expandFiles(patterns);
     if (files.length === 0) {
-        logger.error(`No .hsm or .dmf files found: ${patterns.join(' ')}`);
+        logger.error(`No ${MODEL_EXTENSION} files found: ${patterns.join(' ')}`);
         return 1;
     }
     const { models, structures, failures: loadFailures } = await loadModels(files, logger);
@@ -183,11 +176,7 @@ export async function runRenderCommand(patterns: string[], options: RenderComman
             continue;
         }
         const svg = renderIbdSvg(layout.graph, { theme: settings.theme });
-        // (`drive.dmf.svg` if a state machine `drive.hsm` is rendered into the same directory)
-        const base = path.basename(file).replace(/\.dmf$/i, '');
-        const directory = options.out ?? path.dirname(file);
-        const clash = models.some(m => path.basename(m.file).replace(/\.hsm$/i, '') === base && (options.out ?? path.dirname(m.file)) === directory);
-        const out = single ? options.out! : path.join(directory, base + (clash ? '.dmf.svg' : '.svg'));
+        const out = single ? options.out! : path.join(options.out ?? path.dirname(file), svgFileName(file));
         await fs.mkdir(path.dirname(out), { recursive: true });
         await fs.writeFile(out, svg);
         logger.log(`Rendered ${out}`);
@@ -195,7 +184,7 @@ export async function runRenderCommand(patterns: string[], options: RenderComman
     for (const { file, model } of models) {
         const svg = await renderModel(model, settings);
         const out = single ? options.out!
-            : path.join(options.out ?? path.dirname(file), path.basename(file).replace(/\.hsm$/i, '') + '.svg');
+            : path.join(options.out ?? path.dirname(file), svgFileName(file));
         await fs.mkdir(path.dirname(out), { recursive: true });
         await fs.writeFile(out, svg);
         logger.log(`Rendered ${out}`);
@@ -203,7 +192,12 @@ export async function runRenderCommand(patterns: string[], options: RenderComman
     return failures > 0 ? 1 : 0;
 }
 
-/** `hsm doc`: writes a documentation page per state machine plus an index page. Returns the exit code. */
+/** The name of the SVG file of a model file: `door.devm` -> `door.svg`. */
+function svgFileName(file: string): string {
+    return path.basename(file).replace(/\.devm$/i, '') + '.svg';
+}
+
+/** `devm doc`: writes a documentation page per state machine plus an index page. Returns the exit code. */
 export async function runDocCommand(patterns: string[], options: DocCommandOptions, logger: Logger = consoleLogger): Promise<number> {
     let settings: ReturnType<typeof diagramOptions>;
     let format: DocFormat;
@@ -218,18 +212,15 @@ export async function runDocCommand(patterns: string[], options: DocCommandOptio
         logger.error(error instanceof Error ? error.message : String(error));
         return 2;
     }
-    const files = (await expandFiles(patterns)).filter(file => {
-        if (isStructureFile(file)) {
-            logger.log(`${file}: skipped (structure files are not documented yet; use 'hsm render')`);
-            return false;
-        }
-        return true;
-    });
+    const files = await expandFiles(patterns);
     if (files.length === 0) {
-        logger.error(`No .hsm files found: ${patterns.join(' ')}`);
+        logger.error(`No ${MODEL_EXTENSION} files found: ${patterns.join(' ')}`);
         return 1;
     }
-    const { models, failures } = await loadModels(files, logger);
+    const { models, structures, failures } = await loadModels(files, logger);
+    for (const { file } of structures) {
+        logger.log(`${file}: skipped (structure files are not documented yet; use 'devm render')`);
+    }
     const outDir = options.out ?? 'docs';
     await fs.mkdir(outDir, { recursive: true });
     const index: DocIndexEntry[] = [];
@@ -267,11 +258,11 @@ function toPosix(file: string): string {
 }
 
 /**
- * Expands the arguments into a sorted list of `.hsm` files: files are taken as they are, directories
+ * Expands the arguments into a sorted list of model files (`.devm`): files are taken as they are, directories
  * are searched recursively and glob patterns (`*`, `?`, `**`) are matched against the file system
  * (for shells that do not expand them, e.g. on Windows or when quoted).
  */
-export async function expandFiles(patterns: string[], extensions: readonly string[] = ['.hsm']): Promise<string[]> {
+export async function expandFiles(patterns: string[], extensions: readonly string[] = [MODEL_EXTENSION]): Promise<string[]> {
     const result: string[] = [];
     const add = (file: string) => {
         if (!result.includes(file)) {
@@ -349,7 +340,7 @@ function globToRegExp(pattern: string): RegExp {
 /** Registers `render` and `doc` at the command line program. */
 export function registerRenderCommands(program: Command): void {
     program.command('render')
-        .argument('<files...>', '.hsm and .dmf files, directories or glob patterns')
+        .argument('<files...>', '.devm files (state machines and structure files), directories or glob patterns')
         .option('-o, --out <path>', 'output file (one model, *.svg) or directory (default: next to the model)')
         .option('-t, --theme <theme>', `diagram theme: ${DIAGRAM_THEMES.join(', ')}`, 'classic')
         .option('-d, --direction <direction>', 'layout direction: DOWN or RIGHT', 'DOWN')
@@ -364,7 +355,7 @@ export function registerRenderCommands(program: Command): void {
         });
 
     program.command('doc')
-        .argument('<files...>', '.hsm files, directories or glob patterns')
+        .argument('<files...>', '.devm files (state machines), directories or glob patterns')
         .option('-o, --out <dir>', 'output directory', 'docs')
         .option('-f, --format <format>', 'md (Markdown + SVG files) or html (self-contained pages)', 'md')
         .option('-t, --theme <theme>', `diagram theme: ${DIAGRAM_THEMES.join(', ')}`, 'classic')

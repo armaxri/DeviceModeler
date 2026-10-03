@@ -3,7 +3,7 @@
     "description": "Operations of an instance are implemented by the host under the name of the instance (motor.readSensor).",
     "text": [
         "statemachine Door {",
-        "    import \"motor.hsm\"",
+        "    import \"motor.devm\"",
         "    interface:",
         "        in event open",
         "        in event again",
@@ -18,7 +18,7 @@
         "}"
     ],
     "files": {
-        "motor.hsm": [
+        "motor.devm": [
             "statemachine Motor {",
             "    interface:",
             "        in event start",

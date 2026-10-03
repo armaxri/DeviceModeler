@@ -44,7 +44,7 @@ const SKIP: Record<string, string> = Object.fromEntries([
 const scenarioDirectory = path.resolve(__dirname, 'scenarios');
 const scenarioFiles = fs.readdirSync(scenarioDirectory).filter(f => f.endsWith('.json')).sort();
 const exampleDirectory = path.resolve(__dirname, '../../../examples');
-const exampleFiles = fs.readdirSync(exampleDirectory).filter(f => f.endsWith('.hsm')).sort();
+const exampleFiles = fs.readdirSync(exampleDirectory).filter(f => f.endsWith('.devm')).sort();
 
 interface Outcome {
     passed: boolean;

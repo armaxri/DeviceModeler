@@ -6,7 +6,7 @@ import {
 
 /*
  * Report formats of the model coverage: text summary, JSON, LCOV, Cobertura XML and HTML.
- * All functions return strings (no file system access); `hsm test --coverage` writes them.
+ * All functions return strings (no file system access); `devm test --coverage` writes them.
  */
 
 export type CoverageFormat = 'text' | 'json' | 'lcov' | 'cobertura' | 'html';
@@ -31,7 +31,7 @@ function formatPercent(counter: CoverageCounter): string {
 }
 
 function fileOf(machine: MachineCoverage, options: CoverageReportOptions): string {
-    return machine.uri ? (options.fileName ?? (uri => uri))(machine.uri) : `${machine.machine}.hsm`;
+    return machine.uri ? (options.fileName ?? (uri => uri))(machine.uri) : `${machine.machine}.devm`;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -165,7 +165,7 @@ function fileCoverage(report: CoverageReport, options: CoverageReportOptions): F
 }
 
 /**
- * LCOV tracefile: one record per `.hsm` file. Lines (`DA`) are the source lines of states,
+ * LCOV tracefile: one record per `.devm` file. Lines (`DA`) are the source lines of states,
  * transitions and reactions, functions (`FN` / `FNDA`) are the states, branches (`BRDA`) the guard
  * decisions (branch 0: true, 1: false; `-`: guard never evaluated).
  */
@@ -201,7 +201,7 @@ export function toLcov(report: CoverageReport, options: CoverageReportOptions & 
 }
 
 /**
- * Cobertura XML (GitLab coverage visualization, Jenkins): one package per `.hsm` file, one class per
+ * Cobertura XML (GitLab coverage visualization, Jenkins): one package per `.devm` file, one class per
  * state machine, lines as in {@link toLcov}, guard lines are branches (`condition-coverage`).
  */
 export function toCobertura(report: CoverageReport, options: CoverageReportOptions & { sourceRoot?: string, timestamp?: number } = {}): string {

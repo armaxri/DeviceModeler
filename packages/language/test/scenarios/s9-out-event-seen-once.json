@@ -3,7 +3,7 @@
     "description": "An out event of an instance is visible to reactions processed after the instance in the same step and to the others in the next step: every reaction sees it exactly once.",
     "text": [
         "statemachine Door {",
-        "    import \"motor.hsm\"",
+        "    import \"motor.devm\"",
         "    interface:",
         "        var early : integer = 0",
         "        var late : integer = 0",
@@ -32,7 +32,7 @@
         "}"
     ],
     "files": {
-        "motor.hsm": [
+        "motor.devm": [
             "statemachine Motor {",
             "    ",
             "    interface:",

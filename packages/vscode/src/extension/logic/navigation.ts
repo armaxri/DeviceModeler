@@ -57,7 +57,7 @@ export function sameLocation(a: NavigationLocation, b: NavigationLocation): bool
         && JSON.stringify(a.context ?? null) === JSON.stringify(b.context ?? null);
 }
 
-/** `system.dmf – GarageDoor (GarageDoor/door)`: the label of a location (tooltips of Back / Forward). */
+/** `system.devm – GarageDoor (GarageDoor/door)`: the label of a location (tooltips of Back / Forward). */
 export function locationLabel(location: NavigationLocation): string {
     const file = decodeURIComponent(location.uri.replace(/^.*\//, ''));
     const element = location.element ? ` – ${location.element}` : '';

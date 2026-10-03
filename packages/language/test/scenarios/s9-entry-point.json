@@ -3,7 +3,7 @@
     "description": "A transition with '# >E' to a submachine state enters the instance through the entry point E of its state machine, otherwise by its initial transition.",
     "text": [
         "statemachine Door {",
-        "    import \"motor.hsm\"",
+        "    import \"motor.devm\"",
         "    interface:",
         "        in event open",
         "        in event openFast",
@@ -19,7 +19,7 @@
         "}"
     ],
     "files": {
-        "motor.hsm": [
+        "motor.devm": [
             "statemachine Motor {",
             "    interface:",
             "        in event start",

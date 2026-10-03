@@ -1,12 +1,11 @@
-import { normalizeUri, type DiagramSubmachine, type TextEdit } from 'hsm-language';
+import { isStructureText, normalizeUri, type DiagramSubmachine, type TextEdit } from 'hsm-language';
 import type { DiagramController, DiagramHost, DiagramLocation, StatusSeverity, TextRange } from '@hsm-web/diagram-controller.js';
-import { isStructureFile } from '@hsm-web/model-service.js';
 import { byId, h } from '@hsm-web/ui/dom.js';
 import { svgToPng } from '@hsm-web/ui/export-svg.js';
 import type { FromWebview, LayoutCommand, NavigationState, OffsetEdit, ToWebview, WebviewSettings } from '../common/protocol.js';
 import { textHash } from '../common/text-hash.js';
 
-/** Controls of the toolbar that do not apply to structure files (`.dmf`). */
+/** Controls of the toolbar that do not apply to structure files. */
 const STATE_MACHINE_CONTROLS = ['direction-select', 'routing-select', 'priorities-toggle', 'btn-simulate', 'btn-cpp'];
 
 export interface VsCodeApi {
@@ -140,7 +139,7 @@ export class WebviewHost implements DiagramHost {
      * also updated by the controller).
      */
     private updateFileControls(): void {
-        const structure = isStructureFile(this.uri);
+        const structure = isStructureText(this.text);
         for (const id of STATE_MACHINE_CONTROLS) {
             const control = document.getElementById(id) as HTMLButtonElement | null;
             if (control) {
@@ -200,7 +199,6 @@ export class WebviewHost implements DiagramHost {
                 }
                 if (message.uri !== this.uri) {
                     this.uri = message.uri;
-                    this.updateFileControls();
                 }
                 this.textChanged(message.text, message.version, message.fileName, filesChanged);
                 break;
@@ -260,6 +258,8 @@ export class WebviewHost implements DiagramHost {
             return;
         }
         this.text = text;
+        // (a state machine file can become a structure file and back)
+        this.updateFileControls();
         if (!this.received) {
             this.received = true;
             this.controller.update(true);

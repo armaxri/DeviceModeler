@@ -1,32 +1,29 @@
 {
     "projectName": "Hsm",
-    "languages": [{
-        "id": "hsm",
-        "grammar": "src/hsm.langium",
-        "fileExtensions": [".hsm"],
-        "textMate": {
-            "out": "syntaxes/hsm.tmLanguage.json"
+    "languages": [
+        {
+            "id": "devm",
+            "grammar": "src/devm.langium",
+            "fileExtensions": [
+                ".devm"
+            ],
+            "textMate": {
+                "out": "syntaxes/devm.tmLanguage.json"
+            },
+            "monarch": {
+                "out": "src/syntaxes/devm.monarch.ts"
+            }
         },
-        "monarch": {
-            "out": "src/syntaxes/hsm.monarch.ts"
+        {
+            "id": "devmtest",
+            "grammar": "src/hsm-test.langium",
+            "fileExtensions": [
+                ".devmtest"
+            ],
+            "textMate": {
+                "out": "syntaxes/devmtest.tmLanguage.json"
+            }
         }
-    }, {
-        "id": "hsmtest",
-        "grammar": "src/hsm-test.langium",
-        "fileExtensions": [".hsmtest"],
-        "textMate": {
-            "out": "syntaxes/hsmtest.tmLanguage.json"
-        }
-    }, {
-        "id": "dmf",
-        "grammar": "src/dmf.langium",
-        "fileExtensions": [".dmf"],
-        "textMate": {
-            "out": "syntaxes/dmf.tmLanguage.json"
-        },
-        "monarch": {
-            "out": "src/syntaxes/dmf.monarch.ts"
-        }
-    }],
+    ],
     "out": "src/generated"
 }

@@ -47,7 +47,7 @@ statemachine Motor {
 function door(body: string, declarations = ''): string {
     return `
 statemachine Door {
-    import "motor.hsm"
+    import "motor.devm"
     interface:
         in event open
         in event close
@@ -68,13 +68,13 @@ ${body}
 }
 
 async function check(body: string, declarations = '') {
-    return parse(door(body, declarations), { 'motor.hsm': MOTOR });
+    return parse(door(body, declarations), { 'motor.devm': MOTOR });
 }
 
 describe('imports', () => {
     test('kinds of import paths', () => {
-        expect(importKind('motor.hsm')).toBe('hsm');
-        expect(importKind('sub/Motor.HSM')).toBe('hsm');
+        expect(importKind('motor.devm')).toBe('model');
+        expect(importKind('sub/Motor.DEVM')).toBe('model');
         expect(importKind('types.h')).toBe('header');
         expect(importKind('types.hpp')).toBe('header');
         expect(importKind('motor.sct')).toBe('unsupported');
@@ -90,56 +90,56 @@ describe('imports', () => {
         expect(instanceMachine(motor)?.name).toBe('Motor');
         const moving = machine.vertices.find(v => v.name === 'Moving') as ast.State;
         expect(submachineOf(moving)?.instance).toBe(motor);
-        expect(parsed.imported.map(i => path.basename(i.uri))).toEqual(['motor.hsm']);
+        expect(parsed.imported.map(i => path.basename(i.uri))).toEqual(['motor.devm']);
     });
 
     test("itemis CREATE form 'import: \"a\" \"b\"' and header imports", async () => {
         const parsed = await parse(`
 statemachine Door {
     namespace door
-    import: "motor.hsm" "types.h"
+    import: "motor.devm" "types.h"
     internal:
         var motor : Motor
     [*] -> Moving
     state Moving : motor
 }
-`, { 'motor.hsm': MOTOR, 'types.h': 'namespace door { enum class Kind { A, B }; }' });
+`, { 'motor.devm': MOTOR, 'types.h': 'namespace door { enum class Kind { A, B }; }' });
         expect(errors(parsed)).toEqual([]);
-        expect(resolvedImports(parsed.model).map(i => i.kind)).toEqual(['hsm', 'header']);
+        expect(resolvedImports(parsed.model).map(i => i.kind)).toEqual(['model', 'header']);
         expect(resolvedImports(parsed.model)[1].header?.found).toBe(true);
     });
 
     test('missing files, unsupported files, cycles and duplicate names', async () => {
-        const missing = await parse('statemachine A {\n    import "nothing.hsm"\n    [*] -> S\n    state S\n}');
-        expect(errors(missing)).toEqual([expect.stringMatching(/^Cannot resolve the import 'nothing.hsm': the file '.*nothing.hsm' was not found.$/)]);
+        const missing = await parse('statemachine A {\n    import "nothing.devm"\n    [*] -> S\n    state S\n}');
+        expect(errors(missing)).toEqual([expect.stringMatching(/^Cannot resolve the import 'nothing.devm': the file '.*nothing.devm' was not found.$/)]);
         const unsupported = await parse('statemachine A {\n    import "a.sct"\n    [*] -> S\n    state S\n}');
         expect(errors(unsupported)[0]).toContain(`Cannot import 'a.sct'`);
-        const cycle = await parse('statemachine A {\n    import "b.hsm"\n    [*] -> S\n    state S\n}', {
-            'b.hsm': 'statemachine B {\n    import "c.hsm"\n    [*] -> S\n    state S\n}',
-            'c.hsm': 'statemachine C {\n    import "b.hsm"\n    [*] -> S\n    state S\n}'
+        const cycle = await parse('statemachine A {\n    import "b.devm"\n    [*] -> S\n    state S\n}', {
+            'b.devm': 'statemachine B {\n    import "c.devm"\n    [*] -> S\n    state S\n}',
+            'c.devm': 'statemachine C {\n    import "b.devm"\n    [*] -> S\n    state S\n}'
         });
         expect(errors(cycle)).toEqual([]);
         expect(cycle.imported.flatMap(i => i.diagnostics.filter(d => d.severity === 1).map(d => d.message)))
             .toEqual(['Import cycle: B -> C -> B. State machines cannot import each other.', 'Import cycle: C -> B -> C. State machines cannot import each other.']);
-        const self = await loadFiles({ 'a.hsm': 'statemachine A {\n    import "a.hsm"\n    [*] -> S\n    state S\n}' }, 'a.hsm');
+        const self = await loadFiles({ 'a.devm': 'statemachine A {\n    import "a.devm"\n    [*] -> S\n    state S\n}' }, 'a.devm');
         expect(errors(self)).toEqual([`The state machine 'A' cannot import itself.`]);
-        const duplicate = await parse('statemachine A {\n    import "b.hsm"\n    import "sub/b.hsm"\n    import "b.hsm"\n    [*] -> S\n    state S\n}', {
-            'b.hsm': 'statemachine B {\n    [*] -> S\n    state S\n}',
-            'sub/b.hsm': 'statemachine B {\n    [*] -> S\n    state S\n}'
+        const duplicate = await parse('statemachine A {\n    import "b.devm"\n    import "sub/b.devm"\n    import "b.devm"\n    [*] -> S\n    state S\n}', {
+            'b.devm': 'statemachine B {\n    [*] -> S\n    state S\n}',
+            'sub/b.devm': 'statemachine B {\n    [*] -> S\n    state S\n}'
         });
-        expect(errors(duplicate)).toEqual([`Duplicate state machine name 'B': it is also imported from 'b.hsm'.`]);
-        expect(warnings(duplicate)).toContain(`'b.hsm' is imported more than once.`);
-        const sameName = await parse('statemachine B {\n    import "b.hsm"\n    [*] -> S\n    state S\n}', { 'b.hsm': 'statemachine B {\n    [*] -> S\n    state S\n}' });
+        expect(errors(duplicate)).toEqual([`Duplicate state machine name 'B': it is also imported from 'b.devm'.`]);
+        expect(warnings(duplicate)).toContain(`'b.devm' is imported more than once.`);
+        const sameName = await parse('statemachine B {\n    import "b.devm"\n    [*] -> S\n    state S\n}', { 'b.devm': 'statemachine B {\n    [*] -> S\n    state S\n}' });
         expect(errors(sameName)).toEqual([`The imported state machine has the same name as this state machine ('B').`]);
     });
 
     test('a missing imported file is reported once, without follow-up errors of the instance', async () => {
-        const parsed = await loadFiles({ 'door.hsm': door(`
+        const parsed = await loadFiles({ 'door.devm': door(`
     Closed -> Done : open / raise motor.start
     Moving -> Done : motor.stopped [motor.speed > 0 && active(motor.On)]
-`) }, 'door.hsm');
+`) }, 'door.devm');
         expect(errors(parsed)).toEqual([
-            expect.stringMatching(/^Cannot resolve the import 'motor.hsm': the file '.*motor.hsm' was not found.$/),
+            expect.stringMatching(/^Cannot resolve the import 'motor.devm': the file '.*motor.devm' was not found.$/),
             `Unknown type 'Motor' (an import could not be resolved; does it define 'Motor'?).`
         ]);
     });
@@ -147,20 +147,20 @@ statemachine Door {
     test('files are loaded relative to the importing file (Node file system)', async () => {
         const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-imports-'));
         fs.mkdirSync(path.join(directory, 'parts'));
-        fs.writeFileSync(path.join(directory, 'parts', 'motor.hsm'), MOTOR.replace('statemachine Motor {', 'statemachine Motor {\n    import "gear.hsm"'));
-        fs.writeFileSync(path.join(directory, 'parts', 'gear.hsm'), 'statemachine Gear {\n    [*] -> S\n    state S\n}');
-        const text = door('').replace('import "motor.hsm"', 'import "parts/motor.hsm"');
+        fs.writeFileSync(path.join(directory, 'parts', 'motor.devm'), MOTOR.replace('statemachine Motor {', 'statemachine Motor {\n    import "gear.devm"'));
+        fs.writeFileSync(path.join(directory, 'parts', 'gear.devm'), 'statemachine Gear {\n    [*] -> S\n    state S\n}');
+        const text = door('').replace('import "motor.devm"', 'import "parts/motor.devm"');
         const loader = new HsmModelLoader(createHsmServices(NodeFileSystem));
-        const parsed = await loader.load(text, pathToFileURL(path.join(directory, 'door.hsm')).toString());
+        const parsed = await loader.load(text, pathToFileURL(path.join(directory, 'door.devm')).toString());
         expect(errors(parsed)).toEqual([]);
-        expect(parsed.imported.map(i => path.basename(i.uri)).sort()).toEqual(['gear.hsm', 'motor.hsm']);
+        expect(parsed.imported.map(i => path.basename(i.uri)).sort()).toEqual(['gear.devm', 'motor.devm']);
         fs.rmSync(directory, { recursive: true, force: true });
     });
 
-    test('the example gate.hsm with its motor', async () => {
+    test('the example gate.devm with its motor', async () => {
         const directory = path.resolve(__dirname, '../../../examples/door-with-motor');
         const loader = new HsmModelLoader(createHsmServices(NodeFileSystem));
-        const parsed = await loader.load(example('door-with-motor/gate.hsm'), pathToFileURL(path.join(directory, 'gate.hsm')).toString());
+        const parsed = await loader.load(example('door-with-motor/gate.devm'), pathToFileURL(path.join(directory, 'gate.devm')).toString());
         expect(errors(parsed)).toEqual([]);
         expect(warnings(parsed)).toEqual([]);
         const sim = new StatechartInterpreter(parsed.model);
@@ -179,7 +179,7 @@ statemachine Door {
     test('unit tests of the example (HsmTestWorkspace loads the imported motor)', async () => {
         const directory = path.resolve(__dirname, '../../../examples/door-with-motor');
         const workspace = new HsmTestWorkspace(createHsmServices(NodeFileSystem));
-        const files = ['gate.hsm', 'gate.hsmtest'].map(file => ({ uri: pathToFileURL(path.join(directory, file)).toString(), text: fs.readFileSync(path.join(directory, file), 'utf-8') }));
+        const files = ['gate.devm', 'gate.devmtest'].map(file => ({ uri: pathToFileURL(path.join(directory, file)).toString(), text: fs.readFileSync(path.join(directory, file), 'utf-8') }));
         const { documents, results } = await workspace.run(files);
         expect(documents.flatMap(d => d.diagnostics.filter(x => x.severity === 1).map(x => x.message))).toEqual([]);
         expect(results.map(r => `${r.name}: ${r.status} ${r.message ?? ''}`.trim())).toEqual([
@@ -193,7 +193,7 @@ describe('submachine instances: unit tests', () => {
         const workspace = new HsmTestWorkspace();
         const motor = 'statemachine Motor {\n    interface:\n        in event start\n        out event ready : integer\n        var speed : integer = 0\n'
             + '        operation sensor() : integer\n    [*] -> Off\n    state Off\n    state On\n    Off -> On : start [sensor() > 5] / speed = sensor(); raise ready : speed\n}\n';
-        const gate = 'statemachine Gate {\n    import "motor.hsm"\n    interface:\n        in event open\n    internal:\n        var motor : Motor\n'
+        const gate = 'statemachine Gate {\n    import "motor.devm"\n    interface:\n        in event open\n    internal:\n        var motor : Motor\n'
             + '    [*] -> Closed\n    state Closed\n    state Moving : motor\n    Closed -> Moving : open / raise motor.start\n}\n';
         const tests = `testclass GateTest for statemachine Gate {
     @Test
@@ -213,7 +213,7 @@ describe('submachine instances: unit tests', () => {
     }
 }`;
         const { documents, results } = await workspace.run([
-            { uri: 'memory:///unit/motor.hsm', text: motor }, { uri: 'memory:///unit/gate.hsm', text: gate }, { uri: 'memory:///unit/gate.hsmtest', text: tests }
+            { uri: 'memory:///unit/motor.devm', text: motor }, { uri: 'memory:///unit/gate.devm', text: gate }, { uri: 'memory:///unit/gate.devmtest', text: tests }
         ]);
         expect(documents.flatMap(d => d.diagnostics.filter(x => x.severity === 1).map(x => x.message))).toEqual([]);
         expect(results.map(r => `${r.status} ${r.message ?? ''}`.trim())).toEqual(['passed']);
@@ -260,7 +260,7 @@ describe('submachine instances: validation', () => {
     test('declarations and bindings of instances', async () => {
         const parsed = await parse(`
 statemachine Door {
-    import "motor.hsm"
+    import "motor.devm"
     @ChildFirstExecution
     interface:
         in event motorEvent : Motor
@@ -282,7 +282,7 @@ statemachine Door {
     C -> D : [true]
     D -> A : [true] # >Nope
 }
-`, { 'motor.hsm': MOTOR });
+`, { 'motor.devm': MOTOR });
         expect(errors(parsed).sort()).toEqual([
             `The state machine type 'Motor' can only be used as the type of a variable (a submachine instance).`,
             `The submachine instance 'fixed' cannot be a constant; declare it with 'var'.`,
@@ -314,13 +314,13 @@ statemachine Door {
 
     test('changing an imported file updates the importing document (language server)', async () => {
         const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-imports-update-'));
-        fs.writeFileSync(path.join(directory, 'motor.hsm'), MOTOR);
+        fs.writeFileSync(path.join(directory, 'motor.devm'), MOTOR);
         const services = createHsmServices(NodeFileSystem);
         const loader = new HsmModelLoader(services);
-        const parsed = await loader.load(door(''), pathToFileURL(path.join(directory, 'door.hsm')).toString());
+        const parsed = await loader.load(door(''), pathToFileURL(path.join(directory, 'door.devm')).toString());
         expect(errors(parsed)).toEqual([]);
         // the motor is renamed: the door is relinked (HsmDocumentBuilder.shouldRelink) and reports the errors
-        fs.writeFileSync(path.join(directory, 'motor.hsm'), MOTOR.replace('statemachine Motor {', 'statemachine Engine {'));
+        fs.writeFileSync(path.join(directory, 'motor.devm'), MOTOR.replace('statemachine Motor {', 'statemachine Engine {'));
         await services.shared.workspace.DocumentBuilder.update([parsed.imported[0].document.uri], []);
         fs.rmSync(directory, { recursive: true, force: true });
         expect(errors({ ...parsed, diagnostics: parsed.document.diagnostics ?? [] })).toEqual([

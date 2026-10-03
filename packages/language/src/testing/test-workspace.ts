@@ -8,9 +8,9 @@ import { cppHeaderStore } from '../cpp-headers.js';
 import { importKind } from '../imports.js';
 import { runTests, type TestResult, type TestRunOptions } from './runner.js';
 
-/** A file of a test workspace: an `.hsm` model, an `.hsmtest` test file or a C/C++ header imported by a model. */
+/** A file of a test workspace: an `.devm` model, an `.devmtest` test file or a C/C++ header imported by a model. */
 export interface WorkspaceFile {
-    /** URI of the document; the extension selects the language (`.hsm` or `.hsmtest`) or a header (`.h`, `.hpp`, ...). */
+    /** URI of the document; the extension selects the language (`.devm` or `.devmtest`) or a header (`.h`, `.hpp`, ...). */
     readonly uri: string;
     readonly text: string;
 }
@@ -24,7 +24,7 @@ export interface LoadedDocument {
 }
 
 /**
- * Loads `.hsm` models and `.hsmtest` test files into one workspace, so that test classes can
+ * Loads `.devm` models and `.devmtest` test files into one workspace, so that test classes can
  * reference the state machines by name (`testclass T for statemachine M`). Works in Node.js and
  * in the browser. Documents with the same URI replace previously loaded ones.
  */
@@ -33,7 +33,7 @@ export class HsmTestWorkspace {
     readonly services: { shared: LangiumSharedServices };
     private readonly readFile: FileReader;
 
-    /** `options.readFile` reads imported `.hsm` files that are not among the loaded files (default: the file system provider). */
+    /** `options.readFile` reads imported `.devm` files that are not among the loaded files (default: the file system provider). */
     constructor(services?: { shared: LangiumSharedServices }, options: HsmModelLoaderOptions = {}) {
         this.services = services ?? createHsmServices();
         const fileSystem = this.services.shared.workspace.FileSystemProvider;

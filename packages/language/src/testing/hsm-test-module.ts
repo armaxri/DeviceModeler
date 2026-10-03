@@ -11,7 +11,7 @@ export type HsmTestAddedServices = {
     }
 };
 
-/** Services of the unit test language (`.hsmtest`). */
+/** Services of the unit test language (`.devmtest`). */
 export type HsmTestServices = LangiumServices & HsmTestAddedServices;
 
 export const HsmTestModule: Module<HsmTestServices, PartialLangiumServices & HsmTestAddedServices> = {

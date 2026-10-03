@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { errors, example, parse, warnings } from './helpers.js';
 
 describe('examples', () => {
-    for (const file of ['traffic-light.hsm', 'cd-player.hsm', 'keyboard.hsm', 'door.hsm']) {
+    for (const file of ['traffic-light.devm', 'cd-player.devm', 'keyboard.devm', 'door.devm']) {
         test(`${file} is valid`, async () => {
             const parsed = await parse(example(file));
             expect(parsed.hasSyntaxErrors).toBe(false);

@@ -10,6 +10,7 @@ import {
 import { portIncompatibilities, resolveDataType } from './dmf-types.js';
 import { connectionThreads } from './dmf-routes.js';
 import { resolveTypeName } from './hsm-typesystem.js';
+import { isModelPath } from './imports.js';
 import {
     IBD_EDGE_ELEMENTS, IBD_LAYOUT_ANNOTATIONS, IBD_NODE_ELEMENTS, IBD_PORT_OWNERS, dmfAnnotationArguments, portAnnotation
 } from './diagram/ibd-layout-annotations.js';
@@ -68,7 +69,7 @@ export class DmfValidator {
                 continue;
             }
             if (resolved.kind === 'unsupported') {
-                accept('error', `Cannot import '${resolved.path}': only structure files ('.dmf'), state machines ('.hsm') and C/C++ headers ('.h', '.hpp') can be imported.`, target);
+                accept('error', `Cannot import '${resolved.path}': only model files ('.devm': structure files and state machines) and C/C++ headers ('.h', '.hpp') can be imported.`, target);
                 continue;
             }
             const key = resolved.uri?.toString() ?? resolved.path;
@@ -95,7 +96,7 @@ export class DmfValidator {
                 }
                 continue;
             }
-            if ((resolved.kind === 'dmf' && !resolved.model) || (resolved.kind === 'hsm' && !resolved.machine)) {
+            if (resolved.kind === 'model') {
                 const location = resolved.uri ? (resolved.uri.scheme === 'file' ? resolved.uri.fsPath : resolved.uri.path) : resolved.path;
                 accept('error', `Cannot resolve the import '${resolved.path}': the file '${location}' was not found.`, target);
             }
@@ -211,8 +212,12 @@ export class DmfValidator {
                 accept('error', 'The behavior path is empty.', { node: behavior, property: 'path' });
                 return;
             }
-            if (!behavior.path.toLowerCase().endsWith('.hsm')) {
-                accept('error', `The behavior of a component is a state machine file ('.hsm'), not '${behavior.path}'.`, { node: behavior, property: 'path' });
+            if (!isModelPath(behavior.path)) {
+                accept('error', `The behavior of a component is a state machine file ('.devm'), not '${behavior.path}'.`, { node: behavior, property: 'path' });
+                return;
+            }
+            if (!resolved.machine && resolved.structureFile) {
+                accept('error', `The behavior of a component is a state machine file: '${behavior.path}' is a structure file.`, { node: behavior, property: 'path' });
                 return;
             }
             if (!resolved.machine) {

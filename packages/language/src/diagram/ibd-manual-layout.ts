@@ -1,5 +1,5 @@
 /**
- * Manual ("hand-arranged") layouts of structure diagrams (internal block diagrams of `.dmf` files), the
+ * Manual ("hand-arranged") layouts of structure diagrams (internal block diagrams of `.devm` files), the
  * counterpart of manual-layout.ts for state machines, with the same concept on the shared core
  * (layout-core): the layout is stored as layout annotations in the model text (see
  * ibd-layout-annotations.ts) and applied on top of the automatic (ELK) layout, which is always computed

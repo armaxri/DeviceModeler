@@ -19,23 +19,23 @@ import { createHsmServices } from '../src/hsm-module.js';
 const DEVICE = path.resolve(__dirname, '../../../examples/device');
 const services = createHsmServices(NodeFileSystem);
 const deviceLoader = new DmfModelLoader(services);
-const SYSTEM = fs.readFileSync(path.join(DEVICE, 'system.dmf'), 'utf-8');
+const SYSTEM = fs.readFileSync(path.join(DEVICE, 'system.devm'), 'utf-8');
 
 /** Loads a structure file of the device example (the other files of the example are read from disk). */
-async function load(text: string, file = 'system.dmf') {
+async function load(text: string, file = 'system.devm') {
     const location = path.join(DEVICE, file);
     const parsed = await deviceLoader.load(text, URI.file(location).toString());
     expect(parsed.hasSyntaxErrors, text).toBe(false);
     return parsed;
 }
 
-async function diagram(text: string, file = 'system.dmf', element?: string): Promise<{ model: ast.DmfModel, layout: IbdManualLayoutResult }> {
+async function diagram(text: string, file = 'system.devm', element?: string): Promise<{ model: ast.DmfModel, layout: IbdManualLayoutResult }> {
     const parsed = await load(text, file);
     return { model: parsed.model, layout: (await layoutStructure(parsed.model, { element }))! };
 }
 
 /** The text with the layout written as annotations (computed on the diagram of `text`). */
-async function withLayout(text: string, change: (layout: IbdManualLayout, current: IbdManualLayoutResult) => void, file = 'system.dmf', element?: string): Promise<string> {
+async function withLayout(text: string, change: (layout: IbdManualLayout, current: IbdManualLayoutResult) => void, file = 'system.devm', element?: string): Promise<string> {
     const { model, layout } = await diagram(text, file, element);
     const manual = layout.effective ? structuredClone(layout.effective) : captureIbdLayout(layout.graph);
     change(manual, layout);
@@ -162,13 +162,13 @@ describe('structure diagrams: manual layout', () => {
         expect(edge.points).toContainEqual({ x: frame.x + 560, y: frame.y + 420 });
         expect(layout.effective!.edges[id]).toEqual({ bends: [{ x: 560, y: 420 }] });
         // waypoints of a connector inside a thread are relative to the thread
-        const drive = fs.readFileSync(path.join(DEVICE, 'drive.dmf'), 'utf-8');
+        const drive = fs.readFileSync(path.join(DEVICE, 'drive-unit.devm'), 'utf-8');
         const inner = 'DriveUnit/motor.pwm->pwm.duty';
         const moved = await withLayout(drive, layout => {
             layout.edges[inner] = { bends: [{ x: 150, y: 150 }] };
             layout.nodes['DriveUnit/thread:MotorTask'].x += 30;
-        }, 'drive.dmf');
-        const result = (await diagram(moved, 'drive.dmf')).layout;
+        }, 'drive-unit.devm');
+        const result = (await diagram(moved, 'drive-unit.devm')).layout;
         const thread = node(result, 'DriveUnit/thread:MotorTask');
         expect(result.graph.edges.find(e => e.id === inner)!.waypoints).toEqual([{ x: thread.x + 150, y: thread.y + 150 }]);
     });
@@ -218,24 +218,24 @@ system Outer {
     connect a.r -> b.p
 }
 `;
-        const outer = await diagram(text, 'two.dmf');
+        const outer = await diagram(text, 'two.devm');
         expect(outer.layout.graph.id).toBe('Outer');
         // the annotations of Inner belong to its own diagram
         expect(outer.layout.effective).toBeUndefined();
-        const changed = await withLayout(text, layout => { layout.nodes['Outer/b'].x += 50; }, 'two.dmf');
+        const changed = await withLayout(text, layout => { layout.nodes['Outer/b'].x += 50; }, 'two.devm');
         expect(changed).toContain('@at(10, 10)\nsubsystem Inner {');
         expect(changed).toContain('        @at(20, 60) a : A\n    }\n    delegate');
         expect(changed).toMatch(/@at\(\d+, \d+\)\nsystem Outer/);
-        const inner = await diagram(changed, 'two.dmf', 'Inner');
+        const inner = await diagram(changed, 'two.devm', 'Inner');
         expect(inner.layout.effective?.nodes['Inner/a']).toEqual({ x: 20, y: 60 });
         // removing the layout of Outer keeps the layout of Inner
-        const back = await diagram(changed, 'two.dmf');
+        const back = await diagram(changed, 'two.devm');
         expect(applyEdits(changed, ibdLayoutTextEdits(back.model, back.layout, changed, undefined))).toBe(text);
     });
 
     test('type boxes and component blocks: one position for all diagrams of the file', async () => {
-        const light = fs.readFileSync(path.join(DEVICE, 'light.dmf'), 'utf-8');
-        const { layout } = await diagram(light, 'light.dmf');
+        const light = fs.readFileSync(path.join(DEVICE, 'light.devm'), 'utf-8');
+        const { layout } = await diagram(light, 'light.devm');
         expect(layout.effective).toBeDefined();
         const frame = node(layout, 'CourtesyLight');
         for (const id of ['type:LightLevel', 'type:LightCmd']) {
@@ -244,7 +244,7 @@ system Outer {
         }
         expect(node(layout, 'CourtesyLight/led').node.ports[0].side).toBe('NORTH');
         // the overview of the component types shows the type boxes at the same place, the blocks do not overlap them
-        const overview = (await diagram(light, 'light.dmf', '#components')).layout;
+        const overview = (await diagram(light, 'light.devm', '#components')).layout;
         expect(node(overview, 'type:LightLevel').x).toBe(720);
         const blocks = overview.graph.children.filter(c => c.kind === 'block');
         const types = overview.graph.children.filter(c => c.kind === 'type');
@@ -253,7 +253,7 @@ system Outer {
                 expect(block.x + block.width <= type.x || type.x + type.width <= block.x || block.y + block.height <= type.y || type.y + type.height <= block.y).toBe(true);
             }
         }
-        const moved = await withLayout(light, layout => { layout.nodes['Dimmer'] = { x: 400, y: 300 }; }, 'light.dmf', '#components');
+        const moved = await withLayout(light, layout => { layout.nodes['Dimmer'] = { x: 400, y: 300 }; }, 'light.devm', '#components');
         expect(moved).toContain('/** Fades the lamp in and out. */\n@at(400, 300)\ncomponent Dimmer {');
     });
 
@@ -276,7 +276,7 @@ system Outer {
             .replace('    connect door.motor -> drive.ctrl', '    @via(1, 2, 3) connect door.motor -> drive.ctrl')
             .replace('    provides async remote : DoorCmd', '    @at(1, 2) provides async remote : DoorCmd')
             .replace('    thread IoTask', '    @via(1, 2) @port(cmd, left)\n    thread IoTask');
-        const parsed = await deviceLoader.load(text, URI.file(path.join(DEVICE, 'system.dmf')).toString());
+        const parsed = await deviceLoader.load(text, URI.file(path.join(DEVICE, 'system.devm')).toString());
         const messages = parsed.diagnostics.map(d => `${d.severity === 1 ? 'error' : 'warning'}: ${d.message}`);
         expect(messages).toEqual(expect.arrayContaining([
             'error: Invalid arguments: position in the structure diagram: @at(x, y).',
@@ -313,15 +313,15 @@ system Outer {
         expect(applyEdits(text, edits)).toContain('@port(command, top, 100)');
     });
 
-    test('hsm render honors the layout annotations of structure files (--auto ignores them)', async () => {
+    test('devm render honors the layout annotations of structure files (--auto ignores them)', async () => {
         const out = fs.mkdtempSync(path.join(os.tmpdir(), 'ibd-layout-'));
         const logger = { log: () => undefined, error: (m: string) => { throw new Error(m); } };
         const manual = path.join(out, 'manual.svg');
         const automatic = path.join(out, 'auto.svg');
-        expect(await runRenderCommand([path.join(DEVICE, 'light.dmf')], { out: manual }, logger)).toBe(0);
-        expect(await runRenderCommand([path.join(DEVICE, 'light.dmf')], { out: automatic, auto: true }, logger)).toBe(0);
+        expect(await runRenderCommand([path.join(DEVICE, 'light.devm')], { out: manual }, logger)).toBe(0);
+        expect(await runRenderCommand([path.join(DEVICE, 'light.devm')], { out: automatic, auto: true }, logger)).toBe(0);
         const width = (file: string) => Number(/<svg[^>]* width="(\d+)"/.exec(fs.readFileSync(file, 'utf-8'))![1]);
-        const { layout } = await diagram(fs.readFileSync(path.join(DEVICE, 'light.dmf'), 'utf-8'), 'light.dmf');
+        const { layout } = await diagram(fs.readFileSync(path.join(DEVICE, 'light.devm'), 'utf-8'), 'light.devm');
         expect(width(manual)).toBe(Math.ceil(layout.graph.width));
         expect(width(automatic)).not.toBe(width(manual));
         fs.rmSync(out, { recursive: true, force: true });

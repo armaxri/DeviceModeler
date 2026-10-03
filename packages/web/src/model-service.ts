@@ -1,6 +1,6 @@
 import { URI, UriUtils } from 'langium';
 import {
-    createHsmServices, cppHeaderStore, DmfModelLoader, DmfWorkspace, HsmModelLoader, importKind,
+    createHsmServices, cppHeaderStore, DmfModelLoader, DmfWorkspace, HsmModelLoader, importKind, isModelPath, isStructureText,
     type CppHeaderSettings, type DmfServices, type ParsedDmfModel, type ParsedModel
 } from 'hsm-language';
 
@@ -31,13 +31,13 @@ export function describeSyntaxProblem(problem: SyntaxProblem, start: number, end
     return `unexpected '${problem.found}'${suffix}`;
 }
 
-const DOCUMENT_URI = 'memory:///model.hsm';
+const DOCUMENT_URI = 'memory:///model.devm';
 
 /**
- * Parses, links and validates the model text with the Langium services of the HSM language running
+ * Parses, links and validates the model text with the Langium services of the `.devm` language running
  * directly in the browser (no editor dependencies: used by the web app and the VS Code webview).
  *
- * Imports (`import "motor.hsm"`) are resolved relative to the URI of the edited document against
+ * Imports (`import "motor.devm"`) are resolved relative to the URI of the edited document against
  * the texts of the other files given with {@link setWorkspace} (the browser has no file system): the
  * web app passes its examples and opened files, the VS Code webview the imported files read by the
  * extension. Imports of other files are reported as "file not found".
@@ -46,7 +46,7 @@ export class HsmModelService {
 
     private readonly services = createHsmServices();
     readonly loader = new HsmModelLoader(this.services);
-    /** Loads structure files (`.dmf`, the Device Modeling Framework); shares the services (and documents) of {@link loader}. */
+    /** Loads structure files; shares the services (and documents) of {@link loader}. */
     readonly structureLoader = new DmfModelLoader(this.services);
     private latest?: ParsedModel;
     private latestVersion = -1;
@@ -69,7 +69,7 @@ export class HsmModelService {
 
     /**
      * Sets the URI of the edited document (imports are resolved relative to it) and the texts of the
-     * other files it may import, by URI (or by path relative to the document): state machines (`.hsm`)
+     * other files it may import, by URI (or by path relative to the document): model files (`.devm`)
      * and C/C++ headers (`.h`, `.hpp`, ...; `headers`: include paths and defines of their analysis).
      */
     setWorkspace(documentUri: string, files: Record<string, string>, headers: CppHeaderSettings = {}): void {
@@ -93,7 +93,7 @@ export class HsmModelService {
     }
 
     /**
-     * The structure files (`.dmf`) of the workspace – the files given with {@link setWorkspace} and the
+     * The structure files of the workspace – the files given with {@link setWorkspace} and the
      * edited file with the given text – loaded together, for queries across files (navigation, renames,
      * the structures using a state machine). The hosts pass all structure files of the workspace for this.
      */
@@ -113,26 +113,25 @@ export class HsmModelService {
         return result;
     }
 
-    /** The names of the other files of the workspace (relative to the edited file if they are in its directory). */
-    workspaceFileNames(): string[] {
+    /**
+     * The names of the other files of the workspace (relative to the edited file if they are in its
+     * directory); `machines`: only the state machine files.
+     */
+    workspaceFileNames(machines = false): string[] {
         const base = UriUtils.dirname(URI.parse(this.documentUri)).toString();
-        return Object.keys(this.files).map(key => {
+        const keys = Object.keys(this.files).filter(key => !machines || (isModelPath(key) && !isStructureText(this.files[key])));
+        return keys.map(key => {
             const uri = /^[a-zA-Z][\w+.-]*:/.test(key) ? URI.parse(key).toString() : key;
             return uri.startsWith(base + '/') ? decodeURIComponent(uri.substring(base.length + 1)) : uri;
         }).sort();
     }
 
-    /** The services of the structure language. */
+    /** The services of the `.devm` language (state machines and structure files). */
     get structureServices(): DmfServices {
         return this.services.Dmf;
     }
 
-    /** Whether the edited document is a structure file (`.dmf`) instead of a state machine. */
-    get isStructure(): boolean {
-        return isStructureFile(this.documentUri);
-    }
-
-    /** Parses, links and validates the text of a structure file (`.dmf`). Calls are serialized (also with {@link parse}). */
+    /** Parses, links and validates the text of a structure file. Calls are serialized (also with {@link parse}). */
     parseStructure(text: string): Promise<ParsedDmfModel> {
         const result = this.queue.then(async () => {
             if (this.latestStructure?.text === text && this.latestStructureVersion === this.workspaceVersion
@@ -172,7 +171,7 @@ export class HsmModelService {
      * Only the parser is used: no document is created and the linked model is not affected.
      */
     syntaxErrors(text: string): SyntaxProblem[] {
-        const parser = this.isStructure ? this.services.Dmf.parser.LangiumParser : this.loader.services.Hsm.parser.LangiumParser;
+        const parser = this.services.Hsm.parser.LangiumParser;
         const result = parser.parse(text);
         return [
             ...result.lexerErrors.map(e => ({ message: e.message, offset: e.offset })),
@@ -185,7 +184,3 @@ export class HsmModelService {
     }
 }
 
-/** Whether a file name or URI is a structure file (`.dmf`). */
-export function isStructureFile(name: string): boolean {
-    return /\.dmf$/i.test(name);
-}

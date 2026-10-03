@@ -1,5 +1,5 @@
 // Unit tests of the CD player (cycle based): mocked operations, choice and history.
-// Run with: hsm test examples/tests/cd-player.hsmtest --machine examples/cd-player.hsm
+// Run with: devm test examples/tests/cd-player.devmtest --machine examples/cd-player.devm
 testclass CdPlayerTest for statemachine CdPlayer {
 
     @SetUp

@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HSM Modeler</title>
+    <title>Device Modeler</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='6' width='26' height='20' rx='6' fill='%23fefece' stroke='%23a80036' stroke-width='2'/%3E%3Cline x1='3' y1='13' x2='29' y2='13' stroke='%23a80036' stroke-width='2'/%3E%3C/svg%3E" />
 </head>
 <body>
     <header class="toolbar">
         <div class="brand" title="Hierarchical State Machine Modeler">
             <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true"><rect x="3" y="6" width="26" height="20" rx="6" fill="#fefece" stroke="#a80036" stroke-width="2"/><line x1="3" y1="13" x2="29" y2="13" stroke="#a80036" stroke-width="2"/><circle cx="11" cy="20" r="2.5" fill="#000"/><path d="M14 20 H20" stroke="#a80036" stroke-width="1.5"/><path d="M22 20 l-3 -2 v4 z" fill="#a80036"/></svg>
-            <span>HSM Modeler</span>
+            <span>Device Modeler</span>
         </div>
         <div class="group">
             <select id="example-select" title="Load an example or open a file of the workspace (imports are resolved against these files)">
@@ -19,9 +19,9 @@
             <button id="btn-back" title="Back (Alt+←)" aria-label="Back" disabled>◀</button>
             <button id="btn-forward" title="Forward (Alt+→)" aria-label="Forward" disabled>▶</button>
             <button id="btn-new" title="New state machine">New</button>
-            <button id="btn-open" title="Open .hsm or .dmf files (the other files of a multiple selection can be imported) or import an itemis CREATE .sct file">Open…</button>
-            <button id="btn-save" title="Download the model (.hsm)">Save</button>
-            <input type="file" id="file-input" accept=".hsm,.dmf,.txt,.sct,.h,.hpp,.hh,.hxx" multiple hidden />
+            <button id="btn-open" title="Open .devm files (the other files of a multiple selection can be imported) or import an itemis CREATE .sct file">Open…</button>
+            <button id="btn-save" title="Download the model (.devm)">Save</button>
+            <input type="file" id="file-input" accept=".devm,.txt,.sct,.h,.hpp,.hh,.hxx" multiple hidden />
         </div>
         <div class="group">
             <button id="btn-undo" title="Undo (Ctrl+Z)">↶</button>

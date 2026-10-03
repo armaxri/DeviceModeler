@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
 import {
-    cppHeaderStore, DmfModelLoader, HsmModelLoader, importSct, layoutFileName, layoutStateMachineWithLayout, layoutStructure, layoutTextEdits,
+    cppHeaderStore, DmfModelLoader, HsmModelLoader, importSct, isStructureText, layoutFileName, layoutStateMachineWithLayout, layoutStructure, layoutTextEdits,
     parseManualLayout, renderIbdSvg, renderSvg, type ParsedModel
 } from 'hsm-language';
 import { runGeneration } from '../../../language/src/generator/generate-command.js';
 import { installNodeHeaderSupport } from '../../../language/src/node/cpp-headers-node.js';
-import { isStructureDocument, readText, vscodeHeaderSettings, type DiagramManager } from './diagram-panel.js';
+import { isStructureFile, readText, vscodeHeaderSettings, type DiagramManager } from './diagram-panel.js';
 import type { HsmTestController } from './test-controller.js';
 import { effectiveTheme } from './logic/webview.js';
 import { resolveGeneration, type CppSettings } from './logic/generator-config.js';
@@ -35,7 +35,7 @@ export async function parseModel(document: vscode.TextDocument): Promise<ParsedM
 }
 
 /**
- * The diagram of a structure file (`.dmf`) as SVG document (`renderIbdSvg` of the language package, like
+ * The diagram of a structure file as SVG document (`renderIbdSvg` of the language package, like
  * `hsm render`): the internal block diagram of `element` (a subsystem, system or component type; default:
  * the first system, else the first subsystem, else the component types, else the data types).
  */
@@ -64,7 +64,7 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             commands.output.error(`${id}: ${message}`);
-            vscode.window.showErrorMessage(`HSM: ${message}`);
+            vscode.window.showErrorMessage(`Device Modeler: ${message}`);
             return undefined;
         }
     }));
@@ -72,7 +72,7 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
     register('hsm.openDiagram', async (arg?: unknown) => {
         const uri = modelUri(arg, commands.diagrams);
         if (!uri) {
-            vscode.window.showWarningMessage('HSM: Open an .hsm or .dmf file to show its diagram.');
+            vscode.window.showWarningMessage('Device Modeler: Open a .devm file to show its diagram.');
             return;
         }
         await commands.diagrams.open(uri);
@@ -80,15 +80,15 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
 
     register('hsm.generateCpp', async (arg?: unknown) => {
         const uri = modelUri(arg, commands.diagrams);
-        if (!uri || isStructureDocument(uri)) {
-            vscode.window.showWarningMessage('HSM: Select an .hsm file to generate C++ code for.');
+        if (!uri || await isStructureFile(uri)) {
+            vscode.window.showWarningMessage('Device Modeler: Select the .devm file of a state machine to generate C++ code for.');
             return;
         }
         await generateCppFor(uri, commands.output);
     });
 
     register('hsm.runTests', async (arg?: unknown) => {
-        const uri = arg instanceof vscode.Uri ? arg : vscode.window.activeTextEditor?.document.languageId === 'hsmtest'
+        const uri = arg instanceof vscode.Uri ? arg : vscode.window.activeTextEditor?.document.languageId === 'devmtest'
             ? vscode.window.activeTextEditor.document.uri : undefined;
         await commands.tests.runFile(uri);
     });
@@ -112,7 +112,7 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
     register('hsm.exportDiagram', async (arg?: unknown, element?: unknown) => {
         const uri = modelUri(arg, commands.diagrams);
         if (!uri) {
-            vscode.window.showWarningMessage('HSM: Open an .hsm or .dmf file to export its diagram.');
+            vscode.window.showWarningMessage('Device Modeler: Open a .devm file to export its diagram.');
             return;
         }
         const format = await vscode.window.showQuickPick([
@@ -124,9 +124,9 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
         }
         const document = await vscode.workspace.openTextDocument(uri);
         // structure files: the structure shown in the diagram (`element`, from its toolbar)
-        const svg = isStructureDocument(uri) ? await renderStructureSvg(document, typeof element === 'string' ? element : undefined) : await renderModelSvg(document);
+        const svg = isStructureText(document.getText()) ? await renderStructureSvg(document, typeof element === 'string' ? element : undefined) : await renderModelSvg(document);
         const target = await vscode.window.showSaveDialog({
-            defaultUri: uri.with({ path: uri.path.replace(/\.(hsm|dmf)$/i, '') + '.' + format.format }),
+            defaultUri: uri.with({ path: uri.path.replace(/\.devm$/i, '') + '.' + format.format }),
             filters: format.format === 'svg' ? { SVG: ['svg'] } : { PNG: ['png'] },
             title: `Export diagram as ${format.label}`
         });
@@ -148,13 +148,13 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
     for (const [id, command] of Object.entries(layoutCommands)) {
         register(id, async (arg?: unknown) => {
             const language = vscode.window.activeTextEditor?.document.languageId;
-            const uri = arg instanceof vscode.Uri ? arg : language === 'hsm' || language === 'dmf'
+            const uri = arg instanceof vscode.Uri ? arg : language === 'devm'
                 ? vscode.window.activeTextEditor!.document.uri : undefined;
             if (uri && !commands.diagrams.get(uri)) {
                 await (await commands.diagrams.open(uri)).whenReady();
             }
             if (!commands.diagrams.layoutCommand(uri, command)) {
-                vscode.window.showWarningMessage('HSM: Open the diagram of an .hsm or .dmf file first.');
+                vscode.window.showWarningMessage('Device Modeler: Open the diagram of a .devm file first.');
             }
         });
     }
@@ -163,15 +163,15 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
     for (const direction of ['back', 'forward'] as const) {
         register(direction === 'back' ? 'hsm.navigateBack' : 'hsm.navigateForward', () => {
             if (!commands.diagrams.requestNavigation(direction)) {
-                vscode.window.showWarningMessage('HSM: Open a diagram first.');
+                vscode.window.showWarningMessage('Device Modeler: Open a diagram first.');
             }
         });
     }
 
     register('hsm.convertLayoutFile', async (arg?: unknown) => {
         const uri = modelUri(arg, commands.diagrams);
-        if (!uri || isStructureDocument(uri)) {
-            vscode.window.showWarningMessage('HSM: Open an .hsm file to convert its layout file.');
+        if (!uri || await isStructureFile(uri)) {
+            vscode.window.showWarningMessage('Device Modeler: Open the .devm file of a state machine to convert its layout file.');
             return;
         }
         const layoutFile = await convertLayoutFile(uri);
@@ -182,20 +182,20 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
     });
 }
 
-/** The model a command applies to: the argument (explorer), the active .hsm / .dmf editor or the active diagram. */
+/** The model a command applies to: the argument (explorer), the active .devm editor or the active diagram. */
 function modelUri(arg: unknown, diagrams: DiagramManager): vscode.Uri | undefined {
     if (arg instanceof vscode.Uri) {
         return arg;
     }
     const editor = vscode.window.activeTextEditor;
-    if (editor?.document.languageId === 'hsm' || editor?.document.languageId === 'dmf') {
+    if (editor?.document.languageId === 'devm') {
         return editor.document.uri;
     }
     return diagrams.active?.uri;
 }
 
 /**
- * `HSM: Convert Layout File to Annotations`: writes the layout of the sidecar file `<model>.hsm.layout`
+ * `Device Modeler: Convert Layout File to Annotations`: writes the layout of the sidecar file `<model>.layout`
  * (of earlier builds of the manual layout) into the model as layout annotations (one undoable edit of
  * the document, not saved). The file is left in place. Returns the layout file, undefined if there is none.
  */
@@ -205,7 +205,7 @@ export async function convertLayoutFile(uri: vscode.Uri): Promise<vscode.Uri | u
     try {
         content = new TextDecoder().decode(await vscode.workspace.fs.readFile(layoutFile));
     } catch {
-        vscode.window.showWarningMessage(`HSM: There is no layout file ${path.basename(layoutFile.path)} next to ${path.basename(uri.path)}.`);
+        vscode.window.showWarningMessage(`Device Modeler: There is no layout file ${path.basename(layoutFile.path)} next to ${path.basename(uri.path)}.`);
         return undefined;
     }
     const layout = parseManualLayout(content);
@@ -255,7 +255,7 @@ function cppSettings(uri: vscode.Uri): CppSettings {
 }
 
 /**
- * `HSM: Generate C++`: generates `sc_statemachine.h`, `<Class>.h` and `<Class>.cpp` with the
+ * `Device Modeler: Generate C++`: generates `sc_statemachine.h`, `<Class>.h` and `<Class>.cpp` with the
  * generator of the language package (`runGeneration`, as `hsm generate`), configured by a
  * generator configuration file or the settings. Unsaved changes of the model are saved first.
  */
@@ -282,7 +282,7 @@ export async function generateCppFor(uri: vscode.Uri, output: vscode.LogOutputCh
     const errors = result.diagnostics.filter(d => d.severity === 'error');
     if (errors.length > 0) {
         output.show(true);
-        throw new Error(`The C++ code of ${name} could not be generated: ${errors[0].message}${errors.length > 1 ? ` (and ${errors.length - 1} more, see the output 'HSM')` : ''}`);
+        throw new Error(`The C++ code of ${name} could not be generated: ${errors[0].message}${errors.length > 1 ? ` (and ${errors.length - 1} more, see the output 'Device Modeler')` : ''}`);
     }
     const written = result.outputs.map(o => vscode.Uri.file(o.file));
     for (const o of result.outputs) {
@@ -295,13 +295,13 @@ export async function generateCppFor(uri: vscode.Uri, output: vscode.LogOutputCh
 }
 
 /**
- * `HSM: Import itemis CREATE model`: converts an `.sct` file into an `.hsm` file next to it. The
+ * `Device Modeler: Import itemis CREATE model`: converts an `.sct` file into a `.devm` file next to it. The
  * arrangement of the itemis diagram becomes the manual layout (layout annotations in the model, experimental).
  */
 export async function importSctFile(uri: vscode.Uri, output: vscode.LogOutputChannel): Promise<vscode.Uri | undefined> {
     const xml = new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
     const { text, warnings, layout } = importSct(xml);
-    const target = uri.with({ path: uri.path.replace(/\.sct$/i, '') + '.hsm' });
+    const target = uri.with({ path: uri.path.replace(/\.sct$/i, '') + '.devm' });
     let exists = false;
     try {
         await vscode.workspace.fs.stat(target);
@@ -321,7 +321,7 @@ export async function importSctFile(uri: vscode.Uri, output: vscode.LogOutputCha
     }
     await vscode.window.showTextDocument(target);
     if (warnings.length > 0) {
-        vscode.window.showWarningMessage(`Imported ${path.basename(uri.path)} with ${warnings.length} warning(s) – see the output 'HSM'.`, 'Show Output')
+        vscode.window.showWarningMessage(`Imported ${path.basename(uri.path)} with ${warnings.length} warning(s) – see the output 'Device Modeler'.`, 'Show Output')
             .then(choice => choice && output.show());
     } else {
         vscode.window.showInformationMessage(`Imported ${path.basename(uri.path)} as ${path.basename(target.path)}`

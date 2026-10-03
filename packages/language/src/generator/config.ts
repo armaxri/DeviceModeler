@@ -12,7 +12,7 @@ import { generateCpp, type CppGeneratorOptions } from './cpp/index.js';
  * ```json
  * {
  *     "$schema": "../node_modules/hsm-language/schemas/hsm-gen.schema.json",
- *     "models": ["models/*.hsm", { "path": "legacy/door.hsm", "cpp": { "namespace": "legacy" } }],
+ *     "models": ["models/*.devm", { "path": "legacy/door.devm", "cpp": { "namespace": "legacy" } }],
  *     "cpp": { "outDir": "src-gen", "namespace": "app::sm", "std": 17, "headerExtension": ".hpp" },
  *     "headers": { "includePaths": ["include"], "defines": { "USE_CAN": "1" }, "dataModel": { "longBits": 32, "pointerBits": 32 } },
  *     "writeOnlyIfChanged": true
@@ -20,7 +20,7 @@ import { generateCpp, type CppGeneratorOptions } from './cpp/index.js';
  * ```
  *
  * The `headers` block configures the analysis of imported C/C++ headers (`import "motor_types.h"`,
- * docs/cpp-integration.md) for all hosts: `hsm` (CLI), the language server of the VS Code extension
+ * docs/cpp-integration.md) for all hosts: `devm` (CLI), the language server of the VS Code extension
  * (the nearest `hsm.gen.json` / `*.hsm.gen.json` above a model) and the generator.
  */
 
@@ -166,7 +166,7 @@ export function parseGeneratorConfig(input: string | unknown): ParsedGeneratorCo
     }
     const models: ModelEntry[] = [];
     if (!Array.isArray(value.models) || value.models.length === 0) {
-        error('/models', `'models' must be a non-empty array of paths / globs of .hsm files`);
+        error('/models', `'models' must be a non-empty array of paths / globs of .devm files`);
     } else {
         value.models.forEach((entry: unknown, index: number) => {
             const pointer = `/models/${index}`;
@@ -183,7 +183,7 @@ export function parseGeneratorConfig(input: string | unknown): ParsedGeneratorCo
                     }
                 }
                 if (typeof entry.path !== 'string' || entry.path.trim() === '') {
-                    error(`${pointer}/path`, `a model entry needs a 'path' (path or glob of .hsm files)`);
+                    error(`${pointer}/path`, `a model entry needs a 'path' (path or glob of .devm files)`);
                     return;
                 }
                 const model: ModelEntry = { path: entry.path };

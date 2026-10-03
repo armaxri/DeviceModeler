@@ -1,6 +1,6 @@
 /*
- * Unit test language for HSM state machines (file extension `.hsmtest`), modeled after SCTUnit of
- * itemis CREATE:
+ * Unit test language for the state machines of the Device Modeler (file extension `.devmtest`),
+ * modeled after SCTUnit of itemis CREATE:
  *
  *   testclass DoorTest for statemachine Door {
  *       @SetUp
@@ -27,18 +27,18 @@ entry TestModel:
     testClasses+=TestClass*;
 
 TestClass:
-    'testclass' name=ID 'for' 'statemachine' machine=[StateMachine:ID] '{'
+    'testclass' name=HsmId 'for' 'statemachine' machine=[StateMachine:HsmId] '{'
         operations+=TestOperation*
     '}';
 
 // `@Test` marks a test, `@SetUp` an operation executed before every test; other operations are helpers.
 TestOperation:
     annotations+=Annotation*
-    'operation' name=ID '(' (parameters+=TestParameter (',' parameters+=TestParameter)*)? ')' body=Block;
+    'operation' name=HsmId '(' (parameters+=TestParameter (',' parameters+=TestParameter)*)? ')' body=Block;
 
 // Parameters are variables of the operation, so that they can be referenced in expressions.
 TestParameter infers VariableDeclaration:
-    name=ID ':' type=TypeReference;
+    name=HsmId ':' type=TypeReference;
 
 Block:
     {infer Block} '{' (statements+=TestStatement ';'?)* '}';
@@ -93,7 +93,7 @@ WhileStatement:
     'while' '(' condition=Expression ')' body=Block;
 
 OperationCallStatement:
-    operation=[TestOperation:ID] '(' (arguments+=Expression (',' arguments+=Expression)*)? ')';
+    operation=[TestOperation:HsmId] '(' (arguments+=Expression (',' arguments+=Expression)*)? ')';
 
 // assignments (`x = 1`, `i += 1`) and `x++` / `x--`
 AssignmentStatement:
@@ -108,6 +108,6 @@ TestAssignment infers Expression:
 // the assigned variable, optionally with members / elements of C++ struct / array values (`pos.x`, `a[1]`)
 TestTarget infers Expression:
     ElementReference (
-        {infer MemberAccessExpression.receiver=current} '.' member=ID
+        {infer MemberAccessExpression.receiver=current} '.' member=HsmId
         | {infer IndexExpression.receiver=current} '[' index=Expression ']'
     )*;

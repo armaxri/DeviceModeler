@@ -1,13 +1,13 @@
-// Monarch syntax highlighting for the dmf language.
+// Monarch syntax highlighting for the devm language.
 export default {
     keywords: [
-        'component','interface','subsystem','behavior','delegate','provides','requires','connect','package','import','struct','system','thread','async','event','sync'
+        'statemachine','deephistory','component','interface','namespace','operation','subsystem','behavior','delegate','internal','junction','provides','readonly','requires','connect','default','history','oncycle','package','valueof','active','always','choice','import','region','struct','system','thread','after','alias','async','const','entry','event','every','false','raise','state','else','exit','null','sync','true','out','var','as','in'
     ],
     operators: [
-        '->','::','-',',',';',':','.','@'
+        '...','<<=','>>=','--','-=','->','::','!=','*=','/=','&&','&=','%=','^=','++','+=','<<','<=','==','>=','>>','|=','||','-',',',';',':','!','?','.','@','*','/','&','#','%','^','+','<','=','>','|','~'
     ],
     ignoreCase: false,
-    symbols: /->|::|-|,|;|:|\.|\(|\)|\{|\}|@/,
+    symbols: /\.\.\.|\[\*\]|<<=|>>=|--|-=|->|::|!=|\*=|\/=|&&|&=|%=|\^=|\+\+|\+=|<<|<=|==|>=|>>|\|=|\|\||-|,|;|:|!|\?|\.|\(|\)|\[|\]|\{|\}|@|\*|\/|&|#|%|\^|\+|<|=|>|\||~/,
 
     tokenizer: {
         initial: [

@@ -3,7 +3,7 @@
     "description": "Child first: the instance is processed before the local reactions of its state, so an event raised on it by a local reaction is processed in the next cycle.",
     "text": [
         "statemachine Door {",
-        "    import \"motor.hsm\"",
+        "    import \"motor.devm\"",
         "    @ChildFirstExecution",
         "    interface:",
         "        in event open",
@@ -19,7 +19,7 @@
         "}"
     ],
     "files": {
-        "motor.hsm": [
+        "motor.devm": [
             "statemachine Motor {",
             "    @ChildFirstExecution",
             "    interface:",

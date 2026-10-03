@@ -1,7 +1,7 @@
 {
   "name": "hsm-language",
   "version": "0.1.0",
-  "description": "Langium language, validation, layout and model edits for hierarchical state machines",
+  "description": "Device Modeler: Langium language, validation, layout, simulation and code generation of state machines and product structures (.devm)",
   "type": "module",
   "main": "./out/index.js",
   "types": "./out/index.d.ts",
@@ -12,7 +12,7 @@
     }
   },
   "bin": {
-    "hsm": "./bin/cli.js"
+    "devm": "./bin/cli.js"
   },
   "files": [
     "bin",

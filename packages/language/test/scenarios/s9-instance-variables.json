@@ -3,7 +3,7 @@
     "description": "The parent reads and assigns the interface variables of an instance (motor.speed). Instances keep their variables when they are exited and entered again.",
     "text": [
         "statemachine Door {",
-        "    import \"motor.hsm\"",
+        "    import \"motor.devm\"",
         "    interface:",
         "        in event open",
         "        in event close",
@@ -17,7 +17,7 @@
         "}"
     ],
     "files": {
-        "motor.hsm": [
+        "motor.devm": [
             "statemachine Motor {",
             "    interface:",
             "        in event start",

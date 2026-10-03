@@ -20,7 +20,7 @@ const MODEL = 'statemachine Lamp {\n    [*] -> Off\n    state Off\n}\n';
 const LAYOUT = JSON.stringify({ version: 1, mode: 'manual', nodes: { Off: { x: 10, y: 20 } }, edges: {} });
 
 const PARTS = 'component Pump {\n    provides async cmd : event start\n}\n';
-const SYSTEM = 'import "parts.dmf"\nsystem Plant {\n    thread Main {\n        pump : Pump\n    }\n}\n';
+const SYSTEM = 'import "parts.devm"\nsystem Plant {\n    thread Main {\n        pump : Pump\n    }\n}\n';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -72,7 +72,7 @@ function createPanel(uri: Uri, text = MODEL, workspace: Record<string, string> =
         workspaceFiles: { texts: async () => ({ ...workspace }) },
         openLocation: async (location: NavigationLocation, _source: unknown, from?: NavigationLocation) => {
             navigations.push({ location, from });
-            return !location.uri.endsWith('missing.dmf');
+            return !location.uri.endsWith('missing.devm');
         }
     } as unknown as DiagramManager;
     const panel = new DiagramPanel(manager, webviewPanel as unknown as vscode.WebviewPanel, document as unknown as vscode.TextDocument);
@@ -95,7 +95,7 @@ describe('DiagramPanel and its commands', () => {
 
     beforeEach(async () => {
         dir = await fs.mkdtemp(path.join(os.tmpdir(), 'hsm-layout-'));
-        modelPath = path.join(dir, 'lamp.hsm');
+        modelPath = path.join(dir, 'lamp.devm');
         await fs.writeFile(modelPath, MODEL);
     });
 
@@ -108,7 +108,7 @@ describe('DiagramPanel and its commands', () => {
         await h.receive({ type: 'ready' });
         // (the text is posted once the imported files are collected)
         await vi.waitFor(() => expect(h.posted.map(m => m.type)).toEqual(['settings', 'history', 'text']));
-        expect(h.posted[2]).toMatchObject({ type: 'text', text: MODEL, version: 1, fileName: 'lamp.hsm' });
+        expect(h.posted[2]).toMatchObject({ type: 'text', text: MODEL, version: 1, fileName: 'lamp.devm' });
         h.document.text = MODEL.replace('Off', 'Dark');
         h.document.version = 2;
         h.panel.documentChanged(h.document as unknown as vscode.TextDocument);
@@ -123,12 +123,12 @@ describe('DiagramPanel and its commands', () => {
         const { importSctFile, renderModelSvg } = await import('../../src/extension/commands.js');
         const output = { warn: () => undefined, info: () => undefined, error: () => undefined, show: () => undefined };
         const target = await importSctFile(Uri.file(sct) as unknown as vscode.Uri, output as unknown as vscode.LogOutputChannel);
-        expect(target?.path).toBe(path.join(dir, 'Choice.hsm'));
+        expect(target?.path).toBe(path.join(dir, 'Choice.devm'));
         // no sidecar file any more: the arrangement is in the model
-        await expect(fs.stat(path.join(dir, 'Choice.hsm.layout'))).rejects.toThrow();
-        const text = await fs.readFile(path.join(dir, 'Choice.hsm'), 'utf-8');
+        await expect(fs.stat(path.join(dir, 'Choice.devm.layout'))).rejects.toThrow();
+        const text = await fs.readFile(path.join(dir, 'Choice.devm'), 'utf-8');
         expect(text).toMatch(/@at\(-?\d+, -?\d+\)/);
-        const svg = async (model: string) => renderModelSvg({ uri: Uri.file(path.join(dir, 'Choice.hsm')), getText: () => model } as unknown as vscode.TextDocument);
+        const svg = async (model: string) => renderModelSvg({ uri: Uri.file(path.join(dir, 'Choice.devm')), getText: () => model } as unknown as vscode.TextDocument);
         const manual = await svg(text);
         const auto = await svg(text.split('\n').filter(line => !/^\s*@(at|size|regions|via|label|initial|final|definitions)\(/.test(line)).join('\n'));
         expect(manual).toContain('<svg');
@@ -150,8 +150,8 @@ describe('DiagramPanel and its commands', () => {
     });
 
     it('sends the state machines and structure files of the workspace with the text (not the document itself)', async () => {
-        const uri = Uri.file(path.join(dir, 'system.dmf'));
-        const other = Uri.file(path.join(dir, 'parts.dmf')).toString();
+        const uri = Uri.file(path.join(dir, 'system.devm'));
+        const other = Uri.file(path.join(dir, 'parts.devm')).toString();
         const h = createPanel(uri, SYSTEM, { [other]: PARTS, [uri.toString()]: 'stale', [Uri.file(modelPath).toString()]: MODEL });
         await h.receive({ type: 'ready' });
         await vi.waitFor(() => expect(h.posted.some(m => m.type === 'text')).toBe(true));
@@ -162,8 +162,8 @@ describe('DiagramPanel and its commands', () => {
     });
 
     it('applies the edits of several files as one workspace edit if the files are unchanged', async () => {
-        const systemPath = path.join(dir, 'system.dmf');
-        const partsPath = path.join(dir, 'parts.dmf');
+        const systemPath = path.join(dir, 'system.devm');
+        const partsPath = path.join(dir, 'parts.devm');
         await fs.writeFile(systemPath, SYSTEM);
         await fs.writeFile(partsPath, PARTS);
         const h = createPanel(Uri.file(systemPath), SYSTEM);
@@ -183,7 +183,7 @@ describe('DiagramPanel and its commands', () => {
             type: 'workspaceEdit', requestId: 2, version: 1,
             edits: { [parts]: rename(PARTS.indexOf('Pump')) }, hashes: { [parts]: textHash(PARTS) }
         });
-        expect(h.posted.pop()).toMatchObject({ type: 'editResult', requestId: 2, ok: false, message: expect.stringContaining('parts.dmf was changed') });
+        expect(h.posted.pop()).toMatchObject({ type: 'editResult', requestId: 2, ok: false, message: expect.stringContaining('parts.devm was changed') });
         expect(await fs.readFile(partsPath, 'utf-8')).toBe(PARTS.replace('Pump', 'Valve'));
         // based on an outdated version of the document
         await h.receive({ type: 'workspaceEdit', requestId: 3, version: 0, edits: { [own]: rename(0) }, hashes: {} });
@@ -191,24 +191,24 @@ describe('DiagramPanel and its commands', () => {
     });
 
     it('passes navigations to the manager (history) and answers them', async () => {
-        const h = createPanel(Uri.file(path.join(dir, 'system.dmf')), SYSTEM);
-        const from = { uri: 'file:///w/system.dmf', element: 'Plant' };
-        await h.receive({ type: 'openLocation', requestId: 7, location: { uri: 'file:///w/parts.dmf', element: 'Pump', id: 'Pump' }, from });
-        expect(h.navigations).toEqual([{ location: { uri: 'file:///w/parts.dmf', element: 'Pump', id: 'Pump' }, from }]);
+        const h = createPanel(Uri.file(path.join(dir, 'system.devm')), SYSTEM);
+        const from = { uri: 'file:///w/system.devm', element: 'Plant' };
+        await h.receive({ type: 'openLocation', requestId: 7, location: { uri: 'file:///w/parts.devm', element: 'Pump', id: 'Pump' }, from });
+        expect(h.navigations).toEqual([{ location: { uri: 'file:///w/parts.devm', element: 'Pump', id: 'Pump' }, from }]);
         expect(h.posted.pop()).toEqual({ type: 'locationResult', requestId: 7, ok: true });
-        await h.receive({ type: 'openLocation', requestId: 8, location: { uri: 'file:///w/missing.dmf' }, from });
+        await h.receive({ type: 'openLocation', requestId: 8, location: { uri: 'file:///w/missing.devm' }, from });
         expect(h.posted.pop()).toEqual({ type: 'locationResult', requestId: 8, ok: false });
     });
 
     it('HSM: Export Diagram renders the shown structure of a structure file', async () => {
-        await fs.writeFile(path.join(dir, 'parts.dmf'), PARTS);
+        await fs.writeFile(path.join(dir, 'parts.devm'), PARTS);
         const { renderStructureSvg } = await import('../../src/extension/commands.js');
-        const document = { uri: Uri.file(path.join(dir, 'system.dmf')), getText: () => SYSTEM } as unknown as vscode.TextDocument;
+        const document = { uri: Uri.file(path.join(dir, 'system.devm')), getText: () => SYSTEM } as unknown as vscode.TextDocument;
         const svg = await renderStructureSvg(document);
         expect(svg).toContain('<svg');
         expect(svg).toContain('Plant');
         expect(await renderStructureSvg(document, 'Plant')).toBe(svg);
-        const parts = { uri: Uri.file(path.join(dir, 'parts.dmf')), getText: () => PARTS } as unknown as vscode.TextDocument;
+        const parts = { uri: Uri.file(path.join(dir, 'parts.devm')), getText: () => PARTS } as unknown as vscode.TextDocument;
         expect(await renderStructureSvg(parts, 'Pump')).toContain('Pump');
         await expect(renderStructureSvg({ uri: document.uri, getText: () => 'system {' } as unknown as vscode.TextDocument)).rejects.toThrow(/syntax errors/);
     });

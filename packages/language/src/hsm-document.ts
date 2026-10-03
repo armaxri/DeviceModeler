@@ -16,7 +16,7 @@ export interface ParsedModel {
     diagnostics: Diagnostic[];
     /** True if the text contains lexer or parser errors. */
     hasSyntaxErrors: boolean;
-    /** The `.hsm` files imported (transitively) by the model that could be loaded. */
+    /** The `.devm` files imported (transitively) by the model that could be loaded. */
     imported: ImportedModel[];
 }
 
@@ -45,17 +45,17 @@ export interface HsmModelLoaderOptions {
 
 export interface LoadOptions {
     /**
-     * Texts of other files, by URI or by path relative to the loaded document (`motor.hsm`). Imported
+     * Texts of other files, by URI or by path relative to the loaded document (`motor.devm`). Imported
      * files are taken from here first, then read with `readFile`, then from the documents loaded before.
      */
     files?: Record<string, string>;
 }
 
 /**
- * Parses, links and validates HSM texts outside of a language server,
+ * Parses, links and validates state machine files (`.devm`) outside of a language server,
  * e.g. directly in the browser or in a command line tool.
  *
- * Imports (`import "motor.hsm"`) are loaded transitively, relative to the URI of the importing
+ * Imports (`import "motor.devm"`) are loaded transitively, relative to the URI of the importing
  * document (see imports.ts): from the `files` given to {@link load}, with the `readFile` function of the
  * options or from previously loaded documents. Imports that cannot be loaded are reported by the
  * validator ("file not found").
@@ -87,7 +87,7 @@ export class HsmModelLoader {
      */
     async load(text: string, uri?: string, options: LoadOptions = {}): Promise<ParsedModel> {
         const workspace = this.services.shared.workspace;
-        const documentUri = URI.parse(uri ?? `memory:///model-${this.counter++}.hsm`);
+        const documentUri = URI.parse(uri ?? `memory:///model-${this.counter++}.devm`);
         const document = this.replace(documentUri, text) as LangiumDocument<StateMachine>;
         const imported = await loadImports(this.services.shared, [document], options.files ?? {}, this.readFile);
         await workspace.DocumentBuilder.build([document, ...imported], { validation: true });
@@ -115,14 +115,14 @@ export interface ParsedDmfModel {
     diagnostics: Diagnostic[];
     /** True if the text contains lexer or parser errors. */
     hasSyntaxErrors: boolean;
-    /** The `.dmf` and `.hsm` files imported (transitively) by the model that could be loaded. */
+    /** The `.devm` files (structure files and state machines) imported (transitively) by the model that could be loaded. */
     imported: ImportedModel[];
 }
 
 /**
- * Parses, links and validates structure files (`.dmf`, see dmf.langium) outside of a language server,
- * like {@link HsmModelLoader}: imported structure files, the state machines of the components
- * (`behavior "door.hsm"`) and imported headers are loaded transitively.
+ * Parses, links and validates structure files (`.devm` files with structure elements, see dmf.langium)
+ * outside of a language server, like {@link HsmModelLoader}: imported structure files, the state machines
+ * of the components (`behavior "door.devm"`) and imported headers are loaded transitively.
  */
 export class DmfModelLoader {
 
@@ -145,10 +145,10 @@ export class DmfModelLoader {
         });
     }
 
-    /** Loads the given text (`uri` must end with `.dmf`; default: a fresh in-memory document). */
+    /** Loads the given text (`uri` must end with `.devm`; default: a fresh in-memory document). */
     async load(text: string, uri?: string, options: LoadOptions = {}): Promise<ParsedDmfModel> {
         const workspace = this.services.shared.workspace;
-        const documentUri = URI.parse(uri ?? `memory:///structure-${this.counter++}.dmf`);
+        const documentUri = URI.parse(uri ?? `memory:///structure-${this.counter++}.devm`);
         const document = replaceDocument(this.services.shared, documentUri, text) as LangiumDocument<DmfModel>;
         const imported = await loadImports(this.services.shared, [document], options.files ?? {}, this.readFile);
         await workspace.DocumentBuilder.build([document, ...imported], { validation: true });
@@ -175,8 +175,8 @@ export function replaceDocument(shared: LangiumSharedServices, uri: URI, text: s
 }
 
 /**
- * Loads the `.hsm` files imported (transitively) by the given documents that are not among them
- * (for structure files also the imported `.dmf` files and the `.hsm` files of `behavior "door.hsm"`):
+ * Loads the `.devm` files imported (transitively) by the given documents that are not among them
+ * (for structure files also the state machine files of `behavior "door.devm"`):
  * from `files` (by URI or by path relative to the first document), else with `readFile`, else the
  * text of an already loaded document. The documents are created anew (and replace loaded ones), so that they
  * can be built together with the importing documents. Returns the new documents (not built yet).
@@ -231,7 +231,7 @@ export async function loadImports(shared: LangiumSharedServices, roots: LangiumD
         const document = queue.shift()!;
         const root = document.parseResult.value;
         // state machines import state machines and headers, structure files also structure files and
-        // the state machines of their components (`behavior "door.hsm"`)
+        // the state machines of their components (`behavior "door.devm"`)
         const paths = isStateMachine(root) ? importPaths(root).map(p => p.path)
             : isDmfModel(root) ? [...dmfImportPaths(root).map(p => p.path), ...root.elements.filter(isComponent).map(c => c.behavior?.path)]
                 : [];
@@ -242,7 +242,7 @@ export async function loadImports(shared: LangiumSharedServices, roots: LangiumD
                 await loadHeader(headerCandidates(path, UriUtils.dirname(document.uri), settings), settings);
                 continue;
             }
-            if (!path || (kind !== 'hsm' && (kind !== 'dmf' || !isDmfModel(root)))) {
+            if (!path || kind !== 'model') {
                 continue;
             }
             const uri = resolveImportUri(document.uri, path);

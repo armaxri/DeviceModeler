@@ -16,7 +16,7 @@ import {
 } from './config.js';
 
 /*
- * Node side of the generator configuration (`hsm generate`): loading `hsm.gen.json`, expanding the
+ * Node side of the generator configuration (`devm generate`): loading `hsm.gen.json`, expanding the
  * model globs, running the generators and writing (or checking) the files. Not exported from
  * `index.ts` because the web bundle imports it.
  */
@@ -315,7 +315,7 @@ export interface GenerateCommandOptions {
 }
 
 /**
- * `hsm generate [target] [files...]`: without files, the models and options come from the
+ * `devm generate [target] [files...]`: without files, the models and options come from the
  * generator configuration (`--config`, default `hsm.gen.json` in the current directory); with files,
  * the given models are generated for the target (with the options of `--config` if given).
  * Returns the exit code.
@@ -342,7 +342,7 @@ export async function runGenerateCommand(target: string | undefined, files: stri
     if (options.config !== undefined || files.length === 0) {
         configFile = path.resolve(options.config ?? GENERATOR_CONFIG_FILE);
         if (options.config === undefined && await readIfExists(configFile) === undefined) {
-            return fail(`No ${GENERATOR_CONFIG_FILE} in ${process.cwd()}: pass a configuration with --config <file> or a target and model files (hsm generate cpp model.hsm)`);
+            return fail(`No ${GENERATOR_CONFIG_FILE} in ${process.cwd()}: pass a configuration with --config <file> or a target and model files (devm generate cpp model.devm)`);
         }
         const loaded = await loadGeneratorConfig(configFile);
         configDiagnostics.push(...loaded.diagnostics);
@@ -403,7 +403,7 @@ export async function runGenerateCommand(target: string | undefined, files: stri
         }
         console.log(outdated.length === 0
             ? `All ${result.outputs.length} generated files are up to date`
-            : `${outdated.length} of ${result.outputs.length} generated files are out of date; run hsm generate`);
+            : `${outdated.length} of ${result.outputs.length} generated files are out of date; run devm generate`);
         return outdated.length === 0 ? 0 : 1;
     }
     for (const output of result.outputs) {

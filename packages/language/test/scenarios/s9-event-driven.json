@@ -3,7 +3,7 @@
     "description": "Event driven: events raised on an instance and out events of an instance are queued like internal events; each is processed in a step of its own.",
     "text": [
         "statemachine Door {",
-        "    import \"motor.hsm\"",
+        "    import \"motor.devm\"",
         "    @EventDriven",
         "    interface:",
         "        in event open",
@@ -21,7 +21,7 @@
         "}"
     ],
     "files": {
-        "motor.hsm": [
+        "motor.devm": [
             "statemachine Motor {",
             "    @EventDriven",
             "    interface:",

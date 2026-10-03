@@ -3,7 +3,7 @@
     "description": "Child first: if the instance took a transition, the transitions of its state are not checked in this step (as for sub regions, §4); they see the out event raised by that transition in the next step.",
     "text": [
         "statemachine Door {",
-        "    import \"motor.hsm\"",
+        "    import \"motor.devm\"",
         "    @CycleBased(100)",
         "    @ChildFirstExecution",
         "    interface:",
@@ -18,7 +18,7 @@
         "}"
     ],
     "files": {
-        "motor.hsm": [
+        "motor.devm": [
             "statemachine Motor {",
             "    @CycleBased(100)",
             "    @ChildFirstExecution",

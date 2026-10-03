@@ -3,7 +3,7 @@
     "description": "Cycle based: an in event raised on an instance becomes present in the next processing of the instance. Raised by the transition entering its state, the instance processes it in the next cycle.",
     "text": [
         "statemachine Door {",
-        "    import \"motor.hsm\"",
+        "    import \"motor.devm\"",
         "    interface:",
         "        in event open",
         "        in event close",
@@ -17,7 +17,7 @@
         "}"
     ],
     "files": {
-        "motor.hsm": [
+        "motor.devm": [
             "statemachine Motor {",
             "    interface:",
             "        in event start",

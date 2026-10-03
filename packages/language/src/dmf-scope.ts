@@ -1,11 +1,13 @@
 import {
-    AstUtils, Cancellation, DefaultLinker, DefaultScopeProvider, EMPTY_SCOPE, MapScope,
+    AstUtils, Cancellation, EMPTY_SCOPE, MapScope,
     type AstNode, type AstNodeDescription, type LangiumDocument, type LinkingError, type ReferenceInfo, type Scope
 } from 'langium';
 import * as ast from './generated/ast.js';
 import { hasRegisteredImports, importedDmfMachines, visibleElements } from './dmf-imports.js';
 import type { DmfServices } from './dmf-module.js';
 import { enclosingStructure, instanceType, structureInstances } from './dmf-model.js';
+import { HsmLinker } from './hsm-linker.js';
+import { HsmScopeProvider } from './hsm-scope.js';
 
 /**
  * Name resolution of the structure language.
@@ -17,9 +19,12 @@ import { enclosingStructure, instanceType, structureInstances } from './dmf-mode
  *   enclosing structure, including the instances declared in its threads.
  * - Ports: `inst.port` denotes a port of the component type of the instance, `port` (without an
  *   instance) a boundary port of the enclosing structure.
- * - `behavior Door` denotes a state machine of an imported `.hsm` file.
+ * - `behavior Door` denotes a state machine of an imported state machine file.
+ *
+ * The scope provider of the `.devm` language: references in state machine files (and everything not
+ * in a structure file) are resolved by the {@link HsmScopeProvider}.
  */
-export class DmfScopeProvider extends DefaultScopeProvider {
+export class DmfScopeProvider extends HsmScopeProvider {
 
     constructor(protected readonly services: DmfServices) {
         super(services);
@@ -29,7 +34,7 @@ export class DmfScopeProvider extends DefaultScopeProvider {
         const container = context.container;
         const model = AstUtils.getContainerOfType(container, ast.isDmfModel);
         if (!model) {
-            return EMPTY_SCOPE;
+            return super.getScope(context);
         }
         // references into other documents may be resolved before those documents are linked
         if (!hasRegisteredImports(model)) {
@@ -80,12 +85,13 @@ export class DmfScopeProvider extends DefaultScopeProvider {
 }
 
 /**
- * Linker of the structure language: resolves the imports of the model (see dmf-imports.ts) before its
- * references are linked and explains unresolved port references.
+ * Linker of the `.devm` language: for structure files, resolves the imports of the model (see
+ * dmf-imports.ts) before its references are linked and explains unresolved port references; state
+ * machine files are linked by the {@link HsmLinker}.
  */
-export class DmfLinker extends DefaultLinker {
+export class DmfLinker extends HsmLinker {
 
-    constructor(protected readonly services: DmfServices) {
+    constructor(services: DmfServices) {
         super(services);
     }
 

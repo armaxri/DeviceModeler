@@ -1,19 +1,19 @@
 {
-  "name": "hsm",
-  "scopeName": "source.hsm",
+  "name": "devm",
+  "scopeName": "source.devm",
   "fileTypes": [
-    ".hsm"
+    ".devm"
   ],
   "patterns": [
     {
       "include": "#comments"
     },
     {
-      "name": "keyword.control.hsm",
-      "match": "\\b(statemachine|deephistory|interface|namespace|operation|internal|junction|readonly|default|history|oncycle|valueof|active|always|choice|import|region|after|alias|const|entry|event|every|false|raise|state|else|exit|null|sync|true|out|var|as|in)\\b"
+      "name": "keyword.control.devm",
+      "match": "\\b(statemachine|deephistory|component|interface|namespace|operation|subsystem|behavior|delegate|internal|junction|provides|readonly|requires|connect|default|history|oncycle|package|valueof|active|always|choice|import|region|struct|system|thread|after|alias|async|const|entry|event|every|false|raise|state|else|exit|null|sync|true|out|var|as|in)\\b"
     },
     {
-      "name": "string.quoted.double.hsm",
+      "name": "string.quoted.double.devm",
       "begin": "\"",
       "end": "\"",
       "patterns": [
@@ -23,7 +23,7 @@
       ]
     },
     {
-      "name": "string.quoted.single.hsm",
+      "name": "string.quoted.single.devm",
       "begin": "'",
       "end": "'",
       "patterns": [
@@ -37,17 +37,17 @@
     "comments": {
       "patterns": [
         {
-          "name": "comment.block.hsm",
+          "name": "comment.block.devm",
           "begin": "/\\*",
           "beginCaptures": {
             "0": {
-              "name": "punctuation.definition.comment.hsm"
+              "name": "punctuation.definition.comment.devm"
             }
           },
           "end": "\\*/",
           "endCaptures": {
             "0": {
-              "name": "punctuation.definition.comment.hsm"
+              "name": "punctuation.definition.comment.devm"
             }
           }
         },
@@ -55,16 +55,16 @@
           "begin": "//",
           "beginCaptures": {
             "1": {
-              "name": "punctuation.whitespace.comment.leading.hsm"
+              "name": "punctuation.whitespace.comment.leading.devm"
             }
           },
           "end": "(?=$)",
-          "name": "comment.line.hsm"
+          "name": "comment.line.devm"
         }
       ]
     },
     "string-character-escape": {
-      "name": "constant.character.escape.hsm",
+      "name": "constant.character.escape.devm",
       "match": "\\\\(x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|u\\{[0-9A-Fa-f]+\\}|[0-2][0-7]{0,2}|3[0-6][0-7]?|37[0-7]?|[4-7][0-7]?|.|$)"
     }
   }

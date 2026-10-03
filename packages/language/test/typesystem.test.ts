@@ -656,11 +656,11 @@ describe('vertex references', () => {
 
     test('reloading the same document uses fresh scopes', async () => {
         const { loader } = await import('./helpers.js');
-        const first = await loader.load('statemachine M { [*] -> A state A state B A -> B }', 'memory:///same.hsm');
+        const first = await loader.load('statemachine M { [*] -> A state A state B A -> B }', 'memory:///same.devm');
         expect(errors(first)).toEqual([]);
-        const second = await loader.load('statemachine M { [*] -> A state A state C A -> B }', 'memory:///same.hsm');
+        const second = await loader.load('statemachine M { [*] -> A state A state C A -> B }', 'memory:///same.devm');
         expect(errors(second)).toEqual([`Could not resolve reference to Vertex named 'B'.`]);
-        const third = await loader.load('statemachine M { [*] -> A state A state B A -> B }', 'memory:///same.hsm');
+        const third = await loader.load('statemachine M { [*] -> A state A state B A -> B }', 'memory:///same.devm');
         expect(errors(third)).toEqual([]);
         expect(third.model.transitions[1].target?.ref).toBe(third.model.vertices[1]);
     });

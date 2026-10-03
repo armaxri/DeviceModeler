@@ -6,134 +6,8 @@
 /* eslint-disable */
 import * as langium from 'langium';
 
-/** Contains the reachable terminals & keywords and all available types of the 'Dmf' language. */
-export namespace Dmf {
-
-    export const Terminals = {
-        WS: /\s+/,
-        HEX: /0[xX][0-9a-fA-F]+/,
-        REAL: /[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?/,
-        INT: /[0-9]+/,
-        ID: /[_a-zA-Z][\w]*/,
-        STRING: /"(\\.|[^"\\])*"|'(\\.|[^'\\])*'/,
-        ML_COMMENT: /\/\*[\s\S]*?\*\//,
-        SL_COMMENT: /\/\/[^\n\r]*/,
-    };
-
-    export type TerminalNames = keyof typeof Terminals;
-
-    export type KeywordNames =
-        | "("
-        | ")"
-        | ","
-        | "-"
-        | "->"
-        | "."
-        | ":"
-        | "::"
-        | ";"
-        | "@"
-        | "async"
-        | "behavior"
-        | "component"
-        | "connect"
-        | "delegate"
-        | "event"
-        | "import"
-        | "interface"
-        | "package"
-        | "provides"
-        | "requires"
-        | "struct"
-        | "subsystem"
-        | "sync"
-        | "system"
-        | "thread"
-        | "{"
-        | "}";
-
-    export type TokenNames = TerminalNames | KeywordNames;
-
-    export type AstType = {
-        ActiveExpression: ActiveExpression
-        Annotation: Annotation
-        AnnotationArgument: AnnotationArgument
-        Argument: Argument
-        AssignmentExpression: AssignmentExpression
-        Behavior: Behavior
-        BinaryExpression: BinaryExpression
-        BoolLiteral: BoolLiteral
-        BuiltinTrigger: BuiltinTrigger
-        CastExpression: CastExpression
-        Component: Component
-        ComponentInstance: ComponentInstance
-        ComponentType: ComponentType
-        ConditionalExpression: ConditionalExpression
-        Connection: Connection
-        CppReference: CppReference
-        DataTypeReference: DataTypeReference
-        Declaration: Declaration
-        Delegation: Delegation
-        DmfAnnotation: DmfAnnotation
-        DmfElement: DmfElement
-        DmfImport: DmfImport
-        DmfImportPath: DmfImportPath
-        DmfModel: DmfModel
-        Effect: Effect
-        ElementReference: ElementReference
-        EventDeclaration: EventDeclaration
-        EventTrigger: EventTrigger
-        Expression: Expression
-        ExpressionStatement: ExpressionStatement
-        HexLiteral: HexLiteral
-        Import: Import
-        ImportPath: ImportPath
-        IndexExpression: IndexExpression
-        IntLiteral: IntLiteral
-        InterfaceScope: InterfaceScope
-        InternalScope: InternalScope
-        Literal: Literal
-        LocalReaction: LocalReaction
-        MemberAccessExpression: MemberAccessExpression
-        NullLiteral: NullLiteral
-        OperationDeclaration: OperationDeclaration
-        Parameter: Parameter
-        ParenthesizedExpression: ParenthesizedExpression
-        Port: Port
-        PortEvent: PortEvent
-        PortInterface: PortInterface
-        PortReference: PortReference
-        PostfixExpression: PostfixExpression
-        PseudoState: PseudoState
-        RaiseStatement: RaiseStatement
-        ReactionSpec: ReactionSpec
-        RealLiteral: RealLiteral
-        Region: Region
-        Scope: Scope
-        State: State
-        StateMachine: StateMachine
-        Statement: Statement
-        StringLiteral: StringLiteral
-        StructDeclaration: StructDeclaration
-        StructField: StructField
-        Structure: Structure
-        Thread: Thread
-        ThreadMember: ThreadMember
-        TimeTrigger: TimeTrigger
-        Transition: Transition
-        Trigger: Trigger
-        TypeAliasDeclaration: TypeAliasDeclaration
-        TypeReference: TypeReference
-        UnaryExpression: UnaryExpression
-        ValueOfExpression: ValueOfExpression
-        VariableDeclaration: VariableDeclaration
-        Vertex: Vertex
-    }
-
-}
-
-/** Contains the reachable terminals & keywords and all available types of the 'Hsm' language. */
-export namespace Hsm {
+/** Contains the reachable terminals & keywords and all available types of the 'Devm' language. */
+export namespace Devm {
 
     export const Terminals = {
         WS: /\s+/,
@@ -198,10 +72,15 @@ export namespace Hsm {
         | "alias"
         | "always"
         | "as"
+        | "async"
+        | "behavior"
         | "choice"
+        | "component"
+        | "connect"
         | "const"
         | "deephistory"
         | "default"
+        | "delegate"
         | "else"
         | "entry"
         | "event"
@@ -219,12 +98,19 @@ export namespace Hsm {
         | "oncycle"
         | "operation"
         | "out"
+        | "package"
+        | "provides"
         | "raise"
         | "readonly"
         | "region"
+        | "requires"
         | "state"
         | "statemachine"
+        | "struct"
+        | "subsystem"
         | "sync"
+        | "system"
+        | "thread"
         | "true"
         | "valueof"
         | "var"
@@ -240,15 +126,29 @@ export namespace Hsm {
     export type AstType = {
         ActiveExpression: ActiveExpression
         Annotation: Annotation
+        AnnotationArgument: AnnotationArgument
         Argument: Argument
         AssignmentExpression: AssignmentExpression
+        Behavior: Behavior
         BinaryExpression: BinaryExpression
         BoolLiteral: BoolLiteral
         BuiltinTrigger: BuiltinTrigger
         CastExpression: CastExpression
+        Component: Component
+        ComponentInstance: ComponentInstance
+        ComponentType: ComponentType
         ConditionalExpression: ConditionalExpression
+        Connection: Connection
         CppReference: CppReference
+        DataTypeReference: DataTypeReference
         Declaration: Declaration
+        Delegation: Delegation
+        DevmFile: DevmFile
+        DmfAnnotation: DmfAnnotation
+        DmfElement: DmfElement
+        DmfImport: DmfImport
+        DmfImportPath: DmfImportPath
+        DmfModel: DmfModel
         Effect: Effect
         ElementReference: ElementReference
         EventDeclaration: EventDeclaration
@@ -269,6 +169,10 @@ export namespace Hsm {
         OperationDeclaration: OperationDeclaration
         Parameter: Parameter
         ParenthesizedExpression: ParenthesizedExpression
+        Port: Port
+        PortEvent: PortEvent
+        PortInterface: PortInterface
+        PortReference: PortReference
         PostfixExpression: PostfixExpression
         PseudoState: PseudoState
         RaiseStatement: RaiseStatement
@@ -280,6 +184,11 @@ export namespace Hsm {
         StateMachine: StateMachine
         Statement: Statement
         StringLiteral: StringLiteral
+        StructDeclaration: StructDeclaration
+        StructField: StructField
+        Structure: Structure
+        Thread: Thread
+        ThreadMember: ThreadMember
         TimeTrigger: TimeTrigger
         Transition: Transition
         Trigger: Trigger
@@ -353,8 +262,13 @@ export namespace HsmTest {
         | "active"
         | "as"
         | "assert"
+        | "async"
+        | "behavior"
         | "called"
+        | "component"
+        | "connect"
         | "const"
+        | "delegate"
         | "else"
         | "enter"
         | "exit"
@@ -365,12 +279,19 @@ export namespace HsmTest {
         | "mock"
         | "null"
         | "operation"
+        | "package"
         | "proceed"
+        | "provides"
         | "raise"
         | "readonly"
+        | "requires"
         | "returns"
         | "statemachine"
+        | "struct"
+        | "subsystem"
+        | "system"
         | "testclass"
+        | "thread"
         | "times"
         | "true"
         | "valueof"
@@ -462,18 +383,17 @@ export namespace HsmTest {
 // the terminals, keywords and types of the whole 'Hsm' project
 
 export const HsmTerminals = {
-    ...Dmf.Terminals,
-    ...Hsm.Terminals,
+    ...Devm.Terminals,
     ...HsmTest.Terminals,
 };
 
 export type HsmTerminalNames = keyof typeof HsmTerminals;
 
-export type HsmKeywordNames = Dmf.KeywordNames | Hsm.KeywordNames | HsmTest.KeywordNames;
+export type HsmKeywordNames = Devm.KeywordNames | HsmTest.KeywordNames;
 
 export type HsmTokenNames = HsmTerminalNames | HsmKeywordNames;
 
-export type HsmAstType = Dmf.AstType & Hsm.AstType & HsmTest.AstType
+export type HsmAstType = Devm.AstType & HsmTest.AstType
 
 
 // all type definitions of the the whole 'Hsm' project
@@ -513,7 +433,7 @@ export function isAnnotation(item: unknown): item is Annotation {
 export interface AnnotationArgument extends langium.AstNode {
     readonly $container: DmfAnnotation;
     readonly $type: 'AnnotationArgument';
-    name?: string;
+    name?: DmfId;
     number?: SignedNumber;
     text?: string;
     unit?: string;
@@ -534,7 +454,7 @@ export function isAnnotationArgument(item: unknown): item is AnnotationArgument 
 export interface Argument extends langium.AstNode {
     readonly $container: ElementReference;
     readonly $type: 'Argument';
-    parameter?: string;
+    parameter?: HsmId;
     value: Expression;
 }
 
@@ -732,7 +652,7 @@ export interface Component extends langium.AstNode {
     annotations: Array<DmfAnnotation>;
     behavior?: Behavior;
     description?: string;
-    name: string;
+    name: DmfId;
     ports: Array<Port>;
 }
 
@@ -754,7 +674,7 @@ export interface ComponentInstance extends langium.AstNode {
     readonly $type: 'ComponentInstance';
     annotations: Array<DmfAnnotation>;
     description?: string;
-    name: string;
+    name: DmfId;
     type: langium.Reference<ComponentType>;
 }
 
@@ -842,7 +762,7 @@ export function isCppReference(item: unknown): item is CppReference {
 export interface DataTypeReference extends langium.AstNode {
     readonly $container: Port | PortEvent | StructField;
     readonly $type: 'DataTypeReference';
-    name: TypeReferenceName;
+    name: DmfTypeReferenceName;
 }
 
 export const DataTypeReference = {
@@ -883,11 +803,21 @@ export function isDelegation(item: unknown): item is Delegation {
     return reflection.isInstance(item, Delegation.$type);
 }
 
+export type DevmFile = DmfModel | StateMachine;
+
+export const DevmFile = {
+    $type: 'DevmFile'
+} as const;
+
+export function isDevmFile(item: unknown): item is DevmFile {
+    return reflection.isInstance(item, DevmFile.$type);
+}
+
 export interface DmfAnnotation extends langium.AstNode {
     readonly $container: Component | ComponentInstance | Connection | Delegation | Port | PortInterface | StructDeclaration | Structure | Thread;
     readonly $type: 'DmfAnnotation';
     arguments: Array<AnnotationArgument>;
-    name: string;
+    name: DmfId;
 }
 
 export const DmfAnnotation = {
@@ -908,6 +838,12 @@ export const DmfElement = {
 
 export function isDmfElement(item: unknown): item is DmfElement {
     return reflection.isInstance(item, DmfElement.$type);
+}
+
+export type DmfId = 'active' | 'after' | 'alias' | 'always' | 'as' | 'choice' | 'const' | 'deephistory' | 'default' | 'else' | 'entry' | 'every' | 'exit' | 'false' | 'history' | 'in' | 'internal' | 'junction' | 'namespace' | 'null' | 'oncycle' | 'operation' | 'out' | 'raise' | 'readonly' | 'region' | 'state' | 'statemachine' | 'true' | 'valueof' | 'var' | string;
+
+export function isDmfId(item: unknown): item is DmfId {
+    return item === 'statemachine' || item === 'namespace' || item === 'internal' || item === 'in' || item === 'out' || item === 'const' || item === 'var' || item === 'readonly' || item === 'operation' || item === 'alias' || item === 'state' || item === 'region' || item === 'choice' || item === 'junction' || item === 'history' || item === 'deephistory' || item === 'entry' || item === 'exit' || item === 'after' || item === 'every' || item === 'always' || item === 'oncycle' || item === 'else' || item === 'default' || item === 'raise' || item === 'as' || item === 'valueof' || item === 'active' || item === 'true' || item === 'false' || item === 'null' || (typeof item === 'string' && (/[_a-zA-Z][\w]*/.test(item)));
 }
 
 export interface DmfImport extends langium.AstNode {
@@ -944,7 +880,7 @@ export interface DmfModel extends langium.AstNode {
     readonly $type: 'DmfModel';
     elements: Array<DmfElement>;
     imports: Array<DmfImport>;
-    package?: QualifiedName;
+    package?: DmfQualifiedName;
 }
 
 export const DmfModel = {
@@ -956,6 +892,18 @@ export const DmfModel = {
 
 export function isDmfModel(item: unknown): item is DmfModel {
     return reflection.isInstance(item, DmfModel.$type);
+}
+
+export type DmfQualifiedName = string;
+
+export function isDmfQualifiedName(item: unknown): item is DmfQualifiedName {
+    return typeof item === 'string';
+}
+
+export type DmfTypeReferenceName = string;
+
+export function isDmfTypeReferenceName(item: unknown): item is DmfTypeReferenceName {
+    return typeof item === 'string';
 }
 
 export interface Effect extends langium.AstNode {
@@ -1009,7 +957,7 @@ export interface EventDeclaration extends langium.AstNode {
     readonly $container: InterfaceScope | InternalScope;
     readonly $type: 'EventDeclaration';
     direction?: 'in' | 'out';
-    name: string;
+    name: HsmId;
     type?: TypeReference;
 }
 
@@ -1092,6 +1040,12 @@ export function isHexLiteral(item: unknown): item is HexLiteral {
     return reflection.isInstance(item, HexLiteral.$type);
 }
 
+export type HsmId = 'async' | 'behavior' | 'component' | 'connect' | 'delegate' | 'package' | 'provides' | 'requires' | 'struct' | 'subsystem' | 'system' | 'thread' | string;
+
+export function isHsmId(item: unknown): item is HsmId {
+    return item === 'package' || item === 'struct' || item === 'component' || item === 'behavior' || item === 'subsystem' || item === 'system' || item === 'provides' || item === 'requires' || item === 'async' || item === 'thread' || item === 'connect' || item === 'delegate' || (typeof item === 'string' && (/[_a-zA-Z][\w]*/.test(item)));
+}
+
 export interface IfStatement extends langium.AstNode {
     readonly $container: Block | IfStatement;
     readonly $type: 'IfStatement';
@@ -1166,7 +1120,7 @@ export interface InterfaceScope extends langium.AstNode {
     readonly $container: StateMachine;
     readonly $type: 'InterfaceScope';
     declarations: Array<Declaration>;
-    name?: string;
+    name?: HsmId;
 }
 
 export const InterfaceScope = {
@@ -1256,7 +1210,7 @@ export function isLocalVariableStatement(item: unknown): item is LocalVariableSt
 export interface MemberAccessExpression extends langium.AstNode {
     readonly $container: Annotation | Argument | AssertCalledStatement | AssertStatement | AssignmentExpression | AssignmentStatement | BinaryExpression | CastExpression | ConditionalExpression | ExpressionStatement | IfStatement | IndexExpression | LocalReaction | MemberAccessExpression | MockStatement | OperationCallStatement | ParenthesizedExpression | PostfixExpression | ProceedStatement | RaiseStatement | ReactionSpec | TimeTrigger | UnaryExpression | VariableDeclaration | WhileStatement;
     readonly $type: 'MemberAccessExpression';
-    member: string;
+    member: HsmId;
     receiver: ElementReference | Expression;
 }
 
@@ -1324,7 +1278,7 @@ export function isOperationCallStatement(item: unknown): item is OperationCallSt
 export interface OperationDeclaration extends langium.AstNode {
     readonly $container: InterfaceScope | InternalScope;
     readonly $type: 'OperationDeclaration';
-    name: string;
+    name: HsmId;
     parameters: Array<Parameter>;
     returnType?: TypeReference;
 }
@@ -1343,7 +1297,7 @@ export function isOperationDeclaration(item: unknown): item is OperationDeclarat
 export interface Parameter extends langium.AstNode {
     readonly $container: OperationDeclaration;
     readonly $type: 'Parameter';
-    name: string;
+    name: HsmId;
     type: TypeReference;
     varArgs: boolean;
 }
@@ -1381,7 +1335,7 @@ export interface Port extends langium.AstNode {
     direction: 'provides' | 'requires';
     events: Array<PortEvent>;
     kind: 'async' | 'sync';
-    name: string;
+    name: DmfId;
     type?: DataTypeReference;
 }
 
@@ -1402,7 +1356,7 @@ export function isPort(item: unknown): item is Port {
 export interface PortEvent extends langium.AstNode {
     readonly $container: Port | PortInterface;
     readonly $type: 'PortEvent';
-    name: string;
+    name: DmfId;
     type?: DataTypeReference;
 }
 
@@ -1422,7 +1376,7 @@ export interface PortInterface extends langium.AstNode {
     annotations: Array<DmfAnnotation>;
     description?: string;
     events: Array<PortEvent>;
-    name: string;
+    name: DmfId;
 }
 
 export const PortInterface = {
@@ -1492,7 +1446,7 @@ export interface PseudoState extends langium.AstNode {
     readonly $container: Region | State | StateMachine;
     readonly $type: 'PseudoState';
     kind: PseudoStateKind;
-    name: string;
+    name: HsmId;
 }
 
 export const PseudoState = {
@@ -1572,7 +1526,7 @@ export interface Region extends langium.AstNode {
     readonly $container: State;
     readonly $type: 'Region';
     annotations: Array<Annotation>;
-    name?: string;
+    name?: HsmId;
     transitions: Array<Transition>;
     vertices: Array<Vertex>;
 }
@@ -1610,7 +1564,7 @@ export interface State extends langium.AstNode {
     readonly $type: 'State';
     annotations: Array<Annotation>;
     description?: string;
-    name: string;
+    name: HsmId;
     reactions: Array<LocalReaction>;
     regions: Array<Region>;
     submachine?: langium.Reference<VariableDeclaration>;
@@ -1639,7 +1593,7 @@ export interface StateMachine extends langium.AstNode {
     annotations: Array<Annotation>;
     description?: string;
     imports: Array<Import>;
-    name: string;
+    name: HsmId;
     namespace?: QualifiedName;
     reactions: Array<LocalReaction>;
     scopes: Array<Scope>;
@@ -1695,7 +1649,7 @@ export interface StructDeclaration extends langium.AstNode {
     annotations: Array<DmfAnnotation>;
     description?: string;
     fields: Array<StructField>;
-    name: string;
+    name: DmfId;
 }
 
 export const StructDeclaration = {
@@ -1713,7 +1667,7 @@ export function isStructDeclaration(item: unknown): item is StructDeclaration {
 export interface StructField extends langium.AstNode {
     readonly $container: StructDeclaration;
     readonly $type: 'StructField';
-    name: string;
+    name: DmfId;
     type: DataTypeReference;
 }
 
@@ -1736,7 +1690,7 @@ export interface Structure extends langium.AstNode {
     description?: string;
     instances: Array<ComponentInstance>;
     kind: 'subsystem' | 'system';
-    name: string;
+    name: DmfId;
     ports: Array<Port>;
     threads: Array<Thread>;
 }
@@ -1762,7 +1716,7 @@ export interface TestClass extends langium.AstNode {
     readonly $container: TestModel;
     readonly $type: 'TestClass';
     machine: langium.Reference<StateMachine>;
-    name: string;
+    name: HsmId;
     operations: Array<TestOperation>;
 }
 
@@ -1796,7 +1750,7 @@ export interface TestOperation extends langium.AstNode {
     readonly $type: 'TestOperation';
     annotations: Array<Annotation>;
     body: Block;
-    name: string;
+    name: HsmId;
     parameters: Array<VariableDeclaration>;
 }
 
@@ -1829,7 +1783,7 @@ export interface Thread extends langium.AstNode {
     description?: string;
     instances: Array<ComponentInstance>;
     members: Array<ThreadMember>;
-    name: string;
+    name: DmfId;
 }
 
 export const Thread = {
@@ -1882,8 +1836,8 @@ export function isTimeTrigger(item: unknown): item is TimeTrigger {
 export interface Transition extends langium.AstNode {
     readonly $container: Region | State | StateMachine;
     readonly $type: 'Transition';
-    entryPoints: Array<string>;
-    exitPoints: Array<string>;
+    entryPoints: Array<HsmId>;
+    exitPoints: Array<HsmId>;
     final: boolean;
     initial: boolean;
     source?: langium.Reference<Vertex>;
@@ -1919,7 +1873,7 @@ export function isTrigger(item: unknown): item is Trigger {
 export interface TypeAliasDeclaration extends langium.AstNode {
     readonly $container: InterfaceScope | InternalScope;
     readonly $type: 'TypeAliasDeclaration';
-    name: string;
+    name: HsmId;
     type: TypeReference;
 }
 
@@ -1991,7 +1945,7 @@ export interface VariableDeclaration extends langium.AstNode {
     readonly $type: 'VariableDeclaration';
     const: boolean;
     initialValue?: Expression;
-    name: string;
+    name: HsmId;
     readonly: boolean;
     type?: TypeReference;
 }
@@ -2361,6 +2315,12 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: []
         },
+        DevmFile: {
+            name: DevmFile.$type,
+            properties: {
+            },
+            superTypes: []
+        },
         DmfAnnotation: {
             name: DmfAnnotation.$type,
             properties: {
@@ -2418,7 +2378,7 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
                     optional: true
                 }
             },
-            superTypes: []
+            superTypes: [DevmFile.$type]
         },
         Effect: {
             name: Effect.$type,
@@ -3014,7 +2974,7 @@ export class HsmAstReflection extends langium.AbstractAstReflection {
                     optional: true
                 }
             },
-            superTypes: []
+            superTypes: [DevmFile.$type]
         },
         Statement: {
             name: Statement.$type,

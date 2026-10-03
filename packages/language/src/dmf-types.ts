@@ -5,7 +5,7 @@ import { dmfCppImports, dmfModelOf, visibleElements } from './dmf-imports.js';
 import { isAssignable, resolveTypeName, sameType, typeName, type HsmType } from './hsm-typesystem.js';
 
 /**
- * Data types of the structure language (`.dmf`): the types of sync ports, event payloads and struct
+ * Data types of the structure language (`.devm`): the types of sync ports, event payloads and struct
  * fields.
  *
  * A type name denotes (in this order) a built-in type (`integer`, `real`, `boolean`, `string`), a

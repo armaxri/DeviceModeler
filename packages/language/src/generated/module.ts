@@ -5,25 +5,18 @@
 
 import type { LangiumSharedCoreServices, LangiumCoreServices, LangiumGeneratedCoreServices, LangiumGeneratedSharedCoreServices, LanguageMetaData, Module } from 'langium';
 import { HsmAstReflection } from './ast.js';
-import { DmfGrammar, HsmGrammar, HsmTestGrammar } from './grammar.js';
+import { DevmGrammar, HsmTestGrammar } from './grammar.js';
 
-export const DmfLanguageMetaData = {
-    languageId: 'dmf',
-    fileExtensions: ['.dmf'],
-    caseInsensitive: false,
-    mode: 'development'
-} as const satisfies LanguageMetaData;
-
-export const HsmLanguageMetaData = {
-    languageId: 'hsm',
-    fileExtensions: ['.hsm'],
+export const DevmLanguageMetaData = {
+    languageId: 'devm',
+    fileExtensions: ['.devm'],
     caseInsensitive: false,
     mode: 'development'
 } as const satisfies LanguageMetaData;
 
 export const HsmTestLanguageMetaData = {
-    languageId: 'hsmtest',
-    fileExtensions: ['.hsmtest'],
+    languageId: 'devmtest',
+    fileExtensions: ['.devmtest'],
     caseInsensitive: false,
     mode: 'development'
 } as const satisfies LanguageMetaData;
@@ -32,15 +25,9 @@ export const HsmGeneratedSharedModule: Module<LangiumSharedCoreServices, Langium
     AstReflection: () => new HsmAstReflection()
 };
 
-export const DmfGeneratedModule: Module<LangiumCoreServices, LangiumGeneratedCoreServices> = {
-    Grammar: () => DmfGrammar(),
-    LanguageMetaData: () => DmfLanguageMetaData,
-    parser: {}
-};
-
-export const HsmGeneratedModule: Module<LangiumCoreServices, LangiumGeneratedCoreServices> = {
-    Grammar: () => HsmGrammar(),
-    LanguageMetaData: () => HsmLanguageMetaData,
+export const DevmGeneratedModule: Module<LangiumCoreServices, LangiumGeneratedCoreServices> = {
+    Grammar: () => DevmGrammar(),
+    LanguageMetaData: () => DevmLanguageMetaData,
     parser: {}
 };
 

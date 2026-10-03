@@ -55,7 +55,7 @@ export function testedMachine(node: AstNode): ast.StateMachine | undefined {
 /**
  * Name resolution of the test language.
  *
- * - `testclass T for statemachine M`: `M` is looked up in the global index, i.e. in all `.hsm`
+ * - `testclass T for statemachine M`: `M` is looked up in the global index, i.e. in all `.devm`
  *   documents of the workspace.
  * - Declarations (events, variables, operations) of `M` are referenced like inside `M`: by their
  *   simple name, or by `Interface.name` for named interfaces.

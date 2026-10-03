@@ -2,15 +2,17 @@ import { AstUtils, UriUtils, type AstNode, type LangiumCoreServices, type Langiu
 import * as ast from './generated/ast.js';
 import { cppHeaderStore, loadHeaderClosure, resolveHeaderPath, type CppHeaderStore, type CppImportInfo, type LoadedHeader } from './cpp-headers.js';
 import { CppTypeIndex } from './cpp-header/type-index.js';
-import { HEADER_EXTENSIONS, resolveImportUri, type ResolvedHeader } from './imports.js';
+import { HEADER_EXTENSIONS, MODEL_EXTENSION, resolveImportUri, type ResolvedHeader } from './imports.js';
 
 /**
- * Imports of structure files (`.dmf`) and the state machines of components (`behavior "door.hsm"`).
+ * Imports of structure files and the state machines of components (`behavior "door.devm"`).
  *
  * A structure file imports other structure files (their structs, interfaces and component types
  * become visible, by simple name and by `package.Name`), state machine files (for `behavior Door`)
- * and C/C++ headers (their types can be used as data types). Paths are resolved relative to the
- * importing file like the imports of state machines (see imports.ts); the imported documents must be
+ * and C/C++ headers. Both kinds of model files have the extension `.devm`: whether an import is a
+ * structure file or a state machine file is known when the imported file is loaded (its root), so the
+ * kind of a model import is `model` before and `dmf` / `hsm` after its resolution. The types of C/C++
+ * headers can be used as data types. Paths are resolved relative to the importing file like the imports of state machines (see imports.ts); the imported documents must be
  * loaded into the Langium workspace (the language server loads all files of the workspace,
  * {@link DmfModelLoader} loads imported files transitively).
  *
@@ -19,17 +21,17 @@ import { HEADER_EXTENSIONS, resolveImportUri, type ResolvedHeader } from './impo
  * scope provider, the validator and the route analysis can use the pure functions of this module.
  */
 
-/** `dmf`: a structure file; `hsm`: a state machine file; `header`: a C/C++ header; `unsupported`: any other file. */
-export type DmfImportKind = 'dmf' | 'hsm' | 'header' | 'unsupported';
+/**
+ * `dmf`: a structure file; `hsm`: a state machine file; `model`: a `.devm` file that is not loaded
+ * (the kind before the resolution); `header`: a C/C++ header; `unsupported`: any other file.
+ */
+export type DmfImportKind = 'dmf' | 'hsm' | 'model' | 'header' | 'unsupported';
 
-/** The kind of an import path of a structure file, by its file extension. */
+/** The kind of an import path of a structure file, by its file extension (`model` for `.devm` files). */
 export function dmfImportKind(path: string): DmfImportKind {
     const lower = path.toLowerCase();
-    if (lower.endsWith('.dmf')) {
-        return 'dmf';
-    }
-    if (lower.endsWith('.hsm')) {
-        return 'hsm';
+    if (lower.endsWith(MODEL_EXTENSION)) {
+        return 'model';
     }
     return HEADER_EXTENSIONS.some(extension => lower.endsWith(extension)) ? 'header' : 'unsupported';
 }
@@ -49,14 +51,16 @@ export interface ResolvedDmfImport {
     readonly header?: ResolvedHeader;
 }
 
-/** The resolved state machine of a component (`behavior "door.hsm"` or `behavior Door`). */
+/** The resolved state machine of a component (`behavior "door.devm"` or `behavior Door`). */
 export interface ResolvedBehavior {
     readonly node: ast.Behavior;
-    /** The path of `behavior "door.hsm"`, `undefined` for `behavior Door`. */
+    /** The path of `behavior "door.devm"`, `undefined` for `behavior Door`. */
     readonly path?: string;
     readonly uri?: URI;
     /** The state machine, `undefined` if the file is not loaded (or the name cannot be resolved). */
     readonly machine?: ast.StateMachine;
+    /** Whether the file of `behavior "x.devm"` is a structure file (not a state machine). */
+    readonly structureFile?: boolean;
 }
 
 /** All import paths of a model in text order. */
@@ -110,7 +114,7 @@ export function importedModels(model: ast.DmfModel): ast.DmfModel[] {
     return result;
 }
 
-/** The state machines of the `.hsm` files imported by a model, in text order. */
+/** The state machines of the state machine files imported by a model, in text order. */
 export function importedDmfMachines(model: ast.DmfModel): ast.StateMachine[] {
     return resolvedDmfImports(model).flatMap(i => i.machine ? [i.machine] : []);
 }
@@ -155,8 +159,8 @@ export function dmfModelOf(node: AstNode): ast.DmfModel | undefined {
 }
 
 /**
- * The state machine implementing a component (`behavior "door.hsm"`: the state machine of that file,
- * `behavior Door`: the referenced state machine of an imported `.hsm` file).
+ * The state machine implementing a component (`behavior "door.devm"`: the state machine of that file,
+ * `behavior Door`: the referenced state machine of an imported state machine file).
  */
 export function behaviorMachine(component: ast.Component | undefined): ast.StateMachine | undefined {
     return component?.behavior ? resolvedBehavior(component.behavior).machine : undefined;
@@ -204,7 +208,7 @@ export class DmfImportResolver {
         return dmfImportPaths(model).map(node => this.resolvePath(node, base));
     }
 
-    /** Resolves `behavior "door.hsm"` relative to the model (`behavior Door` is a cross-reference). */
+    /** Resolves `behavior "door.devm"` relative to the model (`behavior Door` is a cross-reference). */
     resolveBehavior(behavior: ast.Behavior): ResolvedBehavior {
         const path = behavior.path ?? '';
         const base = AstUtils.findRootNode(behavior).$document?.uri;
@@ -213,7 +217,7 @@ export class DmfImportResolver {
         }
         const uri = resolveImportUri(base, path);
         const root = this.documents.getDocument(uri)?.parseResult.value;
-        return { node: behavior, path, uri, machine: ast.isStateMachine(root) ? root : undefined };
+        return { node: behavior, path, uri, machine: ast.isStateMachine(root) ? root : undefined, structureFile: ast.isDmfModel(root) };
     }
 
     /**
@@ -223,7 +227,7 @@ export class DmfImportResolver {
     dependenciesChanged(model: ast.DmfModel, changedUris: Set<string>): boolean {
         const imports = resolvedDmfImports(model);
         const changed = (uri: URI | undefined) => uri !== undefined && changedUris.has(uri.toString());
-        if (imports.some(i => (i.kind === 'dmf' && (!i.model || changed(i.uri))) || (i.kind === 'hsm' && (!i.machine || changed(i.uri))))) {
+        if (imports.some(i => i.kind === 'model' || ((i.kind === 'dmf' || i.kind === 'hsm') && changed(i.uri)))) {
             return true;
         }
         for (const resolved of registry.get(model)?.behaviors.values() ?? []) {
@@ -249,11 +253,15 @@ export class DmfImportResolver {
         if (kind === 'unsupported' || !uri) {
             return { node, path, kind, uri };
         }
+        // the kind of a model file is the kind of its root (`model` while it is not loaded)
         const root = this.documents.getDocument(uri)?.parseResult.value;
-        if (kind === 'dmf') {
-            return { node, path, kind, uri, model: ast.isDmfModel(root) ? root : undefined };
+        if (ast.isDmfModel(root)) {
+            return { node, path, kind: 'dmf', uri, model: root };
         }
-        return { node, path, kind, uri, machine: ast.isStateMachine(root) ? root : undefined };
+        if (ast.isStateMachine(root)) {
+            return { node, path, kind: 'hsm', uri, machine: root };
+        }
+        return { node, path, kind, uri };
     }
 
     protected resolveHeader(node: ast.DmfImportPath, path: string, uri: URI | undefined, base: URI | undefined): ResolvedDmfImport {

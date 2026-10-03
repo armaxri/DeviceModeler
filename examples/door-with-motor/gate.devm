@@ -1,9 +1,9 @@
 // A gate with a motor instance (submachine), see docs/semantics.md §9.
-//   hsm simulate examples/door-with-motor/gate.hsm
-//   hsm test examples/door-with-motor/gate.hsmtest
+//   devm simulate examples/door-with-motor/gate.devm
+//   devm test examples/door-with-motor/gate.devmtest
 /** Opens on request; the motor instance runs while the gate is moving. */
 statemachine Gate {
-    import "motor.hsm"
+    import "motor.devm"
 
     interface:
         in event open

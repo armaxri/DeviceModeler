@@ -1,12 +1,14 @@
 import type { AstNode } from 'langium';
-import { AbstractFormatter, Formatting } from 'langium/lsp';
+import { Formatting } from 'langium/lsp';
 import * as ast from './generated/ast.js';
+import { HsmFormatter } from './hsm-formatter.js';
 
 /**
- * Formatter of the structure language: one member per line, bodies indented, `a : T`, `a -> b`,
- * `inst.port`, annotations of threads and type declarations on the line before them.
+ * Formatter of the `.devm` language. Structure files: one member per line, bodies indented, `a : T`,
+ * `a -> b`, `inst.port`, annotations of threads and type declarations on the line before them. The nodes
+ * of state machine files are formatted by the {@link HsmFormatter} (the AST types of the two kinds are disjoint).
  */
-export class DmfFormatter extends AbstractFormatter {
+export class DmfFormatter extends HsmFormatter {
 
     protected override format(node: AstNode): void {
         if (ast.isStructDeclaration(node) || ast.isPortInterface(node) || ast.isComponent(node) || ast.isStructure(node) || ast.isThread(node)) {
@@ -69,6 +71,8 @@ export class DmfFormatter extends AbstractFormatter {
             if (node.package !== undefined || members.length > 1) {
                 formatter.nodes(...(node.package !== undefined ? members : members.slice(1))).prepend(Formatting.newLine({ allowMore: true }));
             }
+        } else {
+            super.format(node);
         }
     }
 

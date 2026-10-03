@@ -27,7 +27,7 @@ export interface Scenario {
     text?: string | string[];
     /**
      * Inline texts of further files the model imports, by path relative to the model
-     * (`{ "motor.hsm": ["statemachine Motor {", ...] }`); arrays are joined with line breaks.
+     * (`{ "motor.devm": ["statemachine Motor {", ...] }`); arrays are joined with line breaks.
      */
     files?: Record<string, string | string[]>;
     /** Return values of operations in call order; the last value is repeated. */

@@ -16,13 +16,13 @@ interface ItemData {
 }
 
 /**
- * The unit tests of `.hsmtest` files in the Test Explorer: test classes and their `@Test`
+ * The unit tests of `.devmtest` files in the Test Explorer: test classes and their `@Test`
  * operations are discovered by parsing the files; running them loads all models of the workspace
  * and executes the tests on the interpreter of the language package.
  */
 export class HsmTestController implements vscode.Disposable {
 
-    readonly controller = vscode.tests.createTestController('hsmTests', 'HSM Tests');
+    readonly controller = vscode.tests.createTestController('hsmTests', 'Device Modeler Tests');
     private readonly data = new WeakMap<vscode.TestItem, ItemData>();
     private readonly disposables: vscode.Disposable[] = [];
     private readonly runProfile: vscode.TestRunProfile;
@@ -39,7 +39,7 @@ export class HsmTestController implements vscode.Disposable {
         const coverageProfile = this.controller.createRunProfile('Run with Model Coverage', vscode.TestRunProfileKind.Coverage,
             (request, token) => this.run(request, token, true), true);
         coverageProfile.loadDetailedCoverage = async (_run, file) => (file as ModelFileCoverage).details;
-        const watcher = vscode.workspace.createFileSystemWatcher('**/*.hsmtest');
+        const watcher = vscode.workspace.createFileSystemWatcher('**/*.devmtest');
         this.disposables.push(
             this.controller,
             watcher,
@@ -58,7 +58,7 @@ export class HsmTestController implements vscode.Disposable {
 
     /** Finds all test files of the workspace. */
     async discoverWorkspace(): Promise<void> {
-        const files = await vscode.workspace.findFiles('**/*.hsmtest', EXCLUDE);
+        const files = await vscode.workspace.findFiles('**/*.devmtest', EXCLUDE);
         for (const uri of files) {
             await this.updateFromDisk(uri);
         }
@@ -78,7 +78,7 @@ export class HsmTestController implements vscode.Disposable {
     }
 
     private updateFromDocument(document: vscode.TextDocument): void {
-        if (document.languageId === 'hsmtest' && document.uri.scheme === 'file') {
+        if (document.languageId === 'devmtest' && document.uri.scheme === 'file') {
             this.updateItems(document.uri, document.getText());
         }
     }
@@ -111,7 +111,7 @@ export class HsmTestController implements vscode.Disposable {
         return file;
     }
 
-    /** `HSM: Run Tests`: runs the tests of a test file (all tests of the workspace without a file). */
+    /** `Device Modeler: Run Tests`: runs the tests of a test file (all tests of the workspace without a file). */
     async runFile(uri: vscode.Uri | undefined): Promise<void> {
         let include: vscode.TestItem[] | undefined;
         if (uri) {
@@ -155,7 +155,7 @@ export class HsmTestController implements vscode.Disposable {
                 return;
             }
             const testFiles = await Promise.all([...files.values()].map(readFile));
-            const models = await Promise.all((await vscode.workspace.findFiles('**/*.hsm', EXCLUDE)).map(readFile));
+            const models = await Promise.all((await vscode.workspace.findFiles('**/*.devm', EXCLUDE)).map(readFile));
             if (token.isCancellationRequested) {
                 return;
             }
@@ -252,7 +252,7 @@ async function readFile(uri: vscode.Uri): Promise<WorkspaceFile> {
     return { uri: uri.toString(), text };
 }
 
-/** Model coverage of the state machines of a file as file coverage of its `.hsm` file. */
+/** Model coverage of the state machines of a file as file coverage of its `.devm` file. */
 class ModelFileCoverage extends vscode.FileCoverage {
 
     readonly details: vscode.StatementCoverage[];

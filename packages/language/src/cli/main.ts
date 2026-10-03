@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { URI } from 'langium';
 import { NodeFileSystem } from 'langium/node';
 import { createHsmServices } from '../hsm-module.js';
+import { isDmfModel } from '../generated/ast.js';
 import { HsmModelLoader } from '../hsm-document.js';
 import { layoutFileName, layoutStateMachineWithLayout, parseManualLayout } from '../diagram/manual-layout.js';
 import { layoutTextEdits } from '../diagram/layout-annotations.js';
@@ -65,11 +66,21 @@ async function load(file: string, options: HeaderCommandOptions = {}) {
     return { parsed, errors };
 }
 
+/** Loads a state machine file (`undefined` and an error message for a structure file). */
+async function loadMachine(file: string, options: HeaderCommandOptions = {}) {
+    const result = await load(file, options);
+    if (isDmfModel(result.parsed.model)) {
+        console.error(`${file}: a structure file, not a state machine`);
+        return undefined;
+    }
+    return result;
+}
+
 export function createProgram(): Command {
-    const program = new Command('hsm').description('Tools for hierarchical state machine models (.hsm)');
+    const program = new Command('devm').description('Device Modeler: tools for state machines and structure models (.devm files)');
 
     headerOptions(program.command('validate'))
-        .argument('<file>', '.hsm file to validate')
+        .argument('<file>', '.devm file to validate (state machine or structure file)')
         .description('parses and validates a model')
         .action(async (file: string, options: HeaderCommandOptions) => {
             const { errors } = await load(file, options);
@@ -82,7 +93,7 @@ export function createProgram(): Command {
 
     headerOptions(program.command('generate'))
         .argument('[target]', 'target language: cpp or c (default: all targets of the configuration)')
-        .argument('[files...]', '.hsm files (default: the models of the generator configuration)')
+        .argument('[files...]', '.devm files of state machines (default: the models of the generator configuration)')
         .option('-c, --config <file>', `generator configuration (default: ${GENERATOR_CONFIG_FILE} in the current directory if no files are given)`)
         .option('-o, --out <dir>', 'output directory (default: outDir of the configuration, or the directory of the model)')
         .option('-n, --namespace <namespace>', 'cpp: namespace of the generated class, e.g. a::b (default: the namespace of the model, "" for none)')
@@ -99,36 +110,42 @@ export function createProgram(): Command {
         });
 
     headerOptions(program.command('layout'))
-        .argument('<file>', '.hsm file')
+        .argument('<file>', '.devm file of a state machine')
         .option('-d, --direction <direction>', 'DOWN or RIGHT', 'DOWN')
         .option('--auto', 'lay out automatically, ignoring the layout annotations (@at, ...)')
         .description('prints the computed diagram layout as JSON (the manual layout of the layout annotations, if any)')
         .action(async (file: string, options: { direction: 'DOWN' | 'RIGHT', auto?: boolean } & HeaderCommandOptions) => {
-            const { parsed } = await load(file, options);
+            const loaded = await loadMachine(file, options);
+            if (!loaded) {
+                process.exitCode = 1;
+                return;
+            }
+            const { parsed } = loaded;
             const { graph } = await layoutStateMachineWithLayout(parsed.model, { direction: options.direction }, options.auto ? null : undefined);
             console.log(JSON.stringify(graph, undefined, 2));
         });
 
     program.command('migrate-layout')
-        .argument('<file>', '.hsm file')
+        .argument('<file>', '.devm file of a state machine')
         .option('-l, --layout <file>', 'layout file of the experimental sidecar format (default: <file>.layout)')
-        .description('writes the manual layout of a .hsm.layout file into the model as layout annotations (@at, @size, @via, ...)')
+        .description('writes the manual layout of a sidecar layout file (<file>.layout) into the model as layout annotations (@at, @size, @via, ...)')
         .action(async (file: string, options: { layout?: string }) => {
             process.exitCode = await migrateLayout(file, options.layout ?? layoutFileName(file));
         });
 
     headerOptions(program.command('simulate'))
-        .argument('<file>', '.hsm file')
+        .argument('<file>', '.devm file of a state machine')
         .option('-s, --script <scenario>', 'scenario file (JSON, see packages/language/test/scenarios/README.md) to run against the model')
         .option('-e, --events <events>', 'without script: comma separated in events raised one after another (cycle based: each followed by a run cycle)')
         .option('-q, --quiet', 'print only the active states after each step, not the trace')
         .description('runs the state machine in the interpreter and prints the trace and the active states')
         .action(async (file: string, options: { script?: string, events?: string, quiet?: boolean } & HeaderCommandOptions) => {
-            const { parsed, errors } = await load(file, options);
-            if (errors > 0 || parsed.hasSyntaxErrors) {
+            const loaded = await loadMachine(file, options);
+            if (!loaded || loaded.errors > 0 || loaded.parsed.hasSyntaxErrors) {
                 process.exitCode = 1;
                 return;
             }
+            const { parsed } = loaded;
             const printTrace = options.quiet ? () => { /* quiet */ } : (line: string) => console.log(line);
             if (options.script) {
                 const scenario = validateScenario(JSON.parse(await fs.readFile(options.script, 'utf-8')), options.script);
@@ -161,8 +178,8 @@ export function createProgram(): Command {
         });
 
     headerOptions(program.command('test'))
-        .argument('<files...>', 'unit test files (.hsmtest)')
-        .option('-m, --machine <files...>', 'state machine files (.hsm) or directories; the .hsm files next to the test files are loaded automatically')
+        .argument('<files...>', 'unit test files (.devmtest)')
+        .option('-m, --machine <files...>', 'state machine files (.devm) or directories; the .devm files next to the test files are loaded automatically')
         .option('--junit <file>', 'writes a JUnit XML report')
         .option('-v, --verbose', 'prints the trace of every test')
         .option('--coverage', 'collects the model coverage (states, transitions, reactions, guard decisions)')
@@ -176,9 +193,9 @@ export function createProgram(): Command {
 
     program.command('import')
         .argument('<files...>', 'itemis CREATE / YAKINDU statecharts (.sct); submachine states referencing one of the other files become submachine instances')
-        .option('-o, --out <file>', 'output file for a single statechart (default: <file>.hsm)')
+        .option('-o, --out <file>', 'output file for a single statechart (default: <file>.devm)')
         .option('--no-layout', 'do not convert the diagrams into layout annotations (@at, ...)')
-        .description('converts itemis CREATE (.sct) statecharts into .hsm models (their diagrams into layout annotations)')
+        .description('converts itemis CREATE (.sct) statecharts into state machine files (.devm; their diagrams into layout annotations)')
         .action(async (files: string[], options: { out?: string, layout: boolean }) => {
             if (options.out && files.length > 1) {
                 console.error('--out can only be used with a single statechart');
@@ -187,7 +204,7 @@ export function createProgram(): Command {
             }
             const inputs = await Promise.all(files.map(async fileName => ({ fileName, xml: await fs.readFile(fileName, 'utf-8') })));
             const results = inputs.length === 1
-                ? [{ ...importSct(inputs[0].xml, { layout: options.layout }), fileName: inputs[0].fileName.replace(/\.sct$/, '') + '.hsm' }]
+                ? [{ ...importSct(inputs[0].xml, { layout: options.layout }), fileName: inputs[0].fileName.replace(/\.sct$/, '') + '.devm' }]
                 : importSctFiles(inputs, { layout: options.layout });
             for (const [index, result] of results.entries()) {
                 for (const warning of result.warnings) {
@@ -216,8 +233,8 @@ export function createProgram(): Command {
 }
 
 /**
- * `hsm migrate-layout`: writes the manual layout of a layout file of the experimental sidecar format
- * (`<model>.hsm.layout`) into the model as layout annotations. The layout file is not deleted.
+ * `devm migrate-layout`: writes the manual layout of a layout file of the experimental sidecar format
+ * (`<model>.layout`, e.g. `door.devm.layout`; older files are passed with `--layout door.hsm.layout`) into the model as layout annotations. The layout file is not deleted.
  */
 async function migrateLayout(file: string, layoutFile: string): Promise<number> {
     if (!await exists(layoutFile)) {
@@ -229,7 +246,11 @@ async function migrateLayout(file: string, layoutFile: string): Promise<number> 
         console.log(`${layoutFile}: the diagram is laid out automatically (mode "auto"), nothing to migrate.`);
         return 0;
     }
-    const { parsed } = await load(file);
+    const loaded = await loadMachine(file);
+    if (!loaded) {
+        return 1;
+    }
+    const { parsed } = loaded;
     if (parsed.hasSyntaxErrors) {
         console.error(`${file}: the model has syntax errors`);
         return 1;

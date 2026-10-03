@@ -1,19 +1,19 @@
 {
-  "name": "dmf",
-  "scopeName": "source.dmf",
+  "name": "devmtest",
+  "scopeName": "source.devmtest",
   "fileTypes": [
-    ".dmf"
+    ".devmtest"
   ],
   "patterns": [
     {
       "include": "#comments"
     },
     {
-      "name": "keyword.control.dmf",
-      "match": "\\b(component|interface|subsystem|behavior|delegate|provides|requires|connect|package|import|struct|system|thread|async|event|sync)\\b"
+      "name": "keyword.control.devmtest",
+      "match": "\\b(statemachine|component|operation|subsystem|testclass|behavior|delegate|provides|readonly|requires|connect|message|package|proceed|returns|valueof|active|assert|called|struct|system|thread|async|const|enter|false|raise|times|while|else|exit|mock|null|true|with|for|var|as|if)\\b"
     },
     {
-      "name": "string.quoted.double.dmf",
+      "name": "string.quoted.double.devmtest",
       "begin": "\"",
       "end": "\"",
       "patterns": [
@@ -23,7 +23,7 @@
       ]
     },
     {
-      "name": "string.quoted.single.dmf",
+      "name": "string.quoted.single.devmtest",
       "begin": "'",
       "end": "'",
       "patterns": [
@@ -37,17 +37,17 @@
     "comments": {
       "patterns": [
         {
-          "name": "comment.block.dmf",
+          "name": "comment.block.devmtest",
           "begin": "/\\*",
           "beginCaptures": {
             "0": {
-              "name": "punctuation.definition.comment.dmf"
+              "name": "punctuation.definition.comment.devmtest"
             }
           },
           "end": "\\*/",
           "endCaptures": {
             "0": {
-              "name": "punctuation.definition.comment.dmf"
+              "name": "punctuation.definition.comment.devmtest"
             }
           }
         },
@@ -55,16 +55,16 @@
           "begin": "//",
           "beginCaptures": {
             "1": {
-              "name": "punctuation.whitespace.comment.leading.dmf"
+              "name": "punctuation.whitespace.comment.leading.devmtest"
             }
           },
           "end": "(?=$)",
-          "name": "comment.line.dmf"
+          "name": "comment.line.devmtest"
         }
       ]
     },
     "string-character-escape": {
-      "name": "constant.character.escape.dmf",
+      "name": "constant.character.escape.devmtest",
       "match": "\\\\(x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|u\\{[0-9A-Fa-f]+\\}|[0-2][0-7]{0,2}|3[0-6][0-7]?|37[0-7]?|[4-7][0-7]?|.|$)"
     }
   }

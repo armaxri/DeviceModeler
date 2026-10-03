@@ -588,7 +588,7 @@ export const DIAGRAM_CSS = `
     stroke-width: 1px;
 }
 
-/* ---- internal block diagrams of subsystems and systems (.dmf, ibd-layout.ts) ---- */
+/* ---- internal block diagrams of subsystems and systems (.devm, ibd-layout.ts) ---- */
 
 .theme-classic {
     --ibd-thread-fill: #f4f7fb;

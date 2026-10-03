@@ -3,7 +3,7 @@
     "description": "Child first: the instance runs before the transitions of its state, which see its out events in the same cycle (if the instance did not take a transition).",
     "text": [
         "statemachine Door {",
-        "    import \"motor.hsm\"",
+        "    import \"motor.devm\"",
         "    @CycleBased(100)",
         "    @ChildFirstExecution",
         "    interface:",
@@ -18,7 +18,7 @@
         "}"
     ],
     "files": {
-        "motor.hsm": [
+        "motor.devm": [
             "statemachine Motor {",
             "    @CycleBased(100)",
             "    @ChildFirstExecution",

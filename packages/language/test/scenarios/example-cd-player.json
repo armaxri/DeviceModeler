@@ -1,7 +1,7 @@
 {
     "name": "example-cd-player",
     "description": "CD player: choice with operation call, local reaction with guard, shallow history, final state.",
-    "model": "../../../../examples/cd-player.hsm",
+    "model": "../../../../examples/cd-player.devm",
     "operations": {"discInserted": [true]},
     "steps": [
         {"enter": true},

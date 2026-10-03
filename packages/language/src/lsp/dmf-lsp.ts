@@ -3,7 +3,7 @@ import {
     type AstNode, type AstNodeDescription, type CstNode, type LangiumDocument, type MaybePromise, type ReferenceInfo, type Stream
 } from 'langium';
 import {
-    DefaultCompletionProvider, DefaultDefinitionProvider,
+    DefaultDefinitionProvider,
     type CompletionAcceptor, type CompletionContext, type ImplementationProvider, type LangiumServices, type NextFeature
 } from 'langium/lsp';
 import { CompletionItemKind, LocationLink, type Range } from 'vscode-languageserver-types';
@@ -17,11 +17,17 @@ import { instanceType, threadOf, threadSettings } from '../dmf-model.js';
 import { providersOf, type PortEndpoint } from '../dmf-routes.js';
 import { portTypeLabel, resolveDataType } from '../dmf-types.js';
 import { BUILTIN_TYPES } from '../hsm-typesystem.js';
+import { HsmDocumentationProvider } from '../doc/hsm-documentation-provider.js';
+import { HsmCompletionProvider, HsmDefinitionProvider } from './cpp-lsp.js';
 
 /**
- * Language server features of the structure language (`.dmf`): go to definition (also for type names,
- * import paths and the behavior file), go to implementation ("go to provider" of required ports, see
+ * Language server features of structure files: go to definition (also for type names, import paths
+ * and the behavior file), go to implementation ("go to provider" of required ports, see
  * dmf-routes.ts), hover (signature and documentation comment) and completion of type names.
+ *
+ * State machine files and structure files are one language (`.devm`), so these are the providers of
+ * that language: they extend the providers of state machine files (lsp/cpp-lsp.ts,
+ * doc/hsm-documentation-provider.ts) and pass the nodes of state machine files on to them.
  */
 
 /** The leaf CST node and its AST node at an offset. */
@@ -50,11 +56,14 @@ const FILE_START: Range = { start: { line: 0, character: 0 }, end: { line: 0, ch
 /**
  * Go to definition: the default (cross-references: component types, instances, ports, `behavior Door`),
  * and for type names the struct or interface (or the declaration in a C++ header), for import paths
- * and `behavior "door.hsm"` the file.
+ * and `behavior "door.devm"` the file. State machine files: {@link HsmDefinitionProvider}.
  */
-export class DmfDefinitionProvider extends DefaultDefinitionProvider {
+export class DmfDefinitionProvider extends HsmDefinitionProvider {
 
     override getDefinition(document: LangiumDocument, params: DefinitionParams): MaybePromise<LocationLink[] | undefined> {
+        if (!ast.isDmfModel(document.parseResult.value)) {
+            return super.getDefinition(document, params);
+        }
         const leaf = leafAt(document, document.textDocument.offsetAt(params.position));
         const node = leaf?.astNode;
         if (leaf && ast.isDataTypeReference(node)) {
@@ -87,7 +96,7 @@ export class DmfDefinitionProvider extends DefaultDefinitionProvider {
             const link = nodeLink(resolvedBehavior(node).machine, leaf);
             return link ? [link] : undefined;
         }
-        return super.getDefinition(document, params);
+        return DefaultDefinitionProvider.prototype.getDefinition.call(this, document, params);
     }
 }
 
@@ -127,20 +136,26 @@ function providerNode(provider: PortEndpoint): AstNode {
     return provider.instance ?? provider.port;
 }
 
-/** Hover documentation: a signature line and the documentation comment of structure elements. */
-export class DmfDocumentationProvider extends JSDocDocumentationProvider {
+/**
+ * Hover documentation: a signature line and the documentation comment of structure elements (the
+ * elements of state machine files: {@link HsmDocumentationProvider}).
+ */
+export class DmfDocumentationProvider extends HsmDocumentationProvider {
 
     override getDocumentation(node: AstNode): string | undefined {
+        if (!AstUtils.getContainerOfType(node, ast.isDmfModel)) {
+            return super.getDocumentation(node);
+        }
         const parts: string[] = [];
         const signature = dmfSignature(node);
         if (signature) {
-            parts.push('```dmf\n' + signature + '\n```');
+            parts.push('```devm\n' + signature + '\n```');
         }
         const description = (node as { description?: string }).description;
         if (description) {
             parts.push(description);
         }
-        const comment = super.getDocumentation(node);
+        const comment = JSDocDocumentationProvider.prototype.getDocumentation.call(this, node);
         if (comment) {
             parts.push(comment);
         }
@@ -191,7 +206,7 @@ export function dmfSignature(node: AstNode): string | undefined {
  * The type of an instance in a thread is a component, outside of the threads a subsystem (see
  * docs/structure-language.md#threads); threads are assigned instances of components only.
  */
-export class DmfCompletionProvider extends DefaultCompletionProvider {
+export class DmfCompletionProvider extends HsmCompletionProvider {
 
     constructor(services: LangiumServices) {
         super(services);
@@ -201,12 +216,12 @@ export class DmfCompletionProvider extends DefaultCompletionProvider {
 
     protected override completionFor(context: CompletionContext, next: NextFeature, acceptor: CompletionAcceptor): MaybePromise<void> {
         const rule = AstUtils.getContainerOfType(next.feature, GrammarAST.isParserRule);
-        if (rule?.name === 'DataTypeReference' || rule?.name === 'TypeReferenceName') {
-            const model = context.node ? AstUtils.getContainerOfType(context.node, ast.isDmfModel) : undefined;
+        const model = context.node ? AstUtils.getContainerOfType(context.node, ast.isDmfModel) : undefined;
+        if (model && (rule?.name === 'DataTypeReference' || rule?.name === 'DmfTypeReferenceName')) {
             for (const name of BUILTIN_TYPES.filter(t => t !== 'void')) {
                 acceptor(context, { label: name, kind: CompletionItemKind.Keyword, detail: 'built-in type' });
             }
-            for (const [name, element] of model ? visibleElements(model) : []) {
+            for (const [name, element] of visibleElements(model)) {
                 if (ast.isStructDeclaration(element) || ast.isPortInterface(element)) {
                     acceptor(context, {
                         label: name, kind: ast.isStructDeclaration(element) ? CompletionItemKind.Struct : CompletionItemKind.Interface,

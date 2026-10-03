@@ -1,8 +1,8 @@
 import { monaco } from './monaco.js';
 import {
-    applyEdits, importSct, importSctFiles, type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ParsedModel, type TextEdit
+    applyEdits, importSct, importSctFiles, isModelPath, isStructureText, type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ParsedModel, type TextEdit
 } from 'hsm-language';
-import { EDITOR_THEMES, HsmLanguageSupport, languageOf } from './language-support.js';
+import { EDITOR_THEMES, HsmLanguageSupport, LANGUAGE_ID } from './language-support.js';
 import { DiagramController, type DiagramHost, type DiagramLocation, type DiagramSettings, type StatusSeverity, type TextRange } from './diagram-controller.js';
 import { createWorkerElk } from './diagram/elk.js';
 import { byId, download, h } from './ui/dom.js';
@@ -35,10 +35,10 @@ export class HsmApp implements DiagramHost {
     private decorations!: monaco.editor.IEditorDecorationsCollection;
     private cursorTimer?: ReturnType<typeof setTimeout>;
     private applyingEdit = false;
-    private fileName = 'statemachine.hsm';
+    private fileName = 'statemachine.devm';
     /**
      * The virtual workspace: opened files and edited files by file name (flat, all in one directory).
-     * Imports (`import "motor.hsm"`) are resolved against these files and the examples.
+     * Imports (`import "motor.devm"`) are resolved against these files and the examples.
      */
     private readonly files = new Map<string, string>();
     private settings: Settings = { direction: 'DOWN', routing: 'SPLINES', theme: 'classic', priorities: true };
@@ -107,7 +107,7 @@ export class HsmApp implements DiagramHost {
         }
         this.editor = monaco.editor.create(byId('editor'), {
             value: initial,
-            language: languageOf(this.fileName),
+            language: LANGUAGE_ID,
             automaticLayout: true,
             minimap: { enabled: false },
             fontSize: 13,
@@ -133,6 +133,8 @@ export class HsmApp implements DiagramHost {
             if (!this.applyingEdit) {
                 this.diagram.scheduleUpdate();
             }
+            // (a state machine file can become a structure file and back)
+            this.updateFileControls();
         });
         this.editor.onDidChangeCursorPosition(event => {
             if (event.source === 'api' || !this.editor.hasTextFocus()) {
@@ -161,7 +163,7 @@ export class HsmApp implements DiagramHost {
                 this.loadText(example.text, example.fileName);
             }
         });
-        byId('btn-new').addEventListener('click', () => this.loadText(EMPTY_MODEL, 'statemachine.hsm'));
+        byId('btn-new').addEventListener('click', () => this.loadText(EMPTY_MODEL, 'statemachine.devm'));
         const fileInput = byId<HTMLInputElement>('file-input');
         byId('btn-open').addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', async () => {
@@ -217,10 +219,10 @@ export class HsmApp implements DiagramHost {
             }
             const file = selected[0];
             if (file && /\.sct$/i.test(file.name)) {
-                // itemis CREATE / YAKINDU statechart: convert to HSM text (the diagram into layout annotations)
+                // itemis CREATE / YAKINDU statechart: convert to a state machine file (the diagram into layout annotations)
                 try {
                     const { text, warnings } = importSct(await file.text());
-                    this.loadText(text, file.name.replace(/\.sct$/i, '.hsm'));
+                    this.loadText(text, file.name.replace(/\.sct$/i, '.devm'));
                     warnings.forEach(warning => console.warn(`${file.name}: ${warning}`));
                     this.setStatus(warnings.length > 0 ? `Imported ${file.name} with ${warnings.length} warning(s): ${warnings.join(' ')}` : `Imported ${file.name}.`,
                         warnings.length > 0 ? 'warning' : 'info');
@@ -343,7 +345,7 @@ export class HsmApp implements DiagramHost {
         if (this.editor && fileName !== this.fileName && this.files.has(this.fileName)) {
             this.files.set(this.fileName, this.editor.getValue());
         }
-        if (!this.files.has(fileName) && (/\.(hsm|dmf)$/i.test(fileName))) {
+        if (!this.files.has(fileName) && isModelPath(fileName)) {
             this.files.set(fileName, text);
         }
         this.saveFiles();
@@ -357,8 +359,8 @@ export class HsmApp implements DiagramHost {
             // storage is not available
         }
         const model = this.editor.getModel()!;
-        if (model.getLanguageId() !== languageOf(fileName)) {
-            monaco.editor.setModelLanguage(model, languageOf(fileName));
+        if (model.getLanguageId() !== LANGUAGE_ID) {
+            monaco.editor.setModelLanguage(model, LANGUAGE_ID);
         }
         this.editor.setValue(text);
         this.updateFileControls();
@@ -366,12 +368,12 @@ export class HsmApp implements DiagramHost {
     }
 
     /**
-     * The controls that do not apply to structure files (`.dmf`: the layout direction and the edge routing –
+     * The controls that do not apply to structure files (the layout direction and the edge routing –
      * structure diagrams are laid out from left to right with orthogonal connectors –, transition priorities
      * and the simulation) are disabled. Auto-arrange and Automatic layout apply to both.
      */
     private updateFileControls(): void {
-        const structure = languageOf(this.fileName) !== 'hsm';
+        const structure = isStructureText(this.editor.getValue());
         for (const id of ['direction-select', 'routing-select', 'priorities-toggle', 'btn-simulate']) {
             const control = document.getElementById(id) as HTMLButtonElement | null;
             if (control) {
@@ -707,7 +709,7 @@ export class HsmApp implements DiagramHost {
     }
 }
 
-/** The file name of a URI of the virtual workspace (`memory:///door.hsm` -> `door.hsm`). */
+/** The file name of a URI of the virtual workspace (`memory:///door.devm` -> `door.devm`). */
 function fileNameOf(uri: string): string {
     return decodeURIComponent(uri.replace(/^.*\//, ''));
 }

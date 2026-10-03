@@ -1,4 +1,4 @@
-// Drives the generated Conveyor class (examples/cpp-types/conveyor.hsm), whose API uses the types of
+// Drives the generated Conveyor class (examples/cpp-types/conveyor.devm), whose API uses the types of
 // the imported header conveyor_types.h directly: conveyor::Mode, conveyor::Package, conveyor::Speed.
 #include <cstdio>
 #include <vector>

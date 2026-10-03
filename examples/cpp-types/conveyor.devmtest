@@ -1,4 +1,4 @@
-// Unit tests of the conveyor (hsm test examples/cpp-types/conveyor.hsmtest): asserts and values use
+// Unit tests of the conveyor (devm test examples/cpp-types/conveyor.devmtest): asserts and values use
 // the types and constants of conveyor_types.h.
 testclass ConveyorTest for statemachine Conveyor {
 

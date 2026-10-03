@@ -3,7 +3,7 @@
     "description": "active(motor.On) tests a state of an instance, valueof(motor.level) the value of its last out event.",
     "text": [
         "statemachine Door {",
-        "    import \"motor.hsm\"",
+        "    import \"motor.devm\"",
         "    interface:",
         "        in event open",
         "        var level : integer = 0",
@@ -18,7 +18,7 @@
         "}"
     ],
     "files": {
-        "motor.hsm": [
+        "motor.devm": [
             "statemachine Motor {",
             "    interface:",
             "        in event start",

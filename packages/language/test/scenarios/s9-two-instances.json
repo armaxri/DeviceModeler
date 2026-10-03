@@ -3,7 +3,7 @@
     "description": "Two instances of the same state machine have their own configuration and variables.",
     "text": [
         "statemachine Plant {",
-        "    import \"motor.hsm\"",
+        "    import \"motor.devm\"",
         "    interface:",
         "        in event startLeft",
         "        in event startRight",
@@ -26,7 +26,7 @@
         "}"
     ],
     "files": {
-        "motor.hsm": [
+        "motor.devm": [
             "statemachine Motor {",
             "    interface:",
             "        in event start",

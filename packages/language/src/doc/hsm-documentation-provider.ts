@@ -15,7 +15,7 @@ export class HsmDocumentationProvider extends JSDocDocumentationProvider {
         const parts: string[] = [];
         const signature = elementSignature(node);
         if (signature) {
-            parts.push('```hsm\n' + signature + '\n```');
+            parts.push('```devm\n' + signature + '\n```');
         }
         if (ast.isState(node) && node.description) {
             parts.push(node.description);

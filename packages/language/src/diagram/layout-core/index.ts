@@ -1,6 +1,6 @@
 /**
- * The shared core of the manual layouts of state machine diagrams (`.hsm`) and structure diagrams
- * (`.dmf`): the layout data model, the text edits of layout annotations, the node hierarchy, the
+ * The shared core of the manual layouts of state machine diagrams (`.devm`) and structure diagrams
+ * (`.devm`): the layout data model, the text edits of layout annotations, the node hierarchy, the
  * placement of nodes and the orthogonal routing of edges (see docs/architecture.md).
  */
 export * from './model.js';

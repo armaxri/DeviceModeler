@@ -3,7 +3,7 @@
  * the syntax): reading them into a {@link ManualLayout} and computing the text edits which make the
  * annotations of a model equal to a given layout.
  *
- * The coordinates are the ones of the `.hsm.layout` files: positions relative to the content area of the
+ * The coordinates are the ones of the `.devm.layout` files: positions relative to the content area of the
  * parent node, waypoints relative to the frame of the transition (the innermost node containing both end
  * points), label positions as offsets from the computed position. They are written as integers (rounded).
  */

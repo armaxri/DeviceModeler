@@ -1,5 +1,5 @@
 // Unit tests of the traffic light (cycle based, 100 ms): time events, interfaces and out events.
-// Run with: hsm test examples/tests/traffic-light.hsmtest --machine examples/traffic-light.hsm
+// Run with: devm test examples/tests/traffic-light.devmtest --machine examples/traffic-light.devm
 testclass TrafficLightTest for statemachine TrafficLight {
 
     @SetUp

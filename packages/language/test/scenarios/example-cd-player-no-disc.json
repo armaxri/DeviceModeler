@@ -1,7 +1,7 @@
 {
     "name": "example-cd-player-no-disc",
     "description": "CD player: the else branch of the choice is taken when no disc is inserted.",
-    "model": "../../../../examples/cd-player.hsm",
+    "model": "../../../../examples/cd-player.devm",
     "operations": {"discInserted": [false]},
     "steps": [
         {"enter": true},

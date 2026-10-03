@@ -116,9 +116,9 @@ describe('C++ header imports: interpreter and test language', () => {
         const workspace = new HsmTestWorkspace();
         const documents = await workspace.load([
             { uri: 'memory:///cpp/motor_types.h', text: MOTOR_TYPES },
-            { uri: 'memory:///cpp/controller.hsm', text: CONTROLLER },
+            { uri: 'memory:///cpp/controller.devm', text: CONTROLLER },
             {
-                uri: 'memory:///cpp/controller.hsmtest', text: `testclass ControllerTest for statemachine Controller {
+                uri: 'memory:///cpp/controller.devmtest', text: `testclass ControllerTest for statemachine Controller {
     @Test
     operation moves() {
         enter
@@ -208,9 +208,9 @@ describe('C++ header imports: Node.js hosts', () => {
             fs.mkdirSync(path.join(dir, 'include/app'), { recursive: true });
             fs.writeFileSync(path.join(dir, 'include/app/config.h'), '#if WIDE\nusing Count = long;\n#else\nusing Count = short;\n#endif\nnamespace app { constexpr int kLimit = LIMIT; }\n');
             fs.writeFileSync(path.join(dir, 'hsm.gen.json'), JSON.stringify({
-                models: ['models/*.hsm'], cpp: {}, headers: { includePaths: ['include'], defines: { WIDE: '1', LIMIT: '7' }, dataModel: { longBits: 32 } }
+                models: ['models/*.devm'], cpp: {}, headers: { includePaths: ['include'], defines: { WIDE: '1', LIMIT: '7' }, dataModel: { longBits: 32 } }
             }));
-            const model = path.join(dir, 'models/m.hsm');
+            const model = path.join(dir, 'models/m.devm');
             fs.writeFileSync(model, 'statemachine M {\n    import "app/config.h"\n    interface:\n        var c : ::Count = app::kLimit\n    [*] -> A\n    state A\n}\n');
             const services = createHsmServices(NodeFileSystem);
             installNodeHeaderSupport(services.shared, { settings: cliHeaderSettings({ define: ['LIMIT=300000'] }) });
@@ -234,7 +234,7 @@ describe('C++ header imports: Node.js hosts', () => {
         installNodeHeaderSupport(services.shared);
         const directory = path.resolve(__dirname, '../../../examples/cpp-types');
         const workspace = new HsmTestWorkspace(services);
-        const documents = await workspace.load(['conveyor.hsm', 'conveyor.hsmtest'].map(name => ({
+        const documents = await workspace.load(['conveyor.devm', 'conveyor.devmtest'].map(name => ({
             uri: pathToFileURL(path.join(directory, name)).toString(),
             text: fs.readFileSync(path.join(directory, name), 'utf-8')
         })));

@@ -1,38 +1,30 @@
 import { monaco } from './monaco.js';
-import { cppHover, DmfMonarchSyntax, HsmMonarchSyntax } from 'hsm-language';
-import type { DmfServices, HsmServices } from 'hsm-language';
+import { cppHover, DevmMonarchSyntax, isStructureText } from 'hsm-language';
+import type { HsmServices } from 'hsm-language';
 import { HsmModelService } from './model-service.js';
 import type { Diagnostic, Range, TextEdit } from 'vscode-languageserver-types';
 
 export { describeSyntaxProblem, type SyntaxProblem } from './model-service.js';
 
-export const LANGUAGE_ID = 'hsm';
-/** Language id of structure files (`.dmf`, Device Modeling Framework). */
-export const DMF_LANGUAGE_ID = 'dmf';
-
-/** The language id of a file name. */
-export function languageOf(fileName: string): string {
-    return /\.dmf$/i.test(fileName) ? DMF_LANGUAGE_ID : LANGUAGE_ID;
-}
+/** Language id of the model files of the Device Modeler (`.devm`: state machines and structure files). */
+export const LANGUAGE_ID = 'devm';
 export const EDITOR_THEMES = { light: 'hsm-light', dark: 'hsm-dark' } as const;
 
 /**
- * Runs the Langium services of the HSM language directly in the browser and connects them
+ * Runs the Langium services of the `.devm` language directly in the browser and connects them
  * to the Monaco editor (validation markers, completion, formatting, go to definition, rename).
  */
 export class HsmLanguageSupport extends HsmModelService {
 
     private async document(model: monaco.editor.ITextModel) {
-        return model.getLanguageId() === DMF_LANGUAGE_ID
+        return isStructureText(model.getValue())
             ? (await this.parseStructure(model.getValue())).document
             : (await this.parse(model.getValue())).document;
     }
 
     registerLanguage(): void {
-        monaco.languages.register({ id: LANGUAGE_ID, extensions: ['.hsm'], aliases: ['HSM', 'hsm'] });
-        monaco.languages.setMonarchTokensProvider(LANGUAGE_ID, monarchSyntax(HsmMonarchSyntax, ['integer', 'real', 'boolean', 'string', 'void']));
-        monaco.languages.register({ id: DMF_LANGUAGE_ID, extensions: ['.dmf'], aliases: ['DMF', 'dmf'] });
-        monaco.languages.setMonarchTokensProvider(DMF_LANGUAGE_ID, monarchSyntax(DmfMonarchSyntax, ['integer', 'real', 'boolean', 'string']));
+        monaco.languages.register({ id: LANGUAGE_ID, extensions: ['.devm'], aliases: ['Device Modeler', 'devm'] });
+        monaco.languages.setMonarchTokensProvider(LANGUAGE_ID, monarchSyntax(DevmMonarchSyntax, ['integer', 'real', 'boolean', 'string', 'void']));
         monaco.editor.defineTheme(EDITOR_THEMES.light, {
             base: 'vs', inherit: true, colors: {},
             rules: [
@@ -49,11 +41,8 @@ export class HsmLanguageSupport extends HsmModelService {
                 { token: 'operator', foreground: 'c8c8c8' }
             ]
         });
-        for (const id of [LANGUAGE_ID, DMF_LANGUAGE_ID]) {
-            this.configureLanguage(id);
-        }
+        this.configureLanguage(LANGUAGE_ID);
         this.registerProviders(LANGUAGE_ID, this.loader.services.Hsm);
-        this.registerProviders(DMF_LANGUAGE_ID, this.structureServices);
     }
 
     private configureLanguage(languageId: string): void {
@@ -74,7 +63,7 @@ export class HsmLanguageSupport extends HsmModelService {
     }
 
     /** Completion, hover, formatting, go to definition, references and rename with the Langium services of a language. */
-    private registerProviders(languageId: string, services: HsmServices | DmfServices): void {
+    private registerProviders(languageId: string, services: HsmServices): void {
         monaco.languages.registerCompletionItemProvider(languageId, {
             triggerCharacters: ['>', ' ', '/', '.', '(', ':'],
             provideCompletionItems: async (model, position) => {

@@ -4,7 +4,7 @@ import { cppHeaderStore, loadHeaderClosure, resolveHeaderPath, type CppHeaderSto
 import { CppTypeIndex } from './cpp-header/type-index.js';
 
 /**
- * Imports of other files (`import "motor.hsm"`) and submachine instances.
+ * Imports of other files (`import "motor.devm"`) and submachine instances.
  *
  * Resolution: an import path is resolved relative to the URI of the importing document
  * ({@link resolveImportUri}); the imported document must be loaded into the Langium workspace
@@ -15,27 +15,46 @@ import { CppTypeIndex } from './cpp-header/type-index.js';
  * system and the interpreter can use the pure functions of this module ({@link resolvedImports},
  * {@link importedMachines}, {@link machineType}, {@link instanceMachine} ...).
  *
- * Kinds of imports ({@link importKind}): `.hsm` files (state machines, their names are types),
+ * Kinds of imports ({@link importKind}): `.devm` files (state machine files, their names are types;
+ * a structure file cannot be imported by a state machine),
  * C/C++ headers (`.h`, `.hpp`, ...: their types and constants, see cpp-headers.ts and cpp-types.ts;
  * resolved relative to the importing file and the include paths) and everything else (unsupported, an error).
  */
 
-/** `hsm`: a state machine file; `header`: a C/C++ header; `unsupported`: any other file. */
-export type ImportKind = 'hsm' | 'header' | 'unsupported';
+/** `model`: a model file (`.devm`); `header`: a C/C++ header; `unsupported`: any other file. */
+export type ImportKind = 'model' | 'header' | 'unsupported';
+
+/** The file extension of the model files of the Device Modeler (state machines and structure files). */
+export const MODEL_EXTENSION = '.devm';
+
+/** The file extension of the unit test files of state machines. */
+export const TEST_EXTENSION = '.devmtest';
+
+/** Whether a path (or URI) names a model file (`.devm`). */
+export function isModelPath(path: string): boolean {
+    return path.toLowerCase().endsWith(MODEL_EXTENSION);
+}
+
+/** Whether a path (or URI) names a unit test file (`.devmtest`). */
+export function isTestPath(path: string): boolean {
+    return path.toLowerCase().endsWith(TEST_EXTENSION);
+}
 
 /** File extensions of C/C++ headers accepted by `import`. */
 export const HEADER_EXTENSIONS: readonly string[] = ['.h', '.hh', '.hpp', '.hxx', '.h++', '.inl'];
 
 /** The result of resolving one import path. */
 export interface ResolvedImport {
-    /** The path in the text (`import "motor.hsm"`). */
+    /** The path in the text (`import "motor.devm"`). */
     readonly node: ast.ImportPath;
     readonly path: string;
     readonly kind: ImportKind;
     /** URI of the imported file (resolved relative to the importing document). */
     readonly uri?: URI;
-    /** `hsm`: the imported state machine, `undefined` if the file is not loaded. */
+    /** `model`: the imported state machine, `undefined` if the file is not loaded or is a structure file. */
     readonly machine?: ast.StateMachine;
+    /** `model`: whether the imported file is a structure file (which a state machine cannot import). */
+    readonly structureFile?: boolean;
     /** `header`: the result of the header resolution. */
     readonly header?: ResolvedHeader;
 }
@@ -53,8 +72,8 @@ export interface ResolvedHeader {
 /** The kind of an import path, by its file extension. */
 export function importKind(path: string): ImportKind {
     const lower = path.toLowerCase();
-    if (lower.endsWith('.hsm')) {
-        return 'hsm';
+    if (lower.endsWith(MODEL_EXTENSION)) {
+        return 'model';
     }
     return HEADER_EXTENSIONS.some(extension => lower.endsWith(extension)) ? 'header' : 'unsupported';
 }
@@ -238,9 +257,9 @@ export function hasUnresolvedHeaders(machine: ast.StateMachine | undefined): boo
     return !!machine && resolvedImports(machine).some(i => i.kind === 'header' && !i.header?.found);
 }
 
-/** Whether an `.hsm` import of the machine could not be resolved (the file is missing). */
+/** Whether a `.devm` import of the machine could not be resolved (the file is missing or not a state machine). */
 export function hasUnresolvedImports(machine: ast.StateMachine): boolean {
-    return resolvedImports(machine).some(i => i.kind === 'hsm' && !i.machine);
+    return resolvedImports(machine).some(i => i.kind === 'model' && !i.machine);
 }
 
 /**
@@ -325,11 +344,11 @@ export class HsmImportResolver {
         if (kind === 'header') {
             return this.resolveHeader(node, path, uri);
         }
-        if (kind !== 'hsm' || !uri) {
+        if (kind !== 'model' || !uri) {
             return { node, path, kind, uri };
         }
         const root = this.documents.getDocument(uri)?.parseResult.value;
-        return { node, path, kind, uri, machine: ast.isStateMachine(root) ? root : undefined };
+        return { node, path, kind, uri, machine: ast.isStateMachine(root) ? root : undefined, structureFile: ast.isDmfModel(root) };
     }
 
     /**
@@ -376,12 +395,12 @@ export class HsmImportResolver {
         return start.machine ? search(start.machine, [machine.name]) : undefined;
     }
 
-    /** URIs of the `.hsm` files imported (transitively) by the state machine, without the machine itself. */
+    /** URIs of the `.devm` files imported (transitively) by the state machine, without the machine itself. */
     importClosure(machine: ast.StateMachine): URI[] {
         const result = new Map<string, URI>();
         const visit = (current: ast.StateMachine) => {
             for (const resolved of this.resolve(current)) {
-                if (resolved.kind === 'hsm' && resolved.uri && !result.has(resolved.uri.toString())) {
+                if (resolved.kind === 'model' && resolved.uri && !result.has(resolved.uri.toString())) {
                     result.set(resolved.uri.toString(), resolved.uri);
                     if (resolved.machine) {
                         visit(resolved.machine);

@@ -12,7 +12,7 @@ import {
 } from 'hsm-language';
 import {
     applyManualLayout, captureLayout, contentOrigin, diagramElementIds, layoutFromModel, layoutTextEdits, toFrameCoordinates,
-    type ManualLayout, type NodeSide, type Point
+    isStructureText, type ManualLayout, type NodeSide, type Point
 } from 'hsm-language';
 import { LayoutEditor, replacementEdit, sampleSpline } from './layout-editing.js';
 import { describeSyntaxProblem, type HsmModelService } from './model-service.js';
@@ -66,7 +66,7 @@ const TOOLS: Array<ToolDescription | 'separator'> = [
     { tool: 'transition', label: 'Transition', key: 'T', icon: Icons.transition, hint: 'Click on the source, then on the target of the transition' }
 ];
 
-/** The palette of structure diagrams (.dmf). */
+/** The palette of structure diagrams. */
 const STRUCTURE_TOOLS: Array<ToolDescription | 'separator'> = [
     { tool: 'select', label: 'Select / move', key: 'V', icon: Icons.select, hint: '' },
     'separator',
@@ -229,7 +229,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     private flagTimer?: ReturnType<typeof setTimeout>;
 
     /**
-     * The diagram of structure files (`.dmf`): shown instead of the state machine diagram when the
+     * The diagram of structure files: shown instead of the state machine diagram when the
      * edited document is a structure file (read only).
      */
     readonly structure: StructureDiagram;
@@ -271,9 +271,12 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         });
     }
 
-    /** Whether the edited document is a structure file (`.dmf`): the structure diagram is shown. */
+    /**
+     * Whether the edited document is a structure file (not a state machine, decided by its text like
+     * the parser does, see `isStructureText`): the structure diagram is shown.
+     */
     get structureMode(): boolean {
-        return this.language.isStructure;
+        return isStructureText(this.host.getText());
     }
 
     /** Switches between the state machine and the structure diagram (palette, layout controls). */

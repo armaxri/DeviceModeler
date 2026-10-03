@@ -28,7 +28,7 @@ export function webviewHtml(options: { cspSource: string, nonce: string, script:
     <meta http-equiv="Content-Security-Policy" content="${csp}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="${options.style}">
-    <title>HSM Diagram</title>
+    <title>Device Modeler Diagram</title>
 </head>
 <body>
     <script nonce="${options.nonce}" src="${options.script}"></script>

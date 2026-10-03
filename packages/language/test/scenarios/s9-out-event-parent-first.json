@@ -3,7 +3,7 @@
     "description": "Parent first: the transitions of a state are checked before its instance runs, so they see an out event of the instance in the next cycle.",
     "text": [
         "statemachine Door {",
-        "    import \"motor.hsm\"",
+        "    import \"motor.devm\"",
         "    @CycleBased(100)",
         "    interface:",
         "        in event open",
@@ -17,7 +17,7 @@
         "}"
     ],
     "files": {
-        "motor.hsm": [
+        "motor.devm": [
             "statemachine Motor {",
             "    @CycleBased(100)",
             "    interface:",

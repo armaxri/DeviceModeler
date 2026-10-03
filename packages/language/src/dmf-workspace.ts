@@ -6,6 +6,7 @@ import { findProviders, findRequirers, portEndpoint, portRoute, structureContext
 import { DmfEditor, dmfRenameEdits } from './edit/dmf-edits.js';
 import type { TextEdit } from './edit/model-edits.js';
 import { loadImports, replaceDocument } from './hsm-document.js';
+import { isModelPath } from './imports.js';
 import { createHsmServices } from './hsm-module.js';
 
 /*
@@ -57,8 +58,8 @@ export class DmfWorkspace {
     private roots: Array<LangiumDocument<ast.DmfModel>> = [];
 
     /**
-     * Loads all structure files (`.dmf`) of `files` (texts by URI; state machines and headers are loaded
-     * as their imports). Nothing is done if the files did not change since the last call.
+     * Loads all model files (`.devm`) of `files` (texts by URI; headers are loaded as their imports);
+     * the structure files among them are the models of the workspace. Nothing is done if the files did not change since the last call.
      */
     async update(files: Readonly<Record<string, string>>): Promise<void> {
         const entries = Object.entries(files).sort(([a], [b]) => a.localeCompare(b));
@@ -71,10 +72,11 @@ export class DmfWorkspace {
         for (const document of documents.all.toArray()) {
             documents.deleteDocument(document.uri);
         }
-        const roots = entries.filter(([uri]) => /\.dmf$/i.test(uri))
-            .map(([uri, text]) => replaceDocument(shared, URI.parse(uri), text) as LangiumDocument<ast.DmfModel>);
-        const imported = await loadImports(shared, roots, { ...files }, async () => undefined);
-        await shared.workspace.DocumentBuilder.build([...roots, ...imported], { validation: false });
+        // all model files; the structure files (by their root) are the models of the workspace
+        const loaded = entries.filter(([uri]) => isModelPath(uri)).map(([uri, text]) => replaceDocument(shared, URI.parse(uri), text));
+        const roots = loaded.filter((d): d is LangiumDocument<ast.DmfModel> => ast.isDmfModel(d.parseResult.value));
+        const imported = await loadImports(shared, loaded, { ...files }, async () => undefined);
+        await shared.workspace.DocumentBuilder.build([...loaded, ...imported], { validation: false });
         this.roots = roots;
         this.key = key;
     }
@@ -245,7 +247,7 @@ export class DmfWorkspace {
     }
 }
 
-/** The URI in the form of the URIs of Langium documents (`memory:///a.dmf` -> `memory:/a.dmf`). */
+/** The URI in the form of the URIs of Langium documents (`memory:///a.devm` -> `memory:/a.devm`). */
 export function normalizeUri(uri: string): string {
     return URI.parse(uri).toString();
 }

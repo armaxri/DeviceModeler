@@ -29,7 +29,7 @@ export interface DiscoveredTestClass {
 let parserServices: ReturnType<typeof createHsmServices> | undefined;
 
 /**
- * Finds the test classes and their tests (operations annotated with `@Test`) of a `.hsmtest` text.
+ * Finds the test classes and their tests (operations annotated with `@Test`) of a `.devmtest` text.
  * Only the parser is used (fast, no linking), so it works on incomplete texts as well.
  */
 export function discoverTests(text: string): DiscoveredTestClass[] {

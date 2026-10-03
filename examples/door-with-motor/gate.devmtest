@@ -1,5 +1,5 @@
 // Unit tests of the gate and its motor instance (submachine, docs/semantics.md §9).
-// Run with: hsm test examples/door-with-motor/gate.hsmtest --machine examples/door-with-motor/gate.hsm
+// Run with: devm test examples/door-with-motor/gate.devmtest --machine examples/door-with-motor/gate.devm
 testclass GateTest for statemachine Gate {
 
     @SetUp

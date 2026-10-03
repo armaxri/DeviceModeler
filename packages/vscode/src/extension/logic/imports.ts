@@ -1,6 +1,7 @@
 import { URI, UriUtils } from 'langium';
 import {
-    createHsmServices, dmfImportKind, dmfImportPaths, headerCandidates, importKind, importPaths, isComponent, isDmfModel, isStateMachine, parseCppHeader,
+    createHsmServices, dmfImportKind, dmfImportPaths, headerCandidates, importKind, importPaths, isComponent, isDmfModel, isStateMachine, isStructureText,
+    parseCppHeader,
     resolveImportUri, type CppHeaderSettings
 } from 'hsm-language';
 
@@ -9,47 +10,51 @@ export type TextReader = (uri: string) => Promise<string | undefined>;
 
 let parserServices: ReturnType<typeof createHsmServices> | undefined;
 
-/** The import paths of `.hsm` files in a model text (only the parser is used, works on incomplete texts). */
-export function hsmImportPaths(text: string): string[] {
-    return importPathsOf(text, 'hsm');
+/** The root of a model text (only the parser is used, works on incomplete texts). */
+function parse(text: string) {
+    parserServices ??= createHsmServices();
+    return parserServices.Hsm.parser.LangiumParser.parse(text).value;
 }
 
-/** The import paths of C/C++ headers in a model text. */
+/** The import paths of `.devm` files in a state machine text (only the parser is used, works on incomplete texts). */
+export function hsmImportPaths(text: string): string[] {
+    return importPathsOf(text, 'model');
+}
+
+/** The import paths of C/C++ headers in a state machine text. */
 export function headerImportPaths(text: string): string[] {
     return importPathsOf(text, 'header');
 }
 
-function importPathsOf(text: string, kind: 'hsm' | 'header'): string[] {
-    parserServices ??= createHsmServices();
-    const model = parserServices.Hsm.parser.LangiumParser.parse(text).value;
+function importPathsOf(text: string, kind: 'model' | 'header'): string[] {
+    const model = parse(text);
     return isStateMachine(model) ? importPaths(model).map(p => p.path).filter(path => path && importKind(path) === kind) : [];
 }
 
 /**
- * The files a structure file (`.dmf`) refers to: imported structure files and state machines (`import`,
- * `behavior "door.hsm"`) and imported C/C++ headers (only the parser is used).
+ * The files a structure file refers to: imported structure files and state machines (`import`,
+ * `behavior "door.devm"`) and imported C/C++ headers (only the parser is used).
  */
 export function dmfReferencedPaths(text: string): { models: string[], headers: string[] } {
-    parserServices ??= createHsmServices();
-    const model = parserServices.Dmf.parser.LangiumParser.parse(text).value;
+    const model = parse(text);
     if (!isDmfModel(model)) {
         return { models: [], headers: [] };
     }
     const paths = dmfImportPaths(model).map(p => p.path).filter(path => path);
     const behaviors = model.elements.filter(isComponent).map(c => c.behavior?.path).filter((path): path is string => !!path);
     return {
-        models: [...paths.filter(path => dmfImportKind(path) === 'dmf' || dmfImportKind(path) === 'hsm'), ...behaviors],
+        models: [...paths.filter(path => dmfImportKind(path) === 'model'), ...behaviors],
         headers: paths.filter(path => dmfImportKind(path) === 'header')
     };
 }
 
-/** The files a model (`.hsm`) or structure file (`.dmf`, by the extension of its URI) refers to. */
-function referencedPaths(uri: string, text: string): { models: string[], headers: string[] } {
-    return /\.dmf$/i.test(uri) ? dmfReferencedPaths(text) : { models: hsmImportPaths(text), headers: headerImportPaths(text) };
+/** The files a model file (state machine or structure file, by its text) refers to. */
+function referencedPaths(text: string): { models: string[], headers: string[] } {
+    return isStructureText(text) ? dmfReferencedPaths(text) : { models: hsmImportPaths(text), headers: headerImportPaths(text) };
 }
 
 /**
- * The texts of the `.hsm` (and `.dmf`) files imported (transitively) by a model or structure file and of
+ * The texts of the `.devm` files imported (transitively) by a state machine or structure file and of
  * the imported C/C++ headers
  * (with the headers they include, searched like the language does: relative to the including file,
  * then in the include paths of `headers`), by URI. The webview has no file system: the extension
@@ -83,7 +88,7 @@ export async function collectImportedFiles(uri: string, text: string, read: Text
     };
     while (queue.length > 0 && visited.size <= limit) {
         const current = queue.shift()!;
-        const referenced = referencedPaths(current.uri, current.text);
+        const referenced = referencedPaths(current.text);
         for (const path of referenced.headers) {
             await readHeader(headerCandidates(path, UriUtils.dirname(URI.parse(current.uri)), headers));
         }

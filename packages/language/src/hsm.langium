@@ -1,5 +1,6 @@
 /*
- * Grammar for hierarchical state machines (HSM).
+ * Grammar for hierarchical state machines (HSM): the state machine files of the Device Modeler
+ * (`.devm`, see devm.langium, which combines this grammar with the structure grammar dmf.langium).
  *
  * The structure (states, regions, transitions) uses a PlantUML-like notation, the definition
  * section and all reactions (triggers, guards, effects) follow the statechart language of
@@ -31,7 +32,7 @@
 grammar Hsm
 
 entry StateMachine:
-    'statemachine' name=ID (description=STRING)? '{'
+    'statemachine' name=HsmId (description=STRING)? '{'
         imports+=Import*
         ('namespace' namespace=QualifiedName imports+=Import*)?
         // the definition section (annotations, interfaces, internal scope) comes first (checked by the validator)
@@ -41,7 +42,7 @@ entry StateMachine:
 // ---------------------------------------------------------------------------------------------
 // Imports
 
-// `import "motor.hsm"` imports the state machine of another file (its name becomes a type, variables
+// `import "motor.devm"` imports the state machine of another file (its name becomes a type, variables
 // of that type are submachine instances), `import "motor_types.h"` a C/C++ header (its enums, structs,
 // type aliases and constants can be used by their `::`-qualified names, see docs/cpp-integration.md).
 // Several paths and the itemis CREATE form `import: "a" "b"` are accepted. Paths are resolved relative
@@ -62,7 +63,7 @@ Scope:
     InterfaceScope | InternalScope;
 
 InterfaceScope:
-    'interface' (name=ID)? ':' declarations+=Declaration*;
+    'interface' (name=HsmId)? ':' declarations+=Declaration*;
 
 InternalScope:
     {infer InternalScope} 'internal' ':' declarations+=Declaration*;
@@ -71,20 +72,20 @@ Declaration:
     EventDeclaration | VariableDeclaration | OperationDeclaration | TypeAliasDeclaration;
 
 EventDeclaration:
-    (direction=('in' | 'out'))? 'event' name=ID (':' type=TypeReference)?;
+    (direction=('in' | 'out'))? 'event' name=HsmId (':' type=TypeReference)?;
 
 VariableDeclaration:
-    (const?='const' | 'var' readonly?='readonly'?) name=ID (':' type=TypeReference)? ('=' initialValue=Expression)?;
+    (const?='const' | 'var' readonly?='readonly'?) name=HsmId (':' type=TypeReference)? ('=' initialValue=Expression)?;
 
 OperationDeclaration:
-    'operation' name=ID '(' (parameters+=Parameter (',' parameters+=Parameter)*)? ')' (':' returnType=TypeReference)?;
+    'operation' name=HsmId '(' (parameters+=Parameter (',' parameters+=Parameter)*)? ')' (':' returnType=TypeReference)?;
 
 Parameter:
-    name=ID (varArgs?='...')? ':' type=TypeReference;
+    name=HsmId (varArgs?='...')? ':' type=TypeReference;
 
 // `alias Name : type` (itemis CREATE): another name for a type; aliases may refer to other aliases.
 TypeAliasDeclaration:
-    'alias' name=ID ':' type=TypeReference;
+    'alias' name=HsmId ':' type=TypeReference;
 
 // Types are referenced by name: the built-in types (integer, real, boolean, string, void), type
 // aliases (`Name` or `Interface.Name` for aliases of a named interface), imported state machines
@@ -94,7 +95,7 @@ TypeReference:
     name=TypeReferenceName;
 
 TypeReferenceName returns string:
-    '::'? ID (('.' | '::') ID)*;
+    '::'? HsmId (('.' | '::') HsmId)*;
 
 // ---------------------------------------------------------------------------------------------
 // States
@@ -110,19 +111,19 @@ Vertex:
 // `state Moving : motor` binds the submachine instance `motor` (a variable whose type is an imported
 // state machine) to the state: the instance runs while the state is active.
 State:
-    'state' name=ID (':' submachine=[VariableDeclaration:QualifiedName])? (description=STRING)? ('{'
+    'state' name=HsmId (':' submachine=[VariableDeclaration:QualifiedName])? (description=STRING)? ('{'
         (annotations+=Annotation | reactions+=LocalReaction | vertices+=Vertex | transitions+=Transition | regions+=Region)*
     '}')?;
 
 // Orthogonal (concurrent) region of a composite state.
 Region:
-    'region' (name=ID)? '{'
+    'region' (name=HsmId)? '{'
         (annotations+=Annotation | vertices+=Vertex | transitions+=Transition)*
     '}';
 
 // `entry` and `exit` pseudo states are the named entry points / exit nodes of itemis CREATE.
 PseudoState:
-    kind=PseudoStateKind name=ID;
+    kind=PseudoStateKind name=HsmId;
 
 PseudoStateKind returns string:
     'choice' | 'junction' | 'history' | 'deephistory' | 'sync' | 'entry' | 'exit';
@@ -139,7 +140,7 @@ LocalReaction:
 Transition:
     (initial?='[*]' | source=[Vertex:QualifiedName]) '->' (final?='[*]' | target=[Vertex:QualifiedName])
     (':' spec=ReactionSpec)?
-    ('#' (('>' entryPoints+=ID) | (exitPoints+=ID '>'))+)?;
+    ('#' (('>' entryPoints+=HsmId) | (exitPoints+=HsmId '>'))+)?;
 
 // ---------------------------------------------------------------------------------------------
 // Reactions: triggers [guard] / effect
@@ -237,7 +238,7 @@ PostfixExpression infers Expression:
 // ElementReference and hsm-linker.ts.)
 AccessExpression infers Expression:
     PrimaryExpression (
-        {infer MemberAccessExpression.receiver=current} '.' member=ID
+        {infer MemberAccessExpression.receiver=current} '.' member=HsmId
         | {infer IndexExpression.receiver=current} '[' index=Expression ']'
     )*;
 
@@ -273,10 +274,10 @@ CppReference:
     name=CppName;
 
 CppName returns string:
-    '::' ID ('::' ID)* | ID '::' ID ('::' ID)*;
+    '::' HsmId ('::' HsmId)* | HsmId '::' HsmId ('::' HsmId)*;
 
 Argument:
-    (parameter=ID '=')? value=ConditionalExpression;
+    (parameter=HsmId '=')? value=ConditionalExpression;
 
 Literal:
     BoolLiteral | IntLiteral | RealLiteral | HexLiteral | StringLiteral | NullLiteral;
@@ -301,7 +302,15 @@ NullLiteral:
     {infer NullLiteral} 'null';
 
 QualifiedName returns string:
-    ID ('.' ID)*;
+    HsmId ('.' HsmId)*;
+
+// A name of the state machine language. The state machines and the structure elements share one
+// language (`.devm`, see devm.langium), so the keywords of the structure language are keywords in state
+// machine files as well; they are accepted as names here, so they can be used like before the merge
+// (completion does not propose them, see `isSoftKeyword` in lsp/cpp-lsp.ts).
+HsmId returns string:
+    ID | 'package' | 'struct' | 'component' | 'behavior' | 'subsystem' | 'system' | 'provides' | 'requires'
+    | 'async' | 'thread' | 'connect' | 'delegate';
 
 // ---------------------------------------------------------------------------------------------
 // Terminals

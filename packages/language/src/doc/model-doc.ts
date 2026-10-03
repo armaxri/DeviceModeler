@@ -9,7 +9,7 @@ import { docComment } from './doc-comments.js';
 /*
  * Documentation of state machines: a structured description of a model (`describeStateMachine`) and
  * its rendering as a Markdown or a self-contained HTML page (`generateModelDoc`), plus an index page
- * (`generateDocIndex`). Pure functions without I/O; the CLI (`hsm doc`) writes the files.
+ * (`generateDocIndex`). Pure functions without I/O; the CLI (`devm doc`) writes the files.
  */
 
 export type DocFormat = 'md' | 'html';

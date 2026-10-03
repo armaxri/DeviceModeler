@@ -13,37 +13,37 @@ describe('parseGeneratorConfig', () => {
     test('accepts a complete configuration', () => {
         const { config, diagnostics } = parseGeneratorConfig(JSON.stringify({
             $schema: './hsm-gen.schema.json',
-            models: ['models/*.hsm', { path: 'door.hsm', cpp: { className: 'MyDoor' } }],
+            models: ['models/*.devm', { path: 'door.devm', cpp: { className: 'MyDoor' } }],
             cpp: { outDir: 'gen', namespace: 'app::sm', std: 11, headerExtension: '.hpp', sourceExtension: '.cc', licenseHeader: ['a', 'b'] },
             c: { outDir: 'gen-c', stringCapacity: 32 },
             writeOnlyIfChanged: false
         }));
         expect(diagnostics).toEqual([]);
-        expect(config?.models).toEqual([{ path: 'models/*.hsm' }, { path: 'door.hsm', cpp: { className: 'MyDoor' } }]);
+        expect(config?.models).toEqual([{ path: 'models/*.devm' }, { path: 'door.devm', cpp: { className: 'MyDoor' } }]);
         expect(config?.cpp?.std).toBe(11);
         expect(config?.writeOnlyIfChanged).toBe(false);
         expect(targetConfigForModel(config!, 'cpp', [config!.models[1]])).toMatchObject({ namespace: 'app::sm', className: 'MyDoor' });
     });
 
     test('defaults: writeOnlyIfChanged', () => {
-        expect(parseGeneratorConfig({ models: ['a.hsm'], cpp: {} }).config).toEqual({ models: [{ path: 'a.hsm' }], cpp: {}, writeOnlyIfChanged: true });
+        expect(parseGeneratorConfig({ models: ['a.devm'], cpp: {} }).config).toEqual({ models: [{ path: 'a.devm' }], cpp: {}, writeOnlyIfChanged: true });
     });
 
     test('reports errors with JSON pointers', () => {
         const messages = (value: unknown) => parseGeneratorConfig(value).diagnostics.map(d => `${d.pointer} ${d.message}`);
         expect(messages('{')[0]).toMatch(/^ invalid JSON/);
         expect(messages([])).toEqual([' the configuration must be a JSON object']);
-        expect(messages({ cpp: {} })).toEqual([`/models 'models' must be a non-empty array of paths / globs of .hsm files`]);
-        expect(messages({ models: ['a.hsm'] })).toEqual([' no target configured: add "cpp": {} and / or "c": {}']);
-        expect(messages({ models: ['a.hsm'], cpp: { std: 14, headerExtension: 'hpp', nameSpace: 'x' }, extra: 1 })).toEqual([
+        expect(messages({ cpp: {} })).toEqual([`/models 'models' must be a non-empty array of paths / globs of .devm files`]);
+        expect(messages({ models: ['a.devm'] })).toEqual([' no target configured: add "cpp": {} and / or "c": {}']);
+        expect(messages({ models: ['a.devm'], cpp: { std: 14, headerExtension: 'hpp', nameSpace: 'x' }, extra: 1 })).toEqual([
             `/extra unknown property 'extra' (expected one of models, cpp, c, headers, writeOnlyIfChanged)`,
             `/cpp/std 'std' must be 17 or 11`,
             `/cpp/headerExtension 'headerExtension' must be a file extension starting with a dot, e.g. '.hpp'`,
             `/cpp/nameSpace unknown option 'nameSpace' of target 'cpp' (expected one of outDir, headerExtension, sourceExtension, licenseHeader, licenseHeaderFile, maxMicrosteps, namespace, className, std)`
         ]);
-        expect(messages({ models: [{ file: 'a.hsm' }, 3], c: { prefix: 'a-b', licenseHeader: 'x', licenseHeaderFile: 'y' } })).toEqual([
+        expect(messages({ models: [{ file: 'a.devm' }, 3], c: { prefix: 'a-b', licenseHeader: 'x', licenseHeaderFile: 'y' } })).toEqual([
             `/models/0/file unknown property 'file' of a model entry (expected path, cpp, c)`,
-            `/models/0/path a model entry needs a 'path' (path or glob of .hsm files)`,
+            `/models/0/path a model entry needs a 'path' (path or glob of .devm files)`,
             '/models/1 a model entry must be a path / glob or an object { "path": ..., "cpp": {...}, "c": {...} }',
             `/c/prefix 'prefix' must be an identifier`,
             `/c use either 'licenseHeader' or 'licenseHeaderFile', not both`
@@ -62,12 +62,12 @@ describe('parseGeneratorConfig', () => {
 
     test('the headers block (C/C++ header imports)', () => {
         const parsed = parseGeneratorConfig({
-            models: ['a.hsm'], cpp: {},
+            models: ['a.devm'], cpp: {},
             headers: { includePaths: ['include'], defines: { USE_CAN: '1', LEVEL: 2 }, dataModel: { longBits: 32, pointerBits: 32, charSigned: false } }
         });
         expect(parsed.diagnostics).toEqual([]);
         expect(parsed.config?.headers).toEqual({ includePaths: ['include'], defines: { USE_CAN: '1', LEVEL: '2' }, dataModel: { longBits: 32, pointerBits: 32, charSigned: false } });
-        const invalid = parseGeneratorConfig({ models: ['a.hsm'], cpp: {}, headers: { includePaths: 'include', dataModel: { longBits: 16 }, x: 1 } });
+        const invalid = parseGeneratorConfig({ models: ['a.devm'], cpp: {}, headers: { includePaths: 'include', dataModel: { longBits: 16 }, x: 1 } });
         expect(invalid.diagnostics.map(d => `${d.pointer}: ${d.message}`)).toEqual([
             "/headers/includePaths: 'includePaths' must be an array of directories",
             "/headers/dataModel/longBits: 'longBits' must be 32 or 64",
@@ -103,24 +103,24 @@ describe('file names, includes and license headers', () => {
 
     test('globs', () => {
         const matches = (glob: string, file: string) => globToRegExp(glob).test(file);
-        expect(matches('*.hsm', 'a.hsm')).toBe(true);
-        expect(matches('*.hsm', 'x/a.hsm')).toBe(false);
-        expect(matches('**/*.hsm', 'a.hsm')).toBe(true);
-        expect(matches('**/*.hsm', 'x/y/a.hsm')).toBe(true);
-        expect(matches('x/**/a?.hsm', 'x/ab.hsm')).toBe(true);
-        expect(matches('x/**/a?.hsm', 'x/y/abc.hsm')).toBe(false);
-        expect(matches('a.hsm', 'aXhsm')).toBe(false);
+        expect(matches('*.devm', 'a.devm')).toBe(true);
+        expect(matches('*.devm', 'x/a.devm')).toBe(false);
+        expect(matches('**/*.devm', 'a.devm')).toBe(true);
+        expect(matches('**/*.devm', 'x/y/a.devm')).toBe(true);
+        expect(matches('x/**/a?.devm', 'x/ab.devm')).toBe(true);
+        expect(matches('x/**/a?.devm', 'x/y/abc.devm')).toBe(false);
+        expect(matches('a.devm', 'aXhsm')).toBe(false);
     });
 });
 
-describe('runGeneration / hsm generate', () => {
+describe('runGeneration / devm generate', () => {
 
     let dir: string;
     beforeEach(() => {
         dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-gen-'));
         fs.mkdirSync(path.join(dir, 'models/sub'), { recursive: true });
-        fs.writeFileSync(path.join(dir, 'models/door.hsm'), example('door.hsm'));
-        fs.writeFileSync(path.join(dir, 'models/sub/keyboard.hsm'), example('keyboard.hsm'));
+        fs.writeFileSync(path.join(dir, 'models/door.devm'), example('door.devm'));
+        fs.writeFileSync(path.join(dir, 'models/sub/keyboard.devm'), example('keyboard.devm'));
         fs.writeFileSync(path.join(dir, 'LICENSE.txt'), 'Copyright ACME\n');
     });
     afterEach(() => {
@@ -131,13 +131,13 @@ describe('runGeneration / hsm generate', () => {
     const writeConfig = (config: unknown) => fs.writeFileSync(path.join(dir, 'hsm.gen.json'), JSON.stringify(config));
 
     test('expands globs', async () => {
-        expect(await expandModelPath(dir, 'models/**/*.hsm')).toEqual([path.join(dir, 'models/door.hsm'), path.join(dir, 'models/sub/keyboard.hsm')]);
-        expect(await expandModelPath(dir, 'models/*.hsm')).toEqual([path.join(dir, 'models/door.hsm')]);
-        expect(await expandModelPath(dir, 'models/missing.hsm')).toEqual([]);
+        expect(await expandModelPath(dir, 'models/**/*.devm')).toEqual([path.join(dir, 'models/door.devm'), path.join(dir, 'models/sub/keyboard.devm')]);
+        expect(await expandModelPath(dir, 'models/*.devm')).toEqual([path.join(dir, 'models/door.devm')]);
+        expect(await expandModelPath(dir, 'models/missing.devm')).toEqual([]);
     });
 
     test('writes only changed files and checks them', async () => {
-        writeConfig({ models: ['models/**/*.hsm'], cpp: { outDir: 'gen', namespace: 'app', licenseHeaderFile: 'LICENSE.txt' }, c: { outDir: 'gen-c' } });
+        writeConfig({ models: ['models/**/*.devm'], cpp: { outDir: 'gen', namespace: 'app', licenseHeaderFile: 'LICENSE.txt' }, c: { outDir: 'gen-c' } });
         const loaded = await loadGeneratorConfig(path.join(dir, 'hsm.gen.json'));
         expect(loaded.diagnostics).toEqual([]);
         const request = { config: loaded.config!, baseDir: dir };
@@ -149,7 +149,7 @@ describe('runGeneration / hsm generate', () => {
             'gen/Keyboard.h written', 'gen/Keyboard.cpp written',
             'gen-c/keyboard.h written', 'gen-c/keyboard.c written'
         ]);
-        expect(fs.readFileSync(path.join(dir, 'gen/Door.h'), 'utf-8')).toMatch(/^\/\*\n \* Copyright ACME\n \*\/\n\/\/ Generated by hsm/);
+        expect(fs.readFileSync(path.join(dir, 'gen/Door.h'), 'utf-8')).toMatch(/^\/\*\n \* Copyright ACME\n \*\/\n\/\/ Generated by devm/);
         expect(fs.readFileSync(path.join(dir, 'gen/Door.h'), 'utf-8')).toContain('namespace app {');
 
         const doorHeader = path.join(dir, 'gen/Door.h');
@@ -160,7 +160,7 @@ describe('runGeneration / hsm generate', () => {
         expect(Math.round(fs.statSync(doorHeader).mtimeMs)).toBe(past.getTime());
 
         expect((await runGeneration({ ...request, mode: 'check' })).outputs.every(o => o.status === 'up-to-date')).toBe(true);
-        fs.writeFileSync(path.join(dir, 'models/door.hsm'), example('door.hsm').replace(/statemachine Door/, 'statemachine Door2'));
+        fs.writeFileSync(path.join(dir, 'models/door.devm'), example('door.devm').replace(/statemachine Door/, 'statemachine Door2'));
         fs.rmSync(path.join(dir, 'gen/Keyboard.cpp'));
         const check = await runGeneration({ ...request, mode: 'check' });
         expect(check.outputs.filter(o => o.status !== 'up-to-date').map(o => `${path.relative(dir, o.file)} ${o.status}`)).toEqual([
@@ -169,19 +169,19 @@ describe('runGeneration / hsm generate', () => {
     });
 
     test('reports conflicts, unmatched globs and model errors without writing', async () => {
-        fs.writeFileSync(path.join(dir, 'models/broken.hsm'), 'statemachine Broken { [*] -> Missing }');
-        writeConfig({ models: ['models/*.hsm', 'nothing/*.hsm', { path: 'models/sub/keyboard.hsm', cpp: { className: 'Door' } }], cpp: { outDir: 'gen' } });
+        fs.writeFileSync(path.join(dir, 'models/broken.devm'), 'statemachine Broken { [*] -> Missing }');
+        writeConfig({ models: ['models/*.devm', 'nothing/*.devm', { path: 'models/sub/keyboard.devm', cpp: { className: 'Door' } }], cpp: { outDir: 'gen' } });
         const loaded = await loadGeneratorConfig(path.join(dir, 'hsm.gen.json'));
         const result = await runGeneration({ config: loaded.config!, baseDir: dir, mode: 'write' });
         const messages = result.diagnostics.map(d => `${d.file ? path.relative(dir, d.file) : ''}: ${d.message}`);
-        expect(messages).toContainEqual(`: 'nothing/*.hsm' matches no model`);
-        expect(messages.some(m => m.startsWith('models/broken.hsm: ') && m.includes('Missing'))).toBe(true);
-        expect(messages.some(m => m.startsWith('models/sub/keyboard.hsm: ') && m.includes('Door.h is generated with different contents'))).toBe(true);
+        expect(messages).toContainEqual(`: 'nothing/*.devm' matches no model`);
+        expect(messages.some(m => m.startsWith('models/broken.devm: ') && m.includes('Missing'))).toBe(true);
+        expect(messages.some(m => m.startsWith('models/sub/keyboard.devm: ') && m.includes('Door.h is generated with different contents'))).toBe(true);
         expect(fs.existsSync(path.join(dir, 'gen'))).toBe(false);
     });
 
     test('command line: --list-outputs, --check and --outputs-file', async () => {
-        writeConfig({ models: ['models/door.hsm'], cpp: { outDir: 'gen', headerExtension: '.hpp' } });
+        writeConfig({ models: ['models/door.devm'], cpp: { outDir: 'gen', headerExtension: '.hpp' } });
         const log: string[] = [];
         vi.spyOn(console, 'log').mockImplementation((line: string) => log.push(line));
         vi.spyOn(console, 'error').mockImplementation((line: string) => log.push(`E ${line}`));
@@ -194,7 +194,7 @@ describe('runGeneration / hsm generate', () => {
         expect(await runGenerateCommand(undefined, [], { config, outputsFile })).toBe(0);
         expect(await runGenerateCommand(undefined, [], { config, check: true })).toBe(0);
         // a target and files: the models of the configuration are replaced, the options kept
-        expect(await runGenerateCommand('cpp', [path.join(dir, 'models/sub/keyboard.hsm')], { config, outputsFile, namespace: 'kb' })).toBe(1);
+        expect(await runGenerateCommand('cpp', [path.join(dir, 'models/sub/keyboard.devm')], { config, outputsFile, namespace: 'kb' })).toBe(1);
         expect(fs.readFileSync(path.join(dir, 'gen/Keyboard.hpp'), 'utf-8')).toContain('namespace kb {');
         expect(fs.readFileSync(outputsFile, 'utf-8')).toContain('/gen/Keyboard.cpp\n');
         log.length = 0;

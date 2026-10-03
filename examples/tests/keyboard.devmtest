@@ -1,5 +1,5 @@
 // Unit tests of the keyboard (cycle based): orthogonal regions and the final state.
-// Run with: hsm test examples/tests/keyboard.hsmtest --machine examples/keyboard.hsm
+// Run with: devm test examples/tests/keyboard.devmtest --machine examples/keyboard.devm
 testclass KeyboardTest for statemachine Keyboard {
 
     @SetUp

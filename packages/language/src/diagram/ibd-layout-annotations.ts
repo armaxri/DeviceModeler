@@ -1,5 +1,5 @@
 /**
- * Manual layouts of structure diagrams stored as layout annotations in the `.dmf` text (the same
+ * Manual layouts of structure diagrams stored as layout annotations in the `.devm` text (the same
  * concept and syntax as the layout annotations of state machines, see docs/manual-layout.md):
  *
  * - `@at(x, y)`: position of the frame (before `system` / `subsystem`), a thread, an instance, a

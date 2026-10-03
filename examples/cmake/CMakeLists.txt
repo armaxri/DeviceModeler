@@ -1,6 +1,6 @@
 # Example: generating C++ code from state machine models with CMake.
 #
-#   npm ci && npm run build -w packages/language     # once, in the repository root (builds the hsm CLI)
+#   npm ci && npm run build -w packages/language     # once, in the repository root (builds the devm CLI)
 #   cmake -S examples/cmake -B build/cmake-example -G Ninja
 #   cmake --build build/cmake-example
 #   ctest --test-dir build/cmake-example --output-on-failure
@@ -10,7 +10,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(HsmCMakeExample LANGUAGES CXX)
 
-# the hsm build integration (alternatively: find_package(Hsm CONFIG REQUIRED PATHS ../../cmake))
+# the Device Modeler build integration (alternatively: find_package(Hsm CONFIG REQUIRED PATHS ../../cmake))
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../cmake")
 include(HsmGenerate)
 
@@ -22,7 +22,7 @@ endif()
 # 1. Models listed in CMake: TrafficLight.h / TrafficLight.cpp / sc_statemachine.h in namespace example.
 add_library(traffic_light_sm STATIC)
 hsm_generate(TARGET traffic_light_sm
-    MODELS ../traffic-light.hsm
+    MODELS ../traffic-light.devm
     NAMESPACE example
     STD 17)
 
@@ -34,7 +34,7 @@ hsm_generate(TARGET cd_player_sm CONFIG hsm.gen.json STD 17)
 #    conveyor::Package, ... directly and is regenerated when the header changes.
 add_library(conveyor_sm STATIC)
 hsm_generate(TARGET conveyor_sm
-    MODELS ../cpp-types/conveyor.hsm
+    MODELS ../cpp-types/conveyor.devm
     INCLUDE_DIRS ../cpp-types
     STD 17)
 
@@ -51,10 +51,10 @@ add_executable(conveyor_test tests/conveyor_test.cpp)
 target_link_libraries(conveyor_test PRIVATE conveyor_sm)
 add_test(NAME conveyor_test COMMAND conveyor_test)
 
-# The model unit tests (.hsmtest) run by `hsm test`; JUnit reports in <build>/hsm_test_results.
+# The model unit tests (.devmtest) run by `devm test`; JUnit reports in <build>/hsm_test_results.
 hsm_add_tests(TARGET models
-    TESTS ../tests/traffic-light.hsmtest ../tests/cd-player.hsmtest
-    MODELS ../traffic-light.hsm ../cd-player.hsm)
+    TESTS ../tests/traffic-light.devmtest ../tests/cd-player.devmtest
+    MODELS ../traffic-light.devm ../cd-player.devm)
 hsm_add_tests(TARGET conveyor
-    TESTS ../cpp-types/conveyor.hsmtest
-    MODELS ../cpp-types/conveyor.hsm)
+    TESTS ../cpp-types/conveyor.devmtest
+    MODELS ../cpp-types/conveyor.devm)

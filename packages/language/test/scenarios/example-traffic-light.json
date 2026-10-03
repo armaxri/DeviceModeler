@@ -1,7 +1,7 @@
 {
     "name": "example-traffic-light",
     "description": "Traffic light: cycle period 100 ms, after / every time events, guards on time triggers, named interface.",
-    "model": "../../../../examples/traffic-light.hsm",
+    "model": "../../../../examples/traffic-light.devm",
     "steps": [
         {"enter": true},
         {"expect": {"configuration": ["Off"], "calls": ["switchOn(0)"], "variables": {"lights": 0, "Pedestrian.waiting": false}}},

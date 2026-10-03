@@ -173,13 +173,13 @@ describe('expressions', () => {
 });
 
 describe('interpreter API', () => {
-    const cdPlayer = example('cd-player.hsm');
+    const cdPlayer = example('cd-player.devm');
 
     test('execution mode and order from annotations', async () => {
-        const door = await load(example('door.hsm'));
+        const door = await load(example('door.devm'));
         expect(door.executionMode).toBe('event');
         expect(door.executionOrder).toBe('child-first');
-        const light = await load(example('traffic-light.hsm'));
+        const light = await load(example('traffic-light.devm'));
         expect(light.executionMode).toBe('cycle');
         expect(light.cyclePeriod).toBe(100);
         expect(light.executionOrder).toBe('parent-first');
@@ -221,7 +221,7 @@ describe('interpreter API', () => {
 
     test('out events of the last call and callback', async () => {
         const received: string[] = [];
-        const sim = await load(example('keyboard.hsm'), { onOutEvent: e => received.push(e.text) });
+        const sim = await load(example('keyboard.devm'), { onOutEvent: e => received.push(e.text) });
         sim.enter();
         sim.raise('capsLock');
         sim.runCycle();
@@ -232,7 +232,7 @@ describe('interpreter API', () => {
     });
 
     test('variables snapshot and setVariable', async () => {
-        const sim = await load(example('traffic-light.hsm'));
+        const sim = await load(example('traffic-light.devm'));
         sim.enter();
         expect(sim.variables).toEqual({ 'Pedestrian.waiting': false, RED: 1, YELLOW: 2, GREEN: 4, lights: 0 });
         sim.setVariable('Pedestrian.waiting', true);
@@ -243,7 +243,7 @@ describe('interpreter API', () => {
     });
 
     test('raising events: unknown, out events, before enter', async () => {
-        const sim = await load(example('keyboard.hsm'));
+        const sim = await load(example('keyboard.devm'));
         expect(() => sim.raise('capsLock')).toThrow('not entered');
         sim.enter();
         expect(() => sim.raise('nope')).toThrow(`Unknown event 'nope'`);
@@ -252,7 +252,7 @@ describe('interpreter API', () => {
     });
 
     test('virtual clock', async () => {
-        const sim = await load(example('traffic-light.hsm'));
+        const sim = await load(example('traffic-light.devm'));
         sim.enter();
         sim.raise('powerOn');
         sim.runFor(20100); // the first cycle (at 100 ms) enters Red
@@ -300,7 +300,7 @@ describe('interpreter API', () => {
     });
 
     test('exit and final', async () => {
-        const sim = await load(example('keyboard.hsm'));
+        const sim = await load(example('keyboard.devm'));
         sim.enter();
         sim.raise('unplug');
         sim.runCycle();

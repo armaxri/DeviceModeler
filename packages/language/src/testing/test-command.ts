@@ -18,7 +18,7 @@ export interface TestCommandOptions {
     include?: string[];
     define?: string[];
     dataModel?: string;
-    /** Additional `.hsm` files or directories containing `.hsm` files. */
+    /** Additional `.devm` files or directories containing `.devm` files. */
     machine?: string[];
     /** Path of a JUnit XML report. */
     junit?: string;
@@ -42,7 +42,7 @@ export const COVERAGE_FILES = { json: 'coverage.json', lcov: 'lcov.info', cobert
 const SEVERITIES = ['', 'error', 'warning', 'info', 'hint'];
 
 /**
- * `hsm test <file.hsmtest ...>`: loads the test files together with the `.hsm` files in their
+ * `devm test <file.devmtest ...>`: loads the test files together with the `.devm` files in their
  * directories – or in the parent directories if there are none – (and the given `--machine` files /
  * directories), runs all tests and prints a report.
  * Returns the exit code: 0 if all tests passed, 1 otherwise.
@@ -96,7 +96,7 @@ export async function runTestCommand(files: string[], options: TestCommandOption
     const display = (uri: string | undefined) => (uri && displayNames.get(uri)) ?? uri ?? '?';
     let problems = 0;
     for (const loaded of documents) {
-        const isTest = loaded.uri.endsWith('.hsmtest');
+        const isTest = loaded.uri.endsWith('.devmtest');
         for (const d of loaded.diagnostics) {
             // warnings of models are not interesting here, their errors prevent running tests
             if (d.severity === 1 || isTest) {
@@ -208,7 +208,7 @@ async function writeCoverage(
 
 async function hsmFilesIn(directory: string): Promise<string[]> {
     const entries = await fs.readdir(directory, { withFileTypes: true });
-    return entries.filter(e => e.isFile() && e.name.endsWith('.hsm')).map(e => path.join(directory, e.name)).sort();
+    return entries.filter(e => e.isFile() && e.name.endsWith('.devm')).map(e => path.join(directory, e.name)).sort();
 }
 
 /** Default diagram of the HTML coverage report: the state machine with covered / uncovered elements highlighted. */

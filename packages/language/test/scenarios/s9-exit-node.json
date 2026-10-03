@@ -3,7 +3,7 @@
     "description": "When the instance reaches an exit node X of its state machine, it is exited and its state is left by the transition with '# X>' (after the exit reactions of the instance and of the state).",
     "text": [
         "statemachine Door {",
-        "    import \"motor.hsm\"",
+        "    import \"motor.devm\"",
         "    interface:",
         "        in event open",
         "        operation log(msg : string) : void",
@@ -20,7 +20,7 @@
         "}"
     ],
     "files": {
-        "motor.hsm": [
+        "motor.devm": [
             "statemachine Motor {",
             "    interface:",
             "        in event start",

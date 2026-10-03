@@ -1,7 +1,7 @@
 export * from './generated/ast.js';
-export { DmfLanguageMetaData, HsmLanguageMetaData, HsmTestLanguageMetaData } from './generated/module.js';
-export { default as HsmMonarchSyntax } from './syntaxes/hsm.monarch.js';
-export { default as DmfMonarchSyntax } from './syntaxes/dmf.monarch.js';
+export { DevmLanguageMetaData, HsmTestLanguageMetaData } from './generated/module.js';
+export { default as DevmMonarchSyntax } from './syntaxes/devm.monarch.js';
+export * from './devm-parser.js';
 export * from './hsm-module.js';
 export * from './hsm-validator.js';
 export * from './hsm-scope.js';

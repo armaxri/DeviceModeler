@@ -11,7 +11,7 @@ import { DIAGRAM_CSS } from '../src/render/diagram-styles.js';
 import { DIAGRAM_THEMES, escapeXml, highlightClass, renderSvg } from '../src/render/svg.js';
 import { example, parse } from './helpers.js';
 
-const EXAMPLES = ['traffic-light.hsm', 'cd-player.hsm', 'keyboard.hsm', 'door.hsm'];
+const EXAMPLES = ['traffic-light.devm', 'cd-player.devm', 'keyboard.devm', 'door.devm'];
 
 function elements(root: XmlElement): XmlElement[] {
     return [root, ...root.children.flatMap(elements)];
@@ -54,7 +54,7 @@ describe('renderSvg', () => {
                 const nodes = flatten(graph.children);
                 for (const theme of DIAGRAM_THEMES) {
                     const svg = renderSvg(graph, { theme });
-                    fs.writeFileSync(path.join(dir, `${file.replace('.hsm', '')}-${direction}-${theme}.svg`), svg);
+                    fs.writeFileSync(path.join(dir, `${file.replace('.devm', '')}-${direction}-${theme}.svg`), svg);
                     expect(svg.startsWith('<?xml')).toBe(true);
                     expect(svg).not.toMatch(/NaN|undefined|Infinity/);
                     const root = parseXml(svg);
@@ -83,7 +83,7 @@ describe('renderSvg', () => {
     }
 
     test('pseudo states have the shapes of the web editor', async () => {
-        const parsed = await parse(example('door.hsm'));
+        const parsed = await parse(example('door.devm'));
         const { graph } = await layoutStateMachine(parsed.model);
         const root = parseXml(renderSvg(graph));
         expect(withClass(root, 'entry-point')).toHaveLength(2);
@@ -92,7 +92,7 @@ describe('renderSvg', () => {
         expect(withClass(root, 'sync-shape')).toHaveLength(2);
         expect(withClass(root, 'region-separator')).toHaveLength(1);
         expect(withClass(root, 'node-label').map(e => e.text).sort()).toEqual(['Blocked', 'Closing', 'Opening']);
-        const cd = await parse(example('cd-player.hsm'));
+        const cd = await parse(example('cd-player.devm'));
         const cdRoot = parseXml(renderSvg((await layoutStateMachine(cd.model)).graph));
         expect(withClass(cdRoot, 'history-text').map(e => e.text)).toEqual(['H']);
         expect(withClass(cdRoot, 'choice-shape')).toHaveLength(1);
@@ -101,7 +101,7 @@ describe('renderSvg', () => {
     });
 
     test('highlight, legend, title and styles', async () => {
-        const parsed = await parse(example('cd-player.hsm'));
+        const parsed = await parse(example('cd-player.devm'));
         const layout = await layoutStateMachine(parsed.model);
         const playing = allVertices(parsed.model).find(v => v.name === 'Playing')!;
         const paused = allVertices(parsed.model).find(v => v.name === 'Paused')!;

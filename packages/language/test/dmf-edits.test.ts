@@ -11,12 +11,12 @@ import { DmfModelLoader } from '../src/hsm-document.js';
 const loader = new DmfModelLoader();
 const DEVICE_DIR = path.resolve(__dirname, '../../../examples/device');
 const deviceFile = (name: string) => fs.readFileSync(path.join(DEVICE_DIR, name), 'utf-8');
-const DEVICE_FILES = ['types.dmf', 'components.dmf', 'drive.dmf', 'system.dmf', 'controller.hsm', 'drive.hsm', 'door_types.h'];
+const DEVICE_FILES = ['types.devm', 'components.devm', 'drive-unit.devm', 'system.devm', 'controller.devm', 'drive.devm', 'door_types.h'];
 
 let counter = 0;
 
 /** Loads a structure file of the device example (with the other files of the example). */
-async function load(text: string, name = 'system.dmf') {
+async function load(text: string, name = 'system.devm') {
     const files: Record<string, string> = {};
     for (const file of DEVICE_FILES) {
         if (file !== name) {
@@ -56,7 +56,7 @@ function end(s: ast.Structure, text: string): DmfPortEnd {
 
 describe('structure edits: threads and instances', () => {
     test('add a thread after the last thread', async () => {
-        const { text, result } = await edit('system.dmf', (e, m) => e.addThread(structure(m, 'GarageDoor')));
+        const { text, result } = await edit('system.devm', (e, m) => e.addThread(structure(m, 'GarageDoor')));
         expect(result.createdName).toBe('Thread1');
         expect(text).toContain(`        diag : Diagnosis
     }
@@ -68,7 +68,7 @@ describe('structure edits: threads and instances', () => {
     });
 
     test('add a thread with annotations', async () => {
-        const { text } = await edit('drive.dmf', (e, m) => e.addThread(structure(m, 'DriveUnit'), 'SafetyTask', { priority: '9', period: '5 ms' }));
+        const { text } = await edit('drive-unit.devm', (e, m) => e.addThread(structure(m, 'DriveUnit'), 'SafetyTask', { priority: '9', period: '5 ms' }));
         expect(text).toContain(`        switches : EndSwitches
     }
     @priority(9) @period(5 ms)
@@ -78,19 +78,19 @@ describe('structure edits: threads and instances', () => {
     });
 
     test('add an instance of a component into a thread, of a subsystem outside of threads', async () => {
-        const inThread = await edit('system.dmf', (e, m) => e.addInstance(structure(m, 'GarageDoor'), 'Buzzer', { thread: structure(m, 'GarageDoor').threads[1] }));
+        const inThread = await edit('system.devm', (e, m) => e.addInstance(structure(m, 'GarageDoor'), 'Buzzer', { thread: structure(m, 'GarageDoor').threads[1] }));
         expect(inThread.result.createdName).toBe('buzzer1');
         expect(inThread.text).toContain(`        diag : Diagnosis
         buzzer1 : Buzzer
     }`);
         expect(inThread.text.substring(inThread.result.selectOffset!)).toMatch(/^buzzer1 : Buzzer/);
-        const subsystem = await edit('system.dmf', (e, m) => e.addInstance(structure(m, 'GarageDoor'), 'DriveUnit', { name: 'drive2' }));
+        const subsystem = await edit('system.devm', (e, m) => e.addInstance(structure(m, 'GarageDoor'), 'DriveUnit', { name: 'drive2' }));
         expect(subsystem.text).toContain(`    drive : DriveUnit
     drive2 : DriveUnit
 
     connect door.motor -> drive.ctrl`);
         // a component instance needs a thread, a subsystem instance must not be in one
-        const parsed = await load(deviceFile('system.dmf'));
+        const parsed = await load(deviceFile('system.devm'));
         const editor = new DmfEditor(parsed.text, parsed.model);
         const s = structure(parsed.model, 'GarageDoor');
         expect(() => editor.addInstance(s, 'PwmDriver')).toThrow("'PwmDriver' is a component: its instances run in a thread – add the instance to a thread.");
@@ -98,13 +98,13 @@ describe('structure edits: threads and instances', () => {
     });
 
     test('add an instance into an empty thread', async () => {
-        const text = 'import "components.dmf"\nsystem S {\n    thread T { }\n}\n';
-        const { text: result } = await edit('main.dmf', (e, m) => e.addInstance(structure(m, 'S'), 'Buzzer', { thread: structure(m, 'S').threads[0] }), text);
-        expect(result).toBe('import "components.dmf"\nsystem S {\n    thread T {\n        buzzer : Buzzer\n    }\n}\n');
+        const text = 'import "components.devm"\nsystem S {\n    thread T { }\n}\n';
+        const { text: result } = await edit('main.devm', (e, m) => e.addInstance(structure(m, 'S'), 'Buzzer', { thread: structure(m, 'S').threads[0] }), text);
+        expect(result).toBe('import "components.devm"\nsystem S {\n    thread T {\n        buzzer : Buzzer\n    }\n}\n');
     });
 
     test('names must be unique and valid', async () => {
-        const parsed = await load(deviceFile('system.dmf'));
+        const parsed = await load(deviceFile('system.devm'));
         const editor = new DmfEditor(parsed.text, parsed.model);
         expect(() => editor.addThread(structure(parsed.model, 'GarageDoor'), 'door')).toThrow(EditError);
         expect(() => editor.addThread(structure(parsed.model, 'GarageDoor'), 'thread')).toThrow(/not a valid name/);
@@ -113,8 +113,8 @@ describe('structure edits: threads and instances', () => {
     });
 
     test('move an instance between threads (with its comment)', async () => {
-        const text = deviceFile('system.dmf').replace('        buzzer : Buzzer\n', '        // beeps\n        buzzer : Buzzer // the alarm\n');
-        const { text: result, errors } = await edit('system.dmf', (e, m) => {
+        const text = deviceFile('system.devm').replace('        buzzer : Buzzer\n', '        // beeps\n        buzzer : Buzzer // the alarm\n');
+        const { text: result, errors } = await edit('system.devm', (e, m) => {
             const s = structure(m, 'GarageDoor');
             return e.moveInstance(instance(s, 'buzzer'), s.threads[1]);
         }, text);
@@ -129,37 +129,37 @@ describe('structure edits: threads and instances', () => {
     });
 
     test('instances of components stay in threads, instances of subsystems outside of them', async () => {
-        const parsed = await load(deviceFile('system.dmf'));
+        const parsed = await load(deviceFile('system.devm'));
         const editor = new DmfEditor(parsed.text, parsed.model);
         const s = structure(parsed.model, 'GarageDoor');
         expect(() => editor.moveInstance(instance(s, 'sensor'), s)).toThrow("'sensor' is an instance of the component PositionSensor: it runs in a thread – move it into another thread.");
         expect(() => editor.moveInstance(instance(s, 'drive'), s.threads[0])).toThrow(/'drive' is an instance of the subsystem DriveUnit: it is placed outside of the threads/);
         expect(editor.moveInstance(instance(s, 'drive'), s).edits).toEqual([]);
         // an invalid model: a subsystem instance in a thread can be moved out of it
-        const text = 'import "drive.dmf"\nsystem S {\n    thread T {\n        d : DriveUnit\n    }\n}\n';
-        const out = await edit('main.dmf', (e, m) => e.moveInstance(instance(structure(m, 'S'), 'd'), structure(m, 'S')), text);
-        expect(out.text).toBe('import "drive.dmf"\nsystem S {\n    thread T {\n    }\n\n    d : DriveUnit\n}\n');
+        const text = 'import "drive-unit.devm"\nsystem S {\n    thread T {\n        d : DriveUnit\n    }\n}\n';
+        const out = await edit('main.devm', (e, m) => e.moveInstance(instance(structure(m, 'S'), 'd'), structure(m, 'S')), text);
+        expect(out.text).toBe('import "drive-unit.devm"\nsystem S {\n    thread T {\n    }\n\n    d : DriveUnit\n}\n');
     });
 
     test('move an instance assigned by name', async () => {
-        const text = 'import "components.dmf"\nsystem S {\n    thread A {\n        b\n    }\n    thread B { }\n    b : Buzzer\n}\n';
-        const { text: result } = await edit('main.dmf', (e, m) => {
+        const text = 'import "components.devm"\nsystem S {\n    thread A {\n        b\n    }\n    thread B { }\n    b : Buzzer\n}\n';
+        const { text: result } = await edit('main.devm', (e, m) => {
             const s = structure(m, 'S');
             return e.moveInstance(instance(s, 'b'), s.threads[1]);
         }, text);
-        expect(result).toBe('import "components.dmf"\nsystem S {\n    thread A {\n    }\n    thread B {\n        b : Buzzer\n    }\n}\n');
+        expect(result).toBe('import "components.devm"\nsystem S {\n    thread A {\n    }\n    thread B {\n        b : Buzzer\n    }\n}\n');
     });
 
     test('change the type of an instance', async () => {
-        const { text } = await edit('system.dmf', (e, m) => e.setInstanceType(instance(structure(m, 'GarageDoor'), 'buzzer'), 'Diagnosis'));
+        const { text } = await edit('system.devm', (e, m) => e.setInstanceType(instance(structure(m, 'GarageDoor'), 'buzzer'), 'Diagnosis'));
         expect(text).toContain('        buzzer : Diagnosis\n');
     });
 });
 
 describe('structure edits: connections', () => {
     test('connect a required to a provided port, swapped if drawn the other way', async () => {
-        const text = deviceFile('system.dmf').replace('    connect door.alarm -> buzzer.alarm\n', '');
-        const { text: result, result: r, errors } = await edit('system.dmf', (e, m) => {
+        const text = deviceFile('system.devm').replace('    connect door.alarm -> buzzer.alarm\n', '');
+        const { text: result, result: r, errors } = await edit('system.devm', (e, m) => {
             const s = structure(m, 'GarageDoor');
             return e.addConnection(s, end(s, 'buzzer.alarm'), end(s, 'door.alarm'));
         }, text);
@@ -172,13 +172,13 @@ describe('structure edits: connections', () => {
     });
 
     test('boundary port and port of a part: a delegation in the direction of the port', async () => {
-        const text = deviceFile('drive.dmf').replace('    delegate ctrl -> motor.ctrl\n', '').replace('    delegate motor.status -> status\n', '');
-        const { text: result } = await edit('drive.dmf', (e, m) => {
+        const text = deviceFile('drive-unit.devm').replace('    delegate ctrl -> motor.ctrl\n', '').replace('    delegate motor.status -> status\n', '');
+        const { text: result } = await edit('drive-unit.devm', (e, m) => {
             const s = structure(m, 'DriveUnit');
             return e.addConnection(s, end(s, 'motor.ctrl'), end(s, 'ctrl'));
         }, text);
         expect(result).toContain('    connect switches.events -> motor.sensors\n    delegate ctrl -> motor.ctrl\n}');
-        const { text: required } = await edit('drive.dmf', (e, m) => {
+        const { text: required } = await edit('drive-unit.devm', (e, m) => {
             const s = structure(m, 'DriveUnit');
             return e.addConnection(s, end(s, 'status'), end(s, 'motor.status'));
         }, result);
@@ -186,7 +186,7 @@ describe('structure edits: connections', () => {
     });
 
     test('invalid connections are refused, incompatible ones reported', async () => {
-        const parsed = await load(deviceFile('system.dmf'));
+        const parsed = await load(deviceFile('system.devm'));
         const s = structure(parsed.model, 'GarageDoor');
         expect(() => planConnection(s, end(s, 'door.cmd'), end(s, 'buzzer.alarm'))).toThrow(/Both ports are provided/);
         expect(() => planConnection(s, end(s, 'remote'), end(s, 'report'))).toThrow(/Two boundary ports/);
@@ -201,70 +201,70 @@ describe('structure edits: connections', () => {
 
 describe('structure edits: ports, annotations, behavior', () => {
     test('add ports to a component and to the boundary of a structure', async () => {
-        const { text, result } = await edit('components.dmf', (e, m) => e.addPort(m.elements.find(x => x.name === 'Buzzer') as ast.Component,
+        const { text, result } = await edit('components.devm', (e, m) => e.addPort(m.elements.find(x => x.name === 'Buzzer') as ast.Component,
             { direction: 'requires', kind: 'sync', name: 'volume', type: 'integer' }));
         expect(text).toContain(`component Buzzer {
     provides async alarm : event alarm
     requires sync volume : integer
 }`);
         expect(text.substring(result.selectOffset!)).toMatch(/^requires sync volume/);
-        const boundary = await edit('drive.dmf', (e, m) => e.addPort(structure(m, 'DriveUnit'), { direction: 'provides', kind: 'async' }));
+        const boundary = await edit('drive-unit.devm', (e, m) => e.addPort(structure(m, 'DriveUnit'), { direction: 'provides', kind: 'async' }));
         expect(boundary.result.createdName).toBe('in1');
         expect(boundary.text).toContain('    requires async status : MotorStatus\n    provides async in1 : event in1\n');
     });
 
     test('add a port to an empty component', async () => {
         const text = 'component C { }\n';
-        const { text: result } = await edit('main.dmf', (e, m) => e.addPort(m.elements[0] as ast.Component, { direction: 'provides', kind: 'sync', name: 'x' }), text);
+        const { text: result } = await edit('main.devm', (e, m) => e.addPort(m.elements[0] as ast.Component, { direction: 'provides', kind: 'sync', name: 'x' }), text);
         expect(result).toBe('component C {\n    provides sync x : integer\n}\n');
     });
 
     test('edit direction, kind and type of a port', async () => {
         const port = (m: ast.DmfModel) => (m.elements.find(x => x.name === 'Diagnosis') as ast.Component).ports[0];
-        const direction = await edit('components.dmf', (e, m) => e.setPortDirection(port(m), 'provides'));
+        const direction = await edit('components.devm', (e, m) => e.setPortDirection(port(m), 'provides'));
         expect(direction.text).toContain('    provides sync cycles : integer\n    provides sync report');
-        const kind = await edit('components.dmf', (e, m) => e.setPortKind(port(m), 'async'));
+        const kind = await edit('components.devm', (e, m) => e.setPortKind(port(m), 'async'));
         expect(kind.text).toContain('    requires async cycles : integer\n');
-        const type = await edit('components.dmf', (e, m) => e.setPortType(port(m), 'event tick ,  event tock : integer'));
+        const type = await edit('components.devm', (e, m) => e.setPortType(port(m), 'event tick ,  event tock : integer'));
         expect(type.text).toContain('    requires sync cycles : event tick , event tock : integer\n');
     });
 
     test('thread annotations: change, add, remove', async () => {
         const thread = (m: ast.DmfModel) => structure(m, 'GarageDoor').threads[0];
-        const changed = await edit('system.dmf', (e, m) => e.setThreadAnnotations(thread(m), { priority: '7', stack: '1024' }));
+        const changed = await edit('system.devm', (e, m) => e.setThreadAnnotations(thread(m), { priority: '7', stack: '1024' }));
         expect(changed.text).toContain('    @priority(7) @period(10 ms) @stack(1024)\n    thread ControlTask {');
-        const removed = await edit('system.dmf', (e, m) => e.setThreadAnnotations(thread(m), { priority: '', period: undefined }));
+        const removed = await edit('system.devm', (e, m) => e.setThreadAnnotations(thread(m), { priority: '', period: undefined }));
         expect(removed.text).toContain('    provides sync report : Diagnostics\n\n    thread ControlTask {');
         expect(removed.text).toContain('    @priority(2) @period(100 ms)\n    thread IoTask');
         const text = 'system S {\n    thread T {\n    }\n}\n';
-        const added = await edit('main.dmf', (e, m) => e.setThreadAnnotations(structure(m, 'S').threads[0], { period: '1 ms' }), text);
+        const added = await edit('main.devm', (e, m) => e.setThreadAnnotations(structure(m, 'S').threads[0], { period: '1 ms' }), text);
         expect(added.text).toBe('system S {\n    @period(1 ms)\n    thread T {\n    }\n}\n');
-        const parsed = await load(text, 'main.dmf');
+        const parsed = await load(text, 'main.devm');
         expect(() => new DmfEditor(text, parsed.model).setThreadAnnotations(structure(parsed.model, 'S').threads[0], { period: '10' })).toThrow(/not a period/);
     });
 
     test('set and remove the behavior of a component', async () => {
         const buzzer = (m: ast.DmfModel) => m.elements.find(x => x.name === 'Buzzer') as ast.Component;
-        const set = await edit('components.dmf', (e, m) => e.setBehavior(buzzer(m), 'buzzer.hsm'));
-        expect(set.text).toContain('component Buzzer {\n    behavior "buzzer.hsm"\n    provides async alarm');
-        const replaced = await edit('components.dmf', (e, m) => e.setBehavior(m.elements.find(x => x.name === 'DoorController') as ast.Component, 'drive.hsm'));
-        expect(replaced.text).toContain('component DoorController {\n    behavior "drive.hsm"\n');
-        const removed = await edit('components.dmf', (e, m) => e.setBehavior(m.elements.find(x => x.name === 'DoorController') as ast.Component, ''));
+        const set = await edit('components.devm', (e, m) => e.setBehavior(buzzer(m), 'buzzer.devm'));
+        expect(set.text).toContain('component Buzzer {\n    behavior "buzzer.devm"\n    provides async alarm');
+        const replaced = await edit('components.devm', (e, m) => e.setBehavior(m.elements.find(x => x.name === 'DoorController') as ast.Component, 'drive.devm'));
+        expect(replaced.text).toContain('component DoorController {\n    behavior "drive.devm"\n');
+        const removed = await edit('components.devm', (e, m) => e.setBehavior(m.elements.find(x => x.name === 'DoorController') as ast.Component, ''));
         expect(removed.text).toContain('component DoorController {\n    provides async cmd');
     });
 
     test('add component types', async () => {
-        const { text, result } = await edit('components.dmf', e => e.addComponentType('component'));
+        const { text, result } = await edit('components.devm', e => e.addComponentType('component'));
         expect(text.endsWith('    provides sync report : Diagnostics\n}\n\ncomponent Component1 {\n}\n')).toBe(true);
         expect(text.substring(result.selectOffset!)).toMatch(/^component Component1/);
-        const { text: empty } = await edit('main.dmf', e => e.addComponentType('system', 'Car'), '// nothing yet\n');
+        const { text: empty } = await edit('main.devm', e => e.addComponentType('system', 'Car'), '// nothing yet\n');
         expect(empty).toBe('// nothing yet\n\nsystem Car {\n}\n');
     });
 });
 
 describe('structure edits: rename and delete', () => {
     test('rename an instance and its references in the file', async () => {
-        const { text, errors } = await edit('system.dmf', (e, m) => e.rename(instance(structure(m, 'GarageDoor'), 'door'), 'gate'));
+        const { text, errors } = await edit('system.devm', (e, m) => e.rename(instance(structure(m, 'GarageDoor'), 'door'), 'gate'));
         expect(errors).toEqual([]);
         expect(text).toContain('        gate : DoorController\n');
         expect(text).toContain('    connect gate.motor -> drive.ctrl\n    connect drive.status -> gate.status\n');
@@ -279,22 +279,22 @@ describe('structure edits: rename and delete', () => {
             files[`file:///ws/${file}`] = deviceFile(file);
         }
         await workspace.update(files);
-        const components = workspace.model('file:///ws/components.dmf')!;
+        const components = workspace.model('file:///ws/components.devm')!;
         const motor = components.elements.find(e => e.name === 'MotorController') as ast.Component;
         const edits = dmfRenameEdits(workspace.services.Dmf, motor, 'Motor');
-        expect([...edits.keys()].sort()).toEqual(['file:///ws/components.dmf', 'file:///ws/drive.dmf']);
-        expect(applyEdits(files['file:///ws/drive.dmf'], edits.get('file:///ws/drive.dmf')!)).toContain('        motor : Motor\n');
+        expect([...edits.keys()].sort()).toEqual(['file:///ws/components.devm', 'file:///ws/drive-unit.devm']);
+        expect(applyEdits(files['file:///ws/drive-unit.devm'], edits.get('file:///ws/drive-unit.devm')!)).toContain('        motor : Motor\n');
         // a port of a component: the connections in the structures using it
         const ctrl = motor.ports.find(p => p.name === 'pwm')!;
-        const portEdits = workspace.renameEdits('file:///ws/components.dmf', ctrl.$cstNode!.offset, 'duty')!;
-        expect(applyEdits(files['file:///ws/drive.dmf'], portEdits.get('file:///ws/drive.dmf')!)).toContain('    connect motor.duty -> pwm.duty\n');
-        expect(applyEdits(files['file:///ws/components.dmf'], portEdits.get('file:///ws/components.dmf')!)).toContain('    requires sync duty : integer\n');
+        const portEdits = workspace.renameEdits('file:///ws/components.devm', ctrl.$cstNode!.offset, 'duty')!;
+        expect(applyEdits(files['file:///ws/drive-unit.devm'], portEdits.get('file:///ws/drive-unit.devm')!)).toContain('    connect motor.duty -> pwm.duty\n');
+        expect(applyEdits(files['file:///ws/components.devm'], portEdits.get('file:///ws/components.devm')!)).toContain('    requires sync duty : integer\n');
         // the interface of a port type is not a cross-reference: only its declaration and references are renamed
         expect(() => dmfRenameEdits(workspace.services.Dmf, motor, 'PwmDriver')).toThrow(/already exists/);
     });
 
     test('delete an instance with its connections and delegations', async () => {
-        const { text, errors } = await edit('system.dmf', (e, m) => e.deleteElements([instance(structure(m, 'GarageDoor'), 'door')]));
+        const { text, errors } = await edit('system.devm', (e, m) => e.deleteElements([instance(structure(m, 'GarageDoor'), 'door')]));
         expect(text).not.toMatch(/door\.|door :/);
         expect(text).toContain('    thread ControlTask {\n        buzzer : Buzzer\n    }');
         expect(text).toContain('    delegate report -> diag.report\n}');
@@ -302,7 +302,7 @@ describe('structure edits: rename and delete', () => {
     });
 
     test('delete a port with its connections', async () => {
-        const { text } = await edit('drive.dmf', (e, m) => e.deleteElements([structure(m, 'DriveUnit').ports[0]]));
+        const { text } = await edit('drive-unit.devm', (e, m) => e.deleteElements([structure(m, 'DriveUnit').ports[0]]));
         expect(text).not.toContain('ctrl');
         expect(text).toContain('subsystem DriveUnit {\n    requires async status : MotorStatus\n');
     });
@@ -314,20 +314,20 @@ describe('structure edits: rename and delete', () => {
             files[`file:///ws/${file}`] = deviceFile(file);
         }
         await workspace.update(files);
-        const components = workspace.model('file:///ws/components.dmf')!;
+        const components = workspace.model('file:///ws/components.devm')!;
         const motor = components.elements.find(e => e.name === 'MotorController') as ast.Component;
         const ports = ['pwm', 'ctrl'].map(name => motor.ports.find(p => p.name === name)!.$cstNode!.offset);
-        const edits = workspace.portDeletionEdits('file:///ws/components.dmf', ports);
-        expect([...edits.keys()]).toEqual(['file:///ws/drive.dmf']);
-        const drive = applyEdits(files['file:///ws/drive.dmf'], edits.get('file:///ws/drive.dmf')!);
+        const edits = workspace.portDeletionEdits('file:///ws/components.devm', ports);
+        expect([...edits.keys()]).toEqual(['file:///ws/drive-unit.devm']);
+        const drive = applyEdits(files['file:///ws/drive-unit.devm'], edits.get('file:///ws/drive-unit.devm')!);
         expect(drive).not.toContain('motor.pwm');
         expect(drive).not.toContain('delegate ctrl -> motor.ctrl');
         expect(drive).toContain('    connect switches.events -> motor.sensors\n    delegate motor.status -> status\n}');
-        expect(workspace.portDeletionEdits('file:///ws/components.dmf', [])).toEqual(new Map());
+        expect(workspace.portDeletionEdits('file:///ws/components.devm', [])).toEqual(new Map());
     });
 
     test('delete a thread: with its instances and their connections', async () => {
-        const { text, errors } = await edit('drive.dmf', (e, m) => e.deleteElements([structure(m, 'DriveUnit').threads[0]]));
+        const { text, errors } = await edit('drive-unit.devm', (e, m) => e.deleteElements([structure(m, 'DriveUnit').threads[0]]));
         expect(text).not.toContain('MotorTask');
         expect(text).not.toMatch(/motor|pwm/);
         expect(text).toContain(`    // the end switches and the current monitor are interrupt driven
@@ -342,16 +342,16 @@ describe('structure edits: rename and delete', () => {
     });
 
     test('delete connections, a thread with a deleted instance, assignments by name', async () => {
-        const { text } = await edit('system.dmf', (e, m) => {
+        const { text } = await edit('system.devm', (e, m) => {
             const s = structure(m, 'GarageDoor');
             return e.deleteElements([s.connections[0], s.delegations[1], s.threads[1], instance(s, 'diag')]);
         });
         expect(text).not.toContain('connect door.motor -> drive.ctrl');
         expect(text).not.toMatch(/diag|sensor|IoTask/);
         expect(text).toContain('        buzzer : Buzzer\n    }\n    // a subsystem');
-        const named = 'import "components.dmf"\nsystem S {\n    thread A {\n        b\n    }\n    b : Buzzer\n}\n';
-        const { text: result } = await edit('main.dmf', (e, m) => e.deleteElements([instance(structure(m, 'S'), 'b')]), named);
-        expect(result).toBe('import "components.dmf"\nsystem S {\n    thread A {\n    }\n}\n');
+        const named = 'import "components.devm"\nsystem S {\n    thread A {\n        b\n    }\n    b : Buzzer\n}\n';
+        const { text: result } = await edit('main.devm', (e, m) => e.deleteElements([instance(structure(m, 'S'), 'b')]), named);
+        expect(result).toBe('import "components.devm"\nsystem S {\n    thread A {\n    }\n}\n');
     });
 });
 
@@ -368,19 +368,19 @@ describe('structure workspace: navigation across files', () => {
 
     test('the instances using a state machine', async () => {
         const ws = await workspace();
-        const usages = ws.behaviorUsages('memory:///drive.hsm');
+        const usages = ws.behaviorUsages('memory:///drive.devm');
         expect(usages.map(u => u.component)).toEqual(['MotorController']);
-        expect(usages[0].instances.map(i => i.location)).toEqual([{ uri: 'memory:/drive.dmf', element: 'DriveUnit', id: 'DriveUnit/motor' }]);
-        expect(ws.behaviorUsages('memory:///controller.hsm')[0].instances[0].location.id).toBe('GarageDoor/door');
+        expect(usages[0].instances.map(i => i.location)).toEqual([{ uri: 'memory:/drive-unit.devm', element: 'DriveUnit', id: 'DriveUnit/motor' }]);
+        expect(ws.behaviorUsages('memory:///controller.devm')[0].instances[0].location.id).toBe('GarageDoor/door');
     });
 
     test('contexts of a structure, routes into composites and providers across files', async () => {
         const ws = await workspace();
-        const drive = ws.componentType('memory:///drive.dmf', 'DriveUnit') as ast.Structure;
+        const drive = ws.componentType('memory:///drive-unit.devm', 'DriveUnit') as ast.Structure;
         const contexts = ws.contextsOf(drive);
-        expect(contexts).toEqual([{ rootUri: 'memory:/system.dmf', root: 'GarageDoor', path: ['drive'] }]);
+        expect(contexts).toEqual([{ rootUri: 'memory:/system.devm', root: 'GarageDoor', path: ['drive'] }]);
         // the route of door.motor in the system continues into the drive
-        const root = { rootUri: 'memory:///system.dmf', root: 'GarageDoor', path: [] };
+        const root = { rootUri: 'memory:///system.devm', root: 'GarageDoor', path: [] };
         const start = ws.endpoint(root, 'door', 'motor')!;
         const route = ws.route([start]);
         expect(routeContinuations(route, [])).toEqual(['drive']);
@@ -389,6 +389,6 @@ describe('structure workspace: navigation across files', () => {
         // from inside the drive: the provider of the status is the door controller in the system file
         const status = ws.endpoint(contexts[0], 'motor', 'status')!;
         const providers = ws.routeEnds(status, contexts[0]);
-        expect(providers).toEqual([{ uri: 'memory:/system.dmf', element: 'GarageDoor', id: 'GarageDoor/door.status', context: { rootUri: 'memory:/system.dmf', root: 'GarageDoor', path: [] } }]);
+        expect(providers).toEqual([{ uri: 'memory:/system.devm', element: 'GarageDoor', id: 'GarageDoor/door.status', context: { rootUri: 'memory:/system.devm', root: 'GarageDoor', path: [] } }]);
     });
 });

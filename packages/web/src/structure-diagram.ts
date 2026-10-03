@@ -111,7 +111,7 @@ const PORT_TOOLS: Record<string, { direction: 'provides' | 'requires', kind: 'sy
 };
 
 /**
- * The diagram of a structure file (`.dmf`): an internal block diagram of a structure or system (see
+ * The diagram of a structure file: an internal block diagram of a structure or system (see
  * ibd-layout.ts of the language package), shown by the {@link DiagramController} instead of the state
  * machine diagram when the edited file is a structure file. Graphical editing (palette, rename in
  * place, drag & drop of instances into threads, connectors, properties) becomes text edits
@@ -1628,9 +1628,9 @@ export class StructureDiagram {
         if (own) {
             result.push(this.nameField(component));
             const machines = h('datalist', { id: 'dmf-behavior-files' },
-                ...this.context.language.workspaceFileNames().filter(n => /\.hsm$/i.test(n)).map(n => h('option', { value: n })));
+                ...this.context.language.workspaceFileNames(true).map(n => h('option', { value: n })));
             const value = component.behavior ? component.behavior.path ?? component.behavior.machine?.$refText ?? '' : '';
-            result.push(...checkedField('Behavior (state machine)', h('input', { value, list: 'dmf-behavior-files', placeholder: 'e.g. door.hsm', spellcheck: 'false' }),
+            result.push(...checkedField('Behavior (state machine)', h('input', { value, list: 'dmf-behavior-files', placeholder: 'e.g. door.devm', spellcheck: 'false' }),
                 v => this.checkEdit(editor => editor.setBehavior(component, v)),
                 v => this.applyEdit(editor => editor.setBehavior(component, v))), machines);
         }

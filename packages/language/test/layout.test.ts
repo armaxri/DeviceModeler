@@ -9,7 +9,7 @@ function flatten(nodes: DiagramNode[], parentX = 0, parentY = 0): Array<DiagramN
 
 describe('layout', () => {
     for (const direction of ['DOWN', 'RIGHT'] as const) {
-        for (const file of ['traffic-light.hsm', 'cd-player.hsm', 'keyboard.hsm', 'door.hsm']) {
+        for (const file of ['traffic-light.devm', 'cd-player.devm', 'keyboard.devm', 'door.devm']) {
             test(`${file} (${direction})`, async () => {
                 const parsed = await parse(example(file));
                 const { graph, elements } = await layoutStateMachine(parsed.model, { direction });
@@ -38,7 +38,7 @@ describe('layout', () => {
     }
 
     test('regions fill their state', async () => {
-        const parsed = await parse(example('keyboard.hsm'));
+        const parsed = await parse(example('keyboard.devm'));
         const { graph } = await layoutStateMachine(parsed.model);
         const active = graph.children.find(n => n.id === 'Active')!;
         const regions = active.children.filter(c => c.kind === 'region');
@@ -51,7 +51,7 @@ describe('layout', () => {
 
 describe('diagram content', () => {
     test('definition section is the first node', async () => {
-        const parsed = await parse(example('traffic-light.hsm'));
+        const parsed = await parse(example('traffic-light.devm'));
         const { graph, elements } = await layoutStateMachine(parsed.model);
         const definition = graph.children[0];
         expect(definition.id).toBe(DEFINITION_ID);
@@ -75,7 +75,7 @@ describe('diagram content', () => {
     });
 
     test('transition priorities', async () => {
-        const parsed = await parse(example('cd-player.hsm'));
+        const parsed = await parse(example('cd-player.devm'));
         const labels = async (priorities: boolean) => (await layoutStateMachine(parsed.model, { priorities })).graph.edges.map(e => e.label?.text);
         const withPriorities = await labels(true);
         expect(withPriorities).toContain('1: [discInserted() && tracks > 0]');
@@ -91,7 +91,7 @@ describe('diagram content', () => {
 
     test('entry points, exit nodes and sync bars', async () => {
         for (const direction of ['DOWN', 'RIGHT'] as const) {
-            const parsed = await parse(example('door.hsm'));
+            const parsed = await parse(example('door.devm'));
             const { graph } = await layoutStateMachine(parsed.model, { direction });
             const nodes = flatten(graph.children);
             const opening = nodes.find(n => n.id === 'Moving.Opening')!;

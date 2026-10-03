@@ -1,27 +1,27 @@
-# HsmGenerate.cmake - build integration of the hsm state machine code generator.
+# HsmGenerate.cmake - build integration of the code generator of the Device Modeler (devm).
 #
 #   list(APPEND CMAKE_MODULE_PATH "<hsm>/cmake")
 #   include(HsmGenerate)            # or: find_package(Hsm CONFIG REQUIRED PATHS "<hsm>/cmake")
 #
 #   add_library(statemachines STATIC)
-#   hsm_generate(TARGET statemachines MODELS models/traffic-light.hsm NAMESPACE app STD 17)
-#   hsm_add_tests(TARGET statemachines TESTS tests/traffic-light.hsmtest MODELS models/traffic-light.hsm)
+#   hsm_generate(TARGET statemachines MODELS models/traffic-light.devm NAMESPACE app STD 17)
+#   hsm_add_tests(TARGET statemachines TESTS tests/traffic-light.devmtest MODELS models/traffic-light.devm)
 #
 # hsm_generate(TARGET <target>
-#              [MODELS <file.hsm>...]       models (relative to the current source directory)
+#              [MODELS <file.devm>...]       models (relative to the current source directory)
 #              [CONFIG <hsm.gen.json>]      generator configuration (models, per target options)
 #              [GENERATOR cpp|c]            target language (default: cpp with MODELS, all targets of CONFIG)
 #              [OUTPUT_DIR <dir>]           default: ${CMAKE_CURRENT_BINARY_DIR}/hsm_generated/<target>
 #              [NAMESPACE <ns>]             cpp: namespace (a::b), "" for the global namespace
 #              [STD 17|11]                  cpp: C++ standard of the generated code (also required from the target)
 #              [PREFIX <prefix>]            c: prefix of the generated functions and files
-#              [INCLUDE_DIRS <dir>...]      include directories of imported C/C++ headers (hsm -I; also added
+#              [INCLUDE_DIRS <dir>...]      include directories of imported C/C++ headers (devm -I; also added
 #                                           to the include directories of <target>)
-#              [DEFINES <NAME[=VALUE]>...]) macros for the analysis of imported headers (hsm -D; also added
+#              [DEFINES <NAME[=VALUE]>...]) macros for the analysis of imported headers (devm -D; also added
 #                                           to the compile definitions of <target>)
 #
 #   Generates the code at build time: the generated files are determined at configure time
-#   (hsm generate --list-outputs) and added to the sources of <target>; OUTPUT_DIR is added to its
+#   (devm generate --list-outputs) and added to the sources of <target>; OUTPUT_DIR is added to its
 #   include directories (PUBLIC for libraries, PRIVATE for executables). The code is regenerated when
 #   a model, the configuration or a license header file changes; only files whose contents changed are
 #   rewritten, so only they are recompiled. If the set of generated files changes (e.g. a state machine
@@ -36,33 +36,33 @@
 #   import path if they are found in an include directory (INCLUDE_DIRS or the headers block of CONFIG,
 #   which the target needs as include directory, too), else by their path relative to OUTPUT_DIR.
 #
-# hsm_add_tests(TARGET <name> TESTS <file.hsmtest>... [MODELS <file.hsm>...] [JUNIT_DIR <dir>]
+# hsm_add_tests(TARGET <name> TESTS <file.devmtest>... [MODELS <file.devm>...] [JUNIT_DIR <dir>]
 #               [INCLUDE_DIRS <dir>...] [DEFINES <NAME[=VALUE]>...])
 #
-#   Registers one CTest test per .hsmtest file (named <name>.<file stem>, label "hsm") running
-#   `hsm test <file> --machine <models> --junit <JUNIT_DIR>/<file stem>.xml`
+#   Registers one CTest test per .devmtest file (named <name>.<file stem>, label "devm") running
+#   `devm test <file> --machine <models> --junit <JUNIT_DIR>/<file stem>.xml`
 #   (default JUNIT_DIR: ${CMAKE_CURRENT_BINARY_DIR}/hsm_test_results).
 #
-# The hsm command line tool is found in this order:
-#   1. the cache variable HSM_EXECUTABLE (a command, e.g. "/usr/local/bin/hsm" or "node;/path/to/cli.js")
-#   2. node + packages/language/bin/cli.js of the hsm repository containing this file (after
+# The devm command line tool is found in this order:
+#   1. the cache variable HSM_EXECUTABLE (a command, e.g. "/usr/local/bin/devm" or "node;/path/to/cli.js")
+#   2. node + packages/language/bin/cli.js of the Device Modeler repository containing this file (after
 #      `npm ci && npm run build -w packages/language`)
-#   3. `hsm` in the PATH (`npm install -g <hsm>/packages/language`, or a package made with `npm pack`)
-#   4. `npx --no-install hsm` in the source directory (hsm-language installed as a dev dependency)
+#   3. `devm` in the PATH (`npm install -g <hsm>/packages/language`, or a package made with `npm pack`)
+#   4. `npx --no-install devm` in the source directory (hsm-language installed as a dev dependency)
 
 include_guard(GLOBAL)
 cmake_minimum_required(VERSION 3.20)
 
 set(_HSM_CMAKE_DIR "${CMAKE_CURRENT_LIST_DIR}")
-set(HSM_EXECUTABLE "" CACHE STRING "Command running the hsm command line tool (a list, e.g. 'node;/path/to/cli.js'); empty: auto-detect")
+set(HSM_EXECUTABLE "" CACHE STRING "Command running the devm command line tool (a list, e.g. 'node;/path/to/cli.js'); empty: auto-detect")
 
-# Sets HSM_COMMAND (a list) to the command running the hsm command line tool.
+# Sets HSM_COMMAND (a list) to the command running the devm command line tool.
 function(_hsm_find_command)
     if(HSM_EXECUTABLE)
         get_property(reported GLOBAL PROPERTY _HSM_REPORTED)
         if(NOT reported)
             list(JOIN HSM_EXECUTABLE " " text)
-            message(STATUS "hsm: using ${text} (HSM_EXECUTABLE)")
+            message(STATUS "devm: using ${text} (HSM_EXECUTABLE)")
             set_property(GLOBAL PROPERTY _HSM_REPORTED TRUE)
         endif()
         set(HSM_COMMAND "${HSM_EXECUTABLE}" PARENT_SCOPE)
@@ -80,7 +80,7 @@ function(_hsm_find_command)
         set(command "${HSM_NODE_EXECUTABLE}" "${repo_cli}")
     endif()
     if(NOT command)
-        find_program(HSM_CLI_PROGRAM NAMES hsm hsm.cmd)
+        find_program(HSM_CLI_PROGRAM NAMES devm devm.cmd)
         if(HSM_CLI_PROGRAM)
             set(command "${HSM_CLI_PROGRAM}")
         endif()
@@ -88,35 +88,35 @@ function(_hsm_find_command)
     if(NOT command)
         find_program(HSM_NPX_EXECUTABLE NAMES npx npx.cmd)
         if(HSM_NPX_EXECUTABLE)
-            execute_process(COMMAND "${HSM_NPX_EXECUTABLE}" --no-install hsm --help
+            execute_process(COMMAND "${HSM_NPX_EXECUTABLE}" --no-install devm --help
                 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" RESULT_VARIABLE result OUTPUT_QUIET ERROR_QUIET)
             if(result EQUAL 0)
-                set(command "${HSM_NPX_EXECUTABLE}" --no-install hsm)
+                set(command "${HSM_NPX_EXECUTABLE}" --no-install devm)
             endif()
         endif()
     endif()
     if(NOT command)
         set(hint "")
         if(EXISTS "${repo_cli}")
-            set(hint " The hsm repository at ${_HSM_CMAKE_DIR}/.. is not built: run `npm ci && npm run build -w packages/language` there.")
+            set(hint " The Device Modeler repository at ${_HSM_CMAKE_DIR}/.. is not built: run `npm ci && npm run build -w packages/language` there.")
         endif()
-        message(FATAL_ERROR "hsm: command line tool not found.${hint} Install it with `npm install -g <hsm>/packages/language` "
+        message(FATAL_ERROR "devm: command line tool not found.${hint} Install it with `npm install -g <hsm>/packages/language` "
             "or set HSM_EXECUTABLE (e.g. -DHSM_EXECUTABLE=\"node;/path/to/hsm/packages/language/bin/cli.js\").")
     endif()
     list(JOIN command " " text)
-    message(STATUS "hsm: using ${text}")
-    set(_HSM_DETECTED_COMMAND "${command}" CACHE INTERNAL "Detected command of the hsm command line tool")
+    message(STATUS "devm: using ${text}")
+    set(_HSM_DETECTED_COMMAND "${command}" CACHE INTERNAL "Detected command of the devm command line tool")
     set(HSM_COMMAND "${command}" PARENT_SCOPE)
 endfunction()
 
-# Runs `hsm <args>` at configure time and stores the printed lines as a list in <out>.
+# Runs `devm <args>` at configure time and stores the printed lines as a list in <out>.
 function(_hsm_query out)
     execute_process(COMMAND ${HSM_COMMAND} ${ARGN}
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE errors)
     if(NOT result EQUAL 0)
         list(JOIN ARGN " " text)
-        message(FATAL_ERROR "hsm ${text} failed:\n${errors}")
+        message(FATAL_ERROR "devm ${text} failed:\n${errors}")
     endif()
     string(STRIP "${output}" output)
     if(output STREQUAL "")
@@ -172,7 +172,7 @@ function(hsm_generate)
     get_filename_component(HSM_OUTPUT_DIR "${HSM_OUTPUT_DIR}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_BINARY_DIR}")
     _hsm_find_command()
 
-    # arguments of `hsm generate`
+    # arguments of `devm generate`
     set(args generate)
     if(HSM_GENERATOR)
         list(APPEND args ${HSM_GENERATOR})
@@ -299,6 +299,6 @@ function(hsm_add_tests)
             list(APPEND command --define "${define}")
         endforeach()
         add_test(NAME ${HSM_TARGET}.${stem} COMMAND ${command} WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
-        set_tests_properties(${HSM_TARGET}.${stem} PROPERTIES LABELS hsm)
+        set_tests_properties(${HSM_TARGET}.${stem} PROPERTIES LABELS devm)
     endforeach()
 endfunction()

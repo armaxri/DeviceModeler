@@ -3,7 +3,7 @@
     "description": "An instance in its final state stays there until its state is exited (no completion transitions, as in itemis CREATE); entering the state again enters the instance by default.",
     "text": [
         "statemachine Door {",
-        "    import \"motor.hsm\"",
+        "    import \"motor.devm\"",
         "    interface:",
         "        in event open",
         "        in event close",
@@ -17,7 +17,7 @@
         "}"
     ],
     "files": {
-        "motor.hsm": [
+        "motor.devm": [
             "statemachine Motor {",
             "    interface:",
             "        in event start",

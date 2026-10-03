@@ -60,8 +60,8 @@ statemachine Cyclic {
 async function load(testText: string, ...models: string[]): Promise<LoadedDocument> {
     const id = counter++;
     const documents = await workspace.load([
-        ...models.map((text, index) => ({ uri: `memory:///t${id}/model${index}.hsm`, text })),
-        { uri: `memory:///t${id}/test.hsmtest`, text: testText }
+        ...models.map((text, index) => ({ uri: `memory:///t${id}/model${index}.devm`, text })),
+        { uri: `memory:///t${id}/test.devmtest`, text: testText }
     ]);
     return documents[documents.length - 1];
 }
@@ -283,8 +283,8 @@ describe('test language: validation', () => {
         expect(loaded.diagnostics.map(d => d.message)).toEqual([`The test class 'DoorTest' contains no test (an operation annotated with @Test).`]);
     });
 
-    test('the .hsm language is not affected by the test language', async () => {
-        const loaded = await workspace.load([{ uri: `memory:///plain${counter++}.hsm`, text: DOOR }]);
+    test('the .devm language is not affected by the test language', async () => {
+        const loaded = await workspace.load([{ uri: `memory:///plain${counter++}.devm`, text: DOOR }]);
         expect(errors(loaded[0])).toEqual([]);
         expect(ast.isStateMachine(loaded[0].document.parseResult.value)).toBe(true);
     });
@@ -488,10 +488,10 @@ describe('test runner', () => {
             @Test operation fails() { enter; assert count > 0 message "count <positive>" }
             @Test operation breaks() { raise open }
         `));
-        const xml = toJUnitXml(results, { fileName: () => 'door.hsmtest' });
+        const xml = toJUnitXml(results, { fileName: () => 'door.devmtest' });
         expect(xml).toContain('<testsuites name="hsm-tests" tests="3" failures="1" errors="1"');
         expect(xml).toContain('<testsuite name="DoorTest" tests="3" failures="1" errors="1" skipped="0"');
-        expect(xml).toMatch(/<testcase name="ok" classname="DoorTest" time="[\d.]+" file="door.hsmtest"\/>/);
+        expect(xml).toMatch(/<testcase name="ok" classname="DoorTest" time="[\d.]+" file="door.devmtest"\/>/);
         expect(xml).toContain('<failure message="count &lt;positive&gt; (count = 0)" type="AssertionFailure">line 4: count &lt;positive&gt; (count = 0)');
         expect(xml).toContain(`<error message="State machine 'Door' is not entered; call enter() first" type="Error">`);
     });
@@ -500,15 +500,15 @@ describe('test runner', () => {
 describe('example tests', () => {
 
     const examples = path.resolve(__dirname, '../../../examples');
-    const testFiles = fs.readdirSync(path.join(examples, 'tests')).filter(f => f.endsWith('.hsmtest'));
+    const testFiles = fs.readdirSync(path.join(examples, 'tests')).filter(f => f.endsWith('.devmtest'));
 
     test('there is a test file for every example', () => {
-        const models = fs.readdirSync(examples).filter(f => f.endsWith('.hsm'));
-        expect(testFiles.map(f => f.replace('.hsmtest', '.hsm')).sort()).toEqual(models.sort());
+        const models = fs.readdirSync(examples).filter(f => f.endsWith('.devm'));
+        expect(testFiles.map(f => f.replace('.devmtest', '.devm')).sort()).toEqual(models.sort());
     });
 
     test.each(testFiles)('%s passes', async (file) => {
-        const model = file.replace('.hsmtest', '.hsm');
+        const model = file.replace('.devmtest', '.devm');
         const { documents, results } = await new HsmTestWorkspace().run([
             { uri: `file:///examples/${model}`, text: fs.readFileSync(path.join(examples, model), 'utf-8') },
             { uri: `file:///examples/tests/${file}`, text: fs.readFileSync(path.join(examples, 'tests', file), 'utf-8') }

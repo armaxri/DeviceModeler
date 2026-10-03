@@ -3,7 +3,7 @@
     "description": "An instance may have instances of its own: they are processed as sub regions of its states, their states are reported as motor.gear.<state>.",
     "text": [
         "statemachine Door {",
-        "    import \"motor.hsm\"",
+        "    import \"motor.devm\"",
         "    interface:",
         "        in event open",
         "    internal:",
@@ -15,9 +15,9 @@
         "}"
     ],
     "files": {
-        "motor.hsm": [
+        "motor.devm": [
             "statemachine Motor {",
-            "    import \"gear.hsm\"",
+            "    import \"gear.devm\"",
             "    interface:",
             "        in event start",
             "    internal:",
@@ -28,7 +28,7 @@
             "    Off -> On : start / raise gear.spin",
             "}"
         ],
-        "gear.hsm": [
+        "gear.devm": [
             "statemachine Gear {",
             "    interface:",
             "        in event spin",

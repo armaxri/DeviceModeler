@@ -1,13 +1,13 @@
-import { AstUtils, CstUtils, GrammarUtils, isReference, URI, type AstNode, type LangiumDocument, type MaybePromise, type Module } from 'langium';
+import { GrammarUtils, isReference, URI, type AstNode, type LangiumDocument, type MaybePromise, type Module } from 'langium';
 import {
-    AbstractSemanticTokenProvider, DefaultDefinitionProvider, MultilineCommentHoverProvider,
+    AbstractSemanticTokenProvider, MultilineCommentHoverProvider,
     type LangiumServices, type PartialLangiumServices, type SemanticTokenAcceptor
 } from 'langium/lsp';
-import { LocationLink, SemanticTokenModifiers, SemanticTokenTypes, type DefinitionParams, type Hover, type HoverParams } from 'vscode-languageserver';
+import { SemanticTokenModifiers, SemanticTokenTypes, type Hover, type HoverParams } from 'vscode-languageserver';
 import {
-    cppDefinition, cppHover, cppHeaderStore, cppTypeOfReference, createHsmServices, importKind, isCppReference, isEventDeclaration, isImportPath,
-    isInterfaceScope, isOperationDeclaration, isPseudoState, isState, isStateMachine, isTypeReference, isVariableDeclaration, machineType, nodeText,
-    qualifiedName, resolveCppValue, resolvedImports, type HsmServiceExtensions, type StateMachine
+    cppHover, cppHeaderStore, cppTypeOfReference, createHsmServices, HsmDefinitionProvider, importKind, isCppReference, isEventDeclaration,
+    isInterfaceScope, isOperationDeclaration, isPseudoState, isState, isStateMachine, isTypeReference, isVariableDeclaration, nodeText,
+    qualifiedName, resolveCppValue, type HsmServiceExtensions
 } from 'hsm-language';
 import type { DefaultSharedModuleContext, LangiumSharedServices } from 'langium/lsp';
 // Node-only part of the language package (not exported from its index because the web app bundles the index)
@@ -44,15 +44,33 @@ export function tokenKind(node: AstNode | undefined): TokenKind | undefined {
             return { type: SemanticTokenTypes.parameter };
         case 'InterfaceScope':
             return { type: SemanticTokenTypes.namespace };
+        // structure files
+        case 'Component':
+        case 'Structure':
+            return { type: SemanticTokenTypes.class };
+        case 'StructDeclaration':
+            return { type: SemanticTokenTypes.struct };
+        case 'PortInterface':
+            return { type: SemanticTokenTypes.interface };
+        case 'PortEvent':
+            return { type: SemanticTokenTypes.event };
+        case 'StructField':
+        case 'Port':
+            return { type: SemanticTokenTypes.property };
+        case 'ComponentInstance':
+            return { type: SemanticTokenTypes.variable };
+        case 'Thread':
+            return { type: SemanticTokenTypes.namespace };
         default:
             return undefined;
     }
 }
 
 /**
- * Semantic highlighting for both languages: names of declarations and all cross references are
- * highlighted by the kind of the element they declare / refer to (states, events, variables,
- * constants, operations, …), which the TextMate grammar cannot know.
+ * Semantic highlighting of both languages (`.devm`, `.devmtest`): names of declarations and all cross
+ * references are highlighted by the kind of the element they declare / refer to (states, events,
+ * variables, constants, operations, components, ports, …), which the TextMate grammar cannot know
+ * (it also highlights the keywords of one kind of `.devm` files that are names in the other kind).
  */
 export class HsmSemanticTokenProvider extends AbstractSemanticTokenProvider {
 
@@ -99,7 +117,7 @@ export class HsmHoverProvider extends MultilineCommentHoverProvider {
     protected override getAstNodeHoverContent(node: AstNode): MaybePromise<string | undefined> {
         const signature = hoverSignature(node);
         const documentation = super.getAstNodeHoverContent(node);
-        const combine = (doc: string | undefined) => [signature ? '```hsm\n' + signature + '\n```' : undefined, doc].filter(part => part).join('\n\n') || undefined;
+        const combine = (doc: string | undefined) => [signature ? '```devm\n' + signature + '\n```' : undefined, doc].filter(part => part).join('\n\n') || undefined;
         return documentation instanceof Promise ? documentation.then(combine) : combine(documentation);
     }
 }
@@ -128,54 +146,28 @@ export function hoverSignature(node: AstNode): string | undefined {
 }
 
 /**
- * Go to definition: additionally from the name of an imported state machine used as a type
- * (`var motor : Motor`) and from an import path (`import "motor.hsm"`) to the imported state machine.
+ * Language server features added to the `.devm` language (state machines and structure files): semantic
+ * highlighting and hover. Go to definition, go to implementation, completion and formatting are the
+ * services of the language package, which dispatch on the kind of the file or node (hsm-module.ts there).
  */
-export class HsmDefinitionProvider extends DefaultDefinitionProvider {
-
-    override getDefinition(document: LangiumDocument, params: DefinitionParams): MaybePromise<LocationLink[] | undefined> {
-        // C++ names and header imports: into the header
-        const cpp = cppDefinition(document, document.textDocument.offsetAt(params.position));
-        if (cpp) {
-            return [LocationLink.create(cpp.uri, cpp.range, cpp.selection, cpp.origin)];
-        }
-        const root = document.parseResult.value.$cstNode;
-        const leaf = root ? CstUtils.findLeafNodeAtOffset(root, document.textDocument.offsetAt(params.position)) : undefined;
-        const node = leaf?.astNode;
-        let machine: StateMachine | undefined;
-        if (isTypeReference(node)) {
-            machine = machineType(node);
-        } else if (isImportPath(node)) {
-            const owner = AstUtils.getContainerOfType(node, isStateMachine);
-            machine = owner ? resolvedImports(owner).find(i => i.node === node)?.machine : undefined;
-        }
-        const target = machine?.$cstNode;
-        const targetDocument = machine?.$document;
-        if (leaf && target && targetDocument) {
-            const name = GrammarUtils.findNodeForProperty(target, 'name') ?? target;
-            return [LocationLink.create(targetDocument.textDocument.uri, target.range, name.range, leaf.range)];
-        }
-        return super.getDefinition(document, params);
-    }
-}
-
-/** Language server features added to the state machine and test languages. */
 export const HsmLspModule: Module<LangiumServices, PartialLangiumServices> = {
     lsp: {
         SemanticTokenProvider: services => new HsmSemanticTokenProvider(services),
-        HoverProvider: services => new HsmHoverProvider(services),
+        HoverProvider: services => new HsmHoverProvider(services)
+    }
+};
+
+/** The features added to the test language (`.devmtest`): also go to definition of C++ names and imported machines. */
+export const HsmTestLspModule: Module<LangiumServices, PartialLangiumServices> = {
+    lsp: {
+        ...HsmLspModule.lsp,
         DefinitionProvider: services => new HsmDefinitionProvider(services)
     }
 };
 
-/**
- * The services of the language server: the HSM languages with the additional LSP features. The structure
- * language (`.dmf`) brings its own LSP services (dmf-module.ts of the language package: definition, go to
- * provider as implementation, completion, hover, formatting); {@link HsmLspModule} must not be added to it
- * (its definition provider would replace the one of the structure language).
- */
+/** The services of the language server: the languages of the Device Modeler with the additional LSP features. */
 export function createHsmLanguageServerServices(context: DefaultSharedModuleContext) {
-    const extensions: HsmServiceExtensions = { hsm: HsmLspModule, hsmTest: HsmLspModule };
+    const extensions: HsmServiceExtensions = { hsm: HsmLspModule, hsmTest: HsmTestLspModule };
     return createHsmServices(context, extensions);
 }
 

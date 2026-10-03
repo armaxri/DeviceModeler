@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { locationLabel, NavigationHistory, sameLocation } from '../../src/extension/logic/navigation.js';
 import { textHash } from '../../src/common/text-hash.js';
 
-const SYSTEM = { uri: 'file:///w/system.dmf', element: 'GarageDoor', id: 'GarageDoor/door' };
-const DRIVE = { uri: 'file:///w/drive.dmf', element: 'DriveUnit', context: { rootUri: 'file:///w/system.dmf', root: 'GarageDoor', path: ['drive'] } };
-const MACHINE = { uri: 'file:///w/my%20door.hsm', offset: 12 };
+const SYSTEM = { uri: 'file:///w/system.devm', element: 'GarageDoor', id: 'GarageDoor/door' };
+const DRIVE = { uri: 'file:///w/drive.devm', element: 'DriveUnit', context: { rootUri: 'file:///w/system.devm', root: 'GarageDoor', path: ['drive'] } };
+const MACHINE = { uri: 'file:///w/my%20door.devm', offset: 12 };
 
 describe('navigation history of the diagrams', () => {
     it('goes back and forward through the recorded locations', () => {
@@ -13,9 +13,9 @@ describe('navigation history of the diagrams', () => {
         // system -> drive -> state machine
         history.record(SYSTEM);
         history.record(DRIVE);
-        expect(history.state.back).toBe('drive.dmf – DriveUnit');
+        expect(history.state.back).toBe('drive.devm – DriveUnit');
         expect(history.goBack(MACHINE)).toEqual(DRIVE);
-        expect(history.state).toEqual({ back: 'system.dmf – GarageDoor (GarageDoor/door)', forward: 'my door.hsm' });
+        expect(history.state).toEqual({ back: 'system.devm – GarageDoor (GarageDoor/door)', forward: 'my door.devm' });
         expect(history.goBack(DRIVE)).toEqual(SYSTEM);
         expect(history.goBack(SYSTEM)).toBeUndefined();
         expect(history.goForward(SYSTEM)).toEqual(DRIVE);
@@ -39,14 +39,14 @@ describe('navigation history of the diagrams', () => {
     it('keeps at most 50 locations', () => {
         const history = new NavigationHistory();
         for (let i = 0; i < 60; i++) {
-            history.record({ uri: `file:///w/${i}.hsm` });
+            history.record({ uri: `file:///w/${i}.devm` });
         }
         let count = 0;
-        while (history.goBack({ uri: 'file:///w/x.hsm' })) {
+        while (history.goBack({ uri: 'file:///w/x.devm' })) {
             count++;
         }
         expect(count).toBe(50);
-        expect(locationLabel({ uri: 'file:///w/a.dmf', element: 'A', id: 'A' })).toBe('a.dmf – A');
+        expect(locationLabel({ uri: 'file:///w/a.devm', element: 'A', id: 'A' })).toBe('a.devm – A');
     });
 });
 

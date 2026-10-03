@@ -1,18 +1,18 @@
 import * as vscode from 'vscode';
 
 /** The files sent to the diagrams: the state machines and structure files of the workspace. */
-const PATTERN = '**/*.{hsm,dmf}';
+const PATTERN = '**/*.devm';
 const EXCLUDE = '**/{node_modules,.git}/**';
 /** The most files read (larger workspaces: the first ones found, plus the open documents). */
 const MAX_FILES = 1000;
 
-/** Whether a URI is a state machine or structure file (the files of {@link WorkspaceFiles}). */
+/** Whether a URI is a model file (`.devm`: state machine or structure file, the files of {@link WorkspaceFiles}). */
 export function isModelFile(uri: vscode.Uri): boolean {
-    return /\.(hsm|dmf)$/i.test(uri.path);
+    return /\.devm$/i.test(uri.path);
 }
 
 /**
- * The texts of all `.hsm` and `.dmf` files of the workspace (open documents with their unsaved changes,
+ * The texts of all `.devm` files of the workspace (open documents with their unsaved changes,
  * the others read from disk and cached until they change). The diagrams need them for queries across
  * files: the structures using a state machine, routes and providers in other files, renames updating the
  * files referencing an element. {@link onDidChange} fires when a file is created, deleted or changed (on

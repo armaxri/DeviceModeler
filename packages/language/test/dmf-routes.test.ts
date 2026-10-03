@@ -16,7 +16,7 @@ const loader = new DmfModelLoader();
 let counter = 0;
 
 async function load(text: string): Promise<ast.DmfModel> {
-    const parsed = await loader.load(text, `file:///routes/model-${counter++}.dmf`);
+    const parsed = await loader.load(text, `file:///routes/model-${counter++}.devm`);
     expect(parsed.diagnostics.filter(d => d.severity === 1).map(d => d.message)).toEqual([]);
     return parsed.model;
 }
@@ -43,7 +43,7 @@ describe('route analysis: the garage door example', () => {
 
     beforeAll(async () => {
         const device = new DmfModelLoader(createHsmServices(NodeFileSystem));
-        const location = path.resolve(__dirname, '../../../examples/device/system.dmf');
+        const location = path.resolve(__dirname, '../../../examples/device/system.devm');
         const parsed = await device.load(fs.readFileSync(location, 'utf-8'), URI.file(location).toString());
         root = parsed.model.elements[0] as ast.Structure;
     });
@@ -204,7 +204,7 @@ system Root {
 component C { requires async r : event e }
 subsystem A { provides async p : event e  b : B  delegate p -> b.p }
 subsystem B { provides async p : event e  a : A  delegate p -> a.p }
-system S { a : A  thread T { c : C }  connect c.r -> a.p }`, `file:///routes/recursive-${counter++}.dmf`);
+system S { a : A  thread T { c : C }  connect c.r -> a.p }`, `file:///routes/recursive-${counter++}.devm`);
         const root = structure(parsed.model, 'S');
         expect(structureContexts(root).map(c => c.structure.name)).toEqual(['S', 'A', 'B']);
         expect(labels(findProviders(endpoint(root, 'c.r')))).toEqual(['a.b.a.p']);

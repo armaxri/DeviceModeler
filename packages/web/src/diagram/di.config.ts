@@ -40,7 +40,7 @@ export function createDiagramContainer(baseDiv: string, callbacks: DiagramCallba
         configureModelElement(context, DiagramTypes.definition, VertexNode, DefinitionView);
         configureModelElement(context, DiagramTypes.transition, TransitionEdge, TransitionView, { enable: [selectFeature] });
 
-        // internal block diagrams of structures (.dmf)
+        // internal block diagrams of structures
         configureModelElement(context, IbdTypes.graph, SGraphImpl, SGraphView);
         // all nodes can be moved (manual layout); instances are also dragged into threads (structure edits, see StructureDiagram.dragEnd)
         configureModelElement(context, IbdTypes.frame, IbdNodeElement, IbdFrameView, { enable: [moveFeature] });

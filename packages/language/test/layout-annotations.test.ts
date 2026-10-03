@@ -9,7 +9,7 @@ import { ModelEditor, applyEdits } from '../src/edit/model-edits.js';
 import { containerAnnotations, elementAnnotations, semanticAnnotations } from '../src/model-annotations.js';
 import { definitionLines, hasDefinitionSection } from '../src/model-utils.js';
 import * as ast from '../src/generated/ast.js';
-import { errors, parse, warnings } from './helpers.js';
+import { errors, isStateMachineText, parse, warnings } from './helpers.js';
 import { importSctFiles } from '../src/importer/sct-importer.js';
 
 const EXAMPLES = path.resolve(__dirname, '../../../examples');
@@ -22,10 +22,10 @@ function examples(): Array<{ name: string, text: string, files: Record<string, s
             const file = path.join(dir, entry.name);
             if (entry.isDirectory() && entry.name !== 'cmake' && entry.name !== 'tests') {
                 visit(file);
-            } else if (entry.name.endsWith('.hsm')) {
+            } else if (entry.name.endsWith('.devm') && isStateMachineText(fs.readFileSync(file, 'utf-8'))) {
                 const files: Record<string, string> = {};
                 for (const other of fs.readdirSync(dir)) {
-                    if (other !== entry.name && (other.endsWith('.hsm') || other.endsWith('.h'))) {
+                    if (other !== entry.name && (other.endsWith('.devm') || other.endsWith('.h'))) {
                         files[other] = fs.readFileSync(path.join(dir, other), 'utf-8');
                     }
                 }
@@ -378,7 +378,7 @@ describe('layout annotations: command line', () => {
         const os = await import('node:os');
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-layout-'));
         try {
-            const model = path.join(dir, 'm.hsm');
+            const model = path.join(dir, 'm.devm');
             const text = `statemachine M {
     interface:
         in event go
@@ -418,8 +418,8 @@ describe('layout annotations: command line', () => {
             const sct = path.join(dir, 'Choice.sct');
             fs.copyFileSync(path.resolve(__dirname, 'importer/fixtures/Choice.sct'), sct);
             await run('import', sct);
-            expect(fs.readFileSync(path.join(dir, 'Choice.hsm'), 'utf-8')).toContain('@at(');
-            expect(fs.existsSync(path.join(dir, 'Choice.hsm.layout'))).toBe(false);
+            expect(fs.readFileSync(path.join(dir, 'Choice.devm'), 'utf-8')).toContain('@at(');
+            expect(fs.existsSync(path.join(dir, 'Choice.devm.layout'))).toBe(false);
         } finally {
             fs.rmSync(dir, { recursive: true, force: true });
         }

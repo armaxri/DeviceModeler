@@ -7,7 +7,7 @@ import { effectiveTheme, webviewHtml } from './logic/webview.js';
 import { collectImportedFiles } from './logic/imports.js';
 import { NavigationHistory } from './logic/navigation.js';
 import { WorkspaceFiles } from './workspace-files.js';
-import type { CppHeaderSettings } from 'hsm-language';
+import { isStructureText, type CppHeaderSettings } from 'hsm-language';
 // Node-only part of the language package (not exported from its index because the web app bundles the index)
 import {
     HeaderConfigFinder, headerSettingsForModel, headerSettingsFromSection, type HeaderSettingsSection
@@ -36,13 +36,23 @@ function readSettings(): WebviewSettings {
     };
 }
 
-/** Whether the document is a structure file (`.dmf`) with a structure diagram. */
+/**
+ * Whether the open document is a structure file with a structure diagram (not a state machine; decided by
+ * its text like the parser does, see `isStructureText`). `false` for a document that is not open.
+ */
 export function isStructureDocument(uri: vscode.Uri): boolean {
-    return /\.dmf$/i.test(uri.path);
+    const document = vscode.workspace.textDocuments.find(d => d.uri.toString() === uri.toString());
+    return document !== undefined && isStructureText(document.getText());
+}
+
+/** Whether the file (open or on disk) is a structure file (not a state machine). */
+export async function isStructureFile(uri: vscode.Uri): Promise<boolean> {
+    const text = await readText(uri.toString());
+    return text !== undefined && isStructureText(text);
 }
 
 /**
- * Manages the diagram panels: one per `.hsm` or `.dmf` document. Holds the navigation history shared by
+ * Manages the diagram panels: one per `.devm` document (state machine or structure file). Holds the navigation history shared by
  * all diagrams (Back / Forward) and the texts of the workspace files sent to them.
  */
 export class DiagramManager implements vscode.Disposable {
@@ -54,7 +64,7 @@ export class DiagramManager implements vscode.Disposable {
     private lastActive?: DiagramPanel;
     /** Back / Forward of the navigation between diagrams. */
     readonly history = new NavigationHistory();
-    /** The `.hsm` and `.dmf` files of the workspace (sent to the diagrams). */
+    /** The `.devm` files of the workspace (sent to the diagrams). */
     readonly workspaceFiles = new WorkspaceFiles();
     readonly highlight = vscode.window.createTextEditorDecorationType({
         backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
@@ -211,7 +221,7 @@ export class DiagramManager implements vscode.Disposable {
         const target = direction === 'back' ? this.history.goBack(from) : this.history.goForward(from);
         this.historyChanged();
         if (target && !await this.show(target, source)) {
-            vscode.window.setStatusBarMessage(`$(warning) HSM: ${decodeURIComponent(target.uri.replace(/^.*\//, ''))} is not available.`, 6000);
+            vscode.window.setStatusBarMessage(`$(warning) Device Modeler: ${decodeURIComponent(target.uri.replace(/^.*\//, ''))} is not available.`, 6000);
         }
     }
 
@@ -258,7 +268,7 @@ export class DiagramManager implements vscode.Disposable {
 
     private autoOpen(editor: vscode.TextEditor | undefined): void {
         const language = editor?.document.languageId;
-        if (!editor || (language !== 'hsm' && language !== 'dmf') || !vscode.workspace.getConfiguration('hsm.diagram').get<boolean>('autoOpen', false)) {
+        if (!editor || language !== 'devm' || !vscode.workspace.getConfiguration('hsm.diagram').get<boolean>('autoOpen', false)) {
             return;
         }
         const key = editor.document.uri.toString();
@@ -296,7 +306,7 @@ export class DiagramManager implements vscode.Disposable {
     }
 }
 
-/** The diagram of one `.hsm` or `.dmf` document in a webview panel. */
+/** The diagram of one `.devm` document in a webview panel. */
 export class DiagramPanel {
 
     private textTimer?: ReturnType<typeof setTimeout>;
@@ -318,7 +328,7 @@ export class DiagramPanel {
         };
         panel.webview.html = this.html();
         panel.webview.onDidReceiveMessage((message: FromWebview) => this.receive(message).catch(error => {
-            vscode.window.showErrorMessage(`HSM diagram: ${error instanceof Error ? error.message : String(error)}`);
+            vscode.window.showErrorMessage(`Device Modeler diagram: ${error instanceof Error ? error.message : String(error)}`);
         }));
     }
 
@@ -460,7 +470,7 @@ export class DiagramPanel {
                 await this.undoRedo(message.type);
                 break;
             case 'status':
-                vscode.window.setStatusBarMessage(`$(warning) HSM: ${message.message}`, 6000);
+                vscode.window.setStatusBarMessage(`$(warning) Device Modeler: ${message.message}`, 6000);
                 break;
             case 'updateSetting': {
                 const key = message.key === 'routing' ? 'edgeRouting' : message.key;

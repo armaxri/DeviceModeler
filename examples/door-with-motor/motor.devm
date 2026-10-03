@@ -1,4 +1,4 @@
-// A motor, used as a submachine by gate.hsm (see docs/semantics.md §9).
+// A motor, used as a submachine by gate.devm (see docs/semantics.md §9).
 /** Drives the gate: ramps up after being started and reports when it has stopped. */
 statemachine Motor {
     interface:

@@ -2,7 +2,7 @@ import { AstUtils, type AstNode } from 'langium';
 import * as ast from './generated/ast.js';
 
 /**
- * Helpers for the AST of structure files (`.dmf`): instances, threads, ports and annotations of
+ * Helpers for the AST of structure files (`.devm`): instances, threads, ports and annotations of
  * structures. Pure functions over the AST, used by the validator, the route analysis (dmf-routes.ts)
  * and the diagram.
  */
