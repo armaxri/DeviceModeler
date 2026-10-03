@@ -60,14 +60,15 @@ packages/
     src/ui/                     properties and simulation panels, value editor, inline editor, SVG / PNG export
     src/styles/                 style sheets of the app, the diagram and the simulation
   vscode/       VS Code extension
-    src/extension/              extension host: language client, commands, diagram panel, test controller
+    src/extension/              extension host: language client, commands, diagram panels (navigation history,
+                                workspace edits), workspace files sent to the diagrams, test controller
                                 (src/extension/logic: VS Code independent parts, unit tested)
-    src/server/                 Langium language server (with C++ header support)
+    src/server/                 Langium language server of .hsm, .hsmtest and .dmf (with C++ header support)
     src/webview/                diagram webview: the DiagramController of packages/web with a VS Code DiagramHost
-    src/common/protocol.ts      messages between extension host and webview
+    src/common/                 messages between extension host and webview (protocol.ts), text hashes
     scripts/                    esbuild / Vite bundling and packaging of the .vsix
 examples/       sample state machines; tests: their unit tests; door-with-motor: imports and submachines;
-                cpp-types: C++ header types; cmake: CMake example
+                cpp-types: C++ header types; cmake: CMake example; device: structure files (.dmf) of a garage door
 cmake/          CMake integration (HsmGenerate.cmake: hsm_generate, hsm_add_tests; HsmConfig.cmake)
 docs/           execution semantics, C++ integration, possible improvements, generated example docs
 ```
@@ -81,7 +82,16 @@ computed by ELK (layered algorithm with hierarchy support, in a web worker) and 
 custom views. Diagram interactions are turned into text edits by `ModelEditor` and applied to the Monaco
 model, which triggers the same pipeline again – so undo / redo, comments and formatting just work.
 
+Structure files (`.dmf`) run through the same pipeline: the diagram controller switches to its structure
+mode (`structure-diagram.ts`), the internal block diagram is computed by `layoutStructure` (ELK) and
+diagram interactions become text edits by `DmfEditor`. Questions across files – the structures using a state
+machine, routes through composites of other files, renames and deletions updating other files – are
+answered by `DmfWorkspace`, which loads all structure files of the workspace together; the hosts pass the
+texts of all `.hsm` / `.dmf` files for this, open other files on navigation (`DiagramHost.openLocation`,
+with a back / forward history) and apply edits of several files (`DiagramHost.applyWorkspaceEdits`).
+
 The VS Code extension runs the same pipeline in its diagram webview; instead of the Monaco model its
-host is the VS Code document (see [VS Code extension](vscode.md)). The CLI, the language server
+host is the VS Code document, navigation opens the target document and its diagram panel, and edits of
+several files are one `WorkspaceEdit` (see [VS Code extension](vscode.md)). The CLI, the language server
 and the test runner use the same `packages/language` code in Node.js; the simulator, unit tests,
 coverage and the conformance scenarios all execute on the one interpreter in `src/simulation`.

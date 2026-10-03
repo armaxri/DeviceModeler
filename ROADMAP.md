@@ -2,7 +2,8 @@
 
 Goal: HSM Modeler becomes a replacement for **itemis CREATE** (formerly YAKINDU Statechart
 Tools): the same statechart language and semantics, plus a web-based graphical editor with a
-PlantUML-like look.
+PlantUML-like look. 🧪 The **Device Modeling Framework** experiment (branch `claude/device-modeling`,
+[Phase 7](#phase-7--device-modeling-framework-)) adds the structure of a product around the state machines.
 
 Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be decided · ⛔ not planned · 🧪 experimental (separate branch)
 
@@ -154,6 +155,8 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
   the web app as webview with selection sync and diagram edits applied as `WorkspaceEdit`s, theme
   following VS Code, Generate C++ (`hsm.gen.json` or settings), tests and model coverage in the Test
   Explorer, `.sct` import, SVG / PNG export, `.vsix` packaging
+  - 🧪 structure files (`.dmf`) of the Device Modeling Framework on the branch `claude/device-modeling`, see
+    [Phase 7](#phase-7--device-modeling-framework-)
   - limitations: no hand-arranged layout on the main branch (see below); the extension generates only the `cpp` target; no end-to-end
     tests in a real VS Code instance (`@vscode/test-electron` could not download VS Code) – the language
     server is tested over stdio, the webview bundle in Chromium with a mocked VS Code API
@@ -185,6 +188,49 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
   - ✅ coverage view in the VS Code extension (Test Explorer coverage profile)
   - 📋 still missing: coverage view in the web simulation
 
+## Phase 7 – Device Modeling Framework 🧪
+
+Experimental on the branch `claude/device-modeling`: the structure of a product modeled alongside its state
+machines ([docs/structure-language.md](docs/structure-language.md), example [`examples/device`](examples/device)).
+
+- 🧪 Structure language (`.dmf`, `src/dmf.langium` in the language package, sharing the services and types
+  of the state machines): component types with `provides` / `requires` ports (sync: simple types, structs,
+  C/C++ header types; async: events, named `interface`s), `behavior "door.hsm"` (ports checked against the
+  interfaces of the state machine), composite `structure`s and the root `system` (recursive nesting),
+  threads with annotations (`@priority`, `@period`, `@stack`), explicit `connect` / `delegate`, imports of
+  structure files, state machines and headers
+- 🧪 Validation (directions, kinds, types, unconnected required ports, connections crossing threads, the
+  port ↔ state machine mapping) and route analysis through all levels (`routeOf`, `findProviders`, go to
+  provider)
+- 🧪 Internal block diagram (SysML style, PlantUML themes, ELK with orthogonal routing): `hsm render`, the
+  web editor and VS Code; graphical editing as text edits (threads, instances, ports, connectors with
+  compatibility feedback, rename across files, delete with the connections in other files, properties),
+  route highlighting, navigation between structures, composites, component types and state machines
+  (*Used by*, *Follow into*, back / forward), markers for problems in imported files, an overview of data
+  type files
+- 🧪 VS Code: `.dmf` in the language server (references, renames and go to provider across files), the
+  structure diagram in the diagram webview, navigation through the extension (shared history), edits of
+  several files as one `WorkspaceEdit`, all workspace `.hsm` / `.dmf` files sent to the diagrams
+- 📋 open follow-ups of the experiment:
+  - layout annotations for structure diagrams (manual layout: positions of instances, threads and ports,
+    connector waypoints, consistent with the `@at` / `@via` annotations of the state machines); connectors
+    do not follow an instance while it is dragged
+  - simulation of the composed system (several state machines connected through the ports, threads and
+    their periods / priorities) and code generation of the composition (instances, wiring of the generated
+    state machine classes, thread setup)
+  - several contexts of a structure: a structure used in several systems (or several times) is shown in the
+    context of the first system only; choosing the context in the diagram
+  - `hsm doc` for structure files (structure documentation with the diagrams, port tables, routes)
+  - ports of an instance whose type is declared in another file are not editable in the diagram (edit them in
+    the type); incompatible connections are created with a warning
+  - renames and deletions of several files are undone together in VS Code only (the web app changes the other
+    files directly); the web app has no real workspace (a virtual file list)
+  - state machines cannot use the structs of structure files (shared C/C++ headers instead); a validation of
+    the `behavior` of components across the instances (e.g. one state machine per thread)
+  - 💭 interface types with sync operations (call ports with parameters and results), multiplicities of
+    ports and instances, deployment (mapping threads to cores / ECUs)
+  - no tests in a real VS Code instance (the webview bundle is smoke-tested in Chromium with a mocked VS Code API)
+
 ## Decisions
 
 - **C++ is the only code generation target in use.** The C++ generator (itemis CREATE style) is the
@@ -195,6 +241,8 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
   keeps the automatic layout; the experiment is merged only if it proves worthwhile.
 - **No exchange with itemis is planned.** HSM replaces itemis CREATE for our own models; remaining
   differences to the itemis language are only closed if our models need them.
+- **The structure language is evaluated on a separate branch** (`claude/device-modeling`); it is merged
+  only if modeling the structure alongside the state machines proves worthwhile.
 - **Code generation improvements come later.** Submachines and C++ header types are supported by the
   language, simulation and tests first; the C++ generator catches up when needed.
 
@@ -203,3 +251,5 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
 - Is simulation or SCTUnit-style testing used in current projects?
 - Does hand-arranged layout (branch `claude/layout-annotations`) prove worthwhile in daily use, and are
   layout annotations in the model acceptable in reviews and merges?
+- Is the structure language (branch `claude/device-modeling`) the right level of detail for our products
+  (threads, sync / async ports), and should the composed system be simulated and generated?

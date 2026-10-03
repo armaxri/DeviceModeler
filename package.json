@@ -1,7 +1,7 @@
 {
   "name": "hsm-workspace",
   "private": true,
-  "description": "Langium based modeling environment for hierarchical state machines",
+  "description": "Device Modeling Framework: Langium based modeling environment for product structures and hierarchical state machines",
   "type": "module",
   "workspaces": [
     "packages/language",

@@ -1,13 +1,49 @@
-# HSM Modeler
+# Device Modeling Framework
 
-A [Langium](https://langium.org) based modeling environment for **hierarchical state machines** with a
-graphical editor built on [Sprotty](https://sprotty.org) and [ELK](https://eclipse.dev/elk/).
-The diagrams look like PlantUML state diagrams, but you can edit them directly: add states, draw
-transitions, nest states by drag and drop, rename in place, … Text and diagram always stay in sync.
+A [Langium](https://langium.org) based modeling environment for devices: the **structure of a product**
+(components with their ports, composite structures, threads, instances and connections – 🧪 the structure
+language, `.dmf`) and the **hierarchical state machines** that implement the behavior of its components
+(`.hsm`, the HSM Modeler). Both are edited as text and in graphical editors built on
+[Sprotty](https://sprotty.org) and [ELK](https://eclipse.dev/elk/): the state machine diagrams look like
+PlantUML state diagrams, structures are shown as SysML internal block diagrams in the same themes – and you
+can edit them directly: add states, draw transitions, nest states by drag and drop, add instances and
+connect ports, rename in place, … Text and diagram always stay in sync, and the structure links to the
+state machines: double-click an instance to open its state machine.
 
 ![HSM Modeler](docs/screenshot.png)
 
-## Features
+## Structure of a product (`.dmf`)
+
+🧪 Experimental (branch `claude/device-modeling`): the structure language of the Device Modeling Framework
+([docs/structure-language.md](docs/structure-language.md), example [`examples/device`](examples/device)).
+
+![The structure of a garage door: internal block diagram of the system GarageDoor](docs/examples/GarageDoor.svg)
+
+- **Component types** with `provides` / `requires` **ports**: sync ports carry data (a simple type, a
+  struct or a C/C++ type of an imported header), async ports carry events (named groups of events:
+  `interface DoorCmd { event open event close }`). A component can be implemented by a state machine
+  (`behavior "door.hsm"`): its ports are checked against the interfaces of the state machine (provided async
+  port = `in` events, required async port = `out` events, sync ports = variables and operations).
+- **Composite structures** and the root **`system`**: instances of component types (also of other
+  structures – recursive nesting), **threads** grouping the instances (`@priority(5) @period(10 ms)`),
+  explicit **connections** (`connect door.motor -> drive.ctrl`, required → provided) and **delegations**
+  to the boundary ports.
+- **Validation**: unconnected required ports, mismatching kinds, types and directions, connections
+  crossing threads (shown dashed), ports that do not match the state machine, unresolved imports, …
+- **Route analysis**: selecting a port, connector or instance highlights the whole signal path across
+  connections and delegations through all levels of the hierarchy and all files; *go to provider* of a
+  required port.
+- **Internal block diagram** (SysML style, PlantUML themes): frames for the structure and its threads,
+  instances with stereotypes, filled (provided) / hollow (required) ports with a chevron for async ports.
+  **Graphical editing** like the state machine diagrams (palette for threads, instances, ports and
+  connectors with compatibility feedback, rename, drag into threads, properties panel) – every action is a
+  text edit; **navigation** between structures, composites, component types and state machines with a
+  back / forward history.
+- **Tools**: the web editor, the VS Code extension (language server, diagram, navigation, edits across
+  files) and `hsm render` (SVG) support structure files. Not (yet) supported: simulation and code
+  generation of structures.
+
+## State machines (`.hsm`)
 
 - **Textual DSL** (Langium): the structure of the state machine (states, regions, transitions) uses a
   PlantUML-like notation, the definition section and all reactions follow the statechart language of
@@ -75,8 +111,8 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
 - **Code generation** for **C++** (a class per state machine like itemis CREATE, see
   [Code generation (C++)](docs/cpp-generator.md)) and C99, both verified against the conformance suite of the
   interpreter by compiling and running every scenario.
-- **VS Code extension** (`packages/vscode`): language server for `.hsm` / `.hsmtest`, the diagram editor
-  of the web app next to the text editor, C++ generation, tests in the Test Explorer (with model
+- **VS Code extension** (`packages/vscode`): language server for `.hsm` / `.hsmtest` / `.dmf`, the diagram
+  editors of the web app next to the text editor, C++ generation, tests in the Test Explorer (with model
   coverage) and the itemis CREATE import – see [VS Code extension](docs/vscode.md).
 - **Build integration**: a generator configuration file (`hsm.gen.json`, like the `.sgen` files of itemis
   CREATE), `hsm generate --check` for CI and CMake functions (`hsm_generate`, `hsm_add_tests`) that
@@ -107,6 +143,7 @@ npm run build -w packages/language
 node packages/language/bin/cli.js validate examples/cd-player.hsm
 node packages/language/bin/cli.js layout examples/keyboard.hsm --direction RIGHT
 node packages/language/bin/cli.js render examples -o out --theme modern     # SVG diagrams, see below
+node packages/language/bin/cli.js render examples/device/system.dmf -o system.svg   # internal block diagram of a structure
 node packages/language/bin/cli.js doc examples -o docs/models --format html  # documentation, see below
 node packages/language/bin/cli.js import model.sct -o model.hsm   # itemis CREATE import, see below
 node packages/language/bin/cli.js simulate examples/cd-player.hsm -e play,eject,eject   # run the interpreter
@@ -125,9 +162,9 @@ node packages/language/bin/cli.js generate --check          # exit 1 if generate
 | [The language](docs/language.md) | syntax of the models: definition section, reactions, expressions, states, regions, pseudo states; imports and submachines; C/C++ header imports |
 | [Structure language](docs/structure-language.md) | 🧪 `.dmf` files: components, ports, structures, threads, instances, connections; port ↔ state machine rules; route analysis |
 | [Execution semantics](docs/semantics.md) | how a state machine executes – the specification implemented by the interpreter and the code generators |
-| [Web editor](docs/editor.md) | editing in the diagram, 🧪 manual layout, simulation |
+| [Web editor](docs/editor.md) | editing in the diagram, 🧪 structure diagrams and navigation, 🧪 manual layout, simulation |
 | [Manual layout](docs/manual-layout.md) | 🧪 experimental (branch `claude/layout-annotations`): layout annotations in the model, layout computation, routing, editor integration, migration |
-| [VS Code extension](docs/vscode.md) | language server, diagram, generation, Test Explorer (details in [packages/vscode/README.md](packages/vscode/README.md)) |
+| [VS Code extension](docs/vscode.md) | language server, diagrams, 🧪 structure files, generation, Test Explorer (details in [packages/vscode/README.md](packages/vscode/README.md)) |
 | [Rendering and model documentation](docs/rendering.md) | `hsm render` (SVG diagrams), `hsm doc` (Markdown / HTML documentation), doc comments |
 | [Unit tests and coverage](docs/testing.md) | the `.hsmtest` language, `hsm test`, model coverage, CI examples |
 | [Code generation (C++)](docs/cpp-generator.md) | generated API, runtime errors, a complete host example |
@@ -141,9 +178,10 @@ node packages/language/bin/cli.js generate --check          # exit 1 if generate
 
 ## Architecture
 
-The repository is an npm workspace with three packages: `packages/language` (the Langium language, CLI,
-interpreter, test runner, renderer and code generators – no DOM dependencies, runs in Node.js and in the
-browser), `packages/web` (the Vite web app: Monaco editor and Sprotty diagram) and `packages/vscode` (the
-VS Code extension). The text is the single source of truth: diagram edits become text edits, which run
+The repository is an npm workspace with three packages: `packages/language` (the Langium languages –
+state machines, unit tests and structures –, CLI, interpreter, test runner, renderer and code generators –
+no DOM dependencies, runs in Node.js and in the browser), `packages/web` (the Vite web app: Monaco editor
+and Sprotty diagram) and `packages/vscode` (the VS Code extension). The package names (`hsm-language`,
+`hsm-web`, `hsm-vscode`) and the command line tool `hsm` keep the name of the HSM Modeler. The text is the single source of truth: diagram edits become text edits, which run
 through the same parse → validate → layout → render pipeline as typed changes. See
 [docs/architecture.md](docs/architecture.md) for the details.

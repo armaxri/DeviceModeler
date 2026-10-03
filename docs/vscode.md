@@ -1,12 +1,13 @@
 # VS Code extension
 
-`packages/vscode` is a VS Code extension for models and their unit tests (details in
-[packages/vscode/README.md](../packages/vscode/README.md)):
+`packages/vscode` is a VS Code extension for state machines, their unit tests and the structure files of
+the Device Modeling Framework (details in [packages/vscode/README.md](../packages/vscode/README.md)):
 
-- **Language server** for `.hsm` and `.hsmtest` (Langium, separate Node process): diagnostics,
+- **Language server** for `.hsm`, `.hsmtest` and `.dmf` (Langium, separate Node process): diagnostics,
   completion, hover with doc comments, definition, references, rename, formatting, outline, folding
-  and semantic highlighting. The whole workspace is indexed, so test classes resolve state machines of
-  other files. TextMate grammars and a language configuration (comments, brackets, `/** */` continuation).
+  and semantic highlighting (state machines and tests). The whole workspace is indexed, so test classes
+  resolve state machines of other files and structure files the component types and ports of other files.
+  TextMate grammars and a language configuration (comments, brackets, `/** */` continuation).
 - **Diagram** (**HSM: Open Diagram** or the button in the editor title): the diagram editor of the web
   app in a webview beside the text – updated while typing, selection sync in both directions, palette
   tools, inline rename, delete, drag to nest, properties panel and simulation. Diagram edits are
@@ -22,6 +23,8 @@
   Layout changes are `WorkspaceEdit`s like every diagram edit: one undo history (`Ctrl+Z` in the text
   editor or in the diagram), the dirty marker and *Save* apply to them. The `.sct` import writes the
   arrangement of the itemis diagram as annotations, and the SVG export applies them.
+- 🧪 **Structure files (`.dmf`)**, see [below](#structure-files-dmf): language server, the structure
+  diagram with editing and navigation between the diagrams.
 - **C/C++ header imports**: headers are read from disk (and re-read when they change: the importing models are
   validated again), hover shows their declarations with documentation, go to definition opens the header,
   completion after `ns::`. Include paths, defines and the data model come from the `headers` block of the
@@ -34,8 +37,44 @@
 - **Tests** in the Test Explorer (all `@Test` operations of the workspace; failures with location and
   trace; **HSM: Run Tests** for the active file) and a **Run with Model Coverage** profile that shows
   covered states / transitions / reactions and guard decisions in the coverage view.
-- **HSM: Import itemis CREATE Model (.sct)**, **HSM: Export Diagram…** (SVG rendered with `renderSvg`,
-  or PNG: the same SVG rasterized in the diagram webview; also *Export…* in the diagram toolbar).
+- **HSM: Import itemis CREATE Model (.sct)**, **HSM: Export Diagram…** (SVG rendered with `renderSvg`
+  – structure files: `renderIbdSvg` of the structure shown in the diagram –, or PNG: the same SVG
+  rasterized in the diagram webview; also *Export…* in the diagram toolbar).
+
+## Structure files (`.dmf`)
+
+🧪 The [structure language](structure-language.md) of the Device Modeling Framework is served by the
+same extension:
+
+- **Language**: the language `dmf` (`.dmf`, TextMate grammar, the language configuration of the state
+  machines) in the same language server – diagnostics (port ↔ state machine rules, connections, threads),
+  completion, hover, formatting, outline, go to definition (component types, ports, type names, import
+  paths, the state machine of a `behavior`), **Go to Implementation** = go to the provider of a required
+  port, find references and rename across the structure files of the workspace (all `.dmf` files are
+  indexed). The state machine features (semantic highlighting, the definition provider of `.hsm`) are not
+  added to the structure language, it has its own.
+- **Diagram**: **HSM: Open Diagram** (editor title, context menus, `hsm.diagram.autoOpen`) opens the
+  internal block diagram beside the text, in the same webview as the state machine diagrams (structure
+  mode of the diagram controller, the styles of the web app): palette, rename, drag into threads,
+  connectors, properties, route highlighting, the selector of the shown structure; the controls of the
+  state machines (layout settings, simulation, auto-arrange, C++) are disabled. A file with structs and
+  interfaces only shows an overview of them.
+- **Navigation** (double-click an instance, its type name, *Go to provider*, *Follow into*, *Used by* of a
+  state machine, …): the extension opens the target file in the text editor column of the diagram and
+  its diagram in the column of the diagram, and shows and selects the target there. The navigation
+  history is shared by all diagrams: *◀* / *▶* in the toolbar of every diagram, `Alt+←` / `Alt+→` in the
+  diagram, **HSM: Diagram: Go Back** / **Go Forward** (the tooltips name the targets).
+- **Edits of several files**: renaming a component type or a port in the diagram also changes the
+  structure files using it, deleting a port also deletes its connections in other files. The webview
+  computes the edits on the texts sent by the extension; the extension applies them as one
+  `WorkspaceEdit` (`Ctrl+Z` undoes them together across the files – VS Code asks for confirmation),
+  provided the files still have these texts (otherwise nothing is changed and the diagram asks to try
+  again).
+- **Workspace files**: the webview has no file system. With the text of the document the extension sends
+  the texts of all `.hsm` and `.dmf` files of the workspace (open documents with their unsaved changes, the
+  others from disk, at most 1000 files) and of the files the document imports (also C/C++ headers), and
+  sends them again when one of them changes – so *Used by*, routes and providers in other files, renames and
+  the markers of instances whose component type or state machine has errors work across files.
 
 ```bash
 npm run package:vscode    # builds and packages packages/vscode/hsm-vscode-<version>.vsix
@@ -52,9 +91,11 @@ errors) until the experiment is merged.
 Three bundles: `dist/extension.cjs` (extension host, esbuild), `dist/server.cjs` (language server,
 esbuild) and `dist/webview/` (Vite, the diagram controller, views and styles of `packages/web` – no
 code is duplicated). The tests (`npm test -w packages/vscode`) cover the edit conversion, the generator
-configuration resolution, test discovery / execution / coverage mapping, extension code that needs the
-VS Code API (with a minimal `vscode` mock) and a language server round
-trip over stdio (initialize, diagnostics, cross-file linking, hover, definition, references, rename,
-formatting, symbols, folding, completion, semantic tokens). There are no tests in a real VS Code
+configuration resolution, test discovery / execution / coverage mapping, the collection of imported and
+workspace files, the navigation history, extension code that needs the VS Code API (with a minimal
+`vscode` mock: the diagram panel, workspace edits of several files, the SVG export of structures) and a
+language server round trip over stdio (initialize, diagnostics, cross-file linking, hover, definition,
+references, rename, formatting, symbols, folding, completion, semantic tokens; for `.dmf` files also go to
+implementation and renames across files). There are no tests in a real VS Code
 instance yet (`@vscode/test-electron` needs to download VS Code, which was not possible in the build
 environment).

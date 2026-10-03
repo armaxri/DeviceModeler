@@ -220,10 +220,11 @@ of a composite instance with the same port seen from inside the composite.
 ## Diagram
 
 The diagram of a structure file is an internal block diagram (IBD) in the style of SysML, in the themes of
-the state machine diagrams (PlantUML classic / modern, dark). It is shown and edited by the web editor
-(palette, rename in place, drag & drop into threads, connectors, properties, navigation into the state
-machines and structures of the instances – see [the editor](editor.md#structure-diagrams-dmf)) and
-rendered by `hsm render` ([rendering](rendering.md)):
+the state machine diagrams (PlantUML classic / modern, dark). It is shown and edited by the web editor and
+the VS Code extension (palette, rename in place, drag & drop into threads, connectors, properties,
+navigation into the state machines and structures of the instances – see
+[the editor](editor.md#structure-diagrams-dmf) and [VS Code](vscode.md)) and rendered by `hsm render`
+([rendering](rendering.md)):
 
 ![The garage door system](examples/GarageDoor.svg)
 
@@ -243,13 +244,16 @@ ordered by the position of their partners, so a reply (`drive.status -> door.sta
 **Choosing what is shown.** The diagram shows the first `system` of the file, else its first
 `structure`; a file with component types only shows them all as blocks with their ports (or one of
 them). If the file declares several elements, a selector at the top of the diagram chooses the shown one;
-moving the text cursor into another structure shows that one.
+moving the text cursor into another structure shows that one. A file with data types and interfaces only
+(like `types.dmf` of the example) shows an overview of its structs and interfaces with their fields and
+events instead of a diagram (a click selects the declaration in the text).
 
 **Routes.** Selecting a port, a connection or an instance highlights the route of its signals
 (`ibdRouteElements`, based on `routeOf` / `portRoute` of the route analysis): the ports, connectors and
 instances on the route are drawn in orange, everything else is dimmed. The properties panel lists the
 providers of a required port (the requirers of a provided port). Diagnostics are shown as markers at the
-element (or at the tab of the frame).
+element (or at the tab of the frame); an instance also gets a marker if the declaration of its component
+type in an imported file or the state machine implementing it has errors.
 
 **Diagram model** (`layoutStructure` in `src/diagram/ibd-layout.ts`, types in `ibd-model.ts`): stable ids
 derived from the names – frame `GarageDoor`, boundary port `GarageDoor.remote`, thread
@@ -265,14 +269,17 @@ ports, thread annotations and the behavior of components; rename; delete), `plan
 between `connect` and `delegate` and the order of the ends of two chosen ports (and reports
 incompatibilities with `portIncompatibilities`), `dmfRenameEdits` renames an element and its references
 in all loaded files (Langium references; qualified references keep their qualifier). Deleting a thread
-keeps its instances: they become passive parts of the structure.
+keeps its instances: they become passive parts of the structure. Deleting a port also deletes the
+connections and delegations using it – in the file by `DmfEditor`, in the other files of the workspace by
+`DmfWorkspace.portDeletionEdits` (the editors apply all of them as one step).
 
 **Workspace** (`src/dmf-workspace.ts`): `DmfWorkspace` loads all structure files of a workspace (with
 their imports) into Langium services of its own for questions across files: `behaviorUsages(uri)` (the
 instances implemented by a state machine), `contextsOf(structure)` (where a structure is used in the
 systems), `endpoint` / `route` / `routeEnds` (routes and providers through all levels and files),
 `routeIdsAt` / `routeContinuations` (the diagram ids of a route at a level of the instance tree, the
-composite parts it continues into), `renameEdits` (renames updating the files that use an element).
+composite parts it continues into), `renameEdits` (renames updating the files that use an element),
+`portDeletionEdits` (the connections of other files using deleted ports).
 Elements are identified across the separately parsed files by URI and names: a `StructureContext`
 (`{ rootUri, root, path }`, the shown structure as the part `path` of the root) and a
 `StructureLocation` (`{ uri, element, id, context }`, what navigation opens and selects).
@@ -292,6 +299,12 @@ go to definition, and shows and edits their diagram (see [Diagram](#diagram) and
 [the editor](editor.md#structure-diagrams-dmf)); all files of `examples/device` are in its list of
 examples and resolve their imports against each other. State machines used as the behavior of components
 link back to the instances (*Used by*).
+
+The VS Code extension serves `.dmf` files with the same language server as the state machines (all
+`.dmf` files of the workspace are indexed: references, renames and go to provider across files), a
+TextMate grammar, and opens the structure diagram with **HSM: Open Diagram** like the diagram of a state
+machine; navigation between the diagrams and edits of several files go through the extension
+([VS Code extension](vscode.md#structure-files-dmf)).
 
 Not (yet) supported: simulation and code generation of structures; state machines cannot use the structs
 of structure files (share C/C++ headers instead).
