@@ -59,15 +59,16 @@ describe('the .devm language: one kind per file', () => {
     });
 
     test('the keywords of the other kind are names', async () => {
-        const machine = await load('statemachine M {\n    interface:\n        var system : integer\n        in event connect\n'
+        const machine = await load('statemachine M {\n    interface:\n        var system : integer\n        in event connect\n        var inout : boolean\n'
             + '    [*] -> component\n    state component\n    component -> thread : connect / system = 1\n    state thread\n}\n');
         expect(errors(machine)).toEqual([]);
         const structure = await load('struct Sample { state : integer  entry : boolean  in : real }\n'
-            + 'interface Signals { event active event exit }\n'
-            + 'component C { provides async in : Signals provides sync out : Sample }\n');
+            + 'component C { in async in : Sample out sync out : Sample in async interface out async event }\n');
         expect(errors(structure)).toEqual([]);
         const fields = (structure.model as ast.StructureModel).elements.filter(ast.isStructDeclaration).flatMap(s => s.fields.map(f => f.name));
         expect(fields).toEqual(['state', 'entry', 'in']);
+        const ports = (structure.model as ast.StructureModel).elements.filter(ast.isComponent).flatMap(c => c.ports.map(p => `${p.direction} ${p.name}`));
+        expect(ports).toEqual(['in in', 'out out', 'in interface', 'out event']);
     });
 
     test('syntax errors list the keywords accepted as names as ID', async () => {
@@ -84,7 +85,7 @@ describe('the .devm language: one kind per file', () => {
     });
 
     test('imports of structure files: structure files and state machine files by their content', async () => {
-        const text = 'import "types.devm"\nimport "motor.devm"\nstruct Pose { p : Position }\ncomponent C {\n    behavior Motor\n    provides async cmd : event start\n}\n';
+        const text = 'import "types.devm"\nimport "motor.devm"\nstruct Pose { p : Position }\ncomponent C {\n    behavior Motor\n    in async start\n}\n';
         const parsed = await load(text, { 'types.devm': TYPES, 'motor.devm': MOTOR });
         expect(errors(parsed)).toEqual([]);
         const missing = await load('import "nowhere.devm"\n');
@@ -92,7 +93,7 @@ describe('the .devm language: one kind per file', () => {
     });
 
     test('the behavior of a component is a state machine file', async () => {
-        const ok = await load('component C {\n    behavior "motor.devm"\n    provides async cmd : event start\n}\n', { 'motor.devm': MOTOR });
+        const ok = await load('component C {\n    behavior "motor.devm"\n    in async start\n}\n', { 'motor.devm': MOTOR });
         expect(errors(ok)).toEqual([]);
         const structure = await load('component C {\n    behavior "types.devm"\n}\n', { 'types.devm': TYPES });
         expect(errors(structure)).toEqual(["The behavior of a component is a state machine file: 'types.devm' is a structure file."]);
@@ -120,6 +121,6 @@ describe('the .devm language: one kind per file', () => {
             return edits.length;
         };
         expect(await format('statemachine M {\n[*]->A\nstate A\n}\n')).toBeGreaterThan(0);
-        expect(await format('component C {\nprovides async cmd:event start\n}\n')).toBeGreaterThan(0);
+        expect(await format('component C {\nin async start:integer\n}\n')).toBeGreaterThan(0);
     });
 });

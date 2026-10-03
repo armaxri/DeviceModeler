@@ -12,7 +12,7 @@ import { StructureModelLoader } from '../src/model-loader.js';
 import { createDevmServices } from '../src/devm-module.js';
 import { parseXml, type XmlElement } from '../src/importer/xml.js';
 import { renderIbdSvg } from '../src/render/ibd-svg.js';
-import { portChevron } from '../src/render/ibd-shapes.js';
+import { connectorArrowheads, portArrow, portClasses } from '../src/render/ibd-shapes.js';
 
 const DEVICE = path.resolve(__dirname, '../../../examples/device');
 const deviceLoader = new StructureModelLoader(createDevmServices(NodeFileSystem));
@@ -63,13 +63,20 @@ describe('internal block diagram: the garage door system', () => {
         const frame = graph.children[0];
         expect(frame.details).toBe('ibd [system] GarageDoor');
         expect(frame.ports.map(p => `${p.id} ${p.direction} ${p.kind} ${p.side}`)).toEqual([
-            'GarageDoor.remote provides async WEST',
-            'GarageDoor.report provides sync WEST'
+            'GarageDoor.open in async WEST',
+            'GarageDoor.close in async WEST',
+            'GarageDoor.stop in async WEST',
+            'GarageDoor.report out sync EAST'
         ]);
-        // centered on the left border, the label outside of the frame
+        // centered on the left (in) or right (out) border, the label outside of the frame
         for (const port of frame.ports) {
-            expect(port.x + port.size / 2).toBeCloseTo(0, 0);
-            expect(port.label.x + port.label.width).toBeLessThan(0);
+            if (port.side === 'WEST') {
+                expect(port.x + port.size / 2).toBeCloseTo(0, 0);
+                expect(port.label.x + port.label.width).toBeLessThan(0);
+            } else {
+                expect(port.x + port.size / 2).toBeCloseTo(frame.width, 0);
+                expect(port.label.x).toBeGreaterThan(frame.width);
+            }
         }
         expect(layout.elements.get('GarageDoor')).toBe(model.elements[0]);
     });
@@ -112,7 +119,7 @@ describe('internal block diagram: the garage door system', () => {
         const drive = node(layout, 'GarageDoor/drive');
         expect([drive.stereotype, drive.composite?.structure]).toEqual(['subsystem', 'DriveUnit']);
         expect(drive.composite?.uri).toMatch(/drive-unit\.devm$/);
-        expect(door.ports.map(p => p.name).sort()).toEqual(['alarm', 'cmd', 'cycles', 'motor', 'position', 'status']);
+        expect(door.ports.map(p => p.name).sort()).toEqual(['alarm', 'blocked', 'close', 'cycles', 'down', 'errors', 'halt', 'open', 'position', 'stop', 'stopped', 'up']);
         for (const { node: n } of ibdNodes(layout.graph).filter(n => n.node.kind === 'instance')) {
             for (const port of n.ports) {
                 expect(port.id).toBe(`${n.id}.${port.name}`);
@@ -130,19 +137,32 @@ describe('internal block diagram: the garage door system', () => {
                 ys.slice(1).forEach((y, i) => expect(y - ys[i]).toBeGreaterThanOrEqual(20));
             }
         }
-        // the cmd port is provided by the system's boundary port on the left
-        expect(door.ports.find(p => p.name === 'cmd')!.side).toBe('WEST');
+        // the in port `open` receives the events of the system's boundary port on the left; the in port
+        // `stopped` faces its source in the drive unit on the right
+        expect(door.ports.find(p => p.name === 'open')!.side).toBe('WEST');
+        expect(door.ports.find(p => p.name === 'stopped')!.side).toBe('EAST');
+        expect(node(layout, 'GarageDoor/buzzer').ports.map(p => `${p.name}:${p.side}`)).toEqual(['alarm:WEST']);
+        // ports show their type in the label (the name only for an event without payload)
+        expect(door.ports.find(p => p.name === 'up')!.label.text).toBe('up : integer');
+        expect(door.ports.find(p => p.name === 'open')!.label.text).toBe('open');
+        expect(door.ports.find(p => p.name === 'up')!.title).toBe('out async up : integer');
     });
 
     test('connectors: ids, kinds, cross-thread connections are dashed', () => {
-        expect(layout.graph.edges.map(e => `${e.id} ${e.kind}${e.crossThread ? ' cross-thread' : ''}`)).toEqual([
-            'GarageDoor/door.motor->drive.ctrl connect cross-thread',
-            'GarageDoor/drive.status->door.status connect cross-thread',
+        expect(layout.graph.edges.map(e => `${e.id} ${e.kind}${e.crossThread ? ' cross-thread' : ''}${e.bidirectional ? ' both-ways' : ''}`)).toEqual([
+            'GarageDoor/door.up->drive.up connect cross-thread',
+            'GarageDoor/door.down->drive.down connect cross-thread',
+            'GarageDoor/door.halt->drive.halt connect cross-thread',
+            'GarageDoor/drive.stopped->door.stopped connect cross-thread',
+            'GarageDoor/drive.blocked->door.blocked connect cross-thread',
             'GarageDoor/door.alarm->buzzer.alarm connect',
-            'GarageDoor/door.position->sensor.position connect cross-thread',
-            'GarageDoor/diag.cycles->door.cycles connect cross-thread',
-            'GarageDoor/remote->door.cmd delegate',
-            'GarageDoor/report->diag.report delegate'
+            'GarageDoor/sensor.position->door.position connect cross-thread',
+            'GarageDoor/door.cycles->diag.cycles connect cross-thread',
+            'GarageDoor/door.errors->diag.errors connect cross-thread both-ways',
+            'GarageDoor/open->door.open delegate',
+            'GarageDoor/close->door.close delegate',
+            'GarageDoor/stop->door.stop delegate',
+            'GarageDoor/diag.report->report delegate'
         ]);
         const positions = new Map(ibdNodes(layout.graph).flatMap(({ node: n, x, y }) => n.ports.map(p => [p.id, { x: x + p.x, y: y + p.y, size: p.size }] as const)));
         for (const edge of layout.graph.edges) {
@@ -162,58 +182,70 @@ describe('internal block diagram: the garage door system', () => {
     });
 
     test('the route of a port, an instance and a connector', () => {
-        expect([...ibdRouteElements(layout, 'GarageDoor/door.motor')!].sort()).toEqual([
-            'GarageDoor/door', 'GarageDoor/door.motor', 'GarageDoor/door.motor->drive.ctrl', 'GarageDoor/drive', 'GarageDoor/drive.ctrl'
+        expect([...ibdRouteElements(layout, 'GarageDoor/door.up')!].sort()).toEqual([
+            'GarageDoor/door', 'GarageDoor/door.up', 'GarageDoor/door.up->drive.up', 'GarageDoor/drive', 'GarageDoor/drive.up'
         ]);
         // through the delegation to the boundary port
-        expect([...ibdRouteElements(layout, 'GarageDoor.remote')!].sort()).toEqual([
-            'GarageDoor.remote', 'GarageDoor/door', 'GarageDoor/door.cmd', 'GarageDoor/remote->door.cmd'
+        expect([...ibdRouteElements(layout, 'GarageDoor.open')!].sort()).toEqual([
+            'GarageDoor.open', 'GarageDoor/door', 'GarageDoor/door.open', 'GarageDoor/open->door.open'
+        ]);
+        // shared data of inout ports
+        expect([...ibdRouteElements(layout, 'GarageDoor/diag.errors')!].sort()).toEqual([
+            'GarageDoor/diag', 'GarageDoor/diag.errors', 'GarageDoor/door', 'GarageDoor/door.errors', 'GarageDoor/door.errors->diag.errors'
         ]);
         expect([...ibdRouteElements(layout, 'GarageDoor/door.alarm->buzzer.alarm')!].sort()).toEqual([
             'GarageDoor/buzzer', 'GarageDoor/buzzer.alarm', 'GarageDoor/door', 'GarageDoor/door.alarm', 'GarageDoor/door.alarm->buzzer.alarm'
         ]);
         const sensor = ibdRouteElements(layout, 'GarageDoor/sensor')!;
         expect([...sensor].sort()).toEqual([
-            'GarageDoor/door', 'GarageDoor/door.position', 'GarageDoor/door.position->sensor.position', 'GarageDoor/sensor', 'GarageDoor/sensor.position'
+            'GarageDoor/door', 'GarageDoor/door.position', 'GarageDoor/sensor', 'GarageDoor/sensor.position', 'GarageDoor/sensor.position->door.position'
         ]);
         expect(ibdRouteElements(layout, 'GarageDoor/thread:IoTask')).toBeUndefined();
         expect(ibdRouteElements(layout, 'GarageDoor')).toBeUndefined();
     });
 
     test('rendered as SVG with the classes of the web editor', () => {
-        const highlight = new Map([...ibdRouteElements(layout, 'GarageDoor/door.motor')!].map(id => [id, 'on-route']));
+        const highlight = new Map([...ibdRouteElements(layout, 'GarageDoor/door.up')!].map(id => [id, 'on-route']));
         const svg = renderIbdSvg(layout.graph, { theme: 'dark', highlight, routeHighlight: true });
         const root = parseXml(svg);
         expect(root.attributes.class).toBe('sprotty-graph theme-dark devm-export ibd-diagram route-highlight');
         expect(withClass(root, 'ibd-frame')).toHaveLength(1);
         expect(withClass(root, 'ibd-thread')).toHaveLength(2);
         expect(withClass(root, 'ibd-instance')).toHaveLength(5);
-        expect(withClass(root, 'ibd-port')).toHaveLength(2 + 6 + 1 + 1 + 2 + 2);
-        expect(withClass(root, 'ibd-connector')).toHaveLength(7);
-        expect(withClass(root, 'cross-thread')).toHaveLength(4);
-        expect(withClass(root, 'delegation')).toHaveLength(2);
+        expect(withClass(root, 'ibd-port')).toHaveLength(4 + 12 + 1 + 1 + 3 + 5);
+        expect(withClass(root, 'ibd-connector')).toHaveLength(13);
+        expect(withClass(root, 'cross-thread')).toHaveLength(8);
+        expect(withClass(root, 'delegation')).toHaveLength(4);
         expect(withClass(root, 'on-route')).toHaveLength(5);
-        // async ports have a chevron, sync ports none
-        expect(withClass(root, 'ibd-port-chevron')).toHaveLength(withClass(root, 'async').length);
+        // every port has an arrow (the direction of the data), async ports are filled, sync ports hollow
+        expect(withClass(root, 'ibd-port-arrow')).toHaveLength(withClass(root, 'ibd-port').length);
+        expect(withClass(root, 'async').length + withClass(root, 'sync').length).toBe(withClass(root, 'ibd-port').length);
+        expect(withClass(root, 'flow-inout')).toHaveLength(2);
+        // an arrowhead at the receiving end of every connector, two between inout ports
+        expect(withClass(root, 'ibd-connector-arrow')).toHaveLength(13 + 1);
         expect(svg).toContain('door : DoorController');
         expect(svg).toContain('«thread»');
     });
 });
 
 describe('internal block diagram: other elements', () => {
-    test('the drive unit: two threads, delegations to required boundary ports', async () => {
+    test('the drive unit: two threads, delegations to and from the boundary ports', async () => {
         const layout = (await layoutStructure(await loadExample('drive-unit.devm')))!;
         const frame = layout.graph.children[0];
         expect(frame.details).toBe('ibd [subsystem] DriveUnit');
         expect(frame.children.map(n => n.id)).toEqual(['DriveUnit/thread:MotorTask', 'DriveUnit/thread:SwitchTask']);
-        expect(frame.ports.map(p => `${p.name} ${p.side}`)).toEqual(['ctrl WEST', 'status EAST']);
+        expect(frame.ports.map(p => `${p.name} ${p.side}`)).toEqual(['up WEST', 'down WEST', 'halt WEST', 'stopped EAST', 'blocked EAST']);
         expect(node(layout, 'DriveUnit/thread:MotorTask').details).toBe('priority 8 · period 1 ms · stack 2048');
-        expect(layout.graph.edges.find(e => e.id === 'DriveUnit/motor.pwm->pwm.duty')?.crossThread).toBe(false);
-        expect(layout.graph.edges.find(e => e.id === 'DriveUnit/switches.events->motor.sensors')?.crossThread).toBe(true);
+        expect(layout.graph.edges.find(e => e.id === 'DriveUnit/motor.duty->pwm.duty')?.crossThread).toBe(false);
+        expect(layout.graph.edges.find(e => e.id === 'DriveUnit/switches.endSwitch->motor.endSwitch')?.crossThread).toBe(true);
+        // in ports left, out ports right (the unconnected out port `speed` too)
+        expect(node(layout, 'DriveUnit/motor').ports.map(p => `${p.name}:${p.side}`).sort()).toEqual([
+            'blocked:EAST', 'down:WEST', 'duty:EAST', 'endSwitch:WEST', 'halt:WEST', 'overcurrent:WEST', 'speed:EAST', 'stopped:EAST', 'up:WEST'
+        ]);
         // no data types declared in the file: no type boxes
         expect(layout.graph.children.map(n => n.kind)).toEqual(['frame']);
-        expect([...ibdRouteElements(layout, 'DriveUnit.status')!].sort()).toEqual([
-            'DriveUnit.status', 'DriveUnit/motor', 'DriveUnit/motor.status', 'DriveUnit/motor.status->status'
+        expect([...ibdRouteElements(layout, 'DriveUnit.stopped')!].sort()).toEqual([
+            'DriveUnit.stopped', 'DriveUnit/motor', 'DriveUnit/motor.stopped', 'DriveUnit/motor.stopped->stopped'
         ]);
     });
 
@@ -234,29 +266,29 @@ describe('internal block diagram: other elements', () => {
         expect(ibdRouteElements(single, 'Buzzer.alarm')).toBeUndefined();
         // an unknown element: the default
         expect((await layoutStructure(model, { element: 'Nope' }))!.graph.kind).toBe('overview');
-        // ports show their named type in the label
-        expect(node(overview, 'DoorController').ports.find(p => p.name === 'cmd')?.label.text).toBe('cmd : DoorCmd');
+        // ports show their type in the label
+        expect(node(overview, 'DoorController').ports.find(p => p.name === 'position')?.label.text).toBe('position : door::Position');
         expect(node(overview, 'DoorController').ports.find(p => p.name === 'alarm')?.label.text).toBe('alarm');
+        // blocks: in ports left, out and inout ports right
+        expect(node(overview, 'Diagnosis').ports.map(p => `${p.name}:${p.side}`)).toEqual(['cycles:WEST', 'errors:EAST', 'report:EAST']);
     });
 
-    test('data types: the structs and interfaces of the file as unconnected type boxes', async () => {
+    test('data types: the structs of the file as unconnected type boxes', async () => {
         // a file without component types: only the type boxes
         const types = await loadExample('types.devm');
         expect(ibdChoices(types).map(c => `${c.kind} ${c.id}`)).toEqual([`types ${IBD_TYPES_ID}`]);
         const layout = (await layoutStructure(types))!;
         expect(layout.graph.kind).toBe('types');
         expect(layout.graph.edges).toEqual([]);
-        expect(layout.graph.children.map(n => `${n.kind} ${n.stereotype} ${n.id}`)).toEqual([
-            'type struct type:Diagnostics', 'type interface type:DoorCmd', 'type interface type:MotorCmd', 'type interface type:MotorStatus'
-        ]);
-        expect(node(layout, 'type:MotorCmd').members?.map(memberText)).toEqual(['event up : integer', 'event down : integer', 'event halt']);
+        expect(layout.graph.children.map(n => `${n.kind} ${n.stereotype} ${n.id}`)).toEqual(['type struct type:Diagnostics']);
+        expect(node(layout, 'type:Diagnostics').members?.map(memberText)).toEqual(['cycles : integer', 'errors : integer']);
         expect(layout.elements.get('type:Diagnostics')?.$type).toBe('StructDeclaration');
         expect(ibdRouteElements(layout, 'type:Diagnostics')).toBeUndefined();
         // a mixed file: the subsystem, the type boxes below its frame (automatic layout: the example is arranged by hand), nothing connected to them
         const light = (await layoutStructure(await loadExample('light.devm'), { layout: null }))!;
         const [frame, ...boxes] = light.graph.children;
         expect(frame.details).toBe('ibd [subsystem] CourtesyLight');
-        expect(boxes.map(b => `${b.kind} ${b.name}`)).toEqual(['type LightLevel', 'type LightCmd']);
+        expect(boxes.map(b => `${b.kind} ${b.name}`)).toEqual(['type LightLevel']);
         for (const box of boxes) {
             expect(box.y).toBeGreaterThanOrEqual(frame.y + frame.height);
             expect(box.x + box.width).toBeLessThanOrEqual(light.graph.width);
@@ -271,8 +303,8 @@ describe('internal block diagram: other elements', () => {
 
     test('several structures: the system is shown by default, the cursor selects another one', async () => {
         const text = `
-component A { provides sync p : integer  requires async e : event x }
-subsystem Inner { provides sync p : integer  thread I { a : A }  delegate p -> a.p }
+component A { in sync p : integer  out async e }
+subsystem Inner { in sync p : integer  thread I { a : A }  delegate p -> a.p }
 system Top {
     thread T { a : A }
     b : A
@@ -289,21 +321,36 @@ system Top {
         // `b` is declared outside of the threads and assigned to U by name
         expect(node(layout, 'Top/thread:U').children.map(n => n.id)).toEqual(['Top/b']);
         expect(layout.graph.children[0].children.map(n => n.id)).toEqual(['Top/thread:T', 'Top/thread:U', 'Top/inner']);
-        // (b.e is required and b.e is not provided: an invalid connection is still drawn; unresolved ones are not)
+        // (a.e and b.e are both out ports: an invalid connection is still drawn; unresolved ones are not)
         expect(layout.graph.edges.map(e => `${e.id}${e.crossThread ? ' cross-thread' : ''}`)).toEqual(['Top/a.e->b.e cross-thread']);
         const inner = (await layoutStructure(model, { element: 'Inner' }))!;
         expect(inner.graph.edges.map(e => e.id)).toEqual(['Inner/p->a.p']);
     });
 
-    test('the chevrons of async ports point in the direction of the events', () => {
-        const chevron = (direction: 'provides' | 'requires', side: 'WEST' | 'EAST') => portChevron({ direction, kind: 'async', side, size: 10 })!;
-        const tipX = (d: string) => Number(/L ([\d.]+),/.exec(d)![1]);
-        const backX = (d: string) => Number(/M ([\d.]+),/.exec(d)![1]);
-        // provided, left border: the events flow into the node (to the right)
-        expect(tipX(chevron('provides', 'WEST'))).toBeGreaterThan(backX(chevron('provides', 'WEST')));
-        expect(tipX(chevron('requires', 'WEST'))).toBeLessThan(backX(chevron('requires', 'WEST')));
-        expect(tipX(chevron('provides', 'EAST'))).toBeLessThan(backX(chevron('provides', 'EAST')));
-        expect(portChevron({ direction: 'provides', kind: 'sync', side: 'WEST', size: 10 })).toBeUndefined();
+    test('the arrows of the ports point in the direction of the data', () => {
+        const arrow = (direction: 'in' | 'out' | 'inout', side: 'WEST' | 'EAST') => portArrow({ direction, side, size: 10 });
+        // the line of the arrow: `M tail L tip`, then the arrowhead(s)
+        const tipX = (d: string) => Number(/^M [\d.]+,[\d.]+ L ([\d.]+),/.exec(d)![1]);
+        const tailX = (d: string) => Number(/^M ([\d.]+),/.exec(d)![1]);
+        // in, left border: the data flows into the node (to the right)
+        expect(tipX(arrow('in', 'WEST'))).toBeGreaterThan(tailX(arrow('in', 'WEST')));
+        expect(tipX(arrow('out', 'WEST'))).toBeLessThan(tailX(arrow('out', 'WEST')));
+        expect(tipX(arrow('in', 'EAST'))).toBeLessThan(tailX(arrow('in', 'EAST')));
+        expect(tipX(arrow('out', 'EAST'))).toBeGreaterThan(tailX(arrow('out', 'EAST')));
+        // inout: arrowheads at both ends
+        expect(arrow('inout', 'WEST').split('M').length - 1).toBe(3);
+        expect(arrow('in', 'WEST').split('M').length - 1).toBe(2);
+        expect(portClasses({ direction: 'inout', kind: 'sync' })).toEqual(['ibd-port', 'flow-inout', 'sync']);
+    });
+
+    test('connectors: an arrowhead at the receiving end, at both ends between inout ports', () => {
+        const points = [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 30 }];
+        const [head] = connectorArrowheads(points);
+        // the tip at the end of the route, pointing down (the direction of the last segment)
+        expect(head).toMatch(/^M 20,30 L 23.5,22 L 16.5,22 Z$/);
+        expect(connectorArrowheads(points, true)).toHaveLength(2);
+        expect(connectorArrowheads(points, true)[1]).toMatch(/^M 0,0 /);
+        expect(connectorArrowheads([{ x: 0, y: 0 }])).toEqual([]);
     });
 });
 

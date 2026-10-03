@@ -63,7 +63,7 @@ describe('structure diagrams: manual layout', () => {
         expect(auto.effective).toBeUndefined();
         const text = await withLayout(SYSTEM, () => undefined);
         expect(text).toContain('@at(130, 16)\nsystem GarageDoor {');
-        expect(text).toContain('    @priority(5) @period(10 ms) @at(41, 48)\n    thread ControlTask {');
+        expect(text).toContain('    @priority(5) @period(10 ms) @at(81, 48)\n    thread ControlTask {');
         expect(text).toContain('        @at(26, 52) door : DoorController');
         expect(await format(text)).toBe(text);
         const { model, layout } = await diagram(text);
@@ -85,11 +85,11 @@ describe('structure diagrams: manual layout', () => {
             layout.nodes['GarageDoor/buzzer'].y += 120;
             layout.nodes['GarageDoor/drive'].x += 80;
         });
-        expect(text).toContain('@at(366, 216) buzzer : Buzzer');
+        expect(text).toContain('@at(356, 301) buzzer : Buzzer');
         const { layout } = await diagram(text);
         const thread = node(layout, 'GarageDoor/thread:ControlTask');
         const buzzer = node(layout, 'GarageDoor/buzzer');
-        expect([buzzer.node.x, buzzer.node.y]).toEqual([366, 216]);
+        expect([buzzer.node.x, buzzer.node.y]).toEqual([356, 301]);
         // the thread grew to fit its instances
         expect(thread.node.y + thread.node.height).toBeGreaterThan(buzzer.node.y + buzzer.node.height);
         const alarm = layout.graph.edges.find(e => e.id === 'GarageDoor/door.alarm->buzzer.alarm')!;
@@ -102,31 +102,31 @@ describe('structure diagrams: manual layout', () => {
         }
         // connectors whose ports did not move keep the route of the automatic layout
         const auto = (await diagram(SYSTEM)).layout;
-        const report = 'GarageDoor/report->diag.report';
+        const report = 'GarageDoor/door.cycles->diag.cycles';
         expect(layout.graph.edges.find(e => e.id === report)!.points).toEqual(auto.graph.edges.find(e => e.id === report)!.points);
     });
 
     test('ports: side and offset (@port), the connector leaves the port perpendicular to its side', async () => {
         const text = await withLayout(SYSTEM, layout => {
-            layout.ports['GarageDoor/door.status'] = { side: 'SOUTH', offset: 40 };
+            layout.ports['GarageDoor/door.stopped'] = { side: 'SOUTH', offset: 40 };
             layout.ports['GarageDoor.report'] = { side: 'SOUTH', offset: 300 };
         });
-        expect(text).toContain('@at(26, 52) @port(status, bottom, 40) door : DoorController');
+        expect(text).toContain('@at(26, 52) @port(stopped, bottom, 40) door : DoorController');
         expect(text).toContain('@at(130, 16) @port(report, bottom, 300)\nsystem GarageDoor {');
         expect(await format(text)).toBe(text);
         const { model, layout } = await diagram(text);
         expect(ibdLayoutFromModel(model, layout)?.ports).toEqual({
-            'GarageDoor/door.status': { side: 'SOUTH', offset: 40 }, 'GarageDoor.report': { side: 'SOUTH', offset: 300 }
+            'GarageDoor/door.stopped': { side: 'SOUTH', offset: 40 }, 'GarageDoor.report': { side: 'SOUTH', offset: 300 }
         });
         const door = node(layout, 'GarageDoor/door');
-        const status = door.node.ports.find(p => p.name === 'status')!;
+        const status = door.node.ports.find(p => p.name === 'stopped')!;
         expect(status.side).toBe('SOUTH');
         expect([status.x + status.size / 2, status.y + status.size / 2]).toEqual([40, door.node.height]);
         // the label below the instance, right of the port; the thread contains it
         expect(status.label.y).toBeGreaterThan(door.node.height);
         const thread = node(layout, 'GarageDoor/thread:ControlTask');
         expect(thread.y + thread.node.height).toBeGreaterThan(door.y + status.label.y + status.label.height);
-        const edge = layout.graph.edges.find(e => e.id === 'GarageDoor/drive.status->door.status')!;
+        const edge = layout.graph.edges.find(e => e.id === 'GarageDoor/drive.stopped->door.stopped')!;
         const end = edge.points[edge.points.length - 1];
         const before = edge.points[edge.points.length - 2];
         expect(end).toEqual({ x: door.x + 40, y: door.y + door.node.height + status.size / 2 });
@@ -136,25 +136,26 @@ describe('structure diagrams: manual layout', () => {
         const frame = node(layout, 'GarageDoor');
         const report = frame.node.ports.find(p => p.name === 'report')!;
         expect(report.side).toBe('SOUTH');
-        const delegation = layout.graph.edges.find(e => e.id === 'GarageDoor/report->diag.report')!;
-        expect(delegation.points[0]).toEqual({ x: frame.x + 300, y: frame.y + frame.node.height - report.size / 2 });
-        expect(delegation.points[1].y).toBeLessThan(delegation.points[0].y);
+        const delegation = layout.graph.edges.find(e => e.id === 'GarageDoor/diag.report->report')!;
+        const last = delegation.points.length - 1;
+        expect(delegation.points[last]).toEqual({ x: frame.x + 300, y: frame.y + frame.node.height - report.size / 2 });
+        expect(delegation.points[last - 1].y).toBeLessThan(delegation.points[last].y);
         // ports of a side keep their distance
         const pushed = await withLayout(SYSTEM, layout => {
-            layout.ports['GarageDoor/door.motor'] = { side: 'EAST', offset: 100 };
+            layout.ports['GarageDoor/door.up'] = { side: 'EAST', offset: 100 };
             layout.ports['GarageDoor/door.alarm'] = { side: 'EAST', offset: 101 };
         });
         const ports = node((await diagram(pushed)).layout, 'GarageDoor/door').node.ports;
         const center = (name: string) => { const p = ports.find(q => q.name === name)!; return p.y + p.size / 2; };
-        expect(Math.abs(center('motor') - center('alarm'))).toBeGreaterThanOrEqual(22);
+        expect(Math.abs(center('up') - center('alarm'))).toBeGreaterThanOrEqual(22);
     });
 
     test('waypoints of connectors (@via), relative to the frame of the connector', async () => {
-        const id = 'GarageDoor/diag.cycles->door.cycles';
+        const id = 'GarageDoor/door.cycles->diag.cycles';
         const text = await withLayout(SYSTEM, layout => {
             layout.edges[id] = { bends: [{ x: 560, y: 420 }] };
         });
-        expect(text).toContain('@via(560, 420) connect diag.cycles -> door.cycles');
+        expect(text).toContain('@via(560, 420) connect door.cycles -> diag.cycles');
         const { layout } = await diagram(text);
         const frame = node(layout, 'GarageDoor');
         const edge = layout.graph.edges.find(e => e.id === id)!;
@@ -163,7 +164,7 @@ describe('structure diagrams: manual layout', () => {
         expect(layout.effective!.edges[id]).toEqual({ bends: [{ x: 560, y: 420 }] });
         // waypoints of a connector inside a thread are relative to the thread
         const drive = fs.readFileSync(path.join(DEVICE, 'drive-unit.devm'), 'utf-8');
-        const inner = 'DriveUnit/motor.pwm->pwm.duty';
+        const inner = 'DriveUnit/motor.duty->pwm.duty';
         const moved = await withLayout(drive, layout => {
             layout.edges[inner] = { bends: [{ x: 150, y: 150 }] };
             layout.nodes['DriveUnit/thread:MotorTask'].x += 30;
@@ -178,7 +179,7 @@ describe('structure diagrams: manual layout', () => {
             layout.nodes['GarageDoor/thread:IoTask'] = { ...layout.nodes['GarageDoor/thread:IoTask'], width: 500, height: 400 };
             layout.nodes['GarageDoor/thread:ControlTask'] = { ...layout.nodes['GarageDoor/thread:ControlTask'], width: 50, height: 50 };
         });
-        expect(text).toContain('@priority(2) @period(100 ms) @at(610, 172) @size(500, 400)');
+        expect(text).toContain('@priority(2) @period(100 ms) @at(644, 268) @size(500, 400)');
         const { layout } = await diagram(text);
         expect([node(layout, 'GarageDoor/thread:IoTask').node.width, node(layout, 'GarageDoor/thread:IoTask').node.height]).toEqual([500, 400]);
         const control = node(layout, 'GarageDoor/thread:ControlTask').node;
@@ -187,23 +188,23 @@ describe('structure diagrams: manual layout', () => {
         expect(control.height).toBeGreaterThanOrEqual(auto.height - 1);
         // the frame grows with the thread
         const frame = node(layout, 'GarageDoor').node;
-        expect(frame.height).toBeGreaterThan(172 + 400);
+        expect(frame.height).toBeGreaterThan(268 + 400);
     });
 
     test('Automatic layout removes the layout annotations of the diagram, other annotations stay', async () => {
         const text = await withLayout(SYSTEM, layout => {
-            layout.ports['GarageDoor/door.status'] = { side: 'NORTH', offset: 30 };
-            layout.edges['GarageDoor/diag.cycles->door.cycles'] = { bends: [{ x: 560, y: 420 }] };
+            layout.ports['GarageDoor/door.stopped'] = { side: 'NORTH', offset: 30 };
+            layout.edges['GarageDoor/door.cycles->diag.cycles'] = { bends: [{ x: 560, y: 420 }] };
         });
         const { model, layout } = await diagram(text);
         expect(applyEdits(text, ibdLayoutTextEdits(model, layout, text, undefined))).toBe(SYSTEM);
     });
 
     test('only the annotations of the elements of the shown diagram are read and written', async () => {
-        const text = `component A { provides sync p : integer  requires sync r : integer }
+        const text = `component A { in sync p : integer  out sync r : integer }
 @at(10, 10)
 subsystem Inner {
-    provides sync p : integer
+    in sync p : integer
     thread I {
         @at(20, 60) a : A
     }
@@ -238,7 +239,7 @@ system Outer {
         const { layout } = await diagram(light, 'light.devm');
         expect(layout.effective).toBeDefined();
         const frame = node(layout, 'CourtesyLight');
-        for (const id of ['type:LightLevel', 'type:LightCmd']) {
+        for (const id of ['type:LightLevel']) {
             // right of the frame (arranged by hand in the example)
             expect(node(layout, id).x).toBeGreaterThanOrEqual(frame.x + frame.node.width);
         }
@@ -271,11 +272,11 @@ system Outer {
 
     test('validation of the layout annotations', async () => {
         const text = SYSTEM
-            .replace('door : DoorController', '@at(1) @port(nothing, left, 10) @port(cmd, middle) door : DoorController')
+            .replace('door : DoorController', '@at(1) @port(nothing, left, 10) @port(open, middle) door : DoorController')
             .replace('buzzer : Buzzer', '@at(1, 2) @at(3, 4) @size(-1, 5) buzzer : Buzzer')
-            .replace('    connect door.motor -> drive.ctrl', '    @via(1, 2, 3) connect door.motor -> drive.ctrl')
-            .replace('    provides async remote : DoorCmd', '    @at(1, 2) provides async remote : DoorCmd')
-            .replace('    thread IoTask', '    @via(1, 2) @port(cmd, left)\n    thread IoTask');
+            .replace('    connect door.up -> drive.up', '    @via(1, 2, 3) connect door.up -> drive.up')
+            .replace('    in async open', '    @at(1, 2) in async open')
+            .replace('    thread IoTask', '    @via(1, 2) @port(open, left)\n    thread IoTask');
         const parsed = await deviceLoader.load(text, URI.file(path.join(DEVICE, 'system.devm')).toString());
         const messages = parsed.diagnostics.map(d => `${d.severity === 1 ? 'error' : 'warning'}: ${d.message}`);
         expect(messages).toEqual(expect.arrayContaining([
@@ -290,8 +291,8 @@ system Outer {
             '\'@port\' has no effect here (side and offset of a port in the structure diagram: @port(name, left | right | top | bottom, offset)).'
         ].map(m => m.startsWith('error') || m.startsWith('warning') ? m : `warning: ${m}`)));
         const valid = await withLayout(SYSTEM, layout => {
-            layout.ports['GarageDoor/door.status'] = { side: 'NORTH', offset: 30 };
-            layout.edges['GarageDoor/diag.cycles->door.cycles'] = { bends: [{ x: 560, y: 420 }] };
+            layout.ports['GarageDoor/door.stopped'] = { side: 'NORTH', offset: 30 };
+            layout.edges['GarageDoor/door.cycles->diag.cycles'] = { bends: [{ x: 560, y: 420 }] };
             layout.nodes['GarageDoor/thread:IoTask'] = { ...layout.nodes['GarageDoor/thread:IoTask'], width: 400, height: 300 };
         });
         expect((await load(valid)).diagnostics.filter(d => /@|annotation/.test(d.message))).toEqual([]);
@@ -299,18 +300,19 @@ system Outer {
 
     test('structural edits keep the layout annotations: moving an instance, renaming a port', async () => {
         const text = await withLayout(SYSTEM, layout => {
-            layout.ports['GarageDoor/door.status'] = { side: 'NORTH', offset: 30 };
-            layout.ports['GarageDoor.remote'] = { side: 'NORTH', offset: 100 };
+            layout.ports['GarageDoor/door.stopped'] = { side: 'NORTH', offset: 30 };
+            layout.ports['GarageDoor.open'] = { side: 'NORTH', offset: 100 };
         });
         const parsed = await load(text);
         const structure = parsed.model.elements.find(ast.isCompositeType)!;
         const buzzer = structure.threads[0].instances.find(i => i.name === 'buzzer')!;
         const moved = applyEdits(text, new StructureEditor(text, parsed.model).moveInstance(buzzer, structure.threads[1]).edits);
-        expect(moved).toMatch(/thread IoTask \{[^}]*@at\(366, 96\) buzzer : Buzzer/);
+        expect(moved).toMatch(/thread IoTask \{[^}]*@at\(356, 181\) buzzer : Buzzer/);
         // a renamed boundary port: its @port follows
-        const remote = structure.ports.find(p => p.name === 'remote')!;
-        const edits = structureRenameEdits(services.Devm, remote, 'command').get(parsed.document.uri.toString())!;
+        const open = structure.ports.find(p => p.name === 'open')!;
+        const edits = structureRenameEdits(services.Devm, open, 'command').get(parsed.document.uri.toString())!;
         expect(applyEdits(text, edits)).toContain('@port(command, top, 100)');
+        expect(applyEdits(text, edits)).toContain('delegate command -> door.open');
     });
 
     test('devm render honors the layout annotations of structure files (--auto ignores them)', async () => {
