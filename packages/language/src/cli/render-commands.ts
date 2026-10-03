@@ -162,7 +162,7 @@ export async function runRenderCommand(patterns: string[], options: RenderComman
     let failures = loadFailures;
     const single = files.length === 1 && options.out?.toLowerCase().endsWith('.svg');
     // structure files: the internal block diagram of a subsystem or system (or the component types as
-    // blocks, or the data types of a file without component types), with the structs and interfaces of the file
+    // blocks, or the data types of a file without component types), with the structs of the file
     for (const { file, model } of structures) {
         const layout = await layoutStructure(model, { element: options.element, layout: settings.auto ? null : undefined });
         if (!layout) {

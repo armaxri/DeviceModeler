@@ -84,21 +84,22 @@ label of a selected transition. The first drag turns the diagram into a manual l
 ## Structure files (experimental)
 
 🧪 Structure files (`.devm` files with structure elements, `docs/structure-language.md` of the
-repository): component types with `provides` / `requires` ports (sync data, async events), implemented by
+repository): component types with ports as directed data flow (`in` / `out` / `inout sync` data, `in` /
+`out async` events with an optional payload), implemented by
 state machines (`behavior "door.devm"`), subsystems and the `system`, threads (instances of components run
 in threads, instances of subsystems outside of them) and connections.
 
 - **Language server**: diagnostics (ports checked against the state machine, connection kinds, types and
   directions, threads), completion, hover, formatting, outline, go to definition (component types, ports,
-  types, imports, the state machine of a behavior), **Go to Implementation** = go to the provider of a
-  required port, find references and rename across all `.devm` files of the workspace.
+  types, imports, the state machine of a behavior), **Go to Implementation** = go to the source of the
+  data of an in port, find references and rename across all `.devm` files of the workspace.
 - **Diagram** (**Device Modeler: Open Diagram**): the internal block diagram of the subsystem or system next to the
-  text (with the structs and interfaces of the file as separate «struct» / «interface» boxes), edited
+  text (with the structs of the file as separate «struct» boxes), edited
   like in the web app – palette (thread, instance, ports, connector), rename (`F2`), drag instances into
   threads, `Del`, properties panel; selecting a port, connector or instance highlights the route of its
-  signals through all levels. **Device Modeler: Export Diagram…** exports the shown diagram (SVG / PNG).
+  data through all levels. **Device Modeler: Export Diagram…** exports the shown diagram (SVG / PNG).
 - **Navigation**: double-click an instance to open its state machine or the diagram of its subsystem, its
-  type name (or the type of a port) to open the type; *Go to provider*, *Follow into*, *Used by* (on a state machine diagram: the
+  type name (or the type of a port) to open the type; *Go to source*, *Follow into*, *Used by* (on a state machine diagram: the
   instances implementing it). The target file is opened with its diagram; *◀* / *▶* in the diagram toolbar,
   `Alt+←` / `Alt+→` and **Device Modeler: Diagram: Go Back / Go Forward** move through the navigation history shared
   by all diagrams.

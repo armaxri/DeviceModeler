@@ -216,25 +216,25 @@ applied on top of the automatic ELK layout, the same editor gestures, *Auto-arra
 undo of the text.
 
 ```
-@at(720, 16)                                    // a type box (struct / interface) of the file
+@at(720, 16)                                    // a type box (struct) of the file
 struct LightLevel { brightness : integer }
 
-@at(112, 16) @port(cmd, left, 155)              // the frame and the place of its boundary port cmd
+@at(112, 16) @port(on, left, 155)               // the frame and the place of its boundary port on
 subsystem CourtesyLight {
-    provides async cmd : LightCmd
+    in async on
     @priority(1) @period(20 ms) @at(41, 48) @size(500, 196)
     thread LightTask {
         @at(26, 52) dimmer : Dimmer
         @at(330, 96) @port(level, top, 40) led : LedDriver
     }
     @via(300, 120) connect dimmer.level -> led.level
-    delegate cmd -> dimmer.cmd
+    delegate on -> dimmer.on
 }
 ```
 
 | Annotation | Written before | Meaning |
 | --- | --- | --- |
-| `@at(x, y)` | `system` / `subsystem` (the frame), `thread`, an instance, `component` (its block in the overview of the component types), `struct` / `interface` (type box) | position relative to the parent node (the frame or a thread; the canvas for the frame, blocks and type boxes) |
+| `@at(x, y)` | `system` / `subsystem` (the frame), `thread`, an instance, `component` (its block in the overview of the component types), `struct` (type box) | position relative to the parent node (the frame or a thread; the canvas for the frame, blocks and type boxes) |
 | `@size(width, height)` | the same | explicit (minimum) size, only if the user resized the node – a node never becomes smaller than its content |
 | `@port(name, side, offset)` | an instance (the ports of its type), `system` / `subsystem` (its boundary ports) | the side of the port (`left`, `right`, `top`, `bottom`) and the offset of its center along the side, from the top / left corner (optional) |
 | `@via(x1, y1, …)` | `connect`, `delegate` | waypoints relative to the connector's frame (the innermost node containing the nodes of both ports: a thread for a connector within a thread, otherwise the frame) |
@@ -245,7 +245,7 @@ subsystem CourtesyLight {
   wrong arguments and duplicates errors, `@port` of a port the type does not have is a warning. Renaming a
   port in the diagram updates the `@port` annotations of the instances of its type.
 - Only the annotations of the elements of the shown diagram are read and written: every subsystem / system
-  of a file has its own diagram. The structs and interfaces of a file are shown in every diagram of the
+  of a file has its own diagram. The structs of a file are shown in every diagram of the
   file (and blocks in the overview of the component types): they have one position for all of them.
 - As written by the layout writer and the formatter, the annotations of the frame, threads, components
   and types stand on the line before them, those of instances, ports, connections and delegations in front

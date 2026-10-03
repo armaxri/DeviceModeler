@@ -45,7 +45,7 @@ entry StructureModel:
 // ---------------------------------------------------------------------------------------------
 // Imports
 
-// `import "motor.devm"` (component types, structs and interfaces of another structure file, or the
+// `import "motor.devm"` (component types and structs of another structure file, or the
 // state machine of a state machine file for `behavior Door`) and `import "types.h"` (C/C++ types of a
 // header). Paths are resolved relative to the importing file, headers also relative to the include
 // paths (see structure-imports.ts).

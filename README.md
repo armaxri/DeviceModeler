@@ -4,7 +4,7 @@ A [Langium](https://langium.org) based modeling environment for devices: the **s
 (components with their ports, subsystems, threads, instances and connections – 🧪 structure files) and
 the **hierarchical state machines** that implement the behavior of its components. Both are model files
 with the extension **`.devm`** – a file contains either a state machine or structure elements (structs,
-interfaces, components, subsystems, systems), never both – and unit tests of state machines are `.devmtest`
+components, subsystems, systems), never both – and unit tests of state machines are `.devmtest`
 files. Both are edited as text and in graphical editors built on
 [Sprotty](https://sprotty.org) and [ELK](https://eclipse.dev/elk/): the state machine diagrams look like
 PlantUML state diagrams, structures are shown as SysML internal block diagrams in the same themes – and you
@@ -12,7 +12,7 @@ can edit them directly: add states, draw transitions, nest states by drag and dr
 connect ports, rename in place, … Text and diagram always stay in sync, and the structure links to the
 state machines: double-click an instance to open its state machine.
 
-![Device Modeler: the system GarageDoor as text and internal block diagram, the route of the port door.motor highlighted](docs/screenshot.png)
+![Device Modeler: the system GarageDoor as text and internal block diagram, the route of the port door.up highlighted](docs/screenshot.png)
 
 ## Structure of a product (structure files)
 
@@ -23,29 +23,32 @@ machine, every other file is a structure file.
 
 ![The structure of a garage door: internal block diagram of the system GarageDoor](docs/examples/GarageDoor.svg)
 
-- **Component types** with `provides` / `requires` **ports**: sync ports carry data (a simple type, a
-  struct or a C/C++ type of an imported header), async ports carry events (named groups of events:
-  `interface DoorCmd { event open event close }`). A component can be implemented by a state machine
-  (`behavior "door.devm"`): its ports are checked against the interfaces of the state machine (provided async
-  port = `in` events, required async port = `out` events, sync ports = variables and operations).
+- **Component types** with **ports as directed data flow**: every port carries data in a direction –
+  **sync** ports data values (`in sync position : door::Position`, `out sync cycles : integer`, shared
+  data `inout sync errors : integer`; a simple type, a struct or a C/C++ type of an imported header),
+  **async** ports exactly one event named like the port with an optional payload (`in async open`,
+  `out async up : integer`). A component can be implemented by a state machine (`behavior "door.devm"`):
+  its ports are checked against the interfaces of the state machine (`out sync` = `var`, `in sync` =
+  `var readonly`, `inout sync` = `var`, `in` / `out async` = `in` / `out event`).
 - **Subsystems** (`subsystem`, composite component types) and the root **`system`**: **threads**
   (`@priority(5) @period(10 ms)`) with the instances of components running in them, instances of other
   subsystems outside of the threads (recursive nesting; their parts run in threads of their own),
-  explicit **connections** (`connect door.motor -> drive.ctrl`, required → provided) and **delegations**
-  to the boundary ports.
-- **Validation**: unconnected required ports, mismatching kinds, types and directions, connections
-  crossing threads (shown dashed), ports that do not match the state machine, unresolved imports, …
-- **Route analysis**: selecting a port, connector or instance highlights the whole signal path across
-  connections and delegations through all levels of the hierarchy and all files; *go to provider* of a
-  required port.
+  explicit **connections** in the direction of the data (`connect door.up -> drive.up`, out → in; inout ↔
+  inout) and **delegations** to the boundary ports (`delegate open -> door.open`, `delegate diag.report -> report`).
+- **Validation**: unconnected in ports, more than one source of a sync in port, mismatching kinds, types,
+  payloads and directions, connections crossing threads (shown dashed), ports that do not match the state
+  machine, unresolved imports, …
+- **Route analysis**: selecting a port, connector or instance highlights the whole data path across
+  connections and delegations through all levels of the hierarchy and all files; the *sources* of an in
+  port, the *targets* of an out port, *go to source*.
 - **Internal block diagram** (SysML style, PlantUML themes): frames for the subsystem / system and its
-  threads, instances with stereotypes, filled (provided) / hollow (required) ports with a chevron for async
-  ports and their type; the structs and interfaces declared in the file as separate «struct» /
-  «interface» boxes.
-  **Graphical editing** like the state machine diagrams (palette for threads, instances, ports and
-  connectors with compatibility feedback, rename, drag into threads, properties panel) – every action is a
-  text edit; **navigation** between systems, subsystems, component types, data types and state machines with a
-  back / forward history.
+  threads, instances with stereotypes, ports as **hollow (sync data) / filled (async event) squares with an
+  arrow for the direction** (in / out / inout) and their type, connectors with an arrowhead at the receiving
+  end; the structs declared in the file as separate «struct» boxes.
+  **Graphical editing** like the state machine diagrams (palette for threads, instances, the five kinds of
+  ports and connectors with compatibility feedback – written out → in whichever way they are drawn –, rename,
+  drag into threads, properties panel) – every action is a text edit; **navigation** between systems,
+  subsystems, component types, data types and state machines with a back / forward history.
 - **Tools**: the web editor, the VS Code extension (language server, diagram, navigation, edits across
   files) and `devm render` (SVG) support structure files. Not (yet) supported: simulation and code
   generation of structure files.

@@ -29,7 +29,7 @@ packages/
     src/model-utils.ts                    AST helpers (containers, composite states, …)
     src/structure-*.ts                    structure language: module, imports, types, scoping / linking, validation,
                                           port <-> state machine mapping (structure-behavior.ts), route analysis (structure-routes.ts),
-                                          formatter; src/lsp/structure-lsp.ts: definition, "go to provider", hover, completion
+                                          formatter; src/lsp/structure-lsp.ts: definition, "go to source", hover, completion
     src/diagram/                          AST -> PlantUML-like diagram model (layout.ts), laid out with ELK; font metrics;
                                           structures: internal block diagram (ibd-model.ts, ibd-layout.ts);
                                           manual layouts: layout-core/ (shared), manual-layout.ts + layout-annotations.ts

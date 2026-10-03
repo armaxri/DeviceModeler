@@ -53,8 +53,8 @@ same extension:
   content of the file: the context key `devm.structureEditorActive` is set for an editor showing a
   structure file) – diagnostics (port ↔ state machine rules, connections, threads),
   completion, hover, formatting, outline, go to definition (component types, ports, type names, import
-  paths, the state machine of a `behavior`), **Go to Implementation** = go to the provider of a required
-  port, find references and rename across the structure files of the workspace (all `.devm` files are
+  paths, the state machine of a `behavior`), **Go to Implementation** = go to the source of the data of an
+  in port (the ports sharing the data of an inout port), find references and rename across the structure files of the workspace (all `.devm` files are
   indexed). The providers of the language dispatch on the kind of the file or node (see
   [Architecture](architecture.md#one-language-for-two-kinds-of-model-files)), so the definition provider
   of state machines (C++ names, imported machines) and the one of structure files work side by side.
@@ -62,8 +62,7 @@ same extension:
   internal block diagram beside the text, in the same webview as the state machine diagrams (structure
   mode of the diagram controller, the styles of the web app): palette, rename, drag into threads,
   connectors, properties, route highlighting, the selector of the shown subsystem or system, the structs
-  and interfaces of the file as «struct» / «interface» boxes (a file with data types only shows only
-  them). **Manual layout** as in the web app: drag nodes, resize them, drag ports along the border of their
+  of the file as «struct» boxes (a file with data types only shows only them). **Manual layout** as in the web app: drag nodes, resize them, drag ports along the border of their
   node, add / move waypoints of connectors – the positions are layout annotations of the `.devm` text
   (`@at`, `@size`, `@port`, `@via`, see [Manual layout](manual-layout.md#structure-diagrams)), written as
   `WorkspaceEdit`s (undone with `Ctrl+Z`). *Auto-arrange* / *Automatic layout* (toolbar, the *…* menu of the
@@ -72,7 +71,7 @@ same extension:
   controls of the state machines (layout direction and edge routing, simulation, C++) are disabled; the
   context key `devm.structureDiagramActive` hides *Generate C++* and *Convert Layout File to Annotations* for
   structure diagrams.
-- **Navigation** (double-click an instance, its type name, the type of a port, *Go to provider*, *Follow into*, *Used by* of a
+- **Navigation** (double-click an instance, its type name, the type of a port, *Go to source*, *Follow into*, *Used by* of a
   state machine, …): the extension opens the target file in the text editor column of the diagram and
   its diagram in the column of the diagram, and shows and selects the target there. The navigation
   history is shared by all diagrams: *◀* / *▶* in the toolbar of every diagram, `Alt+←` / `Alt+→` in the
@@ -86,7 +85,7 @@ same extension:
 - **Workspace files**: the webview has no file system. With the text of the document the extension sends
   the texts of all `.devm` files of the workspace (open documents with their unsaved changes, the
   others from disk, at most 1000 files) and of the files the document imports (also C/C++ headers), and
-  sends them again when one of them changes – so *Used by*, routes and providers in other files, renames and
+  sends them again when one of them changes – so *Used by*, routes and sources in other files, renames and
   the markers of instances whose component type or state machine has errors work across files.
 
 ```bash

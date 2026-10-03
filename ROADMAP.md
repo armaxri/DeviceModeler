@@ -207,25 +207,33 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
   `find_package(Hsm)`, `hsm_generate`, `hsm_add_tests`, `HSM_EXECUTABLE`); CSS classes `devm-*`; in the
   language package `createDevmServices` / `DevmServices`, `StateMachine*` and `Structure*` services and
   the AST type `CompositeType` of subsystems and systems
-- 🧪 Structure elements (`src/structure.langium` in the language package, one language with the state machines): component types with `provides` / `requires` ports (sync: simple types, structs,
-  C/C++ header types; async: events, named `interface`s), `behavior "door.devm"` (ports checked against the
-  interfaces of the state machine), `subsystem`s and the root `system` (recursive nesting), threads with
+- 🧪 Structure elements (`src/structure.langium` in the language package, one language with the state machines): component types with ports as **directed data flow** –
+  `in` / `out` / `inout sync name : Type` (data values: simple types, structs, C/C++ header types) and
+  `in` / `out async name [: Type]` (exactly one event, named like the port, with an optional payload); no
+  operations, no provided / required services, no interface types –, `behavior "door.devm"` (ports mapped onto
+  the interfaces of the state machine: `out sync` = `var`, `in sync` = `var readonly`, `inout sync` = `var`,
+  `in` / `out async` = `in` / `out event`), `subsystem`s and the root `system` (recursive nesting), threads with
   annotations (`@priority`, `@period`, `@stack`) – instances of components run in threads, instances of
-  subsystems are placed outside of them –, explicit `connect` / `delegate`, imports of
-  structure files, state machines and headers
-- 🧪 Validation (directions, kinds, types, unconnected required ports, connections crossing threads, the
-  port ↔ state machine mapping) and route analysis through all levels (`routeOf`, `findProviders`, go to
-  provider)
+  subsystems are placed outside of them –, explicit `connect` / `delegate` in the direction of the data
+  (`connect out -> in`, `delegate in -> part.in`, `delegate part.out -> out`, inout with inout in any order),
+  imports of structure files, state machines and headers. The earlier `provides` / `requires` ports with
+  `interface` event groups were replaced by this model (the parser points to the new syntax)
+- 🧪 Validation (directions, kinds, types and payloads, one source per sync in port – async in ports merge
+  the events of several sources –, unconnected in ports, connections crossing threads, the port ↔ state
+  machine mapping) and route analysis through all levels along the data flow (`routeOf`, `findSources`,
+  `findTargets`, go to source)
 - 🧪 Internal block diagram (SysML style, PlantUML themes, ELK with orthogonal routing): `devm render`, the
   web editor and VS Code; graphical editing as text edits (threads, instances, ports, connectors with
   compatibility feedback – incompatible ports are refused with the explanation of the validator –, rename across files, delete with the connections in other files, properties),
   route highlighting, navigation between systems, subsystems, component types and state machines
   (*Used by*, *Follow into*, back / forward; like in PlantUML a subsystem opened directly is shown on its
   own – routes end at its boundary ports –, reached from a containing structure it is shown as that part,
-  with the navigation path as breadcrumb and *Follow out*), markers for problems in imported files; the structs and
-  interfaces of a file as unconnected «struct» / «interface» boxes (types-only files show only them),
-  port labels with their type
-- 🧪 VS Code: structure files in the language server (references, renames and go to provider across files), the
+  with the navigation path as breadcrumb and *Follow out*), markers for problems in imported files; the structs
+  of a file as unconnected «struct» boxes (types-only files show only them), port labels `name : Type`;
+  notation of the data flow: hollow squares = sync data, filled squares = async events, an arrow in every
+  port for the direction (in / out / inout), arrowheads at the receiving end of the connectors; palette
+  with five port tools (sync in / out / inout, async in / out)
+- 🧪 VS Code: structure files in the language server (references, renames and go to source across files), the
   structure diagram in the diagram webview, navigation through the extension (shared history), edits of
   several files as one `WorkspaceEdit`, all workspace `.devm` files sent to the diagrams
 - 🧪 Manual layout of structure diagrams with the concept and syntax of the state machines (`@at`,
@@ -244,8 +252,9 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
     files directly); the web app has no real workspace (a virtual file list)
   - state machines cannot use the structs of structure files (shared C/C++ headers instead); a validation of
     the `behavior` of components across the instances (e.g. one state machine per thread)
-  - 💭 interface types with sync operations (call ports with parameters and results), multiplicities of
-    ports and instances, deployment (mapping threads to cores / ECUs)
+  - 💭 multiplicities of ports and instances, deployment (mapping threads to cores / ECUs); semantics of
+    the data flow for the simulation / generation of the composition (when sync data is copied between
+    threads, queues of async in ports with several sources)
   - no tests in a real VS Code instance (the webview bundle is smoke-tested in Chromium with a mocked VS Code API)
 
 ## Decisions
@@ -269,4 +278,5 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
 - Is simulation or SCTUnit-style testing used in current projects?
 - Are the layout annotations in the model (merged into main) acceptable in daily use, reviews and merges?
 - Is the structure language (branch `claude/device-modeling`) the right level of detail for our products
-  (threads, sync / async ports), and should the composed system be simulated and generated?
+  (threads, ports as directed data flow: sync data and async events), and should the composed system be
+  simulated and generated?

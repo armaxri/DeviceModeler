@@ -7,7 +7,7 @@ import { HEADER_EXTENSIONS, MODEL_EXTENSION, resolveImportUri, type ResolvedHead
 /**
  * Imports of structure files and the state machines of components (`behavior "door.devm"`).
  *
- * A structure file imports other structure files (their structs, interfaces and component types
+ * A structure file imports other structure files (their structs and component types
  * become visible, by simple name and by `package.Name`), state machine files (for `behavior Door`)
  * and C/C++ headers. Both kinds of model files have the extension `.devm`: whether an import is a
  * structure file or a state machine file is known when the imported file is loaded (its root), so the
@@ -120,7 +120,7 @@ export function importedStructureMachines(model: ast.StructureModel): ast.StateM
 }
 
 /**
- * The elements (structs, interfaces, component types) visible in a model by the names under which
+ * The elements (structs, component types) visible in a model by the names under which
  * they can be referenced: the own elements by simple name (and `package.Name`), then the elements of
  * the imported files by simple name and `package.Name`. The first element of a name wins (duplicates
  * are reported by the validator).
