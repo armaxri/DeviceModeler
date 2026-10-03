@@ -12,7 +12,7 @@ can edit them directly: add states, draw transitions, nest states by drag and dr
 connect ports, rename in place, … Text and diagram always stay in sync, and the structure links to the
 state machines: double-click an instance to open its state machine.
 
-![Device Modeler](docs/screenshot.png)
+![Device Modeler: the system GarageDoor as text and internal block diagram, the route of the port door.motor highlighted](docs/screenshot.png)
 
 ## Structure of a product (structure files)
 
@@ -51,6 +51,8 @@ machine, every other file is a structure file.
   generation of structure files.
 
 ## State machines (state machine files)
+
+![The state machine of the door controller with the definition section and its use in the system (Used by)](docs/screenshot-statemachine.png)
 
 - **Textual DSL** (Langium): the structure of the state machine (states, regions, transitions) uses a
   PlantUML-like notation, the definition section and all reactions follow the statechart language of
