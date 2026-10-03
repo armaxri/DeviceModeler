@@ -13,6 +13,8 @@ export type { Tool } from './diagram-controller.js';
 
 interface Settings extends DiagramSettings {
     editorWidth?: string;
+    /** The properties panel at the right of the diagram is hidden. */
+    hideProperties?: boolean;
 }
 
 const STORAGE_TEXT = 'device-modeler.text';
@@ -56,6 +58,7 @@ export class DevmApp implements DiagramHost {
         this.bindToolbar();
         this.bindKeyboard();
         this.bindSplitter();
+        this.bindPanelToggle();
         this.applyTheme();
         await this.diagram.update();
     }
@@ -328,6 +331,32 @@ export class DevmApp implements DiagramHost {
             splitter.addEventListener('pointermove', move);
             splitter.addEventListener('pointerup', up);
         });
+    }
+
+    /** The button and the shortcut (Ctrl/Cmd+Alt+B) hiding the properties panel; the diagram gets its width. */
+    private bindPanelToggle(): void {
+        const button = byId('btn-panel');
+        const apply = () => {
+            const hidden = this.settings.hideProperties === true;
+            byId('diagram-pane').classList.toggle('hide-properties', hidden);
+            button.setAttribute('aria-pressed', String(!hidden));
+            button.title = `${hidden ? 'Show' : 'Hide'} panel (Ctrl+Alt+B)`;
+        };
+        const toggle = () => {
+            this.settings.hideProperties = !this.settings.hideProperties;
+            this.saveSettings();
+            apply();
+            // (the diagram is re-measured and fitted by the resize observer of the diagram controller)
+        };
+        button.addEventListener('click', toggle);
+        document.addEventListener('keydown', event => {
+            if ((event.ctrlKey || event.metaKey) && event.altKey && !event.shiftKey && event.code === 'KeyB') {
+                toggle();
+                event.preventDefault();
+                event.stopPropagation();
+            }
+        }, { capture: true });
+        apply();
     }
 
     private applyTheme(): void {

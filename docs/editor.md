@@ -22,6 +22,7 @@ The web app (`npm run dev`, `packages/web`) edits the text and the diagram side 
 | Delete | `Del` / `Backspace` or the trash button |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Y` (shared with the text editor) |
 | Keep a tool active | hold `Shift` while choosing it, `Esc` to go back to selection |
+| Hide / show the properties panel | panel button at the right end of the toolbar or `Ctrl+Alt+B` (`Cmd+Alt+B` on macOS); the diagram gets the width, the choice is remembered in the browser |
 
 ## Structure diagrams
 
