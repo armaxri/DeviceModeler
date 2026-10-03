@@ -234,7 +234,8 @@ export function createProgram(): Command {
 
 /**
  * `devm migrate-layout`: writes the manual layout of a layout file of the experimental sidecar format
- * (`<model>.layout`, e.g. `door.devm.layout`; older files are passed with `--layout door.hsm.layout`) into the model as layout annotations. The layout file is not deleted.
+ * (`<model>.layout`, e.g. `door.devm.layout`; files named after the former extension are passed with
+ * `--layout door.hsm.layout`) into the model as layout annotations. The layout file is not deleted.
  */
 async function migrateLayout(file: string, layoutFile: string): Promise<number> {
     if (!await exists(layoutFile)) {
