@@ -180,6 +180,17 @@ describe('runGeneration / devm generate', () => {
         expect(fs.existsSync(path.join(dir, 'gen'))).toBe(false);
     });
 
+    test('structure files: skipped when matched by a glob, an error when named', async () => {
+        fs.writeFileSync(path.join(dir, 'models/types.devm'), 'struct Position { x : real }\n');
+        writeConfig({ models: ['models/*.devm'], cpp: { outDir: 'gen' } });
+        const globbed = await runGeneration({ config: (await loadGeneratorConfig(path.join(dir, 'hsm.gen.json'))).config!, baseDir: dir, mode: 'check' });
+        expect(globbed.diagnostics).toEqual([]);
+        expect(globbed.outputs.map(o => path.basename(o.file))).toEqual(['sc_statemachine.h', 'Door.h', 'Door.cpp']);
+        writeConfig({ models: ['models/types.devm'], cpp: { outDir: 'gen' } });
+        const named = await runGeneration({ config: (await loadGeneratorConfig(path.join(dir, 'hsm.gen.json'))).config!, baseDir: dir, mode: 'check' });
+        expect(named.diagnostics.map(d => `${path.relative(dir, d.file!)}: ${d.message}`)).toEqual(['models/types.devm: a structure file, not a state machine: nothing to generate']);
+    });
+
     test('command line: --list-outputs, --check and --outputs-file', async () => {
         writeConfig({ models: ['models/door.devm'], cpp: { outDir: 'gen', headerExtension: '.hpp' } });
         const log: string[] = [];

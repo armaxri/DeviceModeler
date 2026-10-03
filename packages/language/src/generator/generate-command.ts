@@ -6,7 +6,7 @@ import { HsmModelLoader } from '../hsm-document.js';
 import { URI } from 'langium';
 import { cppHeaderStore } from '../cpp-headers.js';
 import { resolvedImports } from '../imports.js';
-import type { StateMachine } from '../generated/ast.js';
+import { isDmfModel, type StateMachine } from '../generated/ast.js';
 import type { CppHeaderSettings } from '../cpp-headers.js';
 import { cliHeaderSettings, headerSettingsFromConfig, installNodeHeaderSupport } from '../node/cpp-headers-node.js';
 import { createHsmServices } from '../hsm-module.js';
@@ -195,6 +195,13 @@ export async function runGeneration(request: GenerationRequest): Promise<Generat
     for (const [model, entries] of models) {
         const text = await fs.readFile(model, 'utf-8');
         const parsed = await loader.load(text, pathToFileURL(model).toString());
+        if (isDmfModel(parsed.model)) {
+            // structure files have no code; matched by a glob they are skipped, named explicitly an error
+            if (!entries.some(entry => isGlob(entry.path))) {
+                diagnostics.push({ severity: 'error', message: 'a structure file, not a state machine: nothing to generate', file: model });
+            }
+            continue;
+        }
         for (const imported of parsed.imported) {
             imports.add(URI.parse(imported.uri).fsPath);
         }
