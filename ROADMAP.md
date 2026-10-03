@@ -196,7 +196,7 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
 - 🧪 Structure language (`.dmf`, `src/dmf.langium` in the language package, sharing the services and types
   of the state machines): component types with `provides` / `requires` ports (sync: simple types, structs,
   C/C++ header types; async: events, named `interface`s), `behavior "door.hsm"` (ports checked against the
-  interfaces of the state machine), composite `structure`s and the root `system` (recursive nesting),
+  interfaces of the state machine), composites and the root `system` (recursive nesting),
   threads with annotations (`@priority`, `@period`, `@stack`), explicit `connect` / `delegate`, imports of
   structure files, state machines and headers
 - 🧪 Validation (directions, kinds, types, unconnected required ports, connections crossing threads, the
@@ -206,8 +206,7 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
   web editor and VS Code; graphical editing as text edits (threads, instances, ports, connectors with
   compatibility feedback, rename across files, delete with the connections in other files, properties),
   route highlighting, navigation between structures, composites, component types and state machines
-  (*Used by*, *Follow into*, back / forward), markers for problems in imported files, an overview of data
-  type files
+  (*Used by*, *Follow into*, back / forward), markers for problems in imported files
 - 🧪 VS Code: `.dmf` in the language server (references, renames and go to provider across files), the
   structure diagram in the diagram webview, navigation through the extension (shared history), edits of
   several files as one `WorkspaceEdit`, all workspace `.hsm` / `.dmf` files sent to the diagrams

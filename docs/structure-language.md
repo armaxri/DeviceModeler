@@ -244,9 +244,7 @@ ordered by the position of their partners, so a reply (`drive.status -> door.sta
 **Choosing what is shown.** The diagram shows the first `system` of the file, else its first
 `structure`; a file with component types only shows them all as blocks with their ports (or one of
 them). If the file declares several elements, a selector at the top of the diagram chooses the shown one;
-moving the text cursor into another structure shows that one. A file with data types and interfaces only
-(like `types.dmf` of the example) shows an overview of its structs and interfaces with their fields and
-events instead of a diagram (a click selects the declaration in the text).
+moving the text cursor into another structure shows that one.
 
 **Routes.** Selecting a port, a connection or an instance highlights the route of its signals
 (`ibdRouteElements`, based on `routeOf` / `portRoute` of the route analysis): the ports, connectors and

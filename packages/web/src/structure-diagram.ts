@@ -2,7 +2,7 @@ import type { AstNode, LangiumDocument } from 'langium';
 import type { SModelElementImpl } from 'sprotty';
 import type { SModelRoot } from 'sprotty-protocol';
 import {
-    BUILTIN_TYPES, DmfEditor, EditError, IBD_OVERVIEW_ID, applyEdits, behaviorMachine, checkRename, docComment, mapOffset, endpointLabel, findProviders, findRequirers, ibdChoices, ibdElementAt,
+    BUILTIN_TYPES, DmfEditor, EditError, IBD_OVERVIEW_ID, applyEdits, behaviorMachine, checkRename, mapOffset, endpointLabel, findProviders, findRequirers, ibdChoices, ibdElementAt,
     ibdNodes, ibdRouteElements, instanceType, isComponent, isComponentInstance, isComponentType, isConnection, isDelegation, isPort, isPortInterface,
     isStructDeclaration, isStructure, isThread, layoutStructure, normalizeUri, planConnection, portEndpoint, portTypeLabel, routeContinuations, routeIdsAt,
     threadInstances, threadOf, threadSettings, visibleElements,
@@ -149,7 +149,6 @@ export class StructureDiagram {
         this.routeInfo = undefined;
         this.cancelConnector();
         document.getElementById('ibd-element-select')?.parentElement?.setAttribute('hidden', '');
-        this.renderTypes(undefined);
         byId('diagram-area').classList.remove('route-highlight', 'structure-diagram');
     }
 
@@ -219,9 +218,7 @@ export class StructureDiagram {
         this.updateSelector(choices.map(c => ({ id: c.id, label: c.label })), layout ? elementOf(layout) : undefined);
         if (!layout) {
             this.state = undefined;
-            // a file of data types and interfaces: an overview of them instead of a diagram
-            const types = this.renderTypes(parsed);
-            banner.hidden = types;
+            banner.hidden = false;
             banner.textContent = 'The file declares no components, structures or systems – there is nothing to show in the diagram. '
                 + 'Add one with the buttons of the properties panel.';
             await this.context.show({ type: 'graph:ibd', id: '#empty', children: [] } as SModelRoot);
@@ -229,7 +226,6 @@ export class StructureDiagram {
             renderBreadcrumb([]);
             return;
         }
-        this.renderTypes(undefined);
         this.state = { parsed, layout, issues: this.computeIssues(parsed, layout), element: elementOf(layout) };
         for (const id of [...this.context.selection]) {
             if (!layout.elements.has(id)) {
@@ -284,40 +280,6 @@ export class StructureDiagram {
             pendingPort: this.pendingPort
         }));
         this.renderProperties();
-    }
-
-    /**
-     * The overview of the structs and interfaces of a file without component types (cards with their
-     * fields and events; a click selects the declaration in the text). Without `parsed` (or types) the
-     * overview is removed. Returns whether it is shown.
-     */
-    private renderTypes(parsed: ParsedDmfModel | undefined): boolean {
-        const types = parsed?.model.elements.filter(e => isStructDeclaration(e) || isPortInterface(e)) ?? [];
-        document.getElementById('ibd-types')?.remove();
-        if (types.length === 0) {
-            return false;
-        }
-        const text = (node: AstNode | undefined) => node?.$cstNode?.text.replace(/\s+/g, ' ') ?? '';
-        const cards = types.map(type => {
-            const rows = isStructDeclaration(type)
-                ? type.fields.map(f => h('li', {}, h('span', { class: 'member-name' }, f.name), ` : ${text(f.type)}`))
-                : isPortInterface(type) ? type.events.map(e => h('li', {}, 'event ', h('span', { class: 'member-name' }, e.name), e.type ? ` : ${text(e.type)}` : '')) : [];
-            const card = h('section', { class: 'ibd-type-card', title: 'Show the declaration in the text' },
-                h('div', { class: 'ibd-type-kind' }, isStructDeclaration(type) ? '«struct»' : '«interface»'),
-                h('div', { class: 'ibd-type-name' }, type.name),
-                ...[type.description, docComment(type)].filter(d => d).map(d => h('div', { class: 'ibd-type-description' }, d!)),
-                h('ul', {}, ...(rows.length > 0 ? rows : [h('li', { class: 'empty' }, isStructDeclaration(type) ? 'no fields' : 'no events')])));
-            card.addEventListener('click', () => {
-                if (type.$cstNode) {
-                    this.context.host.selectText({ offset: type.$cstNode.offset, end: type.$cstNode.end });
-                }
-            });
-            return card;
-        });
-        const overview = h('div', { id: 'ibd-types' },
-            h('div', { class: 'ibd-types-title' }, `Data types and interfaces of ${fileName(this.uri)}`), h('div', { class: 'ibd-types-cards' }, ...cards));
-        byId('diagram-area').append(overview);
-        return true;
     }
 
     /** The selector of the shown element (hidden if there is only one). */

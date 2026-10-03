@@ -84,7 +84,7 @@ label of a selected transition. The first drag turns the diagram into a manual l
 
 🧪 The structure language of the Device Modeling Framework (`docs/structure-language.md` of the
 repository): component types with `provides` / `requires` ports (sync data, async events), implemented by
-state machines (`behavior "door.hsm"`), composite structures and the `system`, threads and connections.
+state machines (`behavior "door.hsm"`), composites and the `system`, threads and connections.
 
 - **Language server**: diagnostics (ports checked against the state machine, connection kinds, types and
   directions, threads), completion, hover, formatting, outline, go to definition (component types, ports,
@@ -93,8 +93,7 @@ state machines (`behavior "door.hsm"`), composite structures and the `system`, t
 - **Diagram** (**HSM: Open Diagram**): the internal block diagram of the structure next to the text, edited
   like in the web app – palette (thread, instance, ports, connector), rename (`F2`), drag instances into
   threads, `Del`, properties panel; selecting a port, connector or instance highlights the route of its
-  signals through all levels. A file with data types only shows an overview of its structs and
-  interfaces. **HSM: Export Diagram…** exports the shown structure (SVG / PNG).
+  signals through all levels. **HSM: Export Diagram…** exports the shown structure (SVG / PNG).
 - **Navigation**: double-click an instance to open its state machine or the diagram of its structure, its
   type name to open the type; *Go to provider*, *Follow into*, *Used by* (on a state machine diagram: the
   instances implementing it). The target file is opened with its diagram; *◀* / *▶* in the diagram toolbar,

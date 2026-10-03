@@ -1,7 +1,7 @@
 # Device Modeling Framework
 
 A [Langium](https://langium.org) based modeling environment for devices: the **structure of a product**
-(components with their ports, composite structures, threads, instances and connections – 🧪 the structure
+(components with their ports, composites, threads, instances and connections – 🧪 the structure
 language, `.dmf`) and the **hierarchical state machines** that implement the behavior of its components
 (`.hsm`, the HSM Modeler). Both are edited as text and in graphical editors built on
 [Sprotty](https://sprotty.org) and [ELK](https://eclipse.dev/elk/): the state machine diagrams look like
@@ -24,8 +24,8 @@ state machines: double-click an instance to open its state machine.
   `interface DoorCmd { event open event close }`). A component can be implemented by a state machine
   (`behavior "door.hsm"`): its ports are checked against the interfaces of the state machine (provided async
   port = `in` events, required async port = `out` events, sync ports = variables and operations).
-- **Composite structures** and the root **`system`**: instances of component types (also of other
-  structures – recursive nesting), **threads** grouping the instances (`@priority(5) @period(10 ms)`),
+- **Composites** and the root **`system`**: instances of component types (also of other
+  composites – recursive nesting), **threads** grouping the instances (`@priority(5) @period(10 ms)`),
   explicit **connections** (`connect door.motor -> drive.ctrl`, required → provided) and **delegations**
   to the boundary ports.
 - **Validation**: unconnected required ports, mismatching kinds, types and directions, connections

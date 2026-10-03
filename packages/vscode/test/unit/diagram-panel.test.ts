@@ -20,7 +20,7 @@ const MODEL = 'statemachine Lamp {\n    [*] -> Off\n    state Off\n}\n';
 const LAYOUT = JSON.stringify({ version: 1, mode: 'manual', nodes: { Off: { x: 10, y: 20 } }, edges: {} });
 
 const PARTS = 'component Pump {\n    provides async cmd : event start\n}\n';
-const SYSTEM = 'import "parts.dmf"\nsystem Plant {\n    pump : Pump\n}\n';
+const SYSTEM = 'import "parts.dmf"\nsystem Plant {\n    thread Main {\n        pump : Pump\n    }\n}\n';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
