@@ -1,13 +1,13 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
 import {
-    cppHeaderStore, DmfModelLoader, HsmModelLoader, importSct, isStructureText, layoutFileName, layoutStateMachineWithLayout, layoutStructure, layoutTextEdits,
+    cppHeaderStore, StructureModelLoader, StateMachineModelLoader, importSct, isStructureText, layoutFileName, layoutStateMachineWithLayout, layoutStructure, layoutTextEdits,
     parseManualLayout, renderIbdSvg, renderSvg, type ParsedModel
 } from 'devm-language';
 import { runGeneration } from '../../../language/src/generator/generate-command.js';
 import { installNodeHeaderSupport } from '../../../language/src/node/cpp-headers-node.js';
 import { isStructureFile, readText, vscodeHeaderSettings, type DiagramManager } from './diagram-panel.js';
-import type { HsmTestController } from './test-controller.js';
+import type { DevmTestController } from './test-controller.js';
 import { effectiveTheme } from './logic/webview.js';
 import { resolveGeneration, type CppSettings } from './logic/generator-config.js';
 import type { LayoutCommand } from '../common/protocol.js';
@@ -15,18 +15,18 @@ import { toRangeEdits } from './logic/edits.js';
 
 export interface CommandContext {
     diagrams: DiagramManager;
-    tests: HsmTestController;
+    tests: DevmTestController;
     output: vscode.LogOutputChannel;
 }
 
-let loader: HsmModelLoader | undefined;
-let structureLoader: DmfModelLoader | undefined;
+let loader: StateMachineModelLoader | undefined;
+let structureLoader: StructureModelLoader | undefined;
 
 /** Parses and validates the text of a model (in the extension host, independent of the language server). */
 export async function parseModel(document: vscode.TextDocument): Promise<ParsedModel> {
     // imported state machines are read from the open documents or the file system
     if (!loader) {
-        loader = new HsmModelLoader(undefined, { readFile: uri => readText(uri.toString()) });
+        loader = new StateMachineModelLoader(undefined, { readFile: uri => readText(uri.toString()) });
         // imported C/C++ headers: read from disk with the settings of devm.gen.json
         installNodeHeaderSupport(loader.services.shared);
     }
@@ -41,7 +41,7 @@ export async function parseModel(document: vscode.TextDocument): Promise<ParsedM
  */
 export async function renderStructureSvg(document: vscode.TextDocument, element?: string): Promise<string> {
     if (!structureLoader) {
-        structureLoader = new DmfModelLoader(undefined, { readFile: uri => readText(uri.toString()) });
+        structureLoader = new StructureModelLoader(undefined, { readFile: uri => readText(uri.toString()) });
         installNodeHeaderSupport(structureLoader.services.shared);
     }
     cppHeaderStore(structureLoader.services.shared).updateSettings(vscodeHeaderSettings(document.uri));

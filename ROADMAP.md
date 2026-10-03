@@ -199,7 +199,7 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
   configuration `devm.gen.json` (formerly `hsm.gen.json`). A `.devm` file contains either a state machine
   or structure elements: one Langium language whose entry rule is the alternative of both kinds
   (`src/devm.langium`, [Architecture](docs/architecture.md#one-language-for-two-kinds-of-model-files))
-- 🧪 Structure elements (`src/dmf.langium` in the language package, one language with the state machines): component types with `provides` / `requires` ports (sync: simple types, structs,
+- 🧪 Structure elements (`src/structure.langium` in the language package, one language with the state machines): component types with `provides` / `requires` ports (sync: simple types, structs,
   C/C++ header types; async: events, named `interface`s), `behavior "door.devm"` (ports checked against the
   interfaces of the state machine), `subsystem`s and the root `system` (recursive nesting), threads with
   annotations (`@priority`, `@period`, `@stack`) – instances of components run in threads, instances of

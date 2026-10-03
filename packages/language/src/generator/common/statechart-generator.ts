@@ -1,10 +1,10 @@
 import { AstUtils, type AstNode } from 'langium';
 import * as ast from '../../generated/ast.js';
-import { qualifiedName } from '../../hsm-scope.js';
+import { qualifiedName } from '../../statemachine-scope.js';
 import { importKind, instanceVariables } from '../../imports.js';
 import { storageOfTypeReference } from '../../cpp-storage.js';
 import type { CppResolvedType } from '../../cpp-header/model.js';
-import { typeOfVariable, type HsmType } from '../../hsm-typesystem.js';
+import { typeOfVariable, type DevmType } from '../../typesystem.js';
 import { entryPointOf, nodeText, transitionLabel } from '../../model-utils.js';
 import { StatechartInterpreter, type ExecutionMode, type ExecutionOrder } from '../../simulation/interpreter.js';
 import { isFinalState, ModelIndex, type RegionNode, type TargetVertex } from '../../simulation/model-index.js';
@@ -79,7 +79,7 @@ export interface TimerInfo {
 /** A generated (internal) function of the state machine. */
 export interface GeneratedFunction {
     name: string;
-    returnType: HsmType;
+    returnType: DevmType;
     /** Parameters besides the state machine (`int item`). */
     params: string[];
     comment: string;
@@ -119,7 +119,7 @@ export abstract class StatechartGenerator implements ExpressionContext {
     protected readonly variableMembers = new Map<ast.VariableDeclaration, string>();
     protected readonly declarationScopes = new Map<ast.Declaration, ScopeInfo>();
     protected readonly scopes = new Map<string, ScopeInfo>();
-    protected readonly variableTypes = new Map<ast.VariableDeclaration, HsmType>();
+    protected readonly variableTypes = new Map<ast.VariableDeclaration, DevmType>();
     protected readonly transitionNumbers = new Map<ast.Transition, number>();
     protected readonly timers: TimerInfo[] = [];
     protected readonly timerByTrigger = new Map<ast.TimeTrigger, TimerInfo>();
@@ -180,12 +180,12 @@ export abstract class StatechartGenerator implements ExpressionContext {
     // ExpressionContext (dialect part)
     abstract eventValue(event: ast.EventDeclaration): string;
     abstract operationCall(operation: ast.OperationDeclaration, args: Code[][]): string;
-    abstract operationResult(type: HsmType, call: string): string;
+    abstract operationResult(type: DevmType, call: string): string;
     abstract raise(event: ast.EventDeclaration, block: CBlock): void;
     abstract withHandle(args: string): string;
-    abstract typeName(type: HsmType): string;
+    abstract typeName(type: DevmType): string;
     abstract toReal(text: string): string;
-    abstract store(target: string, type: HsmType, value: string): string;
+    abstract store(target: string, type: DevmType, value: string): string;
     abstract compareStrings(left: Code, right: Code, operator: '==' | '!='): string;
     abstract concatStrings(left: Code, right: Code): string;
     abstract variable(variable: ast.VariableDeclaration): string;
@@ -320,7 +320,7 @@ export abstract class StatechartGenerator implements ExpressionContext {
     // -----------------------------------------------------------------------------------------
     // ExpressionContext (common part)
 
-    variableType(variable: ast.VariableDeclaration): HsmType {
+    variableType(variable: ast.VariableDeclaration): DevmType {
         return this.variableTypes.get(variable) ?? 'integer';
     }
 
@@ -359,7 +359,7 @@ export abstract class StatechartGenerator implements ExpressionContext {
     // -----------------------------------------------------------------------------------------
     // Functions (generated on demand, so that there are no unused functions)
 
-    protected use(name: string, params: string[], comment: string, build: (body: CBlock) => void, returnType: HsmType = 'void'): string {
+    protected use(name: string, params: string[], comment: string, build: (body: CBlock) => void, returnType: DevmType = 'void'): string {
         if (!this.functions.has(name)) {
             const fn: GeneratedFunction = { name, returnType, params, comment, body: new CBlock(), order: this.sortKey(name) };
             this.functions.set(name, fn);

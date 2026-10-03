@@ -40,7 +40,7 @@ export interface EvaluationContext {
  * truncates toward zero, `%` has the sign of the dividend; integer division by zero and shift
  * amounts outside `0..63` are errors. `integer` is implicitly converted to `real` in mixed
  * arithmetic, comparisons and assignments to `real` variables. The operand types follow
- * `hsm-typesystem.ts` (`%`, bitwise and shift operators: integers; `+` on strings: concatenation;
+ * `typesystem.ts` (`%`, bitwise and shift operators: integers; `+` on strings: concatenation;
  * relational operators: numbers); invalid operands are runtime errors.
  *
  * Values of imported C++ types (docs/cpp-integration.md): enum values compare by value, unscoped enum

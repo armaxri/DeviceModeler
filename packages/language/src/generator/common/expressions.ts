@@ -1,9 +1,9 @@
 import { AstUtils, type AstNode } from 'langium';
 import * as ast from '../../generated/ast.js';
 import {
-    inferType, isCastable, memberPathType, returnTypeOf, sameType, typeName as hsmTypeName, typeOfEvent, typeOfParameter, typeOfTypeReference,
-    type HsmType
-} from '../../hsm-typesystem.js';
+    inferType, isCastable, memberPathType, returnTypeOf, sameType, typeName as devmTypeName, typeOfEvent, typeOfParameter, typeOfTypeReference,
+    type DevmType
+} from '../../typesystem.js';
 import { elementOf, isCppType, isEnumType, isUnscopedEnum, memberOf, referenceMembers, resolveCppValue } from '../../cpp-types.js';
 import { storageOfTarget, storageOfTypeReference } from '../../cpp-storage.js';
 import type { CppResolvedType } from '../../cpp-header/model.js';
@@ -20,7 +20,7 @@ export type Helper =
 /** A compiled expression: code without side effects (they have been emitted as statements before). */
 export interface Code {
     readonly text: string;
-    readonly type: HsmType;
+    readonly type: DevmType;
     /** A literal: it can be evaluated at any time. */
     readonly constant: boolean;
 }
@@ -32,7 +32,7 @@ export interface Code {
 export interface ExpressionContext {
     /** Lvalue of a variable or constant. */
     variable(variable: ast.VariableDeclaration): string;
-    variableType(variable: ast.VariableDeclaration): HsmType;
+    variableType(variable: ast.VariableDeclaration): DevmType;
     /** Condition that an event is present in the current step. */
     eventPresent(event: ast.EventDeclaration): string;
     /** Lvalue of the value of an event (`valueof`). */
@@ -45,7 +45,7 @@ export interface ExpressionContext {
      */
     operationCall(operation: ast.OperationDeclaration, args: Code[][]): string;
     /** The value of an operation call that is stored in a temporary (e.g. `NULL` -> `""` for C strings). */
-    operationResult(type: HsmType, call: string): string;
+    operationResult(type: DevmType, call: string): string;
     /** Emits the statements raising an event whose value (if any) has been stored. */
     raise(event: ast.EventDeclaration, block: CBlock): void;
     /** Marks a helper as used and returns its name. */
@@ -53,11 +53,11 @@ export interface ExpressionContext {
     /** Arguments of a helper that needs the state machine (C: `h, a, b`; C++: `a, b`, a member function). */
     withHandle(args: string): string;
     /** Name of a value type (`sc_integer`, `sc::integer`, ...). */
-    typeName(type: HsmType): string;
+    typeName(type: DevmType): string;
     /** Explicit conversion of an integer expression to real. */
     toReal(text: string): string;
     /** Statement assigning a converted value to an lvalue of the given type. */
-    store(target: string, type: HsmType, value: string): string;
+    store(target: string, type: DevmType, value: string): string;
     /** `==` / `!=` of two strings. */
     compareStrings(left: Code, right: Code, operator: '==' | '!='): string;
     /** Concatenation of two strings. */
@@ -135,7 +135,7 @@ export class ExpressionCompiler {
     }
 
     /** Compiles an expression and converts it to the given type (only `integer` -> `real` is implicit). */
-    value(expression: ast.Expression, type: HsmType | undefined, block: CBlock): Code {
+    value(expression: ast.Expression, type: DevmType | undefined, block: CBlock): Code {
         const code = this.compile(expression, block);
         return type ? this.convert(code, type, expression) : code;
     }
@@ -154,7 +154,7 @@ export class ExpressionCompiler {
     }
 
     /** Emits an assignment of a (converted) value to an lvalue of the given type. */
-    store(target: string, type: HsmType, value: string, block: CBlock): void {
+    store(target: string, type: DevmType, value: string, block: CBlock): void {
         block.add(this.context.store(target, type, stripParens(value)));
     }
 
@@ -214,7 +214,7 @@ export class ExpressionCompiler {
                 const [receiver, index] = this.operands([{ expression: expression.receiver }, { expression: expression.index, type: 'integer' }], block);
                 const element = elementOf(receiver.type);
                 if (!element) {
-                    return this.context.unsupported(`${hsmTypeName(receiver.type)} has no elements`, expression);
+                    return this.context.unsupported(`${devmTypeName(receiver.type)} has no elements`, expression);
                 }
                 return { text: `${receiver.text}[${this.context.checkedIndex(stripParens(index.text), element.length, expression)}]`, type: element.type, constant: false };
             }
@@ -306,7 +306,7 @@ export class ExpressionCompiler {
      * Compiles operands left to right. If a later operand emits statements (side effects), the values
      * of earlier operands are stored in temporaries first.
      */
-    private operands(items: Array<{ expression: ast.Expression; type?: HsmType; storage?: CppResolvedType }>, block: CBlock): Code[] {
+    private operands(items: Array<{ expression: ast.Expression; type?: DevmType; storage?: CppResolvedType }>, block: CBlock): Code[] {
         const results: Code[] = [];
         const ends: number[] = [];
         for (const item of items) {
@@ -324,7 +324,7 @@ export class ExpressionCompiler {
         return results;
     }
 
-    private temporary(type: HsmType, value: string, block: CBlock): Code {
+    private temporary(type: DevmType, value: string, block: CBlock): Code {
         const name = this.newTemp();
         block.add(`${this.context.typeName(type)} ${name} = ${stripParens(value)};`);
         return { text: name, type, constant: false };
@@ -443,7 +443,7 @@ export class ExpressionCompiler {
     }
 
     /** Implicit conversion for assignments, arguments and event values (`integer` -> `real`). */
-    convert(code: Code, type: HsmType, node: AstNode): Code {
+    convert(code: Code, type: DevmType, node: AstNode): Code {
         if (type === 'error' || sameType(code.type, type)) {
             return code;
         }
@@ -456,7 +456,7 @@ export class ExpressionCompiler {
         if (type === 'void') {
             return code;
         }
-        return this.context.unsupported(`Cannot convert ${hsmTypeName(code.type)} to ${hsmTypeName(type)}`, node);
+        return this.context.unsupported(`Cannot convert ${devmTypeName(code.type)} to ${devmTypeName(type)}`, node);
     }
 
     private conditional(node: ast.ConditionalExpression, block: CBlock): Code {
@@ -500,7 +500,7 @@ export class ExpressionCompiler {
                 return operand;
             }
             if (!isCastable(operand.type, target)) {
-                return this.context.unsupported(`Cannot cast ${hsmTypeName(operand.type)} to ${node.type.name}`, node);
+                return this.context.unsupported(`Cannot cast ${devmTypeName(operand.type)} to ${node.type.name}`, node);
             }
             const text = isCppType(target) ? `static_cast<${target.cppName}>(${stripParens(operand.text)})` : `static_cast<sc::integer>(${stripParens(operand.text)})`;
             const code: Code = { text, type: target, constant: operand.constant };
@@ -527,7 +527,7 @@ export class ExpressionCompiler {
      * An assignable place: a variable, or a member / element of a variable (`pos.x`, `a[i]`). Index
      * expressions are evaluated (into temporaries) before the assigned value, like in the interpreter.
      */
-    private lvalue(target: ast.Expression, message: string, block: CBlock): { text: string, type: HsmType, storage?: CppResolvedType } {
+    private lvalue(target: ast.Expression, message: string, block: CBlock): { text: string, type: DevmType, storage?: CppResolvedType } {
         const inner = unparenthesize(target);
         if (ast.isMemberAccessExpression(inner)) {
             const receiver = this.lvalue(inner.receiver, message, block);
@@ -541,7 +541,7 @@ export class ExpressionCompiler {
             const receiver = this.lvalue(inner.receiver, message, block);
             const element = elementOf(receiver.type);
             if (!element) {
-                return this.context.unsupported(`${hsmTypeName(receiver.type)} has no elements`, inner);
+                return this.context.unsupported(`${devmTypeName(receiver.type)} has no elements`, inner);
             }
             let index = this.value(inner.index, 'integer', block);
             if (!index.constant) {
@@ -588,7 +588,7 @@ export class ExpressionCompiler {
     }
 }
 
-function isNumeric(type: HsmType): boolean {
+function isNumeric(type: DevmType): boolean {
     return type === 'integer' || type === 'real';
 }
 

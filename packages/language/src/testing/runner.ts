@@ -1,6 +1,6 @@
 import type { AstNode, LangiumDocument, Reference } from 'langium';
 import * as ast from '../generated/ast.js';
-import { qualifiedName } from '../hsm-scope.js';
+import { qualifiedName } from '../statemachine-scope.js';
 import { instanceOfReference, referableName } from '../imports.js';
 import { SimulationError } from '../simulation/errors.js';
 import { ExpressionEvaluator, type EvaluationContext } from '../simulation/expressions.js';
@@ -10,8 +10,8 @@ import {
     convert, declaredType, defaultValueOf, formatValue, fromHost, runtimeTypeOfValue, toHost, type HostValue, type Value
 } from '../simulation/values.js';
 import type { CoverageCollector } from './coverage.js';
-import { builtinVariable, isLocalVariable } from './hsm-test-scope.js';
-import { CYCLE_UNITS, hasAnnotation } from './hsm-test-validator.js';
+import { builtinVariable, isLocalVariable } from './devm-test-scope.js';
+import { CYCLE_UNITS, hasAnnotation } from './devm-test-validator.js';
 
 /** Result of one test (an operation annotated with `@Test`). */
 export interface TestResult {

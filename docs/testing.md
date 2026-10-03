@@ -71,7 +71,7 @@ devm test tests/*.devmtest --machine models/ --junit report.xml -v
 `--machine` adds `.devm` files or directories, `--junit` writes a JUnit XML report, `-v` prints the trace of
 every test. The exit code is 1 if a test failed or a file has errors. The examples in
 [`examples/tests/`](../examples/tests) test all example state machines. The runner is available as API
-(`runTests`, `HsmTestWorkspace`, `toJUnitXml` in `devm-language`); it runs in the browser as well.
+(`runTests`, `DevmTestWorkspace`, `toJUnitXml` in `devm-language`); it runs in the browser as well.
 
 Not yet supported (compared to SCTUnit): `@Ignore`, `package` / imports, test suites, verifying the
 order of calls, mocks with sequences of values, calling operations of the state machine in a test,

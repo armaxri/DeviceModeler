@@ -1,7 +1,7 @@
 import { monaco } from './monaco.js';
 import { cppHover, DevmMonarchSyntax, isStructureText } from 'devm-language';
-import type { HsmServices } from 'devm-language';
-import { HsmModelService } from './model-service.js';
+import type { DevmServices } from 'devm-language';
+import { DevmModelService } from './model-service.js';
 import type { Diagnostic, Range, TextEdit } from 'vscode-languageserver-types';
 
 export { describeSyntaxProblem, type SyntaxProblem } from './model-service.js';
@@ -14,7 +14,7 @@ export const EDITOR_THEMES = { light: 'devm-light', dark: 'devm-dark' } as const
  * Runs the Langium services of the `.devm` language directly in the browser and connects them
  * to the Monaco editor (validation markers, completion, formatting, go to definition, rename).
  */
-export class HsmLanguageSupport extends HsmModelService {
+export class DevmLanguageSupport extends DevmModelService {
 
     private async document(model: monaco.editor.ITextModel) {
         return isStructureText(model.getValue())
@@ -42,7 +42,7 @@ export class HsmLanguageSupport extends HsmModelService {
             ]
         });
         this.configureLanguage(LANGUAGE_ID);
-        this.registerProviders(LANGUAGE_ID, this.loader.services.Hsm);
+        this.registerProviders(LANGUAGE_ID, this.loader.services.Devm);
     }
 
     private configureLanguage(languageId: string): void {
@@ -63,7 +63,7 @@ export class HsmLanguageSupport extends HsmModelService {
     }
 
     /** Completion, hover, formatting, go to definition, references and rename with the Langium services of a language. */
-    private registerProviders(languageId: string, services: HsmServices): void {
+    private registerProviders(languageId: string, services: DevmServices): void {
         monaco.languages.registerCompletionItemProvider(languageId, {
             triggerCharacters: ['>', ' ', '/', '.', '(', ':'],
             provideCompletionItems: async (model, position) => {

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { collectImportedFiles, dmfReferencedPaths, hsmImportPaths } from '../../src/extension/logic/imports.js';
+import { collectImportedFiles, structureReferencedPaths, stateMachineImportPaths } from '../../src/extension/logic/imports.js';
 
 describe('imported files of the webview', () => {
     it('finds the .devm import paths of a text (not headers)', () => {
-        expect(hsmImportPaths('statemachine A {\n    import "b.devm"\n    import: "c.devm" "types.h"\n    [*] -> S\n    state S\n}')).toEqual(['b.devm', 'c.devm']);
-        expect(hsmImportPaths('statemachine A { import "b.devm"')).toEqual(['b.devm']);
+        expect(stateMachineImportPaths('statemachine A {\n    import "b.devm"\n    import: "c.devm" "types.h"\n    [*] -> S\n    state S\n}')).toEqual(['b.devm', 'c.devm']);
+        expect(stateMachineImportPaths('statemachine A { import "b.devm"')).toEqual(['b.devm']);
     });
 
     it('collects the imported files transitively, relative to the importing file', async () => {
@@ -32,8 +32,8 @@ describe('imported files of the webview', () => {
 
     it('finds the files a structure file refers to: imports and the state machines of behaviors', () => {
         const text = 'import "types.devm" "door_types.h"\nimport "lamp.devm"\ncomponent Door {\n    behavior "door.devm"\n}\ncomponent Lamp {\n    behavior Lamp\n}\n';
-        expect(dmfReferencedPaths(text)).toEqual({ models: ['types.devm', 'lamp.devm', 'door.devm'], headers: ['door_types.h'] });
-        expect(dmfReferencedPaths('system {')).toEqual({ models: [], headers: [] });
+        expect(structureReferencedPaths(text)).toEqual({ models: ['types.devm', 'lamp.devm', 'door.devm'], headers: ['door_types.h'] });
+        expect(structureReferencedPaths('system {')).toEqual({ models: [], headers: [] });
     });
 
     it('collects the files of a structure file transitively: structure files, state machines and their headers', async () => {

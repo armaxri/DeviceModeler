@@ -4,21 +4,21 @@
 packages/
   language/     Langium language and tooling (no DOM dependencies, runs in Node.js and in the browser)
     src/devm.langium            grammar of the .devm language: a state machine file or a structure file (entry rule)
-    src/hsm.langium             grammar of state machine files (imported by devm.langium and hsm-test.langium)
-    src/dmf.langium             grammar of structure files (imported by devm.langium, docs/structure-language.md)
-    src/hsm-test.langium        grammar of the unit test language (.devmtest), reuses the expressions of hsm.langium
+    src/statemachine.langium             grammar of state machine files (imported by devm.langium and devm-test.langium)
+    src/structure.langium             grammar of structure files (imported by devm.langium, docs/structure-language.md)
+    src/devm-test.langium        grammar of the unit test language (.devmtest), reuses the expressions of statemachine.langium
     src/devm-parser.ts          parser of .devm files: empty files, messages of mixed kinds, isStructureText
     src/generated/              Langium generated AST, grammar and module (`npm run langium:generate`)
     src/syntaxes/               generated Monarch grammar (syntax highlighting in Monaco)
-    src/hsm-module.ts           dependency injection: services of .devm and .devmtest, relinking of importing documents
-    src/hsm-scope.ts            name resolution: qualified state names (nearest first), declarations, imported machines
-    src/hsm-linker.ts           ambiguous vertex names, member access of C++ structs and submachine instances
-    src/hsm-typesystem.ts       type system (integer, real, boolean, string, void, C++ types of headers)
-    src/hsm-validator.ts        validation rules of the model structure
-    src/hsm-expression-validator.ts  type checks of guards, effects and definitions
-    src/hsm-import-validator.ts checks of imports and submachine instances
-    src/hsm-formatter.ts        formatter
-    src/hsm-document.ts         HsmModelLoader: parses, links and validates texts outside a language server
+    src/devm-module.ts           dependency injection: services of .devm and .devmtest, relinking of importing documents
+    src/statemachine-scope.ts            name resolution: qualified state names (nearest first), declarations, imported machines
+    src/statemachine-linker.ts           ambiguous vertex names, member access of C++ structs and submachine instances
+    src/typesystem.ts       type system (integer, real, boolean, string, void, C++ types of headers)
+    src/statemachine-validator.ts        validation rules of the model structure
+    src/expression-validator.ts  type checks of guards, effects and definitions
+    src/statemachine-import-validator.ts checks of imports and submachine instances
+    src/statemachine-formatter.ts        formatter
+    src/model-loader.ts         StateMachineModelLoader: parses, links and validates texts outside a language server
     src/imports.ts              `import "motor.devm"`: path resolution, imported machines, submachine instances
     src/cpp-headers.ts          `import "motor_types.h"`: header store, settings, path resolution
     src/cpp-types.ts            C++ types and constants of headers in the HSM type system
@@ -27,16 +27,16 @@ packages/
     src/node/                   Node.js host of header imports (file system, `headers` of devm.gen.json)
     src/lsp/                    hover, go to definition and completion of C++ names (VS Code and web)
     src/model-utils.ts          AST helpers (containers, composite states, …)
-    src/dmf-*.ts                structure language: module, imports, types, scoping / linking, validation,
-                                port <-> state machine mapping (dmf-behavior.ts), route analysis (dmf-routes.ts),
-                                formatter; src/lsp/dmf-lsp.ts: definition, "go to provider", hover, completion
+    src/structure-*.ts                structure language: module, imports, types, scoping / linking, validation,
+                                port <-> state machine mapping (structure-behavior.ts), route analysis (structure-routes.ts),
+                                formatter; src/lsp/structure-lsp.ts: definition, "go to provider", hover, completion
     src/diagram/                AST -> PlantUML-like diagram model (layout.ts), laid out with ELK; font metrics;
                                 structures: internal block diagram (ibd-model.ts, ibd-layout.ts);
                                 manual layouts: layout-core/ (shared), manual-layout.ts + layout-annotations.ts
                                 (state machines), ibd-manual-layout.ts + ibd-layout-annotations.ts (structures)
     src/edit/model-edits.ts     ModelEditor: structural edits (add, move, rename, delete, …) as text edits
-    src/edit/dmf-edits.ts       DmfEditor: the edits of structure diagrams (threads, instances, ports, connections, …)
-    src/dmf-workspace.ts        DmfWorkspace: all structure files loaded together (navigation, routes and renames across files)
+    src/edit/structure-edits.ts       StructureEditor: the edits of structure diagrams (threads, instances, ports, connections, …)
+    src/structure-workspace.ts        StructureWorkspace: all structure files loaded together (navigation, routes and renames across files)
     src/render/                 SVG renderer without DOM (renderSvg, renderIbdSvg), diagram style sheet shared with the web app
     src/doc/                    model documentation (Markdown / HTML), doc comments, hover documentation
     src/simulation/             interpreter (docs/semantics.md) with virtual clock, scenario runner
@@ -89,9 +89,9 @@ model, which triggers the same pipeline again – so undo / redo, comments and f
 
 Structure files run through the same pipeline: the diagram controller switches to its structure
 mode (`structure-diagram.ts`), the internal block diagram is computed by `layoutStructure` (ELK) and
-diagram interactions become text edits by `DmfEditor`. Questions across files – the structures using a state
+diagram interactions become text edits by `StructureEditor`. Questions across files – the structures using a state
 machine, routes through composites of other files, renames and deletions updating other files – are
-answered by `DmfWorkspace`, which loads all structure files of the workspace together; the hosts pass the
+answered by `StructureWorkspace`, which loads all structure files of the workspace together; the hosts pass the
 texts of all `.devm` files for this, open other files on navigation (`DiagramHost.openLocation`,
 with a back / forward history) and apply edits of several files (`DiagramHost.applyWorkspaceEdits`).
 
@@ -107,8 +107,8 @@ State machine files and structure files have the same extension `.devm` and are 
 (`devm.langium`, generated `DevmGeneratedModule`); a file contains either a state machine or structure
 elements, never both.
 
-- **Grammar:** the entry rule `DevmFile: StateMachine | DmfModel` imports the rules of `hsm.langium` and
-  `dmf.langium`. The kind is decided by the first token (`statemachine` starts a state machine file), so
+- **Grammar:** the entry rule `DevmFile: StateMachine | StructureModel` imports the rules of `statemachine.langium` and
+  `structure.langium`. The kind is decided by the first token (`statemachine` starts a state machine file), so
   every construct is parsed by the rule of its kind and the keywords both kinds use for different
   constructs (`import`, `interface`, `event`, annotations `@…`) keep their syntax. The structure alternative
   must consume at least one token: an alternative that can be empty would be predicted (ALL(*)) for every
@@ -116,23 +116,23 @@ elements, never both.
   devm-parser.ts). Text of the other kind after the model cannot be parsed and is reported as "A .devm file
   contains either a state machine or structure elements" (`DevmParserErrorMessageProvider`).
 - **Keywords:** the keywords of one kind are keywords of the other kind as well (one lexer). They are
-  accepted as names by the name rules `HsmId` (state machines: `component`, `system`, `thread`, …) and
-  `DmfId` (structure files: `state`, `in`, `entry`, …), not proposed by completion (`isSoftKeyword`) and
+  accepted as names by the name rules `StateMachineId` (state machines: `component`, `system`, `thread`, …) and
+  `StructureId` (structure files: `state`, `in`, `entry`, …), not proposed by completion (`isSoftKeyword`) and
   shown as `ID` in the expected tokens of syntax errors. The TextMate / Monarch grammars highlight them as
   keywords; the semantic highlighting of the language server marks declarations and references.
-- **Services** (`HsmModule`, hsm-module.ts): the AST types of the two kinds are disjoint, so the validation
+- **Services** (`DevmModule`, devm-module.ts): the AST types of the two kinds are disjoint, so the validation
   checks of both kinds are registered on the same services. The services that need code of both kinds are
   structure implementations extending the state machine implementations: they handle the nodes of
-  structure files and pass everything else on – `DmfScopeProvider` → `HsmScopeProvider`, `DmfLinker` →
-  `HsmLinker` (resolves the imports of the file's kind before linking), `DmfFormatter` → `HsmFormatter`,
-  `DmfCompletionProvider` → `HsmCompletionProvider`, `DmfDefinitionProvider` → `HsmDefinitionProvider`
-  (lsp/cpp-lsp.ts: C++ names, imported machines), `DmfDocumentationProvider` → `HsmDocumentationProvider`.
-  References, rename and document symbols are the Langium defaults. `createHsmServices` returns the
-  language as `Hsm` and – the same object – as `Dmf`.
+  structure files and pass everything else on – `StructureScopeProvider` → `StateMachineScopeProvider`, `StructureLinker` →
+  `StateMachineLinker` (resolves the imports of the file's kind before linking), `StructureFormatter` → `StateMachineFormatter`,
+  `StructureCompletionProvider` → `StateMachineCompletionProvider`, `StructureDefinitionProvider` → `StateMachineDefinitionProvider`
+  (lsp/cpp-lsp.ts: C++ names, imported machines), `StructureDocumentationProvider` → `StateMachineDocumentationProvider`.
+  References, rename and document symbols are the Langium defaults. `createDevmServices` returns the
+  language as `Devm` and – the same object – as `Devm`.
 - **Imports across files:** an import path ending in `.devm` is a model import; whether it is a state
-  machine or a structure file is the kind of the loaded file (`importKind` = `model`, `dmfImportKind`
+  machine or a structure file is the kind of the loaded file (`importKind` = `model`, `structureImportKind`
   resolves to `hsm` / `dmf`). A state machine cannot import a structure file, the behavior of a component
-  must be a state machine file (both reported). The loaders (`loadImports`, `DmfWorkspace`) load all
+  must be a state machine file (both reported). The loaders (`loadImports`, `StructureWorkspace`) load all
   `.devm` files and use the root of each.
 - **Hosts:** the diagram controller shows the structure diagram when the text is a structure file
   (`isStructureText`: the first token, without parsing); the VS Code extension sets the context key

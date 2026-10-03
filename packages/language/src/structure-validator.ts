@@ -1,0 +1,589 @@
+import { UriUtils, type AstNode, type ValidationAcceptor, type ValidationChecks } from 'langium';
+import * as ast from './generated/ast.js';
+import { displayPath, headerDiagnosticMessage } from './cpp-headers.js';
+import { behaviorMapping } from './structure-behavior.js';
+import { structureCppImports, resolvedBehavior, resolvedStructureImports, visibleElements } from './structure-imports.js';
+import type { DevmServices } from './devm-module.js';
+import {
+    argumentNumber, DURATION_UNITS, enclosingComposite, instanceType, portReferenceText, compositeInstances, threadsOf
+} from './structure-model.js';
+import { portIncompatibilities, resolveDataType } from './structure-types.js';
+import { connectionThreads } from './structure-routes.js';
+import { resolveTypeName } from './typesystem.js';
+import { isModelPath } from './imports.js';
+import {
+    IBD_EDGE_ELEMENTS, IBD_LAYOUT_ANNOTATIONS, IBD_NODE_ELEMENTS, IBD_PORT_OWNERS, structureAnnotationArguments, portAnnotation
+} from './diagram/ibd-layout-annotations.js';
+
+export function registerStructureValidationChecks(services: DevmServices): void {
+    const validator = services.validation.StructureValidator;
+    const checks: ValidationChecks<ast.DevmAstType> = {
+        StructureModel: [validator.checkImports, validator.checkElementNames],
+        StructDeclaration: validator.checkStruct,
+        PortInterface: validator.checkInterface,
+        DataTypeReference: validator.checkDataTypeReference,
+        Component: [validator.checkPortNames, validator.checkBehavior],
+        CompositeType: [validator.checkPortNames, validator.checkCompositeNames, validator.checkPortUsage, validator.checkBoundaryPorts],
+        Port: validator.checkPort,
+        ComponentInstance: validator.checkInstance,
+        ThreadMember: validator.checkThreadMember,
+        Connection: validator.checkConnection,
+        Delegation: validator.checkDelegation,
+        StructureAnnotation: validator.checkAnnotation
+    };
+    services.validation.ValidationRegistry.register(checks, validator);
+}
+
+/**
+ * Known annotations of structure files, by name: where they may be written and what they mean.
+ * Other annotations are reported as unknown (warning). Tools may add names (e.g. layout annotations
+ * of the diagram) before the services are created.
+ */
+export const STRUCTURE_ANNOTATIONS: Record<string, { readonly targets: readonly string[], readonly description: string }> = {
+    priority: { targets: ['Thread'], description: 'priority of the thread: @priority(5)' },
+    period: { targets: ['Thread'], description: 'period of a cyclic thread: @period(10 ms) (units s, ms, us, ns)' },
+    stack: { targets: ['Thread'], description: 'stack size of the thread in bytes: @stack(4096)' },
+    // layout annotations of the structure diagram (see docs/manual-layout.md, ibd-layout-annotations.ts)
+    at: { targets: IBD_NODE_ELEMENTS, description: 'position in the structure diagram: @at(x, y)' },
+    size: { targets: IBD_NODE_ELEMENTS, description: 'size in the structure diagram: @size(width, height)' },
+    via: { targets: IBD_EDGE_ELEMENTS, description: 'waypoints of the connector in the structure diagram: @via(x1, y1, x2, y2, ...)' },
+    port: { targets: IBD_PORT_OWNERS, description: 'side and offset of a port in the structure diagram: @port(name, left | right | top | bottom, offset)' }
+};
+
+/**
+ * Checks of structure files (see docs/structure-language.md): imports, names, types, ports and
+ * their mapping onto the behavior state machine, instances, threads, connections and delegations.
+ */
+export class StructureValidator {
+
+    // -----------------------------------------------------------------------------------------
+    // Imports and names
+
+    checkImports(model: ast.StructureModel, accept: ValidationAcceptor): void {
+        const seen = new Set<string>();
+        const base = model.$document ? UriUtils.dirname(model.$document.uri) : undefined;
+        for (const resolved of resolvedStructureImports(model)) {
+            const target = { node: resolved.node, property: 'path' } as const;
+            if (!resolved.path) {
+                accept('error', 'The import path is empty.', target);
+                continue;
+            }
+            if (resolved.kind === 'unsupported') {
+                accept('error', `Cannot import '${resolved.path}': only model files ('.devm': structure files and state machines) and C/C++ headers ('.h', '.hpp') can be imported.`, target);
+                continue;
+            }
+            const key = resolved.uri?.toString() ?? resolved.path;
+            if (seen.has(key)) {
+                accept('warning', `'${resolved.path}' is imported more than once.`, target);
+                continue;
+            }
+            seen.add(key);
+            if (resolved.uri && resolved.uri.toString() === model.$document?.uri.toString()) {
+                accept('error', 'A structure file cannot import itself.', target);
+                continue;
+            }
+            if (resolved.kind === 'header') {
+                const header = resolved.header;
+                if (!header?.found) {
+                    const searched = (header?.searched ?? []).map(uri => displayPath(uri.toString(), base));
+                    accept('error', `Cannot resolve the import '${resolved.path}': the header was not found${searched.length > 0 ? ` (searched: ${searched.join(', ')})` : ''}.`, target);
+                    continue;
+                }
+                const files = new Set(header.headers.map(h => h.uri.toString()));
+                const errors = structureCppImports(model).index.diagnostics.filter(d => d.severity === 'error' && files.has(d.fileName));
+                for (const error of errors.slice(0, 5)) {
+                    accept('error', `Error in the imported header: ${headerDiagnosticMessage(error, base)}`, target);
+                }
+                continue;
+            }
+            if (resolved.kind === 'model') {
+                const location = resolved.uri ? (resolved.uri.scheme === 'file' ? resolved.uri.fsPath : resolved.uri.path) : resolved.path;
+                accept('error', `Cannot resolve the import '${resolved.path}': the file '${location}' was not found.`, target);
+            }
+        }
+    }
+
+    /** Names of structs, interfaces and component types are unique in a model and are not names of built-in types. */
+    checkElementNames(model: ast.StructureModel, accept: ValidationAcceptor): void {
+        const own = new Map<string, ast.StructureElement>();
+        for (const element of model.elements) {
+            if (!element.name) {
+                continue;
+            }
+            if (own.has(element.name)) {
+                accept('error', `Duplicate name '${element.name}'.`, { node: element, property: 'name' });
+                continue;
+            }
+            own.set(element.name, element);
+            if (resolveTypeName(element.name)) {
+                accept('error', `'${element.name}' is the name of a built-in type.`, { node: element, property: 'name' });
+            }
+        }
+        // the own elements shadow imported elements with the same name
+        const visible = visibleElements(model);
+        for (const resolved of resolvedStructureImports(model)) {
+            for (const element of resolved.model?.elements ?? []) {
+                const shadowing = own.get(element.name);
+                if (shadowing && resolved.model !== model) {
+                    accept('warning', `'${element.name}' hides the element with the same name imported from '${resolved.path}'.`, { node: shadowing, property: 'name' });
+                } else if (!shadowing && visible.get(element.name) !== element) {
+                    accept('warning', `'${element.name}' is declared in several imported files; '${resolved.path}' is not used for this name (use 'package.${element.name}').`, { node: resolved.node, property: 'path' });
+                }
+            }
+        }
+    }
+
+    checkStruct(struct: ast.StructDeclaration, accept: ValidationAcceptor): void {
+        checkUnique(struct.fields, 'field', accept);
+        for (const field of struct.fields) {
+            if (field.type && containsStruct(field.type, struct, new Set())) {
+                accept('error', `The struct '${struct.name}' contains itself (through '${field.name}').`, { node: field, property: 'type' });
+            }
+            this.checkDataType(field.type, `the field '${field.name}'`, accept);
+        }
+    }
+
+    checkInterface(portInterface: ast.PortInterface, accept: ValidationAcceptor): void {
+        checkUnique(portInterface.events, 'event', accept);
+        for (const event of portInterface.events) {
+            this.checkDataType(event.type, `the event '${event.name}'`, accept);
+        }
+    }
+
+    /** Unknown type names (whether a data type or an interface is expected is checked by the containing element). */
+    checkDataTypeReference(reference: ast.DataTypeReference, accept: ValidationAcceptor): void {
+        const resolution = resolveDataType(reference);
+        if (resolution.kind === 'error') {
+            accept('error', resolution.message, { node: reference, property: 'name' });
+        }
+    }
+
+    /** A data type (of a field, event payload or sync port) must not be an interface or `void`. */
+    protected checkDataType(reference: ast.DataTypeReference | undefined, what: string, accept: ValidationAcceptor): void {
+        if (!reference) {
+            return;
+        }
+        const resolution = resolveDataType(reference);
+        if (resolution.kind === 'interface') {
+            accept('error', `The interface '${reference.name}' is not a data type: it can only be the type of an async port (${what}).`, { node: reference, property: 'name' });
+        } else if (resolution.kind === 'data' && resolution.type === 'void') {
+            accept('error', `'void' is not a data type (${what}).`, { node: reference, property: 'name' });
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Ports
+
+    checkPortNames(type: ast.ComponentType, accept: ValidationAcceptor): void {
+        checkUnique(type.ports, 'port', accept);
+    }
+
+    checkPort(port: ast.Port, accept: ValidationAcceptor): void {
+        if (port.kind === 'sync') {
+            if (port.events.length > 0) {
+                accept('error', `The sync port '${port.name}' carries data, not events: write 'sync ${port.name} : Type' or declare it 'async'.`, { node: port, property: 'kind' });
+                return;
+            }
+            this.checkDataType(port.type, `the sync port '${port.name}'`, accept);
+            return;
+        }
+        checkUnique(port.events, 'event', accept);
+        for (const event of port.events) {
+            this.checkDataType(event.type, `the event '${event.name}'`, accept);
+        }
+        if (port.type) {
+            const resolution = resolveDataType(port.type);
+            if (resolution.kind === 'data') {
+                accept('error', `The async port '${port.name}' carries events: its type must be an interface ('interface ${port.type.name} { event ... }') or a list of events ('event a, event b : integer'), not the data type ${port.type.name}. Data ports are 'sync'.`,
+                    { node: port.type, property: 'name' });
+            }
+        }
+    }
+
+    /** The ports of a component with a behavior must match the definition section of the state machine (see structure-behavior.ts). */
+    checkBehavior(component: ast.Component, accept: ValidationAcceptor): void {
+        const behavior = component.behavior;
+        if (!behavior) {
+            return;
+        }
+        if (behavior.path !== undefined) {
+            const resolved = resolvedBehavior(behavior);
+            if (!behavior.path) {
+                accept('error', 'The behavior path is empty.', { node: behavior, property: 'path' });
+                return;
+            }
+            if (!isModelPath(behavior.path)) {
+                accept('error', `The behavior of a component is a state machine file ('.devm'), not '${behavior.path}'.`, { node: behavior, property: 'path' });
+                return;
+            }
+            if (!resolved.machine && resolved.structureFile) {
+                accept('error', `The behavior of a component is a state machine file: '${behavior.path}' is a structure file.`, { node: behavior, property: 'path' });
+                return;
+            }
+            if (!resolved.machine) {
+                const uri = resolved.uri;
+                const location = uri ? (uri.scheme === 'file' ? uri.fsPath : uri.path) : behavior.path;
+                accept('error', `Cannot resolve the behavior '${behavior.path}': the state machine file '${location}' was not found.`, { node: behavior, property: 'path' });
+                return;
+            }
+        }
+        const mapping = behaviorMapping(component);
+        if (!mapping) {
+            return; // unresolved reference (reported by the linker)
+        }
+        for (const port of mapping.ports) {
+            for (const event of port.events) {
+                if (event.problem) {
+                    accept('error', event.problem, { node: event.event, property: 'name' });
+                }
+            }
+            if (port.data?.problem) {
+                accept('error', port.data.problem, { node: port.port, property: 'name' });
+            }
+        }
+        for (const declaration of mapping.unmapped) {
+            const what = ast.isEventDeclaration(declaration) ? `The ${declaration.direction ?? 'in'} event` : 'The operation';
+            const port = ast.isEventDeclaration(declaration)
+                ? `a ${(declaration.direction ?? 'in') === 'in' ? 'provided' : 'required'} async port`
+                : 'a required sync port';
+            accept('warning', `${what} '${declaration.name}' of the state machine '${mapping.machine.name}' does not belong to any port of '${component.name}' (add it to ${port}).`,
+                { node: behavior, property: behavior.path !== undefined ? 'path' : 'machine' });
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Structures
+
+    /** Names of instances and threads are unique in a structure. */
+    checkCompositeNames(structure: ast.CompositeType, accept: ValidationAcceptor): void {
+        checkUnique(compositeInstances(structure), 'instance', accept);
+        checkUnique(structure.threads, 'thread', accept);
+    }
+
+    /**
+     * Instances of components run in a thread: they are declared in a thread or assigned to one by name.
+     * Instances of subsystems are placed outside of the threads (their parts run in the threads of the
+     * subsystem). Systems cannot be instantiated, subsystems not recursively.
+     */
+    checkInstance(instance: ast.ComponentInstance, accept: ValidationAcceptor): void {
+        const type = instanceType(instance);
+        if (!type) {
+            return; // linking error
+        }
+        if (!ast.isCompositeType(type)) {
+            if (!ast.isThread(instance.$container) && threadsOf(instance).length === 0) {
+                accept('error', `The component instance '${instance.name}' is outside of a thread: instances of components run in a thread. `
+                    + `Declare it in a thread ('thread T { ${instance.name} : ${instance.type?.$refText ?? type.name} }') or assign it to one ('thread T { ${instance.name} }').`,
+                    { node: instance, property: 'name' });
+            }
+            return;
+        }
+        if (type.kind === 'system') {
+            accept('error', `'${type.name}' is a system and cannot be instantiated; declare it as 'subsystem ${type.name}' to use it as a part.`, { node: instance, property: 'type' });
+            return;
+        }
+        if (ast.isThread(instance.$container)) {
+            accept('error', `'${instance.name}' is an instance of the subsystem '${type.name}' and cannot be placed in the thread '${instance.$container.name}': `
+                + `the parts of a subsystem run in the threads of the subsystem. Declare '${instance.name}' outside of the threads.`,
+                { node: instance, property: 'type' });
+        }
+        const structure = enclosingComposite(instance);
+        const cycle = structure ? instantiationCycle(type, structure) : undefined;
+        if (cycle) {
+            accept('error', `Recursive instantiation: ${[structure!.name, ...cycle].join(' -> ')}.`, { node: instance, property: 'type' });
+        }
+    }
+
+    checkThreadMember(member: ast.ThreadMember, accept: ValidationAcceptor): void {
+        const instance = member.instance?.ref;
+        if (!instance) {
+            return;
+        }
+        const type = instanceType(instance);
+        const thread = member.$container;
+        if (ast.isCompositeType(type)) {
+            accept('error', `'${instance.name}' is an instance of the subsystem '${type.name}' and cannot be assigned to the thread '${thread.name}': `
+                + 'the parts of a subsystem run in the threads of the subsystem. Only instances of components are assigned to threads.',
+                { node: member, property: 'instance' });
+            return;
+        }
+        const threads = threadsOf(instance);
+        const first = threads[0];
+        if (first && first !== thread) {
+            accept('error', `The instance '${instance.name}' is already assigned to the thread '${first.name}'. An instance belongs to one thread only.`, { node: member, property: 'instance' });
+        } else if (thread.members.filter(m => m.instance?.ref === instance).indexOf(member) > 0 || thread.instances.includes(instance)) {
+            accept('warning', `The instance '${instance.name}' is already part of the thread '${thread.name}'.`, { node: member, property: 'instance' });
+        }
+    }
+
+    /**
+     * Required ports of the instances are connected (or delegated); a sync required port has one provider
+     * only; connections are not duplicated.
+     */
+    checkPortUsage(structure: ast.CompositeType, accept: ValidationAcceptor): void {
+        const uses = new Map<string, Array<ast.Connection | ast.Delegation>>();
+        const keyOf = (reference: ast.PortReference | undefined) => reference?.instance?.ref && reference.port?.ref
+            ? `${reference.instance.ref.name}.${reference.port.ref.name}` : undefined;
+        const seen = new Set<string>();
+        for (const element of [...structure.connections, ...structure.delegations]) {
+            const source = keyOf(element.source);
+            if (source) {
+                uses.set(source, [...uses.get(source) ?? [], element]);
+            }
+            const text = `${element.$type}:${element.source ? portReferenceText(element.source) : ''}->${element.target ? portReferenceText(element.target) : ''}`;
+            if (seen.has(text)) {
+                accept('warning', `Duplicate ${ast.isConnection(element) ? 'connection' : 'delegation'}.`, { node: element });
+            }
+            seen.add(text);
+        }
+        for (const instance of compositeInstances(structure)) {
+            for (const port of instanceType(instance)?.ports ?? []) {
+                if (port.direction !== 'requires') {
+                    continue;
+                }
+                const connections = uses.get(`${instance.name}.${port.name}`) ?? [];
+                if (connections.length === 0) {
+                    accept('warning', `The required port '${instance.name}.${port.name}' is not connected.`, { node: instance, property: 'name' });
+                } else if (port.kind === 'sync' && connections.length > 1) {
+                    for (const extra of connections.slice(1)) {
+                        accept('error', `The sync port '${instance.name}.${port.name}' requires one provider, but it is connected ${connections.length} times.`, { node: extra, property: 'source' });
+                    }
+                }
+            }
+        }
+    }
+
+    /** Provided boundary ports are delegated to a part (a sync one to exactly one), required boundary ports are used by a part. */
+    checkBoundaryPorts(structure: ast.CompositeType, accept: ValidationAcceptor): void {
+        for (const port of structure.ports) {
+            if (port.direction === 'provides') {
+                const delegations = structure.delegations.filter(d => !d.source?.instance && d.source?.port?.ref === port);
+                if (delegations.length === 0) {
+                    accept('warning', `The provided port '${port.name}' is not delegated to a part ('delegate ${port.name} -> part.port').`, { node: port, property: 'name' });
+                } else if (port.kind === 'sync' && delegations.length > 1) {
+                    for (const extra of delegations.slice(1)) {
+                        accept('error', `The sync port '${port.name}' can be delegated to one provider only.`, { node: extra, property: 'target' });
+                    }
+                }
+            } else if (!structure.delegations.some(d => !d.target?.instance && d.target?.port?.ref === port)) {
+                accept('warning', `The required port '${port.name}' is not used by any part ('delegate part.port -> ${port.name}').`, { node: port, property: 'name' });
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Connections and delegations
+
+    checkConnection(connection: ast.Connection, accept: ValidationAcceptor): void {
+        const source = connection.source;
+        const target = connection.target;
+        const from = source?.port?.ref;
+        const to = target?.port?.ref;
+        if (!source || !target || !from || !to) {
+            return; // linking error
+        }
+        if (!source.instance || !target.instance) {
+            accept('error', `'connect' connects ports of parts ('a.port -> b.port'); boundary ports of '${enclosingComposite(connection)?.name}' are connected with 'delegate'.`,
+                { node: connection, property: source.instance ? 'target' : 'source' });
+            return;
+        }
+        if (from.direction === 'provides' && to.direction === 'requires') {
+            accept('error', `Connections go from the required to the provided port: write 'connect ${portReferenceText(target)} -> ${portReferenceText(source)}'.`, { node: connection, property: 'source' });
+            return;
+        }
+        if (from.direction !== 'requires') {
+            accept('error', `The source '${portReferenceText(source)}' of a connection must be a required port.`, { node: connection, property: 'source' });
+            return;
+        }
+        if (to.direction !== 'provides') {
+            accept('error', `The target '${portReferenceText(target)}' of a connection must be a provided port.`, { node: connection, property: 'target' });
+            return;
+        }
+        this.checkCompatibility(connection, from, to, accept);
+        // (a composite outside of threads: the threads of the component ports inside it)
+        const { source: threadA, target: threadB } = connectionThreads(connection);
+        if (threadA && threadB && threadA !== threadB) {
+            accept('info', `The connection crosses threads ('${threadA.name}' -> '${threadB.name}').`, { node: connection });
+        }
+    }
+
+    checkDelegation(delegation: ast.Delegation, accept: ValidationAcceptor): void {
+        const source = delegation.source;
+        const target = delegation.target;
+        const from = source?.port?.ref;
+        const to = target?.port?.ref;
+        if (!source || !target || !from || !to) {
+            return; // linking error
+        }
+        if (!!source.instance === !!target.instance) {
+            accept('error', 'A delegation connects a boundary port with a port of a part: \'delegate port -> part.port\' (provided) or \'delegate part.port -> port\' (required).',
+                { node: delegation, property: 'source' });
+            return;
+        }
+        if (from.direction !== to.direction) {
+            accept('error', `A delegation connects ports of the same direction, but '${portReferenceText(source)}' is ${direction(from)} and '${portReferenceText(target)}' is ${direction(to)}.`,
+                { node: delegation, property: 'target' });
+            return;
+        }
+        const outer = source.instance ? target : source;
+        const inner = source.instance ? source : target;
+        if (from.direction === 'provides' && source.instance) {
+            accept('error', `A provided port is delegated from the boundary to the part: write 'delegate ${portReferenceText(outer)} -> ${portReferenceText(inner)}'.`, { node: delegation, property: 'source' });
+            return;
+        }
+        if (from.direction === 'requires' && !source.instance) {
+            accept('error', `A required port is delegated from the part to the boundary: write 'delegate ${portReferenceText(inner)} -> ${portReferenceText(outer)}'.`, { node: delegation, property: 'source' });
+            return;
+        }
+        this.checkCompatibility(delegation, from, to, accept);
+    }
+
+    protected checkCompatibility(node: ast.Connection | ast.Delegation, from: ast.Port, to: ast.Port, accept: ValidationAcceptor): void {
+        const problems = portIncompatibilities(from, to);
+        if (problems.length > 0) {
+            accept('error', `Incompatible ports '${portReferenceText(node.source!)}' and '${portReferenceText(node.target!)}': ${problems.join('; ')}.`, { node, property: 'target' });
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Annotations
+
+    checkAnnotation(annotation: ast.StructureAnnotation, accept: ValidationAcceptor): void {
+        const known = STRUCTURE_ANNOTATIONS[annotation.name];
+        const owner = annotation.$container as AstNode;
+        if (!known) {
+            accept('warning', `Unknown annotation '@${annotation.name}'.`, { node: annotation, property: 'name' });
+            return;
+        }
+        if (!known.targets.includes(owner.$type)) {
+            accept('warning', `'@${annotation.name}' has no effect here (${known.description}).`, { node: annotation, property: 'name' });
+            return;
+        }
+        if (IBD_LAYOUT_ANNOTATIONS.includes(annotation.name)) {
+            this.checkLayoutAnnotation(annotation, owner, known.description, accept);
+            return;
+        }
+        const argument = annotation.arguments[0];
+        const value = argumentNumber(argument);
+        const usage = () => accept('error', `Invalid arguments: ${known.description}.`, { node: annotation, property: 'name' });
+        if (annotation.arguments.length !== 1 || value === undefined || !Number.isInteger(value)) {
+            usage();
+            return;
+        }
+        switch (annotation.name) {
+            case 'priority':
+                if (argument.unit) {
+                    usage();
+                }
+                break;
+            case 'stack':
+                if (argument.unit || value <= 0) {
+                    usage();
+                }
+                break;
+            case 'period':
+                if (!argument.unit || DURATION_UNITS[argument.unit] === undefined || value <= 0) {
+                    usage();
+                }
+                break;
+        }
+        const duplicate = (owner as { annotations?: ast.StructureAnnotation[] }).annotations?.find(a => a.name === annotation.name);
+        if (duplicate && duplicate !== annotation) {
+            accept('warning', `'@${annotation.name}' is given more than once; the first one is used.`, { node: annotation, property: 'name' });
+        }
+    }
+
+    /** Layout annotations of the structure diagram: their arguments, duplicates, the ports of `@port`. */
+    private checkLayoutAnnotation(annotation: ast.StructureAnnotation, owner: AstNode, description: string, accept: ValidationAcceptor): void {
+        const name = annotation.name;
+        const siblings = (owner as { annotations?: ast.StructureAnnotation[] }).annotations ?? [];
+        if (name === 'port') {
+            const port = portAnnotation(annotation);
+            if (!port) {
+                accept('error', `Invalid arguments: ${description}.`, { node: annotation, property: 'name' });
+                return;
+            }
+            if (siblings.find(a => a.name === 'port' && portAnnotation(a)?.port === port.port) !== annotation) {
+                accept('error', `Duplicate annotation '@port' of the port '${port.port}'.`, { node: annotation, property: 'name' });
+                return;
+            }
+            const type = ast.isComponentInstance(owner) ? instanceType(owner) : ast.isCompositeType(owner) ? owner : undefined;
+            if (type && !type.ports.some(p => p.name === port.port)) {
+                accept('warning', `${ast.isCompositeType(owner) ? `${owner.kind} ${owner.name}` : `${type.name}`} has no port '${port.port}' (the annotation is ignored).`,
+                    { node: annotation, property: 'arguments', index: 0 });
+            }
+            return;
+        }
+        if (siblings.find(a => a.name === name) !== annotation) {
+            accept('error', `Duplicate annotation '@${name}'.`, { node: annotation, property: 'name' });
+            return;
+        }
+        const values = structureAnnotationArguments(annotation);
+        const count = values?.length ?? 0;
+        if (!values || values.some(v => typeof v !== 'number') || (name === 'via' ? count < 2 || count % 2 !== 0 : count !== 2)
+            || (name === 'size' && (values as number[]).some(v => v < 0))) {
+            accept('error', `Invalid arguments: ${description}.`, { node: annotation, property: 'name' });
+        }
+    }
+}
+
+function direction(port: ast.Port): string {
+    return port.direction === 'provides' ? 'provided' : 'required';
+}
+
+/** Reports nodes with the same name as an earlier node. */
+function checkUnique(nodes: ReadonlyArray<AstNode & { name: string }>, what: string, accept: ValidationAcceptor): void {
+    const names = new Set<string>();
+    for (const node of nodes) {
+        if (!node.name) {
+            continue;
+        }
+        if (names.has(node.name)) {
+            accept('error', `Duplicate ${what} '${node.name}'.`, { node, property: 'name' });
+        }
+        names.add(node.name);
+    }
+}
+
+/** Whether a field type contains the struct (directly or through other structs). */
+function containsStruct(reference: ast.DataTypeReference, struct: ast.StructDeclaration, visited: Set<ast.StructDeclaration>): boolean {
+    const resolution = resolveDataType(reference);
+    const inner = resolution.kind === 'data' ? resolution.struct : undefined;
+    if (!inner || inner === struct) {
+        return inner === struct;
+    }
+    if (visited.has(inner)) {
+        return false;
+    }
+    visited.add(inner);
+    return inner.fields.some(field => field.type && containsStruct(field.type, struct, visited));
+}
+
+/**
+ * The structures through which `type` (transitively) instantiates `structure`: `['Sub', 'Car']` if
+ * `Sub` contains an instance of `Car`; `undefined` if there is no such cycle.
+ */
+export function instantiationCycle(type: ast.CompositeType, structure: ast.CompositeType): string[] | undefined {
+    const visited = new Set<ast.CompositeType>();
+    const search = (current: ast.CompositeType, path: string[]): string[] | undefined => {
+        if (current === structure) {
+            return [...path, current.name];
+        }
+        if (visited.has(current)) {
+            return undefined;
+        }
+        visited.add(current);
+        for (const instance of compositeInstances(current)) {
+            const next = instanceType(instance);
+            if (ast.isCompositeType(next)) {
+                const cycle = search(next, [...path, current.name]);
+                if (cycle) {
+                    return cycle;
+                }
+            }
+        }
+        return undefined;
+    };
+    return search(type, []);
+}
+

@@ -1,7 +1,7 @@
 import { AstUtils, type AstNode } from 'langium';
 import { diagramElementIds } from '../diagram/diagram-ids.js';
 import * as ast from '../generated/ast.js';
-import { qualifiedName } from '../hsm-scope.js';
+import { qualifiedName } from '../statemachine-scope.js';
 import { DEFINITION_ID, finalNodeId, MACHINE_ID } from '../diagram/layout.js';
 import { getStateMachine, nodeText, scopeOf, transitionLabel, type ScopeContainer } from '../model-utils.js';
 import type { SimulationOptions, TraceEntry } from '../simulation/interpreter.js';

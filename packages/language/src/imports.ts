@@ -8,9 +8,9 @@ import { CppTypeIndex } from './cpp-header/type-index.js';
  *
  * Resolution: an import path is resolved relative to the URI of the importing document
  * ({@link resolveImportUri}); the imported document must be loaded into the Langium workspace
- * (`LangiumDocuments`): the language server loads all files of the workspace, {@link HsmModelLoader}
+ * (`LangiumDocuments`): the language server loads all files of the workspace, {@link StateMachineModelLoader}
  * loads imported files transitively (from the file system or from given texts). The
- * {@link HsmImportResolver} (service `references.ImportResolver`) resolves the imports of a state
+ * {@link StateMachineImportResolver} (service `references.ImportResolver`) resolves the imports of a state
  * machine before its document is linked and stores the result in a registry, so that the type
  * system and the interpreter can use the pure functions of this module ({@link resolvedImports},
  * {@link importedMachines}, {@link machineType}, {@link instanceMachine} ...).
@@ -93,14 +93,14 @@ export function importPaths(machine: ast.StateMachine): ast.ImportPath[] {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Registry of resolved imports (filled by the HsmImportResolver before a document is linked)
+// Registry of resolved imports (filled by the StateMachineImportResolver before a document is linked)
 
 const registry = new WeakMap<ast.StateMachine, readonly ResolvedImport[]>();
 const machinesCache = new WeakMap<readonly ResolvedImport[], Map<string, ast.StateMachine>>();
 const cppRegistry = new WeakMap<ast.StateMachine, CppImportInfo>();
 let emptyIndex: CppTypeIndex | undefined;
 
-/** Stores the resolved imports of a state machine (called by the {@link HsmImportResolver}). */
+/** Stores the resolved imports of a state machine (called by the {@link StateMachineImportResolver}). */
 export function registerImports(machine: ast.StateMachine, imports: readonly ResolvedImport[], cpp?: CppImportInfo): void {
     registry.set(machine, imports);
     if (cpp) {
@@ -282,7 +282,7 @@ export function isUnresolvedInstance(variable: ast.VariableDeclaration | undefin
  * header parser and store the declarations in `ResolvedImport.header`), the rest of the language
  * only relies on `kind` and `machine`.
  */
-export class HsmImportResolver {
+export class StateMachineImportResolver {
 
     protected readonly documents: LangiumDocuments;
     readonly headerStore: CppHeaderStore;
@@ -348,7 +348,7 @@ export class HsmImportResolver {
             return { node, path, kind, uri };
         }
         const root = this.documents.getDocument(uri)?.parseResult.value;
-        return { node, path, kind, uri, machine: ast.isStateMachine(root) ? root : undefined, structureFile: ast.isDmfModel(root) };
+        return { node, path, kind, uri, machine: ast.isStateMachine(root) ? root : undefined, structureFile: ast.isStructureModel(root) };
     }
 
     /**

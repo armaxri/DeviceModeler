@@ -1,8 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { HsmModelLoader } from '../src/hsm-document.js';
+import { StateMachineModelLoader } from '../src/model-loader.js';
 
-export const loader = new HsmModelLoader();
+export const loader = new StateMachineModelLoader();
 
 /** Whether the text of a `.devm` file is a state machine (not a structure file). */
 export function isStateMachineText(text: string): boolean {

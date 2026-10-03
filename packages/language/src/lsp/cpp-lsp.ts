@@ -11,7 +11,7 @@ import { cppValueToJson, describeCppType } from '../cpp-header/report.js';
 import { displayPath } from '../cpp-headers.js';
 import { contextMachine, cppIndexAt, cppTypeOfReference, isStructType, memberOf, referenceMembers } from '../cpp-types.js';
 import { cppImports, machineType, resolvedImports } from '../imports.js';
-import { inferType, typeName, typeOfDeclaration, type HsmType } from '../hsm-typesystem.js';
+import { inferType, typeName, typeOfDeclaration, type DevmType } from '../typesystem.js';
 
 /**
  * Language server features for the C++ names of imported headers, shared by the VS Code language
@@ -102,7 +102,7 @@ function referenceMemberAt(node: ast.ElementReference, leaf: CstNode): CppElemen
     if (position < 0) {
         return undefined;
     }
-    let type: HsmType = typeOfDeclaration(variable);
+    let type: DevmType = typeOfDeclaration(variable);
     for (let i = 0; i <= position; i++) {
         const member = memberOf(type, members[i]);
         if (member.error || !isStructType(type)) {
@@ -292,13 +292,13 @@ function machineAt(document: LangiumDocument, offset: number): ast.StateMachine 
 }
 
 /** The type of a variable followed by members (`pos`, `cfg.timing`), `undefined` if it is not known. */
-function pathType(machine: ast.StateMachine, path: string[]): HsmType | undefined {
+function pathType(machine: ast.StateMachine, path: string[]): DevmType | undefined {
     for (let length = path.length; length >= 1; length--) {
         const name = path.slice(0, length).join('.');
         const variable = machine.scopes.flatMap(s => s.declarations.map(d => ({ d, name: ast.isInterfaceScope(s) && s.name ? `${s.name}.${d.name}` : d.name })))
             .find(entry => entry.name === name && ast.isVariableDeclaration(entry.d))?.d;
         if (variable) {
-            let type: HsmType = typeOfDeclaration(variable);
+            let type: DevmType = typeOfDeclaration(variable);
             for (const member of path.slice(length)) {
                 const resolved = memberOf(type, member);
                 if (resolved.error) {
@@ -335,7 +335,7 @@ function cppCompletionItem(declaration: CppDeclaration, index: CppTypeIndex): Co
  * {@link cppCompletionItems}), otherwise the default completion of Langium (for `.`, the members of
  * submachine instances and named interfaces are added).
  */
-export class HsmCompletionProvider extends DefaultCompletionProvider {
+export class StateMachineCompletionProvider extends DefaultCompletionProvider {
 
     constructor(services: LangiumServices) {
         super(services);
@@ -345,7 +345,7 @@ export class HsmCompletionProvider extends DefaultCompletionProvider {
 
     override async getCompletion(document: LangiumDocument, params: CompletionParams): Promise<CompletionList | undefined> {
         const offset = document.textDocument.offsetAt(params.position);
-        const cpp = ast.isDmfModel(document.parseResult.value) ? undefined : cppCompletionItems(document, offset);
+        const cpp = ast.isStructureModel(document.parseResult.value) ? undefined : cppCompletionItems(document, offset);
         if (cpp && cpp.length > 0) {
             return { isIncomplete: false, items: cpp };
         }
@@ -359,12 +359,12 @@ export class HsmCompletionProvider extends DefaultCompletionProvider {
 }
 
 /**
- * Whether a keyword of the grammar is an alternative of a name rule (`HsmId`, `DmfId`): a keyword of
+ * Whether a keyword of the grammar is an alternative of a name rule (`StateMachineId`, `StructureId`): a keyword of
  * one kind of `.devm` files accepted as a name in the other kind.
  */
 export function isSoftKeyword(keyword: GrammarAST.Keyword): boolean {
     const rule = AstUtils.getContainerOfType(keyword, GrammarAST.isParserRule);
-    return rule?.name === 'HsmId' || rule?.name === 'DmfId';
+    return rule?.name === 'StateMachineId' || rule?.name === 'StructureId';
 }
 
 /**
@@ -372,7 +372,7 @@ export function isSoftKeyword(keyword: GrammarAST.Keyword): boolean {
  * the name of an imported state machine used as a type (`var motor : Motor`) and an import path
  * (`import "motor.devm"`) to the imported state machine, otherwise the default (cross-references).
  */
-export class HsmDefinitionProvider extends DefaultDefinitionProvider {
+export class StateMachineDefinitionProvider extends DefaultDefinitionProvider {
 
     override getDefinition(document: LangiumDocument, params: DefinitionParams): MaybePromise<LocationLink[] | undefined> {
         const offset = document.textDocument.offsetAt(params.position);

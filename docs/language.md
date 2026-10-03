@@ -156,8 +156,8 @@ statemachine Motor {                              statemachine Gate {
   mode and order of the parent (a warning if its machine declares others), shares the virtual clock and keeps
   its variables when it is entered again. States of instances are reported as `motor.On` (`activeStates`,
   scenarios, traces), their operations are implemented by the host as `motor.setPwm`.
-- **Where imports are resolved**: CLI (`devm validate/simulate/test/render/doc`) and API (`HsmModelLoader`,
-  `HsmTestWorkspace`) read imported files transitively from disk (or from given texts); the VS Code language
+- **Where imports are resolved**: CLI (`devm validate/simulate/test/render/doc`) and API (`StateMachineModelLoader`,
+  `DevmTestWorkspace`) read imported files transitively from disk (or from given texts); the VS Code language
   server resolves them in the workspace (a change of `motor.devm` updates the diagnostics of `gate.devm`, go to
   definition works on `Motor` and on the import path); the diagram webview gets the imported files from the
   extension; the web editor resolves imports against a virtual file list (the examples and the opened files;

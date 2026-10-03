@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { NodeFileSystem } from 'langium/node';
-import { createHsmServices } from '../hsm-module.js';
+import { createDevmServices } from '../devm-module.js';
 import { cliHeaderSettings, installNodeHeaderSupport } from '../node/cpp-headers-node.js';
 import { checkCoverageThresholds, CoverageCollector, parseCoverageThresholds, type CoverageThresholds } from './coverage.js';
 import {
@@ -11,7 +11,7 @@ import {
 import { toJUnitXml } from './junit.js';
 import { layoutStateMachineWithLayout } from '../diagram/manual-layout.js';
 import { renderSvg, type HighlightKind } from '../render/svg.js';
-import { HsmTestWorkspace, type WorkspaceFile } from './test-workspace.js';
+import { DevmTestWorkspace, type WorkspaceFile } from './test-workspace.js';
 
 export interface TestCommandOptions {
     /** `-I`, `-D`, `--data-model`: settings of imported C/C++ headers. */
@@ -65,9 +65,9 @@ export async function runTestCommand(files: string[], options: TestCommandOption
     for (const file of files) {
         // the directory of the test file, or its parent if it contains no models (e.g. `examples/tests/`)
         const directory = path.dirname(path.resolve(file));
-        let candidates = await hsmFilesIn(directory);
+        let candidates = await devmFilesIn(directory);
         if (candidates.length === 0) {
-            candidates = await hsmFilesIn(path.dirname(directory));
+            candidates = await devmFilesIn(path.dirname(directory));
         }
         for (const candidate of candidates) {
             machineFiles.add(candidate);
@@ -76,7 +76,7 @@ export async function runTestCommand(files: string[], options: TestCommandOption
     for (const machine of options.machine ?? []) {
         const resolved = path.resolve(machine);
         const stat = await fs.stat(resolved);
-        for (const candidate of stat.isDirectory() ? await hsmFilesIn(resolved) : [resolved]) {
+        for (const candidate of stat.isDirectory() ? await devmFilesIn(resolved) : [resolved]) {
             machineFiles.add(candidate);
         }
     }
@@ -89,9 +89,9 @@ export async function runTestCommand(files: string[], options: TestCommandOption
         inputs.push({ uri, text: await fs.readFile(file, 'utf-8') });
     }
 
-    const services = createHsmServices(NodeFileSystem);
+    const services = createDevmServices(NodeFileSystem);
     installNodeHeaderSupport(services.shared, { settings: cliHeaderSettings(options) });
-    const workspace = new HsmTestWorkspace(services);
+    const workspace = new DevmTestWorkspace(services);
     const documents = await workspace.load(inputs);
     const display = (uri: string | undefined) => (uri && displayNames.get(uri)) ?? uri ?? '?';
     let problems = 0;
@@ -206,7 +206,7 @@ async function writeCoverage(
     return failures.length;
 }
 
-async function hsmFilesIn(directory: string): Promise<string[]> {
+async function devmFilesIn(directory: string): Promise<string[]> {
     const entries = await fs.readdir(directory, { withFileTypes: true });
     return entries.filter(e => e.isFile() && e.name.endsWith('.devm')).map(e => path.join(directory, e.name)).sort();
 }

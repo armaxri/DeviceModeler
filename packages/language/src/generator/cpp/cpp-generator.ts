@@ -1,6 +1,6 @@
 import type { AstNode } from 'langium';
 import * as ast from '../../generated/ast.js';
-import { returnTypeOf, typeOfEvent, typeOfParameter, type HsmType } from '../../hsm-typesystem.js';
+import { returnTypeOf, typeOfEvent, typeOfParameter, type DevmType } from '../../typesystem.js';
 import { nodeText } from '../../model-utils.js';
 import { describeLocation, SimulationError } from '../../simulation/errors.js';
 import type { ExecutionMode, ExecutionOrder } from '../../simulation/interpreter.js';
@@ -108,7 +108,7 @@ export interface CppApi {
     /** Member expression of a variable of the internal scope, relative to the state machine object (`internal.lights`). */
     internalMember(variable: ast.VariableDeclaration): string;
     /** Type of a variable as seen by the generated code. */
-    variableType(variable: ast.VariableDeclaration): HsmType;
+    variableType(variable: ast.VariableDeclaration): DevmType;
     /** The C++ type of a variable, event value, parameter or return value in the generated API (`sc::integer`, `motor::Mode`, `std::uint8_t`). */
     declaredType(declaration: ast.VariableDeclaration | ast.EventDeclaration | ast.Parameter | ast.OperationDeclaration): string;
     /** The scopes with operations. */
@@ -334,7 +334,7 @@ class CppGenerator extends StatechartGenerator {
         return `${this.operationWrapper(operation)}(${texts.join(', ')})`;
     }
 
-    operationResult(_type: HsmType, call: string): string {
+    operationResult(_type: DevmType, call: string): string {
         return call;
     }
 
@@ -359,7 +359,7 @@ class CppGenerator extends StatechartGenerator {
         return args;
     }
 
-    typeName(type: HsmType): string {
+    typeName(type: DevmType): string {
         return cppType(type);
     }
 
@@ -367,7 +367,7 @@ class CppGenerator extends StatechartGenerator {
         return `static_cast<sc::real>(${stripParens(text)})`;
     }
 
-    store(target: string, _type: HsmType, value: string): string {
+    store(target: string, _type: DevmType, value: string): string {
         return `${target} = ${value};`;
     }
 
@@ -560,7 +560,7 @@ class CppGenerator extends StatechartGenerator {
     }
 
     /** The default value of a type in the generated code (`motor::Mode{}`, `0`, ...). */
-    private defaultOf(reference: ast.TypeReference | undefined, type: HsmType): string {
+    private defaultOf(reference: ast.TypeReference | undefined, type: DevmType): string {
         const storage = storageOfTypeReference(reference);
         return storage && storage.kind !== 'integer' && storage.kind !== 'real' && storage.kind !== 'boolean' && storage.kind !== 'string'
             ? `${cppDeclaredType(reference, type)}{}` : cppDefault(type);
@@ -1227,7 +1227,7 @@ class CppGenerator extends StatechartGenerator {
         if (fn.name === 'check_index') {
             return 'std::size_t';
         }
-        return fn.returnType === 'void' ? 'void' : fn.returnType === 'boolean' ? 'bool' : cppType(fn.returnType as HsmType);
+        return fn.returnType === 'void' ? 'void' : fn.returnType === 'boolean' ? 'bool' : cppType(fn.returnType as DevmType);
     }
 
     private namespaceOpen(): string[] {

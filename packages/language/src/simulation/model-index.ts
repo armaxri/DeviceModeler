@@ -1,8 +1,8 @@
 import { AstUtils, type AstNode } from 'langium';
 import * as ast from '../generated/ast.js';
-import { qualifiedName } from '../hsm-scope.js';
+import { qualifiedName } from '../statemachine-scope.js';
 import { isInstance, referencedInstance, type MemberReferenceNode } from '../imports.js';
-import type { EventDirection } from '../hsm-typesystem.js';
+import type { EventDirection } from '../typesystem.js';
 import { commonContainer, scopeOf, type ScopeContainer } from '../model-utils.js';
 import { SimulationError } from './errors.js';
 

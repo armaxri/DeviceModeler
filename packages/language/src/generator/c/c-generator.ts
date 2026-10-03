@@ -1,6 +1,6 @@
 import { AstUtils, type AstNode } from 'langium';
 import * as ast from '../../generated/ast.js';
-import { typeOfEvent, typeOfParameter, returnTypeOf, type HsmType } from '../../hsm-typesystem.js';
+import { typeOfEvent, typeOfParameter, returnTypeOf, type DevmType } from '../../typesystem.js';
 import { nodeText } from '../../model-utils.js';
 import { SimulationError } from '../../simulation/errors.js';
 import type { ExecutionMode, ExecutionOrder } from '../../simulation/interpreter.js';
@@ -70,7 +70,7 @@ export interface CApi {
     /** Name of the function the host implements for an operation (`cd_player_discInserted`). */
     operation(operation: ast.OperationDeclaration): string;
     /** Type of a variable as seen by the generated code. */
-    variableType(variable: ast.VariableDeclaration): HsmType;
+    variableType(variable: ast.VariableDeclaration): DevmType;
     /** Number of time events (0: no timer service needed). */
     readonly timerCount: number;
     readonly functions: {
@@ -285,7 +285,7 @@ class CGenerator extends StatechartGenerator {
         return `${this.operation(operation)}(${texts.join(', ')})`;
     }
 
-    operationResult(type: HsmType, call: string): string {
+    operationResult(type: DevmType, call: string): string {
         return type === 'string' ? `${this.helper('str_nonnull')}(${call})` : call;
     }
 
@@ -309,7 +309,7 @@ class CGenerator extends StatechartGenerator {
         return `h, ${args}`;
     }
 
-    typeName(type: HsmType): string {
+    typeName(type: DevmType): string {
         return cType(type);
     }
 
@@ -317,7 +317,7 @@ class CGenerator extends StatechartGenerator {
         return `((sc_real)${text})`;
     }
 
-    store(target: string, type: HsmType, value: string): string {
+    store(target: string, type: DevmType, value: string): string {
         return type === 'string' ? `${this.helper('str_assign')}(h, ${target}, ${value});` : `${target} = ${value};`;
     }
 
@@ -639,7 +639,7 @@ class CGenerator extends StatechartGenerator {
         return alignComments(lines).join('\n');
     }
 
-    private memberDeclaration(type: HsmType, member: string): string {
+    private memberDeclaration(type: DevmType, member: string): string {
         return type === 'string' ? `char ${member}[${this.macro}_STRING_CAPACITY];` : `${cType(type)} ${member};`;
     }
 

@@ -14,10 +14,10 @@ export function isStructureText(text: string): boolean {
 /** The message of a `.devm` file containing both a state machine and structure elements. */
 export const MIXED_KINDS_MESSAGE = 'A .devm file contains either a state machine or structure elements';
 
-/** The keywords starting the structure elements of a `.devm` file (dmf.langium). */
-const STRUCTURE_KEYWORDS = new Set(['package', 'import', 'struct', 'interface', 'component', 'subsystem', 'system', '@']);
+/** The keywords starting the structure elements of a `.devm` file (structure.langium). */
+const STRUCTURE_START_KEYWORDS = new Set(['package', 'import', 'struct', 'interface', 'component', 'subsystem', 'system', '@']);
 
-/** The keywords accepted as names in a rule (the keyword alternatives of the name rule `HsmId` or `DmfId`). */
+/** The keywords accepted as names in a rule (the keyword alternatives of the name rule `StateMachineId` or `StructureId`). */
 function keywordsOf(grammar: Grammar, ruleName: string): Set<string> {
     const rule = grammar.rules.find(r => r.name === ruleName);
     return new Set(rule ? AstUtils.streamAllContents(rule).filter(GrammarAST.isKeyword).map(keyword => keyword.value).toArray() : []);
@@ -55,7 +55,7 @@ export class DevmParserErrorMessageProvider extends LangiumParserErrorMessagePro
     constructor(grammar?: Grammar) {
         super();
         if (grammar) {
-            for (const [root, names] of [['StateMachine', 'HsmId'], ['DmfModel', 'DmfId']]) {
+            for (const [root, names] of [['StateMachine', 'StateMachineId'], ['StructureModel', 'StructureId']]) {
                 const keywords = keywordsOf(grammar, names);
                 reachableRules(grammar, root).forEach(rule => this.softKeywords.set(rule, keywords));
             }
@@ -93,7 +93,7 @@ export class DevmParserErrorMessageProvider extends LangiumParserErrorMessagePro
         if (token.image === 'statemachine') {
             return `${MIXED_KINDS_MESSAGE}: a state machine cannot follow structure elements (write it into a file of its own).`;
         }
-        if (STRUCTURE_KEYWORDS.has(token.image)) {
+        if (STRUCTURE_START_KEYWORDS.has(token.image)) {
             return `${MIXED_KINDS_MESSAGE}: \`${token.image}\` cannot follow the state machine (write structure elements into a file of their own).`;
         }
         return super.buildNotAllInputParsedMessage(options);
@@ -103,7 +103,7 @@ export class DevmParserErrorMessageProvider extends LangiumParserErrorMessagePro
 /**
  * The parser of the `.devm` language. The root is always a state machine or a structure model: a
  * file without content (or only comments) is an empty structure file, which the grammar cannot express
- * (the structure alternative of the entry rule must consume a token, see dmf.langium), and a file
+ * (the structure alternative of the entry rule must consume a token, see structure.langium), and a file
  * whose first token starts neither kind gets an empty structure model besides the syntax error.
  */
 export function createDevmParser(services: LangiumCoreServices): LangiumParser {
@@ -114,7 +114,7 @@ export function createDevmParser(services: LangiumCoreServices): LangiumParser {
         const result = parse(input, options);
         const root = result.value as AstNode & { imports?: unknown[], elements?: unknown[] };
         if (root.$type === 'DevmFile') {
-            (root as { $type: string }).$type = 'DmfModel';
+            (root as { $type: string }).$type = 'StructureModel';
             root.imports ??= [];
             root.elements ??= [];
             if (result.lexerErrors.length === 0 && lexer.tokenize(input).tokens.length === 0) {

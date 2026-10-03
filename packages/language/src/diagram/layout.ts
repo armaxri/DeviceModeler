@@ -5,7 +5,7 @@ import { referableName, submachineOf } from '../imports.js';
 import {
     allTransitions, definitionLines, entryPointOf, hasDefinitionSection, nodeText, outgoingTransitions, scopeOf, transitionLabel, transitionPriority, type ScopeContainer
 } from '../model-utils.js';
-import { qualifiedName } from '../hsm-scope.js';
+import { qualifiedName } from '../statemachine-scope.js';
 import type {
     DiagramEdge, DiagramGraph, DiagramNode, DiagramNodeKind, LayoutDirection, LayoutOptionsInput, LayoutResult, Point, TextMeasure, TextStyle
 } from './diagram-model.js';

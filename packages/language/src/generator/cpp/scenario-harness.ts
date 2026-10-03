@@ -1,14 +1,14 @@
 import * as ast from '../../generated/ast.js';
-import { returnTypeOf, typeOfEvent, typeOfParameter, typeOfVariable, type HsmType } from '../../hsm-typesystem.js';
+import { returnTypeOf, typeOfEvent, typeOfParameter, typeOfVariable, type DevmType } from '../../typesystem.js';
 import type { Scenario, ScenarioExpectation, ScenarioStep, ScenarioValue } from '../../simulation/scenario.js';
 import { cInteger, cString, indent } from '../common/code.js';
 import { cppSpelling } from './cpp-code.js';
 import type { CppApi } from './cpp-generator.js';
-import { hsmTypeOfCpp, isCppType, type CppHsmType } from '../../cpp-types.js';
+import { devmTypeOfCpp, isCppType, type CppDevmType } from '../../cpp-types.js';
 import type { CppResolvedType } from '../../cpp-header/model.js';
 
 export interface CppHarnessOptions {
-    /** Namespace of the harness code, which defines `int run()` there (default `hsm_scenario_harness`). */
+    /** Namespace of the harness code, which defines `int run()` there (default `devm_scenario_harness`). */
     namespace?: string;
     /** Whether to define `int main()` calling `run()` (default true). */
     main?: boolean;
@@ -34,7 +34,7 @@ class CppHarnessGenerator {
     private readonly usesInternals: boolean;
 
     constructor(private readonly api: CppApi, private readonly scenario: Scenario, private readonly options: CppHarnessOptions) {
-        this.namespace = options.namespace ?? 'hsm_scenario_harness';
+        this.namespace = options.namespace ?? 'devm_scenario_harness';
         this.usesInternals = scenario.steps.some(step =>
             Object.keys(step.set ?? {}).concat(Object.keys(step.expect?.variables ?? {})).some(name => {
                 const variable = this.index.findVariable(name);
@@ -66,7 +66,7 @@ class CppHarnessGenerator {
             `namespace ${this.namespace} {`,
             '',
             `using Machine = ${this.api.qualifiedClassName};`,
-            'using namespace hsm_scenario;',
+            'using namespace devm_scenario;',
             '',
             'std::vector<std::string> calls;',
             'std::vector<std::string> out_events;',
@@ -147,27 +147,27 @@ class CppHarnessGenerator {
                 const name = this.index.declarationName(operation);
                 const returnType = returnTypeOf(operation);
                 const scripted = this.scenario.operations?.[name] ?? this.scenario.operations?.[operation.name] ?? [];
-                const body: string[] = [`std::string hsm_text = ${cString(`${name}(`)};`];
+                const body: string[] = [`std::string devm_text = ${cString(`${name}(`)};`];
                 const parameterNames = this.api.operationParameterNames(operation);
                 let first = true;
                 operation.parameters.forEach((parameter, k) => {
                     const parameterName = parameterNames[k];
-                    const format = `${this.namespace}::format(${parameter.varArgs ? 'hsm_value' : parameterName})`;
+                    const format = `${this.namespace}::format(${parameter.varArgs ? 'devm_value' : parameterName})`;
                     if (parameter.varArgs) {
-                        body.push(`for (const auto& hsm_value : ${parameterName}) {`, `    hsm_text += hsm_text.back() == '(' ? "" : ",";`, `    hsm_text += ${format};`, '}');
+                        body.push(`for (const auto& devm_value : ${parameterName}) {`, `    devm_text += devm_text.back() == '(' ? "" : ",";`, `    devm_text += ${format};`, '}');
                     } else {
-                        body.push(...(first ? [] : ['hsm_text += ",";']), `hsm_text += ${format};`);
+                        body.push(...(first ? [] : ['devm_text += ",";']), `devm_text += ${format};`);
                     }
                     first = false;
                 });
-                body.push('hsm_text += ")";', 'calls.push_back(hsm_text);');
+                body.push('devm_text += ")";', 'calls.push_back(devm_text);');
                 if (returnType !== 'void') {
                     if (scripted.length > 0) {
-                        const counter = `hsm_next${j}`;
+                        const counter = `devm_next${j}`;
                         counters.push(`std::size_t ${counter} = 0;`);
                         body.push(
-                            `static const ${this.api.declaredType(operation)} hsm_values[] = {${scripted.map(v => this.literal(v, returnType)).join(', ')}};`,
-                            `return hsm_values[${counter} < ${scripted.length} ? ${counter}++ : ${scripted.length - 1}];`
+                            `static const ${this.api.declaredType(operation)} devm_values[] = {${scripted.map(v => this.literal(v, returnType)).join(', ')}};`,
+                            `return devm_values[${counter} < ${scripted.length} ? ${counter}++ : ${scripted.length - 1}];`
                         );
                     } else {
                         body.push(`return ${defaultLiteral(returnType)};`);
@@ -527,7 +527,7 @@ class CppHarnessGenerator {
     }
 
     /** The condition that the value `actual` (C++ expression) differs from the expected value (structs: the listed members). */
-    private mismatch(actual: string, value: ScenarioValue, type: HsmType): string {
+    private mismatch(actual: string, value: ScenarioValue, type: DevmType): string {
         if (isCppType(type)) {
             const resolved = type.resolved;
             if (resolved.kind === 'enum') {
@@ -539,12 +539,12 @@ class CppHarnessGenerator {
                 }
                 const conditions = Object.entries(value).map(([member, expected]) => {
                     const field = resolved.fields.find(f => f.name === member);
-                    const fieldType = field ? hsmTypeOfCpp(field.type, type.index).type : undefined;
+                    const fieldType = field ? devmTypeOfCpp(field.type, type.index).type : undefined;
                     return field && fieldType ? this.mismatch(`${actual}.${member}`, expected, fieldType) : 'true';
                 });
                 return conditions.length === 0 ? 'false' : conditions.map(c => `(${c})`).join(' || ');
             }
-            const element = hsmTypeOfCpp(resolved.element, type.index).type;
+            const element = devmTypeOfCpp(resolved.element, type.index).type;
             if (!Array.isArray(value) || !element || value.length !== resolved.length) {
                 return 'true';
             }
@@ -565,19 +565,19 @@ class CppHarnessGenerator {
     // ----- values of C++ types
 
     /** The C++ types used by the state machine (and by their members), in dependency order. */
-    private cppTypes(): CppHsmType[] {
-        const result: CppHsmType[] = [];
+    private cppTypes(): CppDevmType[] {
+        const result: CppDevmType[] = [];
         const seen = new Set<string>();
-        const visit = (type: HsmType | undefined) => {
+        const visit = (type: DevmType | undefined) => {
             if (!isCppType(type) || seen.has(type.cppName) || type.cppName.includes('(anonymous)')) {
                 return;
             }
             seen.add(type.cppName);
             const resolved = type.resolved;
             if (resolved.kind === 'struct') {
-                resolved.fields.forEach(f => visit(hsmTypeOfCpp(f.type, type.index).type));
+                resolved.fields.forEach(f => visit(devmTypeOfCpp(f.type, type.index).type));
             } else if (resolved.kind === 'array') {
-                visit(hsmTypeOfCpp(resolved.element, type.index).type);
+                visit(devmTypeOfCpp(resolved.element, type.index).type);
             }
             result.push(type);
         };
@@ -597,7 +597,7 @@ class CppHarnessGenerator {
     }
 
     /** The C++ spelling of a type (for parameters of the format functions). */
-    private spelling(type: CppResolvedType, index: CppHsmType['index']): string {
+    private spelling(type: CppResolvedType, index: CppDevmType['index']): string {
         if (type.kind === 'enum' || type.kind === 'struct') {
             return type.cppName;
         }
@@ -608,7 +608,7 @@ class CppHarnessGenerator {
     }
 
     /** The parameter declaration of a format function for a type (`const std::uint8_t (&value)[2]` for C arrays). */
-    private formatParameter(type: CppHsmType): string {
+    private formatParameter(type: CppDevmType): string {
         const resolved = type.resolved;
         if (resolved.kind === 'enum') {
             return `${type.cppName} value`;
@@ -622,7 +622,7 @@ class CppHarnessGenerator {
     /** `format` functions for the values of the C++ types (canonical text like the interpreter). */
     private formatters(): string[] {
         const types = this.cppTypes();
-        const lines: string[] = ['using hsm_scenario::format;', ''];
+        const lines: string[] = ['using devm_scenario::format;', ''];
         if (types.length === 0) {
             return lines;
         }
@@ -658,7 +658,7 @@ class CppHarnessGenerator {
     }
 
     /** A C++ expression for a value of a C++ type given in a scenario (enumerator names, objects, arrays). */
-    private cppLiteral(value: ScenarioValue, type: CppHsmType): string {
+    private cppLiteral(value: ScenarioValue, type: CppDevmType): string {
         const resolved = type.resolved;
         if (resolved.kind === 'enum') {
             if (typeof value === 'string') {
@@ -677,7 +677,7 @@ class CppHarnessGenerator {
         }
         const assignments: string[] = [];
         const assign = (target: string, item: ScenarioValue, itemType: CppResolvedType) => {
-            const mapped = hsmTypeOfCpp(itemType, type.index).type;
+            const mapped = devmTypeOfCpp(itemType, type.index).type;
             if (isCppType(mapped) && mapped.kind !== 'enum') {
                 const inner = mapped.resolved;
                 if (inner.kind === 'struct' && typeof item === 'object' && item !== null && !Array.isArray(item)) {
@@ -704,7 +704,7 @@ class CppHarnessGenerator {
         return `[] { ${declared} v{}; ${assignments.join(' ')} return v; }()`;
     }
 
-    private literal(value: ScenarioValue, type: HsmType): string {
+    private literal(value: ScenarioValue, type: DevmType): string {
         if (isCppType(type)) {
             return this.cppLiteral(value, type);
         }
@@ -733,7 +733,7 @@ class CppHarnessGenerator {
     }
 }
 
-function defaultLiteral(type: HsmType): string {
+function defaultLiteral(type: DevmType): string {
     switch (type) {
         case 'real': return '0.0';
         case 'boolean': return 'false';
@@ -763,8 +763,8 @@ function commentOf(step: ScenarioStep): string {
 
 /** Formatting and comparison of values like the interpreter; shared by all harnesses in a translation unit. */
 const RUNTIME: string[] = [
-    '#ifndef HSM_SCENARIO_RUNTIME_',
-    '#define HSM_SCENARIO_RUNTIME_',
+    '#ifndef DEVM_SCENARIO_RUNTIME_',
+    '#define DEVM_SCENARIO_RUNTIME_',
     '',
     '#include <cstdio>',
     '#include <cstdlib>',
@@ -773,7 +773,7 @@ const RUNTIME: string[] = [
     '#include <type_traits>',
     '#include <vector>',
     '',
-    'namespace hsm_scenario {',
+    'namespace devm_scenario {',
     '',
     'inline std::string format(sc::integer value) {',
     '    return std::to_string(value);',
@@ -877,8 +877,8 @@ const RUNTIME: string[] = [
     '    return result + "]";',
     '}',
     '',
-    '} // namespace hsm_scenario',
+    '} // namespace devm_scenario',
     '',
-    '#endif // HSM_SCENARIO_RUNTIME_',
+    '#endif // DEVM_SCENARIO_RUNTIME_',
     ''
 ];

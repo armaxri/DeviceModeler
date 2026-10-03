@@ -1,5 +1,5 @@
 {
-    "projectName": "Hsm",
+    "projectName": "Devm",
     "languages": [
         {
             "id": "devm",
@@ -16,7 +16,7 @@
         },
         {
             "id": "devmtest",
-            "grammar": "src/hsm-test.langium",
+            "grammar": "src/devm-test.langium",
             "fileExtensions": [
                 ".devmtest"
             ],

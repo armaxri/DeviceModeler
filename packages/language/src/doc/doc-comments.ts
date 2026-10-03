@@ -1,6 +1,6 @@
 import { CstUtils, isJSDoc, parseJSDoc, type AstNode } from 'langium';
 
-/** Names of the terminal rules of multi-line comments (see hsm.langium). */
+/** Names of the terminal rules of multi-line comments (see statemachine.langium). */
 const COMMENT_RULES = ['ML_COMMENT'];
 
 /**

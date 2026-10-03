@@ -11,14 +11,14 @@ import { ibdNodes, layoutStructure, structureDiagramElements } from '../src/diag
 import { captureIbdLayout, createIbdLayout, type IbdManualLayout, type IbdManualLayoutResult } from '../src/diagram/ibd-manual-layout.js';
 import { hasIbdLayoutAnnotations, ibdLayoutFromModel, ibdLayoutTextEdits, withoutIbdLayoutAnnotations } from '../src/diagram/ibd-layout-annotations.js';
 import type { IbdNode } from '../src/diagram/ibd-model.js';
-import { DmfEditor, dmfRenameEdits } from '../src/edit/dmf-edits.js';
+import { StructureEditor, structureRenameEdits } from '../src/edit/structure-edits.js';
 import { applyEdits } from '../src/edit/model-edits.js';
-import { DmfModelLoader } from '../src/hsm-document.js';
-import { createHsmServices } from '../src/hsm-module.js';
+import { StructureModelLoader } from '../src/model-loader.js';
+import { createDevmServices } from '../src/devm-module.js';
 
 const DEVICE = path.resolve(__dirname, '../../../examples/device');
-const services = createHsmServices(NodeFileSystem);
-const deviceLoader = new DmfModelLoader(services);
+const services = createDevmServices(NodeFileSystem);
+const deviceLoader = new StructureModelLoader(services);
 const SYSTEM = fs.readFileSync(path.join(DEVICE, 'system.devm'), 'utf-8');
 
 /** Loads a structure file of the device example (the other files of the example are read from disk). */
@@ -29,7 +29,7 @@ async function load(text: string, file = 'system.devm') {
     return parsed;
 }
 
-async function diagram(text: string, file = 'system.devm', element?: string): Promise<{ model: ast.DmfModel, layout: IbdManualLayoutResult }> {
+async function diagram(text: string, file = 'system.devm', element?: string): Promise<{ model: ast.StructureModel, layout: IbdManualLayoutResult }> {
     const parsed = await load(text, file);
     return { model: parsed.model, layout: (await layoutStructure(parsed.model, { element }))! };
 }
@@ -50,7 +50,7 @@ function node(layout: IbdManualLayoutResult, id: string): { node: IbdNode, x: nu
 
 async function format(text: string): Promise<string> {
     const parsed = await load(text);
-    const edits = await services.Dmf.lsp.Formatter!.formatDocument(parsed.document, {
+    const edits = await services.Devm.lsp.Formatter!.formatDocument(parsed.document, {
         textDocument: { uri: parsed.document.uri.toString() },
         options: { tabSize: 4, insertSpaces: true }
     });
@@ -303,13 +303,13 @@ system Outer {
             layout.ports['GarageDoor.remote'] = { side: 'NORTH', offset: 100 };
         });
         const parsed = await load(text);
-        const structure = parsed.model.elements.find(ast.isStructure)!;
+        const structure = parsed.model.elements.find(ast.isCompositeType)!;
         const buzzer = structure.threads[0].instances.find(i => i.name === 'buzzer')!;
-        const moved = applyEdits(text, new DmfEditor(text, parsed.model).moveInstance(buzzer, structure.threads[1]).edits);
+        const moved = applyEdits(text, new StructureEditor(text, parsed.model).moveInstance(buzzer, structure.threads[1]).edits);
         expect(moved).toMatch(/thread IoTask \{[^}]*@at\(366, 96\) buzzer : Buzzer/);
         // a renamed boundary port: its @port follows
         const remote = structure.ports.find(p => p.name === 'remote')!;
-        const edits = dmfRenameEdits(services.Dmf, remote, 'command').get(parsed.document.uri.toString())!;
+        const edits = structureRenameEdits(services.Devm, remote, 'command').get(parsed.document.uri.toString())!;
         expect(applyEdits(text, edits)).toContain('@port(command, top, 100)');
     });
 

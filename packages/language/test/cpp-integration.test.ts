@@ -6,11 +6,11 @@ import { NodeFileSystem } from 'langium/node';
 import { describe, expect, test } from 'vitest';
 import { errors, parse, warnings } from './helpers.js';
 import { formatValue, StatechartInterpreter } from '../src/simulation/index.js';
-import { HsmTestWorkspace } from '../src/testing/index.js';
+import { DevmTestWorkspace } from '../src/testing/index.js';
 import { cppCompletionItems, cppDefinition, cppHover } from '../src/lsp/cpp-lsp.js';
 import { cliHeaderSettings, installNodeHeaderSupport } from '../src/node/cpp-headers-node.js';
-import { createHsmServices } from '../src/hsm-module.js';
-import { HsmModelLoader } from '../src/hsm-document.js';
+import { createDevmServices } from '../src/devm-module.js';
+import { StateMachineModelLoader } from '../src/model-loader.js';
 import { storageOfTypeReference } from '../src/cpp-storage.js';
 import type { VariableDeclaration } from '../src/generated/ast.js';
 
@@ -113,7 +113,7 @@ describe('C++ header imports: interpreter and test language', () => {
     });
 
     test('unit tests assert enum values and mock operations returning structs', async () => {
-        const workspace = new HsmTestWorkspace();
+        const workspace = new DevmTestWorkspace();
         const documents = await workspace.load([
             { uri: 'memory:///cpp/motor_types.h', text: MOTOR_TYPES },
             { uri: 'memory:///cpp/controller.devm', text: CONTROLLER },
@@ -212,9 +212,9 @@ describe('C++ header imports: Node.js hosts', () => {
             }));
             const model = path.join(dir, 'models/m.devm');
             fs.writeFileSync(model, 'statemachine M {\n    import "app/config.h"\n    interface:\n        var c : ::Count = app::kLimit\n    [*] -> A\n    state A\n}\n');
-            const services = createHsmServices(NodeFileSystem);
+            const services = createDevmServices(NodeFileSystem);
             installNodeHeaderSupport(services.shared, { settings: cliHeaderSettings({ define: ['LIMIT=300000'] }) });
-            const loader = new HsmModelLoader(services);
+            const loader = new StateMachineModelLoader(services);
             const parsed = await loader.load(fs.readFileSync(model, 'utf-8'), pathToFileURL(model).toString());
             expect(errors(parsed)).toEqual([]);
             const storage = storageOfTypeReference((parsed.model.scopes[0].declarations[0] as VariableDeclaration).type);
@@ -230,10 +230,10 @@ describe('C++ header imports: Node.js hosts', () => {
     });
 
     test('the example examples/cpp-types: model and unit tests', async () => {
-        const services = createHsmServices(NodeFileSystem);
+        const services = createDevmServices(NodeFileSystem);
         installNodeHeaderSupport(services.shared);
         const directory = path.resolve(__dirname, '../../../examples/cpp-types');
-        const workspace = new HsmTestWorkspace(services);
+        const workspace = new DevmTestWorkspace(services);
         const documents = await workspace.load(['conveyor.devm', 'conveyor.devmtest'].map(name => ({
             uri: pathToFileURL(path.join(directory, name)).toString(),
             text: fs.readFileSync(path.join(directory, name), 'utf-8')

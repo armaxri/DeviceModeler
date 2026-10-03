@@ -39,7 +39,7 @@ as **Deviation**.
   for strings because `std::string` in the generated C++ code and the string buffers in C cannot be
   null, all implementations use the empty string. Pointer types may follow with C/C++ header types.
 - `+` on two strings concatenates them. `%` and the bitwise and shift operators apply to integers
-  only, relational operators (`<` ...) to numbers only (see `hsm-typesystem.ts`).
+  only, relational operators (`<` ...) to numbers only (see `typesystem.ts`).
 - A variable without declared type has the type of its initializer (no initializer: `integer`).
 - Variables and constants are initialized in declaration order when the state machine is entered
   (`enter`). Without initializer: `0`, `0.0`, `false`, `""`.

@@ -3,9 +3,9 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { URI } from 'langium';
 import { NodeFileSystem } from 'langium/node';
-import { createHsmServices } from '../hsm-module.js';
-import { isDmfModel } from '../generated/ast.js';
-import { HsmModelLoader } from '../hsm-document.js';
+import { createDevmServices } from '../devm-module.js';
+import { isStructureModel } from '../generated/ast.js';
+import { StateMachineModelLoader } from '../model-loader.js';
 import { layoutFileName, layoutStateMachineWithLayout, parseManualLayout } from '../diagram/manual-layout.js';
 import { layoutTextEdits } from '../diagram/layout-annotations.js';
 import { applyEdits } from '../edit/model-edits.js';
@@ -42,9 +42,9 @@ export function nodeHeaderOptions(options: HeaderCommandOptions): NodeHeaderOpti
 }
 
 async function load(file: string, options: HeaderCommandOptions = {}) {
-    const services = createHsmServices(NodeFileSystem);
+    const services = createDevmServices(NodeFileSystem);
     installNodeHeaderSupport(services.shared, nodeHeaderOptions(options));
-    const loader = new HsmModelLoader(services);
+    const loader = new StateMachineModelLoader(services);
     const text = await fs.readFile(file, 'utf-8');
     const parsed = await loader.load(text, `file://${path.resolve(file)}`);
     let errors = 0;
@@ -69,7 +69,7 @@ async function load(file: string, options: HeaderCommandOptions = {}) {
 /** Loads a state machine file (`undefined` and an error message for a structure file). */
 async function loadMachine(file: string, options: HeaderCommandOptions = {}) {
     const result = await load(file, options);
-    if (isDmfModel(result.parsed.model)) {
+    if (isStructureModel(result.parsed.model)) {
         console.error(`${file}: a structure file, not a state machine`);
         return undefined;
     }

@@ -1,6 +1,6 @@
 import { URI, UriUtils } from 'langium';
 import {
-    createHsmServices, dmfImportKind, dmfImportPaths, headerCandidates, importKind, importPaths, isComponent, isDmfModel, isStateMachine, isStructureText,
+    createDevmServices, structureImportKind, structureImportPaths, headerCandidates, importKind, importPaths, isComponent, isStructureModel, isStateMachine, isStructureText,
     parseCppHeader,
     resolveImportUri, type CppHeaderSettings
 } from 'devm-language';
@@ -8,16 +8,16 @@ import {
 /** Reads the text of a file (an open document or the file system); `undefined` if it cannot be read. */
 export type TextReader = (uri: string) => Promise<string | undefined>;
 
-let parserServices: ReturnType<typeof createHsmServices> | undefined;
+let parserServices: ReturnType<typeof createDevmServices> | undefined;
 
 /** The root of a model text (only the parser is used, works on incomplete texts). */
 function parse(text: string) {
-    parserServices ??= createHsmServices();
-    return parserServices.Hsm.parser.LangiumParser.parse(text).value;
+    parserServices ??= createDevmServices();
+    return parserServices.Devm.parser.LangiumParser.parse(text).value;
 }
 
 /** The import paths of `.devm` files in a state machine text (only the parser is used, works on incomplete texts). */
-export function hsmImportPaths(text: string): string[] {
+export function stateMachineImportPaths(text: string): string[] {
     return importPathsOf(text, 'model');
 }
 
@@ -35,22 +35,22 @@ function importPathsOf(text: string, kind: 'model' | 'header'): string[] {
  * The files a structure file refers to: imported structure files and state machines (`import`,
  * `behavior "door.devm"`) and imported C/C++ headers (only the parser is used).
  */
-export function dmfReferencedPaths(text: string): { models: string[], headers: string[] } {
+export function structureReferencedPaths(text: string): { models: string[], headers: string[] } {
     const model = parse(text);
-    if (!isDmfModel(model)) {
+    if (!isStructureModel(model)) {
         return { models: [], headers: [] };
     }
-    const paths = dmfImportPaths(model).map(p => p.path).filter(path => path);
+    const paths = structureImportPaths(model).map(p => p.path).filter(path => path);
     const behaviors = model.elements.filter(isComponent).map(c => c.behavior?.path).filter((path): path is string => !!path);
     return {
-        models: [...paths.filter(path => dmfImportKind(path) === 'model'), ...behaviors],
-        headers: paths.filter(path => dmfImportKind(path) === 'header')
+        models: [...paths.filter(path => structureImportKind(path) === 'model'), ...behaviors],
+        headers: paths.filter(path => structureImportKind(path) === 'header')
     };
 }
 
 /** The files a model file (state machine or structure file, by its text) refers to. */
 function referencedPaths(text: string): { models: string[], headers: string[] } {
-    return isStructureText(text) ? dmfReferencedPaths(text) : { models: hsmImportPaths(text), headers: headerImportPaths(text) };
+    return isStructureText(text) ? structureReferencedPaths(text) : { models: stateMachineImportPaths(text), headers: headerImportPaths(text) };
 }
 
 /**
@@ -59,7 +59,7 @@ function referencedPaths(text: string): { models: string[], headers: string[] } 
  * (with the headers they include, searched like the language does: relative to the including file,
  * then in the include paths of `headers`), by URI. The webview has no file system: the extension
  * sends these texts along with the text of the document, so that the diagram and the simulation of
- * the webview can resolve the imports (see `HsmModelService.setWorkspace`). Files that cannot be
+ * the webview can resolve the imports (see `DevmModelService.setWorkspace`). Files that cannot be
  * read are left out (the webview reports "file not found").
  */
 export async function collectImportedFiles(uri: string, text: string, read: TextReader, limit = 100, headers: CppHeaderSettings = {}): Promise<Record<string, string>> {

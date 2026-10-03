@@ -34,9 +34,9 @@ narrower than the boxes.
 From code (works in the browser as well):
 
 ```ts
-import { HsmModelLoader, layoutStateMachine, renderSvg } from 'devm-language';
+import { StateMachineModelLoader, layoutStateMachine, renderSvg } from 'devm-language';
 
-const { model } = await new HsmModelLoader().load(text);
+const { model } = await new StateMachineModelLoader().load(text);
 const layout = await layoutStateMachine(model, { direction: 'DOWN' });
 const svg = renderSvg(layout.graph, {
     theme: 'classic',                        // 'classic' | 'modern' | 'dark'
@@ -86,6 +86,6 @@ interface Pedestrian:
 ```
 
 The language server shows the doc comments on hover together with the signature of the element
-(`HsmDocumentationProvider`). From code: `describeStateMachine(model)` returns the collected information,
+(`StateMachineDocumentationProvider`). From code: `describeStateMachine(model)` returns the collected information,
 `generateModelDoc(model, { format, svg, svgFile })` and `generateDocIndex(entries, format)` render it,
 `docComment(node)` returns the doc comment of an AST node.

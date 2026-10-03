@@ -7,7 +7,7 @@ import './webview.css';
 import ElkApi from 'elkjs/lib/elk-api.js';
 import elkWorkerSource from 'elkjs/lib/elk-worker.min.js?raw';
 import { DiagramController } from '@devm-web/diagram-controller.js';
-import { HsmModelService } from '@devm-web/model-service.js';
+import { DevmModelService } from '@devm-web/model-service.js';
 import { WebviewHost, type VsCodeApi } from './webview-host.js';
 
 declare function acquireVsCodeApi(): VsCodeApi;
@@ -26,7 +26,7 @@ const vscode = acquireVsCodeApi();
 const host = new WebviewHost(vscode);
 const controller = new DiagramController({
     host,
-    language: new HsmModelService(),
+    language: new DevmModelService(),
     settings: { direction: 'DOWN', routing: 'SPLINES', theme: 'classic', priorities: true },
     elk: createElk()
 });

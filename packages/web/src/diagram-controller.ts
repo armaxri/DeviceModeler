@@ -8,14 +8,14 @@ import {
     qualifiedName, scopeOf, siblingVertices, transitionLabel, finalNodeId, DEFINITION_ID, MACHINE_ID,
     nodeText as nodeTextOf, type DeletionTarget, type DiagramNode, type DiagramNodeKind, type DiagramSubmachine, type EdgeRouting, type EditResult,
     type LayoutDirection, type LayoutResult,
-    type NewVertexKind, type ParsedDmfModel, type ParsedModel, type ScopeContainer, type TextEdit, type Transition, type TransitionSource, type TransitionTarget, type Vertex
+    type NewVertexKind, type ParsedStructureModel, type ParsedModel, type ScopeContainer, type TextEdit, type Transition, type TransitionSource, type TransitionTarget, type Vertex
 } from 'devm-language';
 import {
     applyManualLayout, captureLayout, contentOrigin, diagramElementIds, layoutFromModel, layoutTextEdits, toFrameCoordinates,
     isStructureText, type ManualLayout, type NodeSide, type Point
 } from 'devm-language';
 import { LayoutEditor, replacementEdit, sampleSpline } from './layout-editing.js';
-import { describeSyntaxProblem, type HsmModelService } from './model-service.js';
+import { describeSyntaxProblem, type DevmModelService } from './model-service.js';
 import { createDiagramContainer } from './diagram/di.config.js';
 import type { DiagramCallbacks, DragInfo } from './diagram/listeners.js';
 import { toSchema, type Issue } from './diagram/model.js';
@@ -134,7 +134,7 @@ export interface DiagramHost {
      */
     applyTextEdits(edits: readonly TextEdit[]): Promise<boolean>;
     /** Called after the text has been parsed (e.g. to show markers and the number of problems). */
-    modelParsed?(parsed: ParsedModel | ParsedDmfModel): void;
+    modelParsed?(parsed: ParsedModel | ParsedStructureModel): void;
     /** Highlights (and reveals) the text of the selected diagram element; undefined removes the highlight. */
     highlightText(range: TextRange | undefined): void;
     /** Selects and reveals a text range (e.g. an element of the simulation trace). */
@@ -175,7 +175,7 @@ export interface DiagramHost {
 
 export interface DiagramControllerOptions {
     host: DiagramHost;
-    language: HsmModelService;
+    language: DevmModelService;
     settings: DiagramSettings;
     /** The ELK instance used for the layout (e.g. running in a web worker). */
     elk?: unknown;
@@ -196,7 +196,7 @@ const TAKEN_HIGHLIGHT_MS = 350;
 export class DiagramController implements PropertiesHost, DiagramCallbacks {
 
     readonly host: DiagramHost;
-    readonly language: HsmModelService;
+    readonly language: DevmModelService;
     readonly settings: DiagramSettings;
     private container!: Container;
     private modelSource!: LocalModelSource;
@@ -234,7 +234,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
      */
     readonly structure: StructureDiagram;
     /** The palette shown: of the state machines or of the structures. */
-    private paletteMode?: 'hsm' | 'structure';
+    private paletteMode?: 'statemachine' | 'structure';
     /** A hint replacing the hint of the tool (e.g. while drawing a connector). */
     private hintOverride?: string;
     /** Shown after the next update of a state machine (navigation). */
@@ -282,7 +282,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     /** Switches between the state machine and the structure diagram (palette, layout controls). */
     private updateMode(): void {
         const structure = this.structureMode;
-        const mode = structure ? 'structure' : 'hsm';
+        const mode = structure ? 'structure' : 'statemachine';
         if (structure) {
             // the state machine operations do not apply to the structure diagram
             this.state = undefined;
@@ -357,7 +357,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     private buildPalette(): void {
         const palette = byId('palette');
         palette.replaceChildren();
-        this.paletteMode = this.structureMode ? 'structure' : 'hsm';
+        this.paletteMode = this.structureMode ? 'structure' : 'statemachine';
         for (const entry of this.tools) {
             if (entry === 'separator') {
                 palette.append(h('div', { class: 'separator' }));

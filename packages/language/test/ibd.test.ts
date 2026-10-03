@@ -8,26 +8,26 @@ import { runRenderCommand } from '../src/cli/render-commands.js';
 import * as ast from '../src/generated/ast.js';
 import { defaultIbdElement, ibdChoices, ibdElementAt, ibdNodes, ibdRouteElements, layoutStructure, memberText } from '../src/diagram/ibd-layout.js';
 import { IBD_OVERVIEW_ID, IBD_TYPES_ID, type IbdLayoutResult, type IbdNode } from '../src/diagram/ibd-model.js';
-import { DmfModelLoader } from '../src/hsm-document.js';
-import { createHsmServices } from '../src/hsm-module.js';
+import { StructureModelLoader } from '../src/model-loader.js';
+import { createDevmServices } from '../src/devm-module.js';
 import { parseXml, type XmlElement } from '../src/importer/xml.js';
 import { renderIbdSvg } from '../src/render/ibd-svg.js';
 import { portChevron } from '../src/render/ibd-shapes.js';
 
 const DEVICE = path.resolve(__dirname, '../../../examples/device');
-const deviceLoader = new DmfModelLoader(createHsmServices(NodeFileSystem));
+const deviceLoader = new StructureModelLoader(createDevmServices(NodeFileSystem));
 
-async function loadExample(file: string): Promise<ast.DmfModel> {
+async function loadExample(file: string): Promise<ast.StructureModel> {
     const location = path.join(DEVICE, file);
     const parsed = await deviceLoader.load(fs.readFileSync(location, 'utf-8'), URI.file(location).toString());
     expect(parsed.diagnostics.filter(d => d.severity === 1)).toEqual([]);
     return parsed.model;
 }
 
-const loader = new DmfModelLoader();
+const loader = new StructureModelLoader();
 let counter = 0;
 
-async function load(text: string): Promise<ast.DmfModel> {
+async function load(text: string): Promise<ast.StructureModel> {
     const parsed = await loader.load(text, `file:///ibd/model-${counter++}.devm`);
     expect(parsed.hasSyntaxErrors).toBe(false);
     return parsed.model;
@@ -48,7 +48,7 @@ function withClass(root: XmlElement, cls: string): XmlElement[] {
 }
 
 describe('internal block diagram: the garage door system', () => {
-    let model: ast.DmfModel;
+    let model: ast.StructureModel;
     let layout: IbdLayoutResult;
 
     beforeAll(async () => {

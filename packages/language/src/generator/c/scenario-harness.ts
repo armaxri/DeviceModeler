@@ -1,5 +1,5 @@
 import * as ast from '../../generated/ast.js';
-import { returnTypeOf, typeOfEvent, typeOfParameter, type HsmType } from '../../hsm-typesystem.js';
+import { returnTypeOf, typeOfEvent, typeOfParameter, type DevmType } from '../../typesystem.js';
 import type { Scenario, ScenarioExpectation, ScenarioStep, ScenarioValue } from '../../simulation/scenario.js';
 import { cInteger, cString, indent } from './c-code.js';
 import type { CApi } from './c-generator.js';
@@ -485,7 +485,7 @@ class HarnessGenerator {
         return state;
     }
 
-    private literal(value: ScenarioValue, type: HsmType): string {
+    private literal(value: ScenarioValue, type: DevmType): string {
         switch (type) {
             case 'real':
                 if (typeof value !== 'number') {
@@ -511,7 +511,7 @@ class HarnessGenerator {
     }
 }
 
-function valueKind(type: HsmType): string {
+function valueKind(type: DevmType): string {
     switch (type) {
         case 'real': return 'real';
         case 'boolean': return 'boolean';
@@ -520,7 +520,7 @@ function valueKind(type: HsmType): string {
     }
 }
 
-function defaultLiteral(type: HsmType): string {
+function defaultLiteral(type: DevmType): string {
     switch (type) {
         case 'real': return '0.0';
         case 'boolean': return 'false';

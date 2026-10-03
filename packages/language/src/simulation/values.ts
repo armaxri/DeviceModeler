@@ -1,7 +1,7 @@
 import type { AstNode } from 'langium';
 import type { TypeReference } from '../generated/ast.js';
-import { typeOfTypeReference } from '../hsm-typesystem.js';
-import { hsmTypeOfCpp, isCppType, type CppHsmType } from '../cpp-types.js';
+import { typeOfTypeReference } from '../typesystem.js';
+import { devmTypeOfCpp, isCppType, type CppDevmType } from '../cpp-types.js';
 import { storageOfTypeReference, wrapInteger } from '../cpp-storage.js';
 import type { CppEnumType, CppIntegerType, CppRealType, CppResolvedType, CppValue } from '../cpp-header/model.js';
 import type { CppTypeIndex } from '../cpp-header/type-index.js';
@@ -18,7 +18,7 @@ export type Value = bigint | number | boolean | string | EnumValue | StructValue
 
 /** A value of a C++ enum type: the numeric value of the enumerator (as in C++) and the enum type. */
 export class EnumValue {
-    constructor(readonly type: CppHsmType, readonly value: bigint) { }
+    constructor(readonly type: CppDevmType, readonly value: bigint) { }
 
     get enumType(): CppEnumType {
         return this.type.resolved as CppEnumType;
@@ -38,7 +38,7 @@ export class EnumValue {
 
 /** A value of a C++ struct type: the values of its members in declaration order. */
 export class StructValue {
-    constructor(readonly type: CppHsmType, readonly fields: ReadonlyMap<string, Value>) { }
+    constructor(readonly type: CppDevmType, readonly fields: ReadonlyMap<string, Value>) { }
 
     /** A copy with the member `name` replaced. */
     with(name: string, value: Value): StructValue {
@@ -50,7 +50,7 @@ export class StructValue {
 
 /** A value of a C++ array type (`std::array<T, N>`, `T[N]`). */
 export class ArrayValue {
-    constructor(readonly type: CppHsmType, readonly elements: readonly Value[]) { }
+    constructor(readonly type: CppDevmType, readonly elements: readonly Value[]) { }
 
     /** A copy with the element `index` replaced. */
     with(index: number, value: Value): ArrayValue {
@@ -75,7 +75,7 @@ export type TypeName = 'integer' | 'real' | 'boolean' | 'string' | 'void';
  * integer or floating point type (the storage type of a variable, member, event value or parameter:
  * integers wrap around to its width, `float` rounds to single precision).
  */
-export type RuntimeType = TypeName | CppHsmType | CppIntegerType | CppRealType;
+export type RuntimeType = TypeName | CppDevmType | CppIntegerType | CppRealType;
 
 const TYPE_NAMES: readonly string[] = ['integer', 'real', 'boolean', 'string', 'void'];
 
@@ -132,7 +132,7 @@ export function runtimeTypeOfCpp(resolved: CppResolvedType, index: CppTypeIndex)
         case 'string':
             return resolved.kind;
         default: {
-            const mapping = hsmTypeOfCpp(resolved, index);
+            const mapping = devmTypeOfCpp(resolved, index);
             return isCppType(mapping.type) ? mapping.type : undefined;
         }
     }
@@ -317,7 +317,7 @@ export function fromHost(value: unknown, type: RuntimeType | undefined, what: st
     throw new SimulationError(`${what}: ${describeHost(value)} is not a valid ${runtimeTypeName(type)}`, node);
 }
 
-function cppFromHost(value: unknown, type: CppHsmType, what: string, node?: AstNode): Value {
+function cppFromHost(value: unknown, type: CppDevmType, what: string, node?: AstNode): Value {
     const invalid = () => new SimulationError(`${what}: ${describeHost(value)} is not a valid ${type.cppName}`, node);
     if ((value instanceof EnumValue || value instanceof StructValue || value instanceof ArrayValue)) {
         if (value.type.cppName === type.cppName && value.type.kind === type.kind) {

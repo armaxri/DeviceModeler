@@ -215,7 +215,7 @@ interface HandleDrag {
 }
 
 @injectable()
-export class HsmMouseListener extends MouseListener {
+export class DevmMouseListener extends MouseListener {
 
     @inject(DiagramCallbacks) protected callbacks!: DiagramCallbacks;
     @inject(TYPES.ViewerOptions) protected viewerOptions!: ViewerOptions;
@@ -662,10 +662,10 @@ function isWithin(element: SModelElementImpl, ancestor: SModelElementImpl | unde
 
 /**
  * Moving elements is disabled while the diagram cannot be edited (simulation); handles (resize, waypoints)
- * are dragged by the `HsmMouseListener`.
+ * are dragged by the `DevmMouseListener`.
  */
 @injectable()
-export class HsmMoveMouseListener extends MoveMouseListener {
+export class DevmMoveMouseListener extends MoveMouseListener {
 
     @inject(DiagramCallbacks) protected callbacks!: DiagramCallbacks;
 
@@ -690,7 +690,7 @@ export class HsmMoveMouseListener extends MoveMouseListener {
 
 /** Dragging a handle must not scroll the diagram. */
 @injectable()
-export class HsmScrollMouseListener extends ScrollMouseListener {
+export class DevmScrollMouseListener extends ScrollMouseListener {
 
     @inject(DiagramCallbacks) protected callbacks!: DiagramCallbacks;
 
@@ -706,7 +706,7 @@ export class HsmScrollMouseListener extends ScrollMouseListener {
 
 /** Selection without re-ordering the selected element (transitions have to stay on top). */
 @injectable()
-export class HsmSelectMouseListener extends SelectMouseListener {
+export class DevmSelectMouseListener extends SelectMouseListener {
     protected override handleSelectTarget(selectableTarget: SModelElementImpl & { selected: boolean }, deselectedElements: SModelElementImpl[], event: MouseEvent): (Action | Promise<Action>)[] {
         return super.handleSelectTarget(selectableTarget as never, deselectedElements, event)
             .filter(action => !('kind' in action) || action.kind !== BringToFrontAction.KIND);

@@ -129,7 +129,7 @@ in threads, instances of subsystems outside of them) and connections.
 | Process | Bundle | Content |
 | --- | --- | --- |
 | Extension host | `dist/extension.cjs` (esbuild, CJS) | language client, commands, diagram panels, test controller; the language package (generators, test runner, SVG renderer) is bundled |
-| Language server | `dist/server.cjs` (esbuild, CJS) | Langium services of the two languages (`.devm`, `.devmtest`: `createHsmServices` of the language package) plus semantic tokens and hover signatures; started via IPC, `--stdio` for other clients |
+| Language server | `dist/server.cjs` (esbuild, CJS) | Langium services of the two languages (`.devm`, `.devmtest`: `createDevmServices` of the language package) plus semantic tokens and hover signatures; started via IPC, `--stdio` for other clients |
 | Diagram webview | `dist/webview/webview.js`, `webview.css` (Vite, IIFE) | `DiagramController`, views, properties / simulation panels and styles of the web app (`packages/web/src`), ELK in a blob web worker |
 
 The webview parses the text of the document itself (the same code as the web app) and computes the

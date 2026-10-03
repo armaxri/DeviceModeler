@@ -6,11 +6,11 @@ import { NodeFileSystem } from 'langium/node';
 import type { EdgeRouting, LayoutDirection } from '../diagram/diagram-model.js';
 import { layoutStateMachineWithLayout } from '../diagram/manual-layout.js';
 import { describeStateMachine, generateDocIndex, generateModelDoc, type DocFormat, type DocIndexEntry } from '../doc/model-doc.js';
-import { isDmfModel, type DmfModel, type StateMachine } from '../generated/ast.js';
+import { isStructureModel, type StructureModel, type StateMachine } from '../generated/ast.js';
 import { layoutStructure } from '../diagram/ibd-layout.js';
 import { IBD_OVERVIEW_ID, IBD_TYPES_ID } from '../diagram/ibd-model.js';
-import { HsmModelLoader } from '../hsm-document.js';
-import { createHsmServices } from '../hsm-module.js';
+import { StateMachineModelLoader } from '../model-loader.js';
+import { createDevmServices } from '../devm-module.js';
 import { MODEL_EXTENSION } from '../imports.js';
 import { installNodeHeaderSupport } from '../node/cpp-headers-node.js';
 import { DIAGRAM_THEMES, renderSvg, type DiagramTheme } from '../render/svg.js';
@@ -68,7 +68,7 @@ interface LoadedModel {
 
 interface LoadedStructure {
     file: string;
-    model: DmfModel;
+    model: StructureModel;
 }
 
 /**
@@ -76,11 +76,11 @@ interface LoadedStructure {
  * failures), validation errors are reported but the models are still rendered.
  */
 async function loadModels(files: string[], logger: Logger): Promise<{ models: LoadedModel[], structures: LoadedStructure[], failures: number }> {
-    const services = createHsmServices(NodeFileSystem);
+    const services = createDevmServices(NodeFileSystem);
     // imported C/C++ headers: read from the file system, settings of the nearest devm.gen.json
     installNodeHeaderSupport(services.shared);
     // state machine files and structure files are one language: the kind of a file is the kind of its root
-    const loader = new HsmModelLoader(services);
+    const loader = new StateMachineModelLoader(services);
     const models: LoadedModel[] = [];
     const structures: LoadedStructure[] = [];
     let failures = 0;
@@ -97,8 +97,8 @@ async function loadModels(files: string[], logger: Logger): Promise<{ models: Lo
         for (const d of parsed.diagnostics.filter(d => d.severity === 1)) {
             logger.error(`${file}:${d.range.start.line + 1}:${d.range.start.character + 1}: ${severities[d.severity ?? 1]}: ${d.message}`);
         }
-        const root: StateMachine | DmfModel = parsed.model;
-        if (isDmfModel(root)) {
+        const root: StateMachine | StructureModel = parsed.model;
+        if (isStructureModel(root)) {
             if (parsed.hasSyntaxErrors) {
                 logger.error(`${file}: skipped (syntax errors)`);
                 failures++;

@@ -215,7 +215,7 @@ The widths of `long`, `size_t` etc. depend on the target: `CppTypeIndex` uses LP
   primary expressions: `valueof(e).x`, `measure().y`, `motor::kHome.x`, `a[i]`, `cfg.gains[1]`.
   **Decision:** after a name, `pos.x.y` is still parsed as the (`.`-qualified) name of the `ElementReference`
   (so `Iface.x` and `motor.speed` keep working unchanged); the linker (`memberAwareCandidate` in
-  `hsm-linker.ts`, also used by the test language) resolves the **longest prefix that names a variable**
+  `statemachine-linker.ts`, also used by the test language) resolves the **longest prefix that names a variable**
   when the whole name does not resolve and records the rest as member path (`referenceMembers(ref)` in
   `cpp-types.ts`). Consumers (type system, validator, interpreter, generators, hover) treat an element
   reference with members like a chain of member accesses. Unknown members are errors of the validator
@@ -229,7 +229,7 @@ The widths of `long`, `size_t` etc. depend on the target: `CppTypeIndex` uses LP
 
 ### 4.2 Resolution and linking
 
-- `HsmImportResolver.resolveHeader` finds the header in the `CppHeaderStore` of the services
+- `StateMachineImportResolver.resolveHeader` finds the header in the `CppHeaderStore` of the services
   (`cpp-headers.ts`: texts by URI, a synchronous `reader`, the settings, caches of parsed headers and
   indexes) and loads it with its includes (`loadHeaderClosure`). `ResolvedImport.header` is
   `{ found, searched, headers }`; the resolver registers one `CppTypeIndex` per state machine
@@ -244,15 +244,15 @@ The widths of `long`, `size_t` etc. depend on the target: `CppTypeIndex` uses LP
   hint to the include path settings); errors of the analysis of the header (and its includes) are errors at
   the import with the location (`motor_types.h:12:5: …`, at most 5), warnings are summarized as one info.
   Errors of C++ names are not reported while a header import is unresolved.
-- `HsmDocumentBuilder.shouldRelink` relinks a machine when a header it uses changed (`headersChanged`: the
+- `DevmDocumentBuilder.shouldRelink` relinks a machine when a header it uses changed (`headersChanged`: the
   version of a header text or of the settings differs from the one the index was built with) or a header
   import is unresolved.
 
 ### 4.3 Type system
 
-`HsmType` is `BuiltinTypeName | 'null' | 'instance' | 'error' | CppHsmType` where `CppHsmType` is
+`DevmType` is `BuiltinTypeName | 'null' | 'instance' | 'error' | CppDevmType` where `CppDevmType` is
 `{ kind: 'enum' | 'struct' | 'array', cppName, resolved, index }` (identity: kind and qualified C++ name,
-compare with `sameType`). Mapping of `CppResolvedType` (`hsmTypeOfCpp`):
+compare with `sameType`). Mapping of `CppResolvedType` (`devmTypeOfCpp`):
 
 | C++ | HSM | decisions |
 | --- | --- | --- |
@@ -260,9 +260,9 @@ compare with `sameType`). Mapping of `CppResolvedType` (`hsmTypeOfCpp`):
 | `real` | `real` | `float` places round to single precision |
 | `boolean` | `boolean` | |
 | `string` | `string` | only `std::string` can be the type of a place; `const char*` / `std::string_view` constants are readable (a type reference to them is an error) |
-| `enum` | `CppHsmType` enum | `==` / `!=` between values of the same enum; **unscoped** enums are promoted to `integer` in arithmetic, bitwise and relational operators and assignable to `integer` / `real`; `enum class` values are not; `as` converts integer ↔ enum (and enum → other enum) |
-| `struct` | `CppHsmType` struct | members by name (public data members, inherited ones included); assignable as a whole (same type); **no `==`** (C++ aggregates have none before C++20; user-defined operators are not analyzed) |
-| `array` | `CppHsmType` array | element access `a[i]` (index: integer or unscoped enum; constant indices out of bounds are errors); `std::array` values are assignable as a whole, C arrays are not; no `==`; arrays of unknown length are unsupported |
+| `enum` | `CppDevmType` enum | `==` / `!=` between values of the same enum; **unscoped** enums are promoted to `integer` in arithmetic, bitwise and relational operators and assignable to `integer` / `real`; `enum class` values are not; `as` converts integer ↔ enum (and enum → other enum) |
+| `struct` | `CppDevmType` struct | members by name (public data members, inherited ones included); assignable as a whole (same type); **no `==`** (C++ aggregates have none before C++20; user-defined operators are not analyzed) |
+| `array` | `CppDevmType` array | element access `a[i]` (index: integer or unscoped enum; constant indices out of bounds are errors); `std::array` values are assignable as a whole, C arrays are not; no `==`; arrays of unknown length are unsupported |
 | `unsupported` | error where used | `The C++ type 'Foo' cannot be used: 'Foo' is not supported (union)` |
 
 Event payloads, operation parameters and return values may use all these types.
@@ -315,7 +315,7 @@ Event payloads, operation parameters and return values may use all these types.
   paths.
 - Go to definition (`cppDefinition`): into the header (`fileName` + `nameRange` of the declaration); the
   import path opens the header.
-- Completion (`HsmCompletionProvider`, both languages): after `ns::` the members of the namespace / class /
+- Completion (`StateMachineCompletionProvider`, both languages): after `ns::` the members of the namespace / class /
   enum, after `::` the global names, after `var.` the members of a struct variable; otherwise Langium's
   completion.
 - Semantic highlighting (VS Code): C++ types, enumerators and constants.
@@ -344,7 +344,7 @@ override it.
 | host | headers | settings |
 | --- | --- | --- |
 | CLI (`devm validate`, `simulate`, `test`, `generate`, `layout`, `render`, `doc`) | read from disk (`installNodeHeaderSupport` in `src/node/cpp-headers-node.ts`: synchronous reader) | `devm.gen.json`; `-I <dir>`, `-D NAME[=VALUE]`, `--data-model lp64`/`llp64`/`ilp32`; `devm generate --list-inputs` lists the imported headers (CMake dependencies); CMake `INCLUDE_DIRS` / `DEFINES` |
-| API (`HsmModelLoader`, `HsmTestWorkspace`) | `files` / `readFile` (async, loaded before the build by `loadImports`, also the includes), header files given to `HsmTestWorkspace.load` | `HsmModelLoaderOptions.cppHeaders`, `cppHeaderStore(shared).settings` / `settingsProvider` |
+| API (`StateMachineModelLoader`, `DevmTestWorkspace`) | `files` / `readFile` (async, loaded before the build by `loadImports`, also the includes), header files given to `DevmTestWorkspace.load` | `ModelLoaderOptions.cppHeaders`, `cppHeaderStore(shared).settings` / `settingsProvider` |
 | VS Code language server | read from disk; the `**/*` file watcher of Langium invalidates changed headers and `devm.gen.json` files; importing models are relinked and validated again | `devm.gen.json`; settings `devm.headers.includePaths` (relative to the workspace folder, `${workspaceFolder}`), `devm.headers.defines`, `devm.headers.dataModel` |
 | VS Code diagram webview | the extension sends the header texts (and their includes) with the imported `.devm` files (`collectImportedFiles`) | the extension sends the effective settings (`headers` of the `text` message) |
 | Web app | the virtual file list: headers of the examples and headers opened with *Open…* (`.h`, `.hpp`, …; added to the list, not edited) | – |

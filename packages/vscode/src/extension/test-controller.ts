@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'node:path';
 import { CoverageCollector, type MachineCoverage, type WorkspaceFile } from 'devm-language';
 import { vscodeHeaderSettings } from './diagram-panel.js';
-import { discoverTests, failureMessage, lineCoverage, runHsmTests, type TextRange } from './logic/tests.js';
+import { discoverTests, failureMessage, lineCoverage, runDevmTests, type TextRange } from './logic/tests.js';
 
 const EXCLUDE = '**/{node_modules,out,dist,build}/**';
 
@@ -20,7 +20,7 @@ interface ItemData {
  * operations are discovered by parsing the files; running them loads all models of the workspace
  * and executes the tests on the interpreter of the language package.
  */
-export class HsmTestController implements vscode.Disposable {
+export class DevmTestController implements vscode.Disposable {
 
     readonly controller = vscode.tests.createTestController('devmTests', 'Device Modeler Tests');
     private readonly data = new WeakMap<vscode.TestItem, ItemData>();
@@ -163,7 +163,7 @@ export class HsmTestController implements vscode.Disposable {
             for (const item of tests.values()) {
                 run.started(item);
             }
-            const { results, problems } = await runHsmTests(models, testFiles, {
+            const { results, problems } = await runDevmTests(models, testFiles, {
                 coverage,
                 headers: vscodeHeaderSettings(undefined),
                 filter: (uri, testClass, test) => !token.isCancellationRequested && itemOf(uri, testClass, test) !== undefined,

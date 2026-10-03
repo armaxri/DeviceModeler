@@ -1,7 +1,7 @@
 import { URI, UriUtils } from 'langium';
 import {
-    createHsmServices, cppHeaderStore, DmfModelLoader, DmfWorkspace, HsmModelLoader, importKind, isModelPath, isStructureText,
-    type CppHeaderSettings, type DmfServices, type ParsedDmfModel, type ParsedModel
+    createDevmServices, cppHeaderStore, StructureModelLoader, StructureWorkspace, StateMachineModelLoader, importKind, isModelPath, isStructureText,
+    type CppHeaderSettings, type DevmServices, type ParsedStructureModel, type ParsedModel
 } from 'devm-language';
 
 export interface SyntaxProblem {
@@ -42,15 +42,15 @@ const DOCUMENT_URI = 'memory:///model.devm';
  * web app passes its examples and opened files, the VS Code webview the imported files read by the
  * extension. Imports of other files are reported as "file not found".
  */
-export class HsmModelService {
+export class DevmModelService {
 
-    private readonly services = createHsmServices();
-    readonly loader = new HsmModelLoader(this.services);
+    private readonly services = createDevmServices();
+    readonly loader = new StateMachineModelLoader(this.services);
     /** Loads structure files; shares the services (and documents) of {@link loader}. */
-    readonly structureLoader = new DmfModelLoader(this.services);
+    readonly structureLoader = new StructureModelLoader(this.services);
     private latest?: ParsedModel;
     private latestVersion = -1;
-    private latestStructure?: ParsedDmfModel;
+    private latestStructure?: ParsedStructureModel;
     private latestStructureVersion = -1;
     private latestUri?: string;
     private latestStructureUri?: string;
@@ -59,7 +59,7 @@ export class HsmModelService {
     private files: Record<string, string> = {};
     private workspaceVersion = 0;
     /** All structure files of the workspace, loaded together (separate services): queries across files. */
-    private readonly structures = new DmfWorkspace();
+    private readonly structures = new StructureWorkspace();
     private structuresQueue: Promise<unknown> = Promise.resolve();
 
     /** The URI of the edited document. */
@@ -97,7 +97,7 @@ export class HsmModelService {
      * edited file with the given text – loaded together, for queries across files (navigation, renames,
      * the structures using a state machine). The hosts pass all structure files of the workspace for this.
      */
-    structureWorkspace(currentText: string): Promise<DmfWorkspace> {
+    structureWorkspace(currentText: string): Promise<StructureWorkspace> {
         const files: Record<string, string> = {};
         const base = URI.parse(this.documentUri);
         for (const [key, text] of Object.entries(this.files)) {
@@ -127,12 +127,12 @@ export class HsmModelService {
     }
 
     /** The services of the `.devm` language (state machines and structure files). */
-    get structureServices(): DmfServices {
-        return this.services.Dmf;
+    get structureServices(): DevmServices {
+        return this.services.Devm;
     }
 
     /** Parses, links and validates the text of a structure file. Calls are serialized (also with {@link parse}). */
-    parseStructure(text: string): Promise<ParsedDmfModel> {
+    parseStructure(text: string): Promise<ParsedStructureModel> {
         const result = this.queue.then(async () => {
             if (this.latestStructure?.text === text && this.latestStructureVersion === this.workspaceVersion
                 && this.latestStructureUri === this.documentUri) {
@@ -171,7 +171,7 @@ export class HsmModelService {
      * Only the parser is used: no document is created and the linked model is not affected.
      */
     syntaxErrors(text: string): SyntaxProblem[] {
-        const parser = this.services.Hsm.parser.LangiumParser;
+        const parser = this.services.Devm.parser.LangiumParser;
         const result = parser.parse(text);
         return [
             ...result.lexerErrors.map(e => ({ message: e.message, offset: e.offset })),

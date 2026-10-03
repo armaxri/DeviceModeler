@@ -1,8 +1,8 @@
 import { AstUtils, type AstNode } from 'langium';
 import { semanticAnnotations } from '../model-annotations.js';
 import * as ast from '../generated/ast.js';
-import { qualifiedName } from '../hsm-scope.js';
-import { eventDirection, typeName, typeOfAlias, typeOfEvent, typeOfParameter, typeOfVariable, returnTypeOf } from '../hsm-typesystem.js';
+import { qualifiedName } from '../statemachine-scope.js';
+import { eventDirection, typeName, typeOfAlias, typeOfEvent, typeOfParameter, typeOfVariable, returnTypeOf } from '../typesystem.js';
 import { nodeText, outgoingTransitions, scopeOf, transitionPriority, type ScopeContainer } from '../model-utils.js';
 import { docComment } from './doc-comments.js';
 

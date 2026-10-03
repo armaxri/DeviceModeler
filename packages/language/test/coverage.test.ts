@@ -7,12 +7,12 @@ import * as ast from '../src/generated/ast.js';
 import { layoutStateMachine } from '../src/diagram/layout.js';
 import { StatechartInterpreter } from '../src/simulation/interpreter.js';
 import {
-    checkCoverageThresholds, CoverageCollector, diagramIds, HsmTestWorkspace, parseCoverageThresholds, runTests, toCobertura,
+    checkCoverageThresholds, CoverageCollector, diagramIds, DevmTestWorkspace, parseCoverageThresholds, runTests, toCobertura,
     toCoverageHtml, toCoverageJson, toCoverageText, toLcov, type CoverageReport, type MachineCoverage
 } from '../src/testing/index.js';
 import { runTestCommand } from '../src/testing/test-command.js';
 
-const workspace = new HsmTestWorkspace();
+const workspace = new DevmTestWorkspace();
 let counter = 0;
 
 const CHOICE = `

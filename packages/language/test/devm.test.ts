@@ -2,13 +2,13 @@ import { describe, expect, test } from 'vitest';
 import type { Diagnostic } from 'vscode-languageserver-types';
 import * as ast from '../src/generated/ast.js';
 import { isStructureText, MIXED_KINDS_MESSAGE } from '../src/devm-parser.js';
-import { HsmModelLoader } from '../src/hsm-document.js';
+import { StateMachineModelLoader } from '../src/model-loader.js';
 
 /*
  * The `.devm` language: one language for state machine files and structure files (devm.langium).
  */
 
-const loader = new HsmModelLoader();
+const loader = new StateMachineModelLoader();
 const services = loader.services;
 let counter = 0;
 
@@ -24,7 +24,7 @@ const TYPES = 'struct Position { x : real }\n';
 describe('the .devm language: one kind per file', () => {
     test('the kind of a file is decided by its first token', async () => {
         expect((await load(MOTOR)).model.$type).toBe('StateMachine');
-        expect((await load(TYPES)).model.$type).toBe('DmfModel');
+        expect((await load(TYPES)).model.$type).toBe('StructureModel');
         expect((await load('/** the motor */\n// comment\n' + MOTOR)).model.$type).toBe('StateMachine');
         expect(isStructureText(MOTOR)).toBe(false);
         expect(isStructureText('/* c */ // d\n' + MOTOR)).toBe(false);
@@ -35,8 +35,8 @@ describe('the .devm language: one kind per file', () => {
     test('an empty file is an empty structure file without errors', async () => {
         for (const text of ['', '\n', '// nothing yet\n', '/* nothing */']) {
             const parsed = await load(text);
-            expect(parsed.model.$type).toBe('DmfModel');
-            expect(ast.isDmfModel(parsed.model) && parsed.model.elements).toEqual([]);
+            expect(parsed.model.$type).toBe('StructureModel');
+            expect(ast.isStructureModel(parsed.model) && parsed.model.elements).toEqual([]);
             expect(parsed.hasSyntaxErrors).toBe(false);
             expect(isStructureText(text)).toBe(true);
         }
@@ -47,7 +47,7 @@ describe('the .devm language: one kind per file', () => {
         expect(after.model.$type).toBe('StateMachine');
         expect(errors(after)).toEqual([`${MIXED_KINDS_MESSAGE}: \`struct\` cannot follow the state machine (write structure elements into a file of their own).`]);
         const before = await load(TYPES + MOTOR);
-        expect(before.model.$type).toBe('DmfModel');
+        expect(before.model.$type).toBe('StructureModel');
         expect(errors(before)).toEqual([`${MIXED_KINDS_MESSAGE}: a state machine cannot follow structure elements (write it into a file of its own).`]);
     });
 
@@ -66,7 +66,7 @@ describe('the .devm language: one kind per file', () => {
             + 'interface Signals { event active event exit }\n'
             + 'component C { provides async in : Signals provides sync out : Sample }\n');
         expect(errors(structure)).toEqual([]);
-        const fields = (structure.model as ast.DmfModel).elements.filter(ast.isStructDeclaration).flatMap(s => s.fields.map(f => f.name));
+        const fields = (structure.model as ast.StructureModel).elements.filter(ast.isStructDeclaration).flatMap(s => s.fields.map(f => f.name));
         expect(fields).toEqual(['state', 'entry', 'in']);
     });
 
@@ -102,7 +102,7 @@ describe('the .devm language: one kind per file', () => {
 
     test('completion does not propose the keywords of the other kind', async () => {
         const parsed = await load('statemachine M {\n    interface:\n        var x : integer\n    [*] -> A\n    state A\n    A -> A : / x = \n}\n');
-        const list = await services.Hsm.lsp.CompletionProvider!.getCompletion(parsed.document, {
+        const list = await services.Devm.lsp.CompletionProvider!.getCompletion(parsed.document, {
             textDocument: { uri: parsed.document.uri.toString() }, position: { line: 5, character: 18 }
         });
         const labels = list?.items.map(i => i.label) ?? [];
@@ -114,7 +114,7 @@ describe('the .devm language: one kind per file', () => {
     test('formatting dispatches on the kind of the file', async () => {
         const format = async (text: string) => {
             const parsed = await load(text);
-            const edits = await services.Hsm.lsp.Formatter!.formatDocument(parsed.document, {
+            const edits = await services.Devm.lsp.Formatter!.formatDocument(parsed.document, {
                 textDocument: { uri: parsed.document.uri.toString() }, options: { tabSize: 4, insertSpaces: true }
             });
             return edits.length;

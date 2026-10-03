@@ -2,7 +2,7 @@ import { monaco } from './monaco.js';
 import {
     applyEdits, importSct, importSctFiles, isModelPath, isStructureText, type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ParsedModel, type TextEdit
 } from 'devm-language';
-import { EDITOR_THEMES, HsmLanguageSupport, LANGUAGE_ID } from './language-support.js';
+import { EDITOR_THEMES, DevmLanguageSupport, LANGUAGE_ID } from './language-support.js';
 import { DiagramController, type DiagramHost, type DiagramLocation, type DiagramSettings, type StatusSeverity, type TextRange } from './diagram-controller.js';
 import { createWorkerElk } from './diagram/elk.js';
 import { byId, download, h } from './ui/dom.js';
@@ -28,9 +28,9 @@ const FILE_OPTION = 'file:';
  * The web application: the Monaco text editor, the toolbar and the graphical editor
  * ({@link DiagramController}) which shows and edits the text of the Monaco editor.
  */
-export class HsmApp implements DiagramHost {
+export class DevmApp implements DiagramHost {
 
-    readonly language = new HsmLanguageSupport();
+    readonly language = new DevmLanguageSupport();
     private editor!: monaco.editor.IStandaloneCodeEditor;
     private decorations!: monaco.editor.IEditorDecorationsCollection;
     private cursorTimer?: ReturnType<typeof setTimeout>;
@@ -572,7 +572,7 @@ export class HsmApp implements DiagramHost {
 
     modelParsed(parsed: ParsedModel): void {
         this.updateFileList(parsed.imported.map(i => decodeURIComponent(i.uri.replace(/^.*\//, ''))));
-        HsmLanguageSupport.setMarkers(this.editor.getModel()!, parsed.diagnostics);
+        DevmLanguageSupport.setMarkers(this.editor.getModel()!, parsed.diagnostics);
         this.showProblemCount(parsed);
     }
 

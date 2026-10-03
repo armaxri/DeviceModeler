@@ -10,13 +10,13 @@ import type { CppDataModel, CppDiagnostic, CppHeader } from './cpp-header/model.
  *
  * Header texts are not Langium documents. Every host puts them into the {@link CppHeaderStore} of
  * its services ({@link cppHeaderStore}):
- * - `HsmModelLoader.load` / `HsmTestWorkspace` / `loadImports` load them from the given `files`
+ * - `StateMachineModelLoader.load` / `DevmTestWorkspace` / `loadImports` load them from the given `files`
  *   or with the (async) `readFile` function before the documents are built,
  * - the language server and the CLI install a synchronous {@link CppHeaderStore.reader} (Node `fs`),
  *   so headers are read on demand; the language server invalidates changed files,
  * - the web app and the VS Code webview set the texts of their virtual files.
  *
- * Resolution is synchronous: when a state machine is linked, the `HsmImportResolver` looks up the
+ * Resolution is synchronous: when a state machine is linked, the `StateMachineImportResolver` looks up the
  * imported headers in the store ({@link resolveHeaderPath}), follows their `#include`s and builds one
  * `CppTypeIndex` for the machine (cached by the versions of the headers and the settings).
  */
@@ -160,7 +160,7 @@ export class CppHeaderStore {
         };
     }
 
-    /** Changes the global settings; documents are relinked by the next build ({@link HsmImportResolver.headersChanged}). */
+    /** Changes the global settings; documents are relinked by the next build ({@link StateMachineImportResolver.headersChanged}). */
     updateSettings(settings: CppHeaderSettings): void {
         this.settings = settings;
         this.settingsVersion++;

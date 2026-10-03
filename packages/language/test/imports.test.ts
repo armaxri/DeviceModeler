@@ -4,12 +4,12 @@ import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { NodeFileSystem } from 'langium/node';
 import { describe, expect, test } from 'vitest';
-import { HsmModelLoader } from '../src/hsm-document.js';
-import { createHsmServices } from '../src/hsm-module.js';
+import { StateMachineModelLoader } from '../src/model-loader.js';
+import { createDevmServices } from '../src/devm-module.js';
 import { importKind, importedMachines, instanceMachine, instanceVariables, resolvedImports, submachineOf } from '../src/imports.js';
-import { inferType } from '../src/hsm-typesystem.js';
+import { inferType } from '../src/typesystem.js';
 import { StatechartInterpreter } from '../src/simulation/interpreter.js';
-import { HsmTestWorkspace } from '../src/testing/test-workspace.js';
+import { DevmTestWorkspace } from '../src/testing/test-workspace.js';
 import * as ast from '../src/generated/ast.js';
 import { errors, example, parse, warnings } from './helpers.js';
 
@@ -150,7 +150,7 @@ statemachine Door {
         fs.writeFileSync(path.join(directory, 'parts', 'motor.devm'), MOTOR.replace('statemachine Motor {', 'statemachine Motor {\n    import "gear.devm"'));
         fs.writeFileSync(path.join(directory, 'parts', 'gear.devm'), 'statemachine Gear {\n    [*] -> S\n    state S\n}');
         const text = door('').replace('import "motor.devm"', 'import "parts/motor.devm"');
-        const loader = new HsmModelLoader(createHsmServices(NodeFileSystem));
+        const loader = new StateMachineModelLoader(createDevmServices(NodeFileSystem));
         const parsed = await loader.load(text, pathToFileURL(path.join(directory, 'door.devm')).toString());
         expect(errors(parsed)).toEqual([]);
         expect(parsed.imported.map(i => path.basename(i.uri)).sort()).toEqual(['gear.devm', 'motor.devm']);
@@ -159,7 +159,7 @@ statemachine Door {
 
     test('the example gate.devm with its motor', async () => {
         const directory = path.resolve(__dirname, '../../../examples/door-with-motor');
-        const loader = new HsmModelLoader(createHsmServices(NodeFileSystem));
+        const loader = new StateMachineModelLoader(createDevmServices(NodeFileSystem));
         const parsed = await loader.load(example('door-with-motor/gate.devm'), pathToFileURL(path.join(directory, 'gate.devm')).toString());
         expect(errors(parsed)).toEqual([]);
         expect(warnings(parsed)).toEqual([]);
@@ -176,9 +176,9 @@ statemachine Door {
         expect(() => sim.raise('motor.start')).toThrow(/raised by the state machine/);
     });
 
-    test('unit tests of the example (HsmTestWorkspace loads the imported motor)', async () => {
+    test('unit tests of the example (DevmTestWorkspace loads the imported motor)', async () => {
         const directory = path.resolve(__dirname, '../../../examples/door-with-motor');
-        const workspace = new HsmTestWorkspace(createHsmServices(NodeFileSystem));
+        const workspace = new DevmTestWorkspace(createDevmServices(NodeFileSystem));
         const files = ['gate.devm', 'gate.devmtest'].map(file => ({ uri: pathToFileURL(path.join(directory, file)).toString(), text: fs.readFileSync(path.join(directory, file), 'utf-8') }));
         const { documents, results } = await workspace.run(files);
         expect(documents.flatMap(d => d.diagnostics.filter(x => x.severity === 1).map(x => x.message))).toEqual([]);
@@ -190,7 +190,7 @@ statemachine Door {
 
 describe('submachine instances: unit tests', () => {
     test('assertions on members of instances and mocks of their operations', async () => {
-        const workspace = new HsmTestWorkspace();
+        const workspace = new DevmTestWorkspace();
         const motor = 'statemachine Motor {\n    interface:\n        in event start\n        out event ready : integer\n        var speed : integer = 0\n'
             + '        operation sensor() : integer\n    [*] -> Off\n    state Off\n    state On\n    Off -> On : start [sensor() > 5] / speed = sensor(); raise ready : speed\n}\n';
         const gate = 'statemachine Gate {\n    import "motor.devm"\n    interface:\n        in event open\n    internal:\n        var motor : Motor\n'
@@ -315,11 +315,11 @@ statemachine Door {
     test('changing an imported file updates the importing document (language server)', async () => {
         const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-imports-update-'));
         fs.writeFileSync(path.join(directory, 'motor.devm'), MOTOR);
-        const services = createHsmServices(NodeFileSystem);
-        const loader = new HsmModelLoader(services);
+        const services = createDevmServices(NodeFileSystem);
+        const loader = new StateMachineModelLoader(services);
         const parsed = await loader.load(door(''), pathToFileURL(path.join(directory, 'door.devm')).toString());
         expect(errors(parsed)).toEqual([]);
-        // the motor is renamed: the door is relinked (HsmDocumentBuilder.shouldRelink) and reports the errors
+        // the motor is renamed: the door is relinked (DevmDocumentBuilder.shouldRelink) and reports the errors
         fs.writeFileSync(path.join(directory, 'motor.devm'), MOTOR.replace('statemachine Motor {', 'statemachine Engine {'));
         await services.shared.workspace.DocumentBuilder.update([parsed.imported[0].document.uri], []);
         fs.rmSync(directory, { recursive: true, force: true });
@@ -334,6 +334,6 @@ statemachine Door {
 let directoryCounter = 0;
 async function loadFiles(files: Record<string, string>, main: string) {
     const base = `memory:///files-${directoryCounter++}/`;
-    const loader = new HsmModelLoader();
+    const loader = new StateMachineModelLoader();
     return loader.load(files[main], base + main, { files });
 }

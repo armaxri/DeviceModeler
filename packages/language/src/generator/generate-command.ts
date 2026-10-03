@@ -2,14 +2,14 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { NodeFileSystem } from 'langium/node';
-import { HsmModelLoader } from '../hsm-document.js';
+import { StateMachineModelLoader } from '../model-loader.js';
 import { URI } from 'langium';
 import { cppHeaderStore } from '../cpp-headers.js';
 import { resolvedImports } from '../imports.js';
-import { isDmfModel, type StateMachine } from '../generated/ast.js';
+import { isStructureModel, type StateMachine } from '../generated/ast.js';
 import type { CppHeaderSettings } from '../cpp-headers.js';
 import { cliHeaderSettings, headerSettingsFromConfig, installNodeHeaderSupport } from '../node/cpp-headers-node.js';
-import { createHsmServices } from '../hsm-module.js';
+import { createDevmServices } from '../devm-module.js';
 import {
     GENERATOR_CONFIG_FILE, GENERATOR_TARGETS, generateTarget, globToRegExp, isGlob, parseGeneratorConfig, targetConfigForModel,
     type CppTargetConfig, type CTargetConfig, type GeneratorConfig, type GeneratorTarget, type ModelEntry, type TargetConfig
@@ -180,7 +180,7 @@ export async function runGeneration(request: GenerationRequest): Promise<Generat
         }
     }
 
-    const services = createHsmServices(NodeFileSystem);
+    const services = createDevmServices(NodeFileSystem);
     // imported C/C++ headers: the `headers` block of the configuration applies to all its models
     const finder = installNodeHeaderSupport(services.shared, { settings: request.headers });
     if (config.headers) {
@@ -189,13 +189,13 @@ export async function runGeneration(request: GenerationRequest): Promise<Generat
     } else {
         void finder;
     }
-    const loader = new HsmModelLoader(services);
+    const loader = new StateMachineModelLoader(services);
     const contents = new Map<string, { content: string, target: GeneratorTarget, model: string }>();
     const imports = new Set<string>();
     for (const [model, entries] of models) {
         const text = await fs.readFile(model, 'utf-8');
         const parsed = await loader.load(text, pathToFileURL(model).toString());
-        if (isDmfModel(parsed.model)) {
+        if (isStructureModel(parsed.model)) {
             // structure files have no code; matched by a glob they are skipped, named explicitly an error
             if (!entries.some(entry => isGlob(entry.path))) {
                 diagnostics.push({ severity: 'error', message: 'a structure file, not a state machine: nothing to generate', file: model });

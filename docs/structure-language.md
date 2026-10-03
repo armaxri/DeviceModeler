@@ -186,7 +186,7 @@ the state machine's definition section (the internal scope does not count):
 - Every `in` / `out` event and every operation of the interfaces of the state machine should belong to a
   port: otherwise a warning names the port kind it belongs to.
 
-The mapping is available as `behaviorMapping(component)` (dmf-behavior.ts) for tools (navigation from a
+The mapping is available as `behaviorMapping(component)` (structure-behavior.ts) for tools (navigation from a
 port to the state machine elements).
 
 ## Threads
@@ -207,15 +207,15 @@ components are always in a thread**, **instances of subsystems never**:
 - Annotations: `@priority(n)` (integer), `@period(10 ms)` (period of a cyclic thread, units `s`, `ms`,
   `us`, `ns`), `@stack(4096)` (stack size in bytes), and the layout annotations of the diagram (see
   [Diagram](#diagram)). Other annotations are reported as unknown; tools can register further names in
-  `DMF_ANNOTATIONS` (dmf-validator.ts).
+  `STRUCTURE_ANNOTATIONS` (structure-validator.ts).
 - A connection between two instances of different threads crosses threads: an info diagnostic (the
   diagram draws it dashed). For an instance of a subsystem, the threads of the component ports the
   connection leads to inside the subsystem count (`door.motor -> drive.ctrl` crosses from `ControlTask`
-  to `MotorTask`, see `connectionThreads` and `effectiveThread` in dmf-routes.ts).
+  to `MotorTask`, see `connectionThreads` and `effectiveThread` in structure-routes.ts).
 
 ## Route analysis
 
-`dmf-routes.ts` computes the signal paths of a port or instance across connections, delegations and the
+`structure-routes.ts` computes the signal paths of a port or instance across connections, delegations and the
 boundaries of composite instances, through all levels of the hierarchy (exported from the package index).
 Endpoints are ports in the *instance tree* of a root (by default the subsystem or system containing the
 start), so a subsystem that is instantiated several times has separate endpoints per instance path
@@ -308,20 +308,20 @@ hierarchy handling, ports with fixed positions); the layout annotations of the d
 applied on top of it (`applyIbdManualLayout` in `ibd-manual-layout.ts`, read and written by
 `ibd-layout-annotations.ts`; `layoutStructure(model, { layout: null })` gives the automatic layout).
 
-**Editing** (`src/edit/dmf-edits.ts`): `DmfEditor` turns the diagram operations into minimal text edits
+**Editing** (`src/edit/structure-edits.ts`): `StructureEditor` turns the diagram operations into minimal text edits
 (add threads, instances, ports, connections and component types; move instances between threads; edit
 ports, thread annotations and the behavior of components; rename; delete), `planConnection` decides
 between `connect` and `delegate` and the order of the ends of two chosen ports (and reports
-incompatibilities with `portIncompatibilities`), `dmfRenameEdits` renames an element and its references
+incompatibilities with `portIncompatibilities`), `structureRenameEdits` renames an element and its references
 in all loaded files (Langium references; qualified references keep their qualifier). An instance of a
 component is added to a thread, an instance of a subsystem outside of the threads; moving an instance of a
 component out of its thread or an instance of a subsystem into one is refused. Deleting a thread deletes it
 together with its instances and their connections and delegations (instances of components only exist in
 threads, so keeping them would leave invalid instances behind). Deleting a port also deletes the
-connections and delegations using it – in the file by `DmfEditor`, in the other files of the workspace by
-`DmfWorkspace.portDeletionEdits` (the editors apply all of them as one step).
+connections and delegations using it – in the file by `StructureEditor`, in the other files of the workspace by
+`StructureWorkspace.portDeletionEdits` (the editors apply all of them as one step).
 
-**Workspace** (`src/dmf-workspace.ts`): `DmfWorkspace` loads all structure files of a workspace (with
+**Workspace** (`src/structure-workspace.ts`): `StructureWorkspace` loads all structure files of a workspace (with
 their imports) into Langium services of its own for questions across files: `behaviorUsages(uri)` (the
 instances implemented by a state machine), `contextsOf(structure)` (where a structure is used in the
 systems), `endpoint` / `route` / `routeEnds` (routes and providers through all levels and files),
@@ -335,12 +335,12 @@ Elements are identified across the separately parsed files by URI and names: a `
 ## Editor support
 
 Structure files and state machine files are one language (see
-[Architecture](architecture.md#one-language-for-two-kinds-of-model-files); `createHsmServices` returns it as
-`Hsm` and as `Dmf`), so structure files reference state machine files and are revalidated when a state
+[Architecture](architecture.md#one-language-for-two-kinds-of-model-files); `createDevmServices` returns it as
+`Devm` and as `Devm`), so structure files reference state machine files and are revalidated when a state
 machine they use changes. Language server features: formatter, completion (keywords, references,
 type names), go to definition (component types, instances, ports, type names – also into C++ headers –,
 import paths and the behavior file), go to implementation = go to the provider of a required port, hover
-(signature and documentation comment) and document symbols. `DmfModelLoader` (hsm-document.ts) loads a
+(signature and documentation comment) and document symbols. `StructureModelLoader` (model-loader.ts) loads a
 structure file with everything it imports outside of a language server.
 
 The web app highlights structure files like state machines (one generated Monarch grammar), offers completion, hover, formatting and

@@ -1,7 +1,7 @@
 import { AstUtils, GrammarUtils, type AstNode, type CstNode, type Reference } from 'langium';
 import { containerAnnotations, elementStart } from '../model-annotations.js';
 import * as ast from '../generated/ast.js';
-import { qualifiedName, referenceName } from '../hsm-scope.js';
+import { qualifiedName, referenceName } from '../statemachine-scope.js';
 import {
     allTransitions, allVertices, commonContainer, initialTransitions, isScopeContainer, isAncestorOrSelf, scopeOf,
     type ScopeContainer

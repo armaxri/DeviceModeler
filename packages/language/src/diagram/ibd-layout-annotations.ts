@@ -29,21 +29,21 @@ import {
 export const IBD_LAYOUT_ANNOTATIONS: readonly string[] = ['at', 'size', 'via', 'port'];
 
 /** The elements with a node in a structure diagram (they can have `@at` and `@size`). */
-export const IBD_NODE_ELEMENTS: readonly string[] = ['Structure', 'Thread', 'ComponentInstance', 'Component', 'StructDeclaration', 'PortInterface'];
+export const IBD_NODE_ELEMENTS: readonly string[] = ['CompositeType', 'Thread', 'ComponentInstance', 'Component', 'StructDeclaration', 'PortInterface'];
 /** The elements with a connector (`@via`). */
 export const IBD_EDGE_ELEMENTS: readonly string[] = ['Connection', 'Delegation'];
 /** The elements whose ports are placed by `@port` (instances: the ports of their type; subsystems / systems: their boundary ports). */
-export const IBD_PORT_OWNERS: readonly string[] = ['ComponentInstance', 'Structure'];
+export const IBD_PORT_OWNERS: readonly string[] = ['ComponentInstance', 'CompositeType'];
 
 /** Side names of `@port` and the sides of the diagram model. */
 export const PORT_SIDE_NAMES: Readonly<Record<string, IbdPortSide>> = { left: 'WEST', right: 'EAST', top: 'NORTH', bottom: 'SOUTH' };
 const SIDE_NAME: Record<IbdPortSide, string> = { WEST: 'left', EAST: 'right', NORTH: 'top', SOUTH: 'bottom' };
 
-export function isIbdLayoutAnnotation(annotation: ast.DmfAnnotation): boolean {
+export function isIbdLayoutAnnotation(annotation: ast.StructureAnnotation): boolean {
     return IBD_LAYOUT_ANNOTATIONS.includes(annotation.name);
 }
 
-type Annotated = AstNode & { annotations: ast.DmfAnnotation[] };
+type Annotated = AstNode & { annotations: ast.StructureAnnotation[] };
 
 function isAnnotated(node: AstNode | undefined): node is Annotated {
     return !!node && Array.isArray((node as Partial<Annotated>).annotations);
@@ -67,7 +67,7 @@ function argumentValue(argument: ast.AnnotationArgument): LayoutArgument | undef
 }
 
 /** The arguments of an annotation, undefined if one cannot be read. */
-export function dmfAnnotationArguments(annotation: ast.DmfAnnotation): LayoutArgument[] | undefined {
+export function structureAnnotationArguments(annotation: ast.StructureAnnotation): LayoutArgument[] | undefined {
     const result: LayoutArgument[] = [];
     for (const argument of annotation.arguments) {
         const value = argumentValue(argument);
@@ -80,8 +80,8 @@ export function dmfAnnotationArguments(annotation: ast.DmfAnnotation): LayoutArg
 }
 
 /** The numbers of an annotation (all arguments must be numbers without unit). */
-function numbers(annotation: ast.DmfAnnotation | undefined, count?: number): number[] | undefined {
-    const values = annotation ? dmfAnnotationArguments(annotation) : undefined;
+function numbers(annotation: ast.StructureAnnotation | undefined, count?: number): number[] | undefined {
+    const values = annotation ? structureAnnotationArguments(annotation) : undefined;
     if (!values || values.some(v => typeof v !== 'number') || (count !== undefined && values.length !== count)) {
         return undefined;
     }
@@ -89,8 +89,8 @@ function numbers(annotation: ast.DmfAnnotation | undefined, count?: number): num
 }
 
 /** `@port(name, side[, offset])`: the port name, the side and the offset (undefined if invalid). */
-export function portAnnotation(annotation: ast.DmfAnnotation): { port: string, side: IbdPortSide, offset?: number } | undefined {
-    const values = dmfAnnotationArguments(annotation);
+export function portAnnotation(annotation: ast.StructureAnnotation): { port: string, side: IbdPortSide, offset?: number } | undefined {
+    const values = structureAnnotationArguments(annotation);
     if (!values || values.length < 2 || values.length > 3) {
         return undefined;
     }
@@ -104,7 +104,7 @@ export function portAnnotation(annotation: ast.DmfAnnotation): { port: string, s
 }
 
 /** The key of a layout annotation in its slot (`@port` once per port). */
-function annotationKey(annotation: ast.DmfAnnotation): string {
+function annotationKey(annotation: ast.StructureAnnotation): string {
     if (annotation.name === 'port') {
         const first = annotation.arguments[0];
         return `port:${first?.name ?? first?.text ?? ''}`;
@@ -113,7 +113,7 @@ function annotationKey(annotation: ast.DmfAnnotation): string {
 }
 
 /** The elements of the diagram which can have layout annotations, with their diagram ids, in text order. */
-function diagramElements(model: ast.DmfModel, result: IbdLayoutResult): Array<{ id: string, element: Annotated }> {
+function diagramElements(model: ast.StructureModel, result: IbdLayoutResult): Array<{ id: string, element: Annotated }> {
     const seen = new Set<AstNode>();
     const elements: Array<{ id: string, element: Annotated }> = [];
     for (const [id, element] of result.elements) {
@@ -149,7 +149,7 @@ function portIds(result: IbdLayoutResult): Map<string, Map<string, string>> {
  * undefined if none of them has a layout annotation (the diagram is laid out automatically). Invalid
  * annotations and annotations of ports which do not exist are ignored.
  */
-export function ibdLayoutFromModel(model: ast.DmfModel, result: IbdLayoutResult): IbdManualLayout | undefined {
+export function ibdLayoutFromModel(model: ast.StructureModel, result: IbdLayoutResult): IbdManualLayout | undefined {
     const layout = createIbdLayout();
     const ports = portIds(result);
     let found = false;
@@ -194,7 +194,7 @@ export function ibdLayoutFromModel(model: ast.DmfModel, result: IbdLayoutResult)
 }
 
 /** Whether an element of the diagram has a layout annotation (the diagram is arranged by hand). */
-export function hasIbdLayoutAnnotations(model: ast.DmfModel, result: IbdLayoutResult): boolean {
+export function hasIbdLayoutAnnotations(model: ast.StructureModel, result: IbdLayoutResult): boolean {
     return diagramElements(model, result).some(({ element }) => element.annotations.some(isIbdLayoutAnnotation));
 }
 
@@ -248,7 +248,7 @@ function elementStart(element: Annotated, text: string): number {
 
 /** Threads, subsystems / systems and type declarations have their annotations on the line before them (formatter). */
 function annotationsOnOwnLine(element: Annotated): boolean {
-    return ast.isThread(element) || ast.isStructure(element) || ast.isComponent(element) || ast.isStructDeclaration(element) || ast.isPortInterface(element);
+    return ast.isThread(element) || ast.isCompositeType(element) || ast.isComponent(element) || ast.isStructDeclaration(element) || ast.isPortInterface(element);
 }
 
 /**
@@ -259,11 +259,11 @@ function annotationsOnOwnLine(element: Annotated): boolean {
  * written on the line before them, those of instances, connections and delegations in front of them on
  * the same line (as the formatter writes them).
  */
-export function ibdLayoutTextEdits(model: ast.DmfModel, result: IbdLayoutResult, text: string, layout: IbdManualLayout | undefined): TextEdit[] {
+export function ibdLayoutTextEdits(model: ast.StructureModel, result: IbdLayoutResult, text: string, layout: IbdManualLayout | undefined): TextEdit[] {
     const ports = portIds(result);
     const slots: AnnotationSlot[] = diagramElements(model, result).map(({ id, element }) => ({
         written: element.annotations.filter(a => a.$cstNode).map((a): WrittenAnnotation => ({
-            name: a.name, key: annotationKey(a), layout: isIbdLayoutAnnotation(a), args: dmfAnnotationArguments(a),
+            name: a.name, key: annotationKey(a), layout: isIbdLayoutAnnotation(a), args: structureAnnotationArguments(a),
             offset: a.$cstNode!.offset, end: a.$cstNode!.end
         })),
         wanted: wantedAnnotations(id, element, layout, ports),
@@ -273,8 +273,8 @@ export function ibdLayoutTextEdits(model: ast.DmfModel, result: IbdLayoutResult,
 }
 
 /** The text of a structure file without any layout annotation (the input of the automatic layout). */
-export function withoutIbdLayoutAnnotations(model: ast.DmfModel, text: string): string {
-    const deletions = AstUtils.streamAst(model).filter(ast.isDmfAnnotation).filter(isIbdLayoutAnnotation)
+export function withoutIbdLayoutAnnotations(model: ast.StructureModel, text: string): string {
+    const deletions = AstUtils.streamAst(model).filter(ast.isStructureAnnotation).filter(isIbdLayoutAnnotation)
         .map(a => a.$cstNode).filter(c => c !== undefined).map(c => ({ offset: c!.offset, end: c!.end })).toArray();
     const edits = annotationDeletionEdits(text, deletions).sort((a, b) => b.offset - a.offset);
     let result = text;

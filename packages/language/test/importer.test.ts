@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { isPseudoState, isState, type Transition } from '../src/generated/ast.js';
-import { qualifiedName } from '../src/hsm-scope.js';
+import { qualifiedName } from '../src/statemachine-scope.js';
 import { importSct, importSctFiles } from '../src/importer/sct-importer.js';
 import { parseXml } from '../src/importer/xml.js';
 import { allTransitions, allVertices } from '../src/model-utils.js';

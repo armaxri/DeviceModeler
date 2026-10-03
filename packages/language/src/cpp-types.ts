@@ -3,7 +3,7 @@ import * as ast from './generated/ast.js';
 import type { CppDeclaration, CppArrayType, CppEnumType, CppResolvedField, CppResolvedType, CppStructType } from './cpp-header/model.js';
 import type { CppConstantInfo, CppTypeIndex } from './cpp-header/type-index.js';
 import { cppImports } from './imports.js';
-import type { HsmType } from './hsm-typesystem.js';
+import type { DevmType } from './typesystem.js';
 
 /**
  * The C++ types and constants of imported headers in the HSM language (see docs/cpp-integration.md).
@@ -15,14 +15,14 @@ import type { HsmType } from './hsm-typesystem.js';
  *   reported,
  * - `float` / `double` are `real` (`float` storage rounds to single precision), `bool` is `boolean`,
  *   `std::string` is `string` (`const char*` / `std::string_view` constants can be read as strings),
- * - enums, structs and arrays are types of their own ({@link CppHsmType}, identified by the
+ * - enums, structs and arrays are types of their own ({@link CppDevmType}, identified by the
  *   qualified C++ name): enum values are compared with `==` / `!=` (unscoped enums convert to integer
  *   like in C++), structs have members (`pos.x`) and are assigned as a whole, arrays have elements (`a[i]`),
  * - everything else (pointers, unions, templates, ...) is unsupported (an error where it is used).
  */
 
 /** An imported C++ enum, struct or array type. */
-export interface CppHsmType {
+export interface CppDevmType {
     readonly kind: 'enum' | 'struct' | 'array';
     /** Qualified C++ name (canonical spelling: aliases are resolved), e.g. `motor::Mode`. */
     readonly cppName: string;
@@ -31,34 +31,34 @@ export interface CppHsmType {
     readonly index: CppTypeIndex;
 }
 
-export function isCppType(type: unknown): type is CppHsmType {
+export function isCppType(type: unknown): type is CppDevmType {
     return typeof type === 'object' && type !== null && 'resolved' in type && 'cppName' in type;
 }
 
-export function isEnumType(type: HsmType | undefined): type is CppHsmType & { resolved: CppEnumType } {
+export function isEnumType(type: DevmType | undefined): type is CppDevmType & { resolved: CppEnumType } {
     return isCppType(type) && type.kind === 'enum';
 }
 
-export function isStructType(type: HsmType | undefined): type is CppHsmType & { resolved: CppStructType } {
+export function isStructType(type: DevmType | undefined): type is CppDevmType & { resolved: CppStructType } {
     return isCppType(type) && type.kind === 'struct';
 }
 
-export function isArrayType(type: HsmType | undefined): type is CppHsmType & { resolved: CppArrayType } {
+export function isArrayType(type: DevmType | undefined): type is CppDevmType & { resolved: CppArrayType } {
     return isCppType(type) && type.kind === 'array';
 }
 
 /** Whether a type is an unscoped enum (which converts implicitly to integer, as in C++). */
-export function isUnscopedEnum(type: HsmType | undefined): boolean {
+export function isUnscopedEnum(type: DevmType | undefined): boolean {
     return isEnumType(type) && !type.resolved.scoped;
 }
 
 /** The HSM type of a C++ type, or the reason why it cannot be used. */
-export type CppTypeMapping = { readonly type: HsmType, readonly error?: undefined } | { readonly error: string, readonly type?: undefined };
+export type CppTypeMapping = { readonly type: DevmType, readonly error?: undefined } | { readonly error: string, readonly type?: undefined };
 
-const typeCache = new WeakMap<object, CppHsmType>();
+const typeCache = new WeakMap<object, CppDevmType>();
 
 /** The HSM type of a resolved C++ type. */
-export function hsmTypeOfCpp(resolved: CppResolvedType, index: CppTypeIndex): CppTypeMapping {
+export function devmTypeOfCpp(resolved: CppResolvedType, index: CppTypeIndex): CppTypeMapping {
     switch (resolved.kind) {
         case 'integer':
             return resolved.bits > 64 ? { error: `${resolved.bits}-bit integers are not supported` } : { type: 'integer' };
@@ -75,14 +75,14 @@ export function hsmTypeOfCpp(resolved: CppResolvedType, index: CppTypeIndex): Cp
                 if (resolved.length === undefined) {
                     return { error: `arrays of unknown length are not supported ('${resolved.cppName}')` };
                 }
-                const element = hsmTypeOfCpp(resolved.element, index);
+                const element = devmTypeOfCpp(resolved.element, index);
                 if (element.error) {
                     return { error: `the element type of '${resolved.cppName}' is not supported: ${element.error}` };
                 }
             }
             if (resolved.kind === 'struct') {
                 for (const field of resolved.fields) {
-                    const fieldType = hsmTypeOfCpp(field.type, index);
+                    const fieldType = devmTypeOfCpp(field.type, index);
                     if (fieldType.error) {
                         return { error: `the member '${field.name}' of '${resolved.cppName}' has an unsupported type: ${fieldType.error}` };
                     }
@@ -90,7 +90,7 @@ export function hsmTypeOfCpp(resolved: CppResolvedType, index: CppTypeIndex): Cp
             }
             let type = typeCache.get(resolved);
             if (!type) {
-                type = { kind: resolved.kind, cppName: resolved.cppName, resolved, index } as CppHsmType;
+                type = { kind: resolved.kind, cppName: resolved.cppName, resolved, index } as CppDevmType;
                 typeCache.set(resolved, type);
             }
             return { type };
@@ -172,7 +172,7 @@ export function cppTypeOfReference(reference: ast.TypeReference): CppTypeResolut
     if (resolved) {
         const declaration = index.lookup(name);
         result = {
-            resolved, mapping: hsmTypeOfCpp(resolved, index),
+            resolved, mapping: devmTypeOfCpp(resolved, index),
             declaration: declaration && declaration.kind !== 'namespace' ? declaration : undefined
         };
     }
@@ -215,10 +215,10 @@ export function referenceBaseText(reference: ast.ElementReference): string {
 // Members and elements
 
 /** A member of a struct type. */
-export type MemberResolution = { readonly field: CppResolvedField, readonly type: HsmType, readonly error?: undefined } | { readonly error: string, readonly type?: undefined, readonly field?: undefined };
+export type MemberResolution = { readonly field: CppResolvedField, readonly type: DevmType, readonly error?: undefined } | { readonly error: string, readonly type?: undefined, readonly field?: undefined };
 
 /** The member `name` of a value of type `type`. */
-export function memberOf(type: HsmType, name: string): MemberResolution {
+export function memberOf(type: DevmType, name: string): MemberResolution {
     if (!isStructType(type)) {
         return { error: `a value of type ${typeLabel(type)} has no members` };
     }
@@ -227,20 +227,20 @@ export function memberOf(type: HsmType, name: string): MemberResolution {
         const names = type.resolved.fields.map(f => f.name);
         return { error: `'${type.cppName}' has no member '${name}'${names.length > 0 ? ` (members: ${names.join(', ')})` : ''}` };
     }
-    const mapping = hsmTypeOfCpp(field.type, type.index);
+    const mapping = devmTypeOfCpp(field.type, type.index);
     return mapping.error ? { error: `the member '${name}' of '${type.cppName}' cannot be used: ${mapping.error}` } : { field, type: mapping.type! };
 }
 
 /** The element type of an array type. */
-export function elementOf(type: HsmType): { readonly type: HsmType, readonly storage: CppResolvedType, readonly length: number } | undefined {
+export function elementOf(type: DevmType): { readonly type: DevmType, readonly storage: CppResolvedType, readonly length: number } | undefined {
     if (!isArrayType(type)) {
         return undefined;
     }
-    const mapping = hsmTypeOfCpp(type.resolved.element, type.index);
+    const mapping = devmTypeOfCpp(type.resolved.element, type.index);
     return mapping.type ? { type: mapping.type, storage: type.resolved.element, length: type.resolved.length ?? 0 } : undefined;
 }
 
-function typeLabel(type: HsmType): string {
+function typeLabel(type: DevmType): string {
     return isCppType(type) ? type.cppName : type === 'error' ? 'unknown' : type === 'instance' ? 'state machine instance' : type;
 }
 
@@ -249,7 +249,7 @@ function typeLabel(type: HsmType): string {
 
 /** A resolved C++ name used as value. */
 export type CppValueResolution =
-    | { readonly info: CppConstantInfo, readonly type: HsmType, readonly index: CppTypeIndex, readonly error?: undefined }
+    | { readonly info: CppConstantInfo, readonly type: DevmType, readonly index: CppTypeIndex, readonly error?: undefined }
     | { readonly error: string, readonly declaration?: CppDeclaration, readonly type?: undefined, readonly info?: undefined };
 
 const valueCache = new WeakMap<ast.CppReference, { index: CppTypeIndex, result: CppValueResolution }>();
@@ -283,7 +283,7 @@ function computeCppValue(name: string, index: CppTypeIndex): CppValueResolution 
     if (info.value === undefined) {
         return { error: `The value of the C++ constant '${name}' is unknown: ${info.error ?? 'it cannot be evaluated'}.`, declaration: info.declaration };
     }
-    const mapping = hsmTypeOfCpp(info.type, index);
+    const mapping = devmTypeOfCpp(info.type, index);
     if (mapping.error) {
         return { error: `The C++ constant '${name}' cannot be used: ${mapping.error}.`, declaration: info.declaration };
     }

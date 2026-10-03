@@ -1,5 +1,5 @@
 import * as ast from '../../generated/ast.js';
-import { baseTypeReference, type HsmType } from '../../hsm-typesystem.js';
+import { baseTypeReference, type DevmType } from '../../typesystem.js';
 import { cppTypeOfReference, isCppType } from '../../cpp-types.js';
 import type { CppResolvedType } from '../../cpp-header/model.js';
 
@@ -21,7 +21,7 @@ export const CPP_KEYWORDS: ReadonlySet<string> = new Set([
 export const CPP_RESERVED_NAMES: ReadonlySet<string> = new Set([...CPP_KEYWORDS, 'value', 'machine', 'owner', 'callback', 'operationCallback']);
 
 /** C++ type of a value type (C++ enum / struct / array types: their qualified name). */
-export function cppType(type: HsmType): string {
+export function cppType(type: DevmType): string {
     if (isCppType(type)) {
         return type.cppName;
     }
@@ -35,7 +35,7 @@ export function cppType(type: HsmType): string {
 }
 
 /** Type of a parameter of a generated function (strings, structs and arrays by const reference). */
-export function cppParameterType(type: HsmType, spelling = cppType(type)): string {
+export function cppParameterType(type: DevmType, spelling = cppType(type)): string {
     return type === 'string' || (isCppType(type) && type.kind !== 'enum') ? `const ${spelling}&` : spelling;
 }
 
@@ -52,7 +52,7 @@ export function cppSpelling(type: CppResolvedType): string {
  * written in the model (`motor::Rpm`, `::Color`; through HSM aliases), `std::uint8_t` for `<cstdint>`
  * typedefs, otherwise the type of the HSM type ({@link cppType}).
  */
-export function cppDeclaredType(reference: ast.TypeReference | undefined, type: HsmType): string {
+export function cppDeclaredType(reference: ast.TypeReference | undefined, type: DevmType): string {
     const base = baseTypeReference(reference);
     const cpp = base ? cppTypeOfReference(base) : undefined;
     if (base && cpp && !cpp.mapping.error) {
@@ -62,7 +62,7 @@ export function cppDeclaredType(reference: ast.TypeReference | undefined, type: 
 }
 
 /** C++ literal of the default value of a type. */
-export function cppDefault(type: HsmType): string {
+export function cppDefault(type: DevmType): string {
     if (isCppType(type)) {
         return `${type.cppName}{}`;
     }

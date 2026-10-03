@@ -1,7 +1,7 @@
 import { GrammarUtils, type AstNode, type LangiumDocument } from 'langium';
 import type { Diagnostic } from 'vscode-languageserver-types';
 import {
-    createHsmServices, hasAnnotation, HsmTestWorkspace, runTests, type CppHeaderSettings, type CoverageCollector, type MachineCoverage, type TestModel, type TestResult,
+    createDevmServices, hasAnnotation, DevmTestWorkspace, runTests, type CppHeaderSettings, type CoverageCollector, type MachineCoverage, type TestModel, type TestResult,
     type WorkspaceFile
 } from 'devm-language';
 // Node-only part of the language package (not exported from its index because the web app bundles the index)
@@ -26,15 +26,15 @@ export interface DiscoveredTestClass {
     tests: DiscoveredTest[];
 }
 
-let parserServices: ReturnType<typeof createHsmServices> | undefined;
+let parserServices: ReturnType<typeof createDevmServices> | undefined;
 
 /**
  * Finds the test classes and their tests (operations annotated with `@Test`) of a `.devmtest` text.
  * Only the parser is used (fast, no linking), so it works on incomplete texts as well.
  */
 export function discoverTests(text: string): DiscoveredTestClass[] {
-    parserServices ??= createHsmServices();
-    const model = parserServices.HsmTest.parser.LangiumParser.parse<TestModel>(text).value;
+    parserServices ??= createDevmServices();
+    const model = parserServices.DevmTest.parser.LangiumParser.parse<TestModel>(text).value;
     const classes: DiscoveredTestClass[] = [];
     for (const testClass of model?.testClasses ?? []) {
         if (!testClass.name || !testClass.$cstNode) {
@@ -63,12 +63,12 @@ export interface TestFileProblem {
     diagnostics: Diagnostic[];
 }
 
-export interface HsmTestRunResult {
+export interface DevmTestRunResult {
     results: TestResult[];
     problems: TestFileProblem[];
 }
 
-export interface HsmTestRunOptions {
+export interface DevmTestRunOptions {
     /** Runs only the tests for which the filter returns true. */
     filter?: (uri: string, testClass: string, test: string) => boolean;
     onResult?: (result: TestResult) => void;
@@ -84,12 +84,12 @@ export interface HsmTestRunOptions {
  * machines) and runs the tests of the given test files. Test files with errors are not executed but
  * reported as problems.
  */
-export async function runHsmTests(models: readonly WorkspaceFile[], testFiles: readonly WorkspaceFile[], options: HsmTestRunOptions = {}): Promise<HsmTestRunResult> {
+export async function runDevmTests(models: readonly WorkspaceFile[], testFiles: readonly WorkspaceFile[], options: DevmTestRunOptions = {}): Promise<DevmTestRunResult> {
     const testUris = new Set(testFiles.map(file => file.uri));
-    const services = createHsmServices();
+    const services = createDevmServices();
     // imported C/C++ headers: read from disk, settings of devm.gen.json and of the VS Code settings
     installNodeHeaderSupport(services.shared, { settings: options.headers });
-    const workspace = new HsmTestWorkspace(services);
+    const workspace = new DevmTestWorkspace(services);
     const documents = await workspace.load([...models.filter(model => !testUris.has(model.uri)), ...testFiles]);
     const results: TestResult[] = [];
     const problems: TestFileProblem[] = [];

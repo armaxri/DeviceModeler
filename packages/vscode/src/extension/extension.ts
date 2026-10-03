@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { LanguageClient, TransportKind, type LanguageClientOptions, type ServerOptions } from 'vscode-languageclient/node';
 import { registerCommands } from './commands.js';
 import { DiagramManager, isStructureDocument } from './diagram-panel.js';
-import { HsmTestController } from './test-controller.js';
+import { DevmTestController } from './test-controller.js';
 
 let client: LanguageClient | undefined;
 
@@ -13,7 +13,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     const diagrams = new DiagramManager(context);
     context.subscriptions.push(diagrams);
-    const tests = new HsmTestController(output);
+    const tests = new DevmTestController(output);
     context.subscriptions.push(tests);
     registerCommands(context, { diagrams, tests, output });
 

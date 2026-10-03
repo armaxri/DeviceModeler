@@ -1,7 +1,7 @@
 import * as ast from './generated/ast.js';
 import type { CppIntegerType, CppResolvedType } from './cpp-header/model.js';
 import { cppTypeOfReference, isCppType, memberOf, referenceMembers, resolveCppValue } from './cpp-types.js';
-import { baseTypeReference, inferType, typeOfVariable } from './hsm-typesystem.js';
+import { baseTypeReference, inferType, typeOfVariable } from './typesystem.js';
 
 /**
  * Storage types: the C++ type of a place a value is stored in (a variable, a struct member, an array

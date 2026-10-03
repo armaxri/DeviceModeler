@@ -109,7 +109,7 @@ describe('file names, includes and license headers', () => {
         expect(matches('**/*.devm', 'x/y/a.devm')).toBe(true);
         expect(matches('x/**/a?.devm', 'x/ab.devm')).toBe(true);
         expect(matches('x/**/a?.devm', 'x/y/abc.devm')).toBe(false);
-        expect(matches('a.devm', 'aXhsm')).toBe(false);
+        expect(matches('a.devm', 'aXdevm')).toBe(false);
     });
 });
 

@@ -2,10 +2,10 @@ import { AstUtils, type AstNode } from 'langium';
 import type { ELK as ElkApi, ElkExtendedEdge, ElkNode, ElkPort, LayoutOptions } from 'elkjs/lib/elk-api.js';
 import * as ast from '../generated/ast.js';
 import { docComment } from '../doc/doc-comments.js';
-import { resolvedBehavior } from '../dmf-imports.js';
-import { instanceType, structureInstances, threadInstances, threadOf, threadSettings } from '../dmf-model.js';
-import { crossesThreads, portEndpoint, portRoute, routeEndpointsOf, type PortEndpoint } from '../dmf-routes.js';
-import { portTypeLabel } from '../dmf-types.js';
+import { resolvedBehavior } from '../structure-imports.js';
+import { instanceType, compositeInstances, threadInstances, threadOf, threadSettings } from '../structure-model.js';
+import { crossesThreads, portEndpoint, portRoute, routeEndpointsOf, type PortEndpoint } from '../structure-routes.js';
+import { portTypeLabel } from '../structure-types.js';
 import type { Point, TextMeasure } from './diagram-model.js';
 import {
     IBD_OVERVIEW_ID, IBD_TYPES_ID, IbdMetrics, ibdTextWidth, type IbdEdge, type IbdGraph, type IbdLayoutResult, type IbdMember, type IbdNode, type IbdPort, type IbdPortSide
@@ -64,11 +64,11 @@ export interface IbdChoice {
  * The elements of a file that can be shown: its systems, subsystems and components, the overview of all
  * components, and for a file without component types its data types (structs and interfaces).
  */
-export function ibdChoices(model: ast.DmfModel): IbdChoice[] {
+export function ibdChoices(model: ast.StructureModel): IbdChoice[] {
     const result: IbdChoice[] = [];
     const types = model.elements.filter(ast.isComponentType).filter(t => t.name);
     for (const type of types) {
-        const kind = ast.isStructure(type) ? type.kind : 'component';
+        const kind = ast.isCompositeType(type) ? type.kind : 'component';
         result.push({ id: type.name, label: `${kind} ${type.name}`, kind });
     }
     if (types.filter(ast.isComponent).length > 1) {
@@ -84,18 +84,18 @@ export function ibdChoices(model: ast.DmfModel): IbdChoice[] {
  * The element shown by default: the first system, else the first subsystem, else the overview of the
  * component types (if there are several), else the single component type, else the data types.
  */
-export function defaultIbdElement(model: ast.DmfModel): string | undefined {
+export function defaultIbdElement(model: ast.StructureModel): string | undefined {
     const choices = ibdChoices(model);
     return (choices.find(c => c.kind === 'system') ?? choices.find(c => c.kind === 'subsystem') ?? choices.find(c => c.kind === 'overview') ?? choices[0])?.id;
 }
 
 /** The structs and interfaces declared in a file (shown as type boxes next to its diagram). */
-export function dataTypesOf(model: ast.DmfModel): Array<ast.StructDeclaration | ast.PortInterface> {
+export function dataTypesOf(model: ast.StructureModel): Array<ast.StructDeclaration | ast.PortInterface> {
     return model.elements.filter((e): e is ast.StructDeclaration | ast.PortInterface => (ast.isStructDeclaration(e) || ast.isPortInterface(e)) && !!e.name);
 }
 
 /** The element of a structure file containing the offset (a component type), for selecting the diagram by the cursor. */
-export function ibdElementAt(model: ast.DmfModel, offset: number): string | undefined {
+export function ibdElementAt(model: ast.StructureModel, offset: number): string | undefined {
     for (const element of model.elements) {
         const cst = element.$cstNode;
         if (ast.isComponentType(element) && element.name && cst && cst.offset <= offset && offset <= cst.end) {
@@ -122,7 +122,7 @@ async function createDefaultElk(): Promise<ElkInstance> {
  * interfaces declared in the file are added as unconnected type boxes below the diagram (see
  * {@link addTypeBoxes}). `undefined` if the file declares neither component types nor data types.
  */
-export async function layoutStructure(model: ast.DmfModel, options: StructureLayoutOptions = {}): Promise<IbdManualLayoutResult | undefined> {
+export async function layoutStructure(model: ast.StructureModel, options: StructureLayoutOptions = {}): Promise<IbdManualLayoutResult | undefined> {
     const id = options.element && ibdChoices(model).some(c => c.id === options.element) ? options.element : defaultIbdElement(model);
     if (!id) {
         return undefined;
@@ -149,13 +149,13 @@ export async function layoutStructure(model: ast.DmfModel, options: StructureLay
  * ids and hierarchy, without laying them out (cheap; e.g. to compute layout annotations of a changed
  * model). `undefined` if there is nothing to show.
  */
-export async function structureDiagramElements(model: ast.DmfModel, options: Pick<StructureLayoutOptions, 'element' | 'measure'> = {}): Promise<IbdLayoutResult | undefined> {
+export async function structureDiagramElements(model: ast.StructureModel, options: Pick<StructureLayoutOptions, 'element' | 'measure'> = {}): Promise<IbdLayoutResult | undefined> {
     const id = options.element && ibdChoices(model).some(c => c.id === options.element) ? options.element : defaultIbdElement(model);
     return id ? automaticLayout(model, id, options.measure ?? approximateTextMeasure, undefined) : undefined;
 }
 
 /** The automatic layout of the diagram `id`; without `elk` only the elements and ids (not laid out). */
-async function automaticLayout(model: ast.DmfModel, id: string, measure: TextMeasure, elk: ElkInstance | undefined): Promise<IbdLayoutResult> {
+async function automaticLayout(model: ast.StructureModel, id: string, measure: TextMeasure, elk: ElkInstance | undefined): Promise<IbdLayoutResult> {
     let result: IbdLayoutResult;
     if (id === IBD_TYPES_ID) {
         result = {
@@ -203,7 +203,7 @@ function descriptionOf(node: AstNode & { description?: string }): string | undef
 }
 
 function stereotypeOf(type: ast.ComponentType | undefined): string | undefined {
-    return !type ? undefined : ast.isStructure(type) ? type.kind : 'component';
+    return !type ? undefined : ast.isCompositeType(type) ? type.kind : 'component';
 }
 
 /**
@@ -219,7 +219,7 @@ function blockNode(id: string, kind: 'instance' | 'block', name: string, type: a
         x: 0, y: 0, width: 0, height: 0,
         headerHeight: M.instanceHeader,
         behavior: behaviorOf(type),
-        composite: ast.isStructure(type) ? { structure: type.name, uri: AstUtils.findRootNode(type).$document?.uri.toString() } : undefined,
+        composite: ast.isCompositeType(type) ? { structure: type.name, uri: AstUtils.findRootNode(type).$document?.uri.toString() } : undefined,
         ports: [],
         children: []
     };
@@ -449,7 +449,7 @@ class IbdBuilder {
     private readonly edges: EdgeInfo[] = [];
     private frame!: IbdNode;
 
-    constructor(private readonly structure: ast.Structure, private readonly measure: TextMeasure) { }
+    constructor(private readonly structure: ast.CompositeType, private readonly measure: TextMeasure) { }
 
     private unique(base: string): string {
         let id = base;
@@ -532,7 +532,7 @@ class IbdBuilder {
                 }
             }
         }
-        for (const instance of structureInstances(structure)) {
+        for (const instance of compositeInstances(structure)) {
             if (!this.ids.has(instance) && instance.name) {
                 this.frame.children.push(this.instanceNode(instance, this.frame.id));
             }
@@ -929,7 +929,7 @@ class IbdBuilder {
 // Routes
 
 /**
- * The diagram elements on the route of the selected element (see dmf-routes.ts): the ports, connectors
+ * The diagram elements on the route of the selected element (see structure-routes.ts): the ports, connectors
  * and delegations of the route in the shown structure and the instances owning the ports. Starts: a port
  * of an instance or a boundary port (the whole net of the port), an instance (the nets of all its ports),
  * a connection or delegation. `undefined` if the element has no route (threads, the frame, blocks).
@@ -937,7 +937,7 @@ class IbdBuilder {
 export function ibdRouteElements(layout: IbdLayoutResult, id: string): Set<string> | undefined {
     const structure = layout.elements.get(layout.graph.id);
     const node = layout.elements.get(id);
-    if (!ast.isStructure(structure) || !node || node === structure || ast.isThread(node)) {
+    if (!ast.isCompositeType(structure) || !node || node === structure || ast.isThread(node)) {
         return undefined;
     }
     let starts: PortEndpoint[];

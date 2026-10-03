@@ -3696,7 +3696,7 @@ export const DevmGrammar = (): Grammar => loadedDevmGrammar ?? (loadedDevmGramma
     },
     {
       "$type": "ParserRule",
-      "name": "HsmId",
+      "name": "StateMachineId",
       "dataType": "string",
       "definition": {
         "$type": "Alternatives",
@@ -3857,7 +3857,7 @@ export const DevmGrammar = (): Grammar => loadedDevmGrammar ?? (loadedDevmGramma
     {
       "$type": "ParserRule",
       "entry": false,
-      "name": "DmfModel",
+      "name": "StructureModel",
       "definition": {
         "$type": "Alternatives",
         "elements": [
@@ -3959,7 +3959,7 @@ export const DevmGrammar = (): Grammar => loadedDevmGrammar ?? (loadedDevmGramma
     },
     {
       "$type": "ParserRule",
-      "name": "DmfImport",
+      "name": "StructureImport",
       "definition": {
         "$type": "Group",
         "elements": [
@@ -3988,7 +3988,7 @@ export const DevmGrammar = (): Grammar => loadedDevmGrammar ?? (loadedDevmGramma
     },
     {
       "$type": "ParserRule",
-      "name": "DmfImportPath",
+      "name": "StructureImportPath",
       "definition": {
         "$type": "Assignment",
         "feature": "path",
@@ -4007,7 +4007,7 @@ export const DevmGrammar = (): Grammar => loadedDevmGrammar ?? (loadedDevmGramma
     },
     {
       "$type": "ParserRule",
-      "name": "DmfElement",
+      "name": "StructureElement",
       "definition": {
         "$type": "Alternatives",
         "elements": [
@@ -4504,7 +4504,7 @@ export const DevmGrammar = (): Grammar => loadedDevmGrammar ?? (loadedDevmGramma
     },
     {
       "$type": "ParserRule",
-      "name": "Structure",
+      "name": "CompositeType",
       "definition": {
         "$type": "Group",
         "elements": [
@@ -5148,7 +5148,7 @@ export const DevmGrammar = (): Grammar => loadedDevmGrammar ?? (loadedDevmGramma
     },
     {
       "$type": "ParserRule",
-      "name": "DmfAnnotation",
+      "name": "StructureAnnotation",
       "definition": {
         "$type": "Group",
         "elements": [
@@ -5340,7 +5340,7 @@ export const DevmGrammar = (): Grammar => loadedDevmGrammar ?? (loadedDevmGramma
     },
     {
       "$type": "ParserRule",
-      "name": "DmfId",
+      "name": "StructureId",
       "dataType": "string",
       "definition": {
         "$type": "Alternatives",
@@ -5484,7 +5484,7 @@ export const DevmGrammar = (): Grammar => loadedDevmGrammar ?? (loadedDevmGramma
     },
     {
       "$type": "ParserRule",
-      "name": "DmfQualifiedName",
+      "name": "StructureQualifiedName",
       "dataType": "string",
       "definition": {
         "$type": "Group",
@@ -5521,7 +5521,7 @@ export const DevmGrammar = (): Grammar => loadedDevmGrammar ?? (loadedDevmGramma
     },
     {
       "$type": "ParserRule",
-      "name": "DmfTypeReferenceName",
+      "name": "StructureTypeReferenceName",
       "dataType": "string",
       "definition": {
         "$type": "Group",
@@ -5573,14 +5573,14 @@ export const DevmGrammar = (): Grammar => loadedDevmGrammar ?? (loadedDevmGramma
   ],
   "interfaces": [],
   "types": [],
-  "$comment": "/*\\n * The language of the Device Modeler (file extension \`.devm\`). A \`.devm\` file contains either a state\\n * machine (hsm.langium) or structure elements: structs, interfaces, components, subsystems and systems\\n * (dmf.langium), never both. The entry rule is the alternative of the two kinds, decided by the first\\n * token (\`statemachine\` starts a state machine file, everything else - also an empty file - is a\\n * structure file); text of the other kind after the model is reported by the parser\\n * (devm-parser.ts: \\"A .devm file contains either a state machine or structure elements\\").\\n *\\n * Both grammars use the same keywords for different constructs (\`import\`, \`interface\`, \`event\`,\\n * annotations \`@...\`); as the kind of the file is decided by the entry rule, every construct is parsed\\n * by the rule of its kind and the surface syntax of both kinds stays as it is. The keywords of one kind\\n * are accepted as names in the other kind (HsmId, DmfId).\\n */"
+  "$comment": "/*\\n * The language of the Device Modeler (file extension \`.devm\`). A \`.devm\` file contains either a state\\n * machine (statemachine.langium) or structure elements: structs, interfaces, components, subsystems and systems\\n * (structure.langium), never both. The entry rule is the alternative of the two kinds, decided by the first\\n * token (\`statemachine\` starts a state machine file, everything else - also an empty file - is a\\n * structure file); text of the other kind after the model is reported by the parser\\n * (devm-parser.ts: \\"A .devm file contains either a state machine or structure elements\\").\\n *\\n * Both grammars use the same keywords for different constructs (\`import\`, \`interface\`, \`event\`,\\n * annotations \`@...\`); as the kind of the file is decided by the entry rule, every construct is parsed\\n * by the rule of its kind and the surface syntax of both kinds stays as it is. The keywords of one kind\\n * are accepted as names in the other kind (StateMachineId, StructureId).\\n */"
 }`));
 
-let loadedHsmTestGrammar: Grammar | undefined;
-export const HsmTestGrammar = (): Grammar => loadedHsmTestGrammar ?? (loadedHsmTestGrammar = loadGrammarFromJson(`{
+let loadedDevmTestGrammar: Grammar | undefined;
+export const DevmTestGrammar = (): Grammar => loadedDevmTestGrammar ?? (loadedDevmTestGrammar = loadGrammarFromJson(`{
   "$type": "Grammar",
   "isDeclared": true,
-  "name": "HsmTest",
+  "name": "DevmTest",
   "imports": [],
   "rules": [
     {
@@ -10479,7 +10479,7 @@ export const HsmTestGrammar = (): Grammar => loadedHsmTestGrammar ?? (loadedHsmT
     },
     {
       "$type": "ParserRule",
-      "name": "HsmId",
+      "name": "StateMachineId",
       "dataType": "string",
       "definition": {
         "$type": "Alternatives",
@@ -10640,5 +10640,5 @@ export const HsmTestGrammar = (): Grammar => loadedHsmTestGrammar ?? (loadedHsmT
   ],
   "interfaces": [],
   "types": [],
-  "$comment": "/*\\n * Unit test language for the state machines of the Device Modeler (file extension \`.devmtest\`),\\n * modeled after SCTUnit of itemis CREATE:\\n *\\n *   testclass DoorTest for statemachine Door {\\n *       @SetUp\\n *       operation init() { enter }\\n *\\n *       @Test\\n *       operation opens() {\\n *           assert active(Door.Closed)\\n *           raise open\\n *           proceed 1 cycle\\n *           assert active(Moving.Up) message \\"the door opens\\"\\n *           assert !called stopMotor\\n *       }\\n *   }\\n *\\n * The expressions are the expressions of the HSM language (imported from \`hsm.langium\`). Names are\\n * resolved against the declarations of the referenced state machine and the local variables and\\n * parameters of the test operation.\\n */"
+  "$comment": "/*\\n * Unit test language for the state machines of the Device Modeler (file extension \`.devmtest\`),\\n * modeled after SCTUnit of itemis CREATE:\\n *\\n *   testclass DoorTest for statemachine Door {\\n *       @SetUp\\n *       operation init() { enter }\\n *\\n *       @Test\\n *       operation opens() {\\n *           assert active(Door.Closed)\\n *           raise open\\n *           proceed 1 cycle\\n *           assert active(Moving.Up) message \\"the door opens\\"\\n *           assert !called stopMotor\\n *       }\\n *   }\\n *\\n * The expressions are the expressions of the HSM language (imported from \`statemachine.langium\`). Names are\\n * resolved against the declarations of the referenced state machine and the local variables and\\n * parameters of the test operation.\\n */"
 }`));

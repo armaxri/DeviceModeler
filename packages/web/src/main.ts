@@ -4,17 +4,17 @@ import './styles/app.css';
 import './styles/diagram-styles.js';
 import './styles/simulation.css';
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
-import { HsmApp } from './app.js';
+import { DevmApp } from './app.js';
 
 self.MonacoEnvironment = {
     getWorker: () => new EditorWorker()
 };
 
-const app = new HsmApp();
+const app = new DevmApp();
 app.start().catch(error => {
     console.error(error);
     document.getElementById('status-message')!.textContent = `Failed to start: ${error instanceof Error ? error.message : error}`;
 });
 
 // exposed for debugging and automated tests
-(window as unknown as { hsmApp: HsmApp }).hsmApp = app;
+(window as unknown as { devmApp: DevmApp }).devmApp = app;

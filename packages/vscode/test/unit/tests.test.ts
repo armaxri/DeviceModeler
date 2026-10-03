@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { CoverageCollector } from 'devm-language';
-import { discoverTests, failureMessage, lineCoverage, runHsmTests } from '../../src/extension/logic/tests.js';
+import { discoverTests, failureMessage, lineCoverage, runDevmTests } from '../../src/extension/logic/tests.js';
 
 const examples = path.resolve(__dirname, '../../../../examples');
 const file = async (relative: string) => ({ uri: pathToFileURL(path.join(examples, relative)).toString(), text: await fs.readFile(path.join(examples, relative), 'utf-8') });
@@ -42,7 +42,7 @@ describe('running tests', () => {
         const test = await file('tests/door.devmtest');
         const coverage = new CoverageCollector();
         const seen: string[] = [];
-        const { results, problems } = await runHsmTests(models, [test], { coverage, onResult: result => seen.push(result.name) });
+        const { results, problems } = await runDevmTests(models, [test], { coverage, onResult: result => seen.push(result.name) });
         expect(problems).toEqual([]);
         expect(results.length).toBeGreaterThan(2);
         expect(results.every(r => r.status === 'passed')).toBe(true);
@@ -65,7 +65,7 @@ describe('running tests', () => {
             uri: 'file:///virtual/fail.devmtest',
             text: 'testclass F for statemachine Door {\n    @Test\n    operation fails() {\n        enter\n        assert active(Moving)\n    }\n    @Test\n    operation skipped() { enter }\n}\n'
         };
-        const { results } = await runHsmTests(models, [test], { filter: (_uri, _c, name) => name === 'fails' });
+        const { results } = await runDevmTests(models, [test], { filter: (_uri, _c, name) => name === 'fails' });
         expect(results).toHaveLength(1);
         expect(results[0].status).toBe('failed');
         expect(results[0].line).toBe(5);
@@ -73,7 +73,7 @@ describe('running tests', () => {
     });
 
     it('reports test files with errors as problems', async () => {
-        const { results, problems } = await runHsmTests([], [{ uri: 'file:///virtual/bad.devmtest', text: 'testclass B for statemachine Missing {\n}\n' }]);
+        const { results, problems } = await runDevmTests([], [{ uri: 'file:///virtual/bad.devmtest', text: 'testclass B for statemachine Missing {\n}\n' }]);
         expect(results).toEqual([]);
         expect(problems[0].diagnostics.length).toBeGreaterThan(0);
     });

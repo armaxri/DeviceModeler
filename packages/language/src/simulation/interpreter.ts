@@ -2,7 +2,7 @@ import { AstUtils, type AstNode } from 'langium';
 import * as ast from '../generated/ast.js';
 import { instanceMachine, referableName } from '../imports.js';
 import { entryPointOf, transitionLabel, nodeText } from '../model-utils.js';
-import type { EventDirection } from '../hsm-typesystem.js';
+import type { EventDirection } from '../typesystem.js';
 import { SimulationError } from './errors.js';
 import { ExpressionEvaluator, type EvaluationContext } from './expressions.js';
 import {

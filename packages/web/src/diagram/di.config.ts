@@ -12,17 +12,17 @@ import {
 } from './views.js';
 import { IbdConnectorElement, IbdNodeElement, IbdPortElement, IbdTypes } from './ibd-model.js';
 import { IbdCanvasView, IbdConnectorView, IbdFrameView, IbdInstanceView, IbdPortView, IbdThreadView, IbdTypeView } from './ibd-views.js';
-import { DiagramCallbacks, HsmMouseListener, HsmMoveMouseListener, HsmScrollMouseListener, HsmSelectMouseListener, SelectionTracker } from './listeners.js';
+import { DiagramCallbacks, DevmMouseListener, DevmMoveMouseListener, DevmScrollMouseListener, DevmSelectMouseListener, SelectionTracker } from './listeners.js';
 
 export function createDiagramContainer(baseDiv: string, callbacks: DiagramCallbacks): Container {
-    const hsmModule = new ContainerModule((bind, unbind, isBound, rebind) => {
+    const devmModule = new ContainerModule((bind, unbind, isBound, rebind) => {
         bind(TYPES.ModelSource).to(LocalModelSource).inSingletonScope();
         bind(DiagramCallbacks).toConstantValue(callbacks);
-        bind(HsmMouseListener).toSelf().inSingletonScope();
-        bind(TYPES.MouseListener).toService(HsmMouseListener);
-        rebind(SelectMouseListener).to(HsmSelectMouseListener).inSingletonScope();
-        rebind(MoveMouseListener).to(HsmMoveMouseListener).inSingletonScope();
-        rebind(ScrollMouseListener).to(HsmScrollMouseListener).inSingletonScope();
+        bind(DevmMouseListener).toSelf().inSingletonScope();
+        bind(TYPES.MouseListener).toService(DevmMouseListener);
+        rebind(SelectMouseListener).to(DevmSelectMouseListener).inSingletonScope();
+        rebind(MoveMouseListener).to(DevmMoveMouseListener).inSingletonScope();
+        rebind(ScrollMouseListener).to(DevmScrollMouseListener).inSingletonScope();
 
         const context = { bind, unbind, isBound, rebind };
         configureModelElement(context, DiagramTypes.graph, StateMachineGraph, SGraphView);
@@ -67,6 +67,6 @@ export function createDiagramContainer(baseDiv: string, callbacks: DiagramCallba
     const container = new Container();
     // Undo / redo is handled by the text editor: the text is the single source of truth.
     loadDefaultModules(container, { exclude: [undoRedoModule, labelEditUiModule] });
-    container.load(hsmModule);
+    container.load(devmModule);
     return container;
 }

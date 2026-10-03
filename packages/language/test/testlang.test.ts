@@ -3,9 +3,9 @@ import * as path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import type { LangiumDocument } from 'langium';
 import * as ast from '../src/generated/ast.js';
-import { HsmTestWorkspace, runTests, toJUnitXml, type LoadedDocument, type TestResult } from '../src/testing/index.js';
+import { DevmTestWorkspace, runTests, toJUnitXml, type LoadedDocument, type TestResult } from '../src/testing/index.js';
 
-const workspace = new HsmTestWorkspace();
+const workspace = new DevmTestWorkspace();
 let counter = 0;
 
 const DOOR = `
@@ -509,7 +509,7 @@ describe('example tests', () => {
 
     test.each(testFiles)('%s passes', async (file) => {
         const model = file.replace('.devmtest', '.devm');
-        const { documents, results } = await new HsmTestWorkspace().run([
+        const { documents, results } = await new DevmTestWorkspace().run([
             { uri: `file:///examples/${model}`, text: fs.readFileSync(path.join(examples, model), 'utf-8') },
             { uri: `file:///examples/tests/${file}`, text: fs.readFileSync(path.join(examples, 'tests', file), 'utf-8') }
         ]);

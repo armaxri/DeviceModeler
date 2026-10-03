@@ -2,8 +2,8 @@ import { URI, type LangiumDocument } from 'langium';
 import type { LangiumSharedServices } from 'langium/lsp';
 import type { Diagnostic } from 'vscode-languageserver-types';
 import * as ast from '../generated/ast.js';
-import { createHsmServices } from '../hsm-module.js';
-import { loadImports, type FileReader, type HsmModelLoaderOptions } from '../hsm-document.js';
+import { createDevmServices } from '../devm-module.js';
+import { loadImports, type FileReader, type ModelLoaderOptions } from '../model-loader.js';
 import { cppHeaderStore } from '../cpp-headers.js';
 import { importKind } from '../imports.js';
 import { runTests, type TestResult, type TestRunOptions } from './runner.js';
@@ -28,14 +28,14 @@ export interface LoadedDocument {
  * reference the state machines by name (`testclass T for statemachine M`). Works in Node.js and
  * in the browser. Documents with the same URI replace previously loaded ones.
  */
-export class HsmTestWorkspace {
+export class DevmTestWorkspace {
 
     readonly services: { shared: LangiumSharedServices };
     private readonly readFile: FileReader;
 
     /** `options.readFile` reads imported `.devm` files that are not among the loaded files (default: the file system provider). */
-    constructor(services?: { shared: LangiumSharedServices }, options: HsmModelLoaderOptions = {}) {
-        this.services = services ?? createHsmServices();
+    constructor(services?: { shared: LangiumSharedServices }, options: ModelLoaderOptions = {}) {
+        this.services = services ?? createDevmServices();
         const fileSystem = this.services.shared.workspace.FileSystemProvider;
         this.readFile = options.readFile ?? (async uri => {
             try {

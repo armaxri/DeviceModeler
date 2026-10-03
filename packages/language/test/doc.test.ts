@@ -82,7 +82,7 @@ describe('doc comments', () => {
 
     test('hover shows signature and documentation', async () => {
         const parsed = await parse(MODEL);
-        const provider = loader.services.Hsm.documentation.DocumentationProvider;
+        const provider = loader.services.Devm.documentation.DocumentationProvider;
         const count = parsed.model.scopes[0].declarations[2];
         expect(provider.getDocumentation(count)).toBe('```devm\nvar count : integer = 1 + 2\n```\n\nA counter | with a pipe.');
         const compute = parsed.model.scopes[0].declarations[5];

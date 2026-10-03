@@ -242,7 +242,7 @@ subsystem CourtesyLight {
 
 - The annotations belong to the element they are written before (in the grammar they are part of the
   element), so they move, are deleted and renamed with it. They are checked by the validator (the known
-  annotations of structure files, `DMF_ANNOTATIONS`): misplaced or unknown annotations are warnings,
+  annotations of structure files, `STRUCTURE_ANNOTATIONS`): misplaced or unknown annotations are warnings,
   wrong arguments and duplicates errors, `@port` of a port the type does not have is a warning. Renaming a
   port in the diagram updates the `@port` annotations of the instances of its type.
 - Only the annotations of the elements of the shown diagram are read and written: every subsystem / system

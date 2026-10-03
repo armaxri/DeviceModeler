@@ -4,7 +4,7 @@ import * as ast from '../src/generated/ast.js';
 import {
     binaryResultType, commonType, eventDirection, inferType, isAssignable, isCastable, resolveTypeName,
     typeOfDeclaration, typeOfTypeReference, unaryResultType
-} from '../src/hsm-typesystem.js';
+} from '../src/typesystem.js';
 import { errors, parse, warnings } from './helpers.js';
 
 type Parsed = Awaited<ReturnType<typeof parse>>;
