@@ -2,7 +2,7 @@ import { AstUtils, URI, type AstNode, type LangiumDocument } from 'langium';
 import * as ast from './generated/ast.js';
 import { resolvedBehavior } from './structure-imports.js';
 import { instanceType, compositeInstances } from './structure-model.js';
-import { findProviders, findRequirers, portEndpoint, portRoute, type PortEndpoint, type Route } from './structure-routes.js';
+import { findSources, findTargets, portEndpoint, portRoute, type PortEndpoint, type Route } from './structure-routes.js';
 import { StructureEditor, structureRenameEdits } from './edit/structure-edits.js';
 import type { TextEdit } from './edit/model-edits.js';
 import { loadImports, replaceDocument } from './model-loader.js';
@@ -12,8 +12,8 @@ import { createDevmServices } from './devm-module.js';
 /*
  * The structure files of a workspace, loaded together (with their imports) into Langium services of
  * their own: queries across files that the editor of a single file cannot answer from its own document
- * and its imports – which structures use a state machine or a component type, the route of a signal
- * from the root system down to the parts of a composite ("follow into"), the providers of a port in
+ * and its imports – which structures use a state machine or a component type, the route of the data
+ * from the root system down to the parts of a composite ("follow into"), the sources of a port in
  * another file, renames that update the files referencing an element. Model elements are identified
  * across the separately parsed documents by URI and names (see {@link StructureLocation}).
  */
@@ -144,9 +144,9 @@ export class StructureWorkspace {
         return portRoute(starts);
     }
 
-    /** The providers (for required ports) or requirers (provided ports) of an endpoint, as locations. */
+    /** The sources (for in ports), targets (out ports) or the ports sharing the data (inout ports) of an endpoint, as locations. */
     routeEnds(endpoint: PortEndpoint, context: StructureContext): StructureLocation[] {
-        const ends = endpoint.port.direction === 'requires' ? findProviders(endpoint) : findRequirers(endpoint);
+        const ends = endpoint.port.direction === 'out' ? findTargets(endpoint) : findSources(endpoint);
         return ends.map(end => endpointLocation(end, context));
     }
 
@@ -200,7 +200,7 @@ export class StructureWorkspace {
      */
     renameEdits(uri: string, offset: number, newName: string): Map<string, TextEdit[]> | undefined {
         const node = this.nodeAt(uri, offset, n => 'name' in n && typeof (n as { name: unknown }).name === 'string'
-            && (ast.isComponentType(n) || ast.isPort(n) || ast.isComponentInstance(n) || ast.isThread(n) || ast.isPortInterface(n) || ast.isStructDeclaration(n)));
+            && (ast.isComponentType(n) || ast.isPort(n) || ast.isComponentInstance(n) || ast.isThread(n) || ast.isStructDeclaration(n)));
         return node ? structureRenameEdits(this.services.Devm, node as AstNode & { name: string }, newName) : undefined;
     }
 

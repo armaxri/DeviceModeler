@@ -1,56 +1,61 @@
 // Controller of the garage door (examples/device). The component DoorController (components.devm)
-// declares the ports; the structure language checks that they match the interfaces below.
+// declares the ports; the structure language checks that they match the interfaces below: in / out
+// events for the async ports, variables for the sync ports (read-only for in ports).
 /** Opens and closes the door on request and stops at obstacles. */
 statemachine DoorController {
     import "door_types.h"
 
     @EventDriven
 
-    /** Commands of the remote control (port `cmd`). */
-    interface cmd:
+    /** Commands of the remote control (ports `open`, `close`, `stop`). */
+    interface remote:
         in event open
         in event close
         in event stop
 
-    /** Commands to the drive unit (port `motor`). */
-    interface motor:
+    /** The drive unit (ports `up`, `down`, `halt`, `stopped`, `blocked`). */
+    interface drive:
+        /** Opens with the given speed in percent. */
         out event up : integer
+        /** Closes with the given speed in percent. */
         out event down : integer
         out event halt
+        /** The drive reached an end position. */
+        in event stopped
+        /** The drive detected an obstacle. */
+        in event blocked
 
     interface:
-        /** The drive reached an end position (port `status`). */
-        in event stopped
-        /** The drive detected an obstacle (port `status`). */
-        in event blocked
         /** Sounds the buzzer (port `alarm`). */
         out event alarm
+        /** The position of the door, written by the encoder (port `position`). */
+        var readonly position : door::Position
         /** Number of completed closing cycles (port `cycles`). */
         var cycles : integer = 0
-        /** Reads the position of the door (port `position`). */
-        operation position() : door::Position
+        /** Number of obstacles, shared with the diagnosis (port `errors`). */
+        var errors : integer = 0
 
     [*] -> Closed
 
     state Closed
     state Opening {
-        entry / raise motor.up : 100
+        entry / raise drive.up : 100
     }
     state Open
     state Closing {
-        entry / raise motor.down : 60
+        entry / raise drive.down : 60
     }
     state Blocked {
-        entry / raise alarm
+        entry / errors += 1; raise alarm
     }
 
-    Closed -> Opening : cmd.open
-    Opening -> Open : stopped
-    Opening -> Open : cmd.stop / raise motor.halt
-    Opening -> Blocked : blocked
-    Open -> Closing : cmd.close [position().valid]
-    Closing -> Closed : stopped / cycles += 1
-    Closing -> Open : cmd.stop / raise motor.halt
-    Closing -> Blocked : blocked
-    Blocked -> Opening : cmd.open
+    Closed -> Opening : remote.open
+    Opening -> Open : drive.stopped
+    Opening -> Open : remote.stop / raise drive.halt
+    Opening -> Blocked : drive.blocked
+    Open -> Closing : remote.close [position.valid]
+    Closing -> Closed : drive.stopped / cycles += 1
+    Closing -> Open : remote.stop / raise drive.halt
+    Closing -> Blocked : drive.blocked
+    Blocked -> Opening : remote.open
 }

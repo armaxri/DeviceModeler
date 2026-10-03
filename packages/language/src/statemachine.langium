@@ -309,7 +309,7 @@ QualifiedName returns string:
 // machine files as well; they are accepted as names here, so they can be used like before the merge
 // (completion does not propose them, see `isSoftKeyword` in lsp/cpp-lsp.ts).
 StateMachineId returns string:
-    ID | 'package' | 'struct' | 'component' | 'behavior' | 'subsystem' | 'system' | 'provides' | 'requires'
+    ID | 'package' | 'struct' | 'component' | 'behavior' | 'subsystem' | 'system' | 'inout'
     | 'async' | 'thread' | 'connect' | 'delegate';
 
 // ---------------------------------------------------------------------------------------------

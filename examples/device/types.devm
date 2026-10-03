@@ -1,28 +1,8 @@
-// Data types and interfaces of the garage door (examples/device).
+// Data types of the garage door (examples/device).
 package types
 
 /** Statistics reported by the diagnosis. */
 struct Diagnostics {
     cycles : integer
     errors : integer
-}
-
-/** Commands of the remote control. */
-interface DoorCmd {
-    event open
-    event close
-    event stop
-}
-
-/** Commands to the drive: speed in percent. */
-interface MotorCmd {
-    event up : integer
-    event down : integer
-    event halt
-}
-
-/** Why the drive stopped. */
-interface MotorStatus {
-    event stopped
-    event blocked
 }

@@ -10,7 +10,7 @@
     },
     {
       "name": "keyword.control.devmtest",
-      "match": "\\b(statemachine|component|operation|subsystem|testclass|behavior|delegate|provides|readonly|requires|connect|message|package|proceed|returns|valueof|active|assert|called|struct|system|thread|async|const|enter|false|raise|times|while|else|exit|mock|null|true|with|for|var|as|if)\\b"
+      "match": "\\b(statemachine|component|operation|subsystem|testclass|behavior|delegate|readonly|connect|message|package|proceed|returns|valueof|active|assert|called|struct|system|thread|async|const|enter|false|inout|raise|times|while|else|exit|mock|null|true|with|for|var|as|if)\\b"
     },
     {
       "name": "string.quoted.double.devmtest",

@@ -90,6 +90,7 @@ export namespace Devm {
         | "history"
         | "import"
         | "in"
+        | "inout"
         | "interface"
         | "internal"
         | "junction"
@@ -99,11 +100,9 @@ export namespace Devm {
         | "operation"
         | "out"
         | "package"
-        | "provides"
         | "raise"
         | "readonly"
         | "region"
-        | "requires"
         | "state"
         | "statemachine"
         | "struct"
@@ -166,8 +165,6 @@ export namespace Devm {
         Parameter: Parameter
         ParenthesizedExpression: ParenthesizedExpression
         Port: Port
-        PortEvent: PortEvent
-        PortInterface: PortInterface
         PortReference: PortReference
         PostfixExpression: PostfixExpression
         PseudoState: PseudoState
@@ -275,16 +272,15 @@ export namespace DevmTest {
         | "false"
         | "for"
         | "if"
+        | "inout"
         | "message"
         | "mock"
         | "null"
         | "operation"
         | "package"
         | "proceed"
-        | "provides"
         | "raise"
         | "readonly"
-        | "requires"
         | "returns"
         | "statemachine"
         | "struct"
@@ -791,7 +787,7 @@ export function isCppReference(item: unknown): item is CppReference {
 }
 
 export interface DataTypeReference extends langium.AstNode {
-    readonly $container: Port | PortEvent | StructField;
+    readonly $container: Port | StructField;
     readonly $type: 'DataTypeReference';
     name: StructureTypeReferenceName;
 }
@@ -1264,8 +1260,7 @@ export interface Port extends langium.AstNode {
     readonly $container: Component | CompositeType;
     readonly $type: 'Port';
     annotations: Array<StructureAnnotation>;
-    direction: 'provides' | 'requires';
-    events: Array<PortEvent>;
+    direction: 'in' | 'inout' | 'out';
     kind: 'async' | 'sync';
     name: StructureId;
     type?: DataTypeReference;
@@ -1275,7 +1270,6 @@ export const Port = {
     $type: 'Port',
     annotations: 'annotations',
     direction: 'direction',
-    events: 'events',
     kind: 'kind',
     name: 'name',
     type: 'type'
@@ -1283,44 +1277,6 @@ export const Port = {
 
 export function isPort(item: unknown): item is Port {
     return reflection.isInstance(item, Port.$type);
-}
-
-export interface PortEvent extends langium.AstNode {
-    readonly $container: Port | PortInterface;
-    readonly $type: 'PortEvent';
-    name: StructureId;
-    type?: DataTypeReference;
-}
-
-export const PortEvent = {
-    $type: 'PortEvent',
-    name: 'name',
-    type: 'type'
-} as const;
-
-export function isPortEvent(item: unknown): item is PortEvent {
-    return reflection.isInstance(item, PortEvent.$type);
-}
-
-export interface PortInterface extends langium.AstNode {
-    readonly $container: StructureModel;
-    readonly $type: 'PortInterface';
-    annotations: Array<StructureAnnotation>;
-    description?: string;
-    events: Array<PortEvent>;
-    name: StructureId;
-}
-
-export const PortInterface = {
-    $type: 'PortInterface',
-    annotations: 'annotations',
-    description: 'description',
-    events: 'events',
-    name: 'name'
-} as const;
-
-export function isPortInterface(item: unknown): item is PortInterface {
-    return reflection.isInstance(item, PortInterface.$type);
 }
 
 export interface PortReference extends langium.AstNode {
@@ -1550,10 +1506,10 @@ export function isStateMachine(item: unknown): item is StateMachine {
     return reflection.isInstance(item, StateMachine.$type);
 }
 
-export type StateMachineId = 'async' | 'behavior' | 'component' | 'connect' | 'delegate' | 'package' | 'provides' | 'requires' | 'struct' | 'subsystem' | 'system' | 'thread' | string;
+export type StateMachineId = 'async' | 'behavior' | 'component' | 'connect' | 'delegate' | 'inout' | 'package' | 'struct' | 'subsystem' | 'system' | 'thread' | string;
 
 export function isStateMachineId(item: unknown): item is StateMachineId {
-    return item === 'package' || item === 'struct' || item === 'component' || item === 'behavior' || item === 'subsystem' || item === 'system' || item === 'provides' || item === 'requires' || item === 'async' || item === 'thread' || item === 'connect' || item === 'delegate' || (typeof item === 'string' && (/[_a-zA-Z][\w]*/.test(item)));
+    return item === 'package' || item === 'struct' || item === 'component' || item === 'behavior' || item === 'subsystem' || item === 'system' || item === 'inout' || item === 'async' || item === 'thread' || item === 'connect' || item === 'delegate' || (typeof item === 'string' && (/[_a-zA-Z][\w]*/.test(item)));
 }
 
 export type Statement = ExpressionStatement | RaiseStatement;
@@ -1620,7 +1576,7 @@ export function isStructField(item: unknown): item is StructField {
 }
 
 export interface StructureAnnotation extends langium.AstNode {
-    readonly $container: Component | ComponentInstance | CompositeType | Connection | Delegation | Port | PortInterface | StructDeclaration | Thread;
+    readonly $container: Component | ComponentInstance | CompositeType | Connection | Delegation | Port | StructDeclaration | Thread;
     readonly $type: 'StructureAnnotation';
     arguments: Array<AnnotationArgument>;
     name: StructureId;
@@ -1636,7 +1592,7 @@ export function isStructureAnnotation(item: unknown): item is StructureAnnotatio
     return reflection.isInstance(item, StructureAnnotation.$type);
 }
 
-export type StructureElement = ComponentType | PortInterface | StructDeclaration;
+export type StructureElement = ComponentType | StructDeclaration;
 
 export const StructureElement = {
     $type: 'StructureElement'
@@ -1646,10 +1602,10 @@ export function isStructureElement(item: unknown): item is StructureElement {
     return reflection.isInstance(item, StructureElement.$type);
 }
 
-export type StructureId = 'active' | 'after' | 'alias' | 'always' | 'as' | 'choice' | 'const' | 'deephistory' | 'default' | 'else' | 'entry' | 'every' | 'exit' | 'false' | 'history' | 'in' | 'internal' | 'junction' | 'namespace' | 'null' | 'oncycle' | 'operation' | 'out' | 'raise' | 'readonly' | 'region' | 'state' | 'statemachine' | 'true' | 'valueof' | 'var' | string;
+export type StructureId = 'active' | 'after' | 'alias' | 'always' | 'as' | 'choice' | 'const' | 'deephistory' | 'default' | 'else' | 'entry' | 'event' | 'every' | 'exit' | 'false' | 'history' | 'in' | 'inout' | 'interface' | 'internal' | 'junction' | 'namespace' | 'null' | 'oncycle' | 'operation' | 'out' | 'raise' | 'readonly' | 'region' | 'state' | 'statemachine' | 'true' | 'valueof' | 'var' | string;
 
 export function isStructureId(item: unknown): item is StructureId {
-    return item === 'statemachine' || item === 'namespace' || item === 'internal' || item === 'in' || item === 'out' || item === 'const' || item === 'var' || item === 'readonly' || item === 'operation' || item === 'alias' || item === 'state' || item === 'region' || item === 'choice' || item === 'junction' || item === 'history' || item === 'deephistory' || item === 'entry' || item === 'exit' || item === 'after' || item === 'every' || item === 'always' || item === 'oncycle' || item === 'else' || item === 'default' || item === 'raise' || item === 'as' || item === 'valueof' || item === 'active' || item === 'true' || item === 'false' || item === 'null' || (typeof item === 'string' && (/[_a-zA-Z][\w]*/.test(item)));
+    return item === 'statemachine' || item === 'namespace' || item === 'internal' || item === 'in' || item === 'out' || item === 'inout' || item === 'interface' || item === 'event' || item === 'const' || item === 'var' || item === 'readonly' || item === 'operation' || item === 'alias' || item === 'state' || item === 'region' || item === 'choice' || item === 'junction' || item === 'history' || item === 'deephistory' || item === 'entry' || item === 'exit' || item === 'after' || item === 'every' || item === 'always' || item === 'oncycle' || item === 'else' || item === 'default' || item === 'raise' || item === 'as' || item === 'valueof' || item === 'active' || item === 'true' || item === 'false' || item === 'null' || (typeof item === 'string' && (/[_a-zA-Z][\w]*/.test(item)));
 }
 
 export interface StructureImport extends langium.AstNode {
@@ -2695,11 +2651,6 @@ export class DevmAstReflection extends langium.AbstractAstReflection {
                 direction: {
                     name: Port.direction
                 },
-                events: {
-                    name: Port.events,
-                    defaultValue: [],
-                    optional: true
-                },
                 kind: {
                     name: Port.kind
                 },
@@ -2712,42 +2663,6 @@ export class DevmAstReflection extends langium.AbstractAstReflection {
                 }
             },
             superTypes: []
-        },
-        PortEvent: {
-            name: PortEvent.$type,
-            properties: {
-                name: {
-                    name: PortEvent.name
-                },
-                type: {
-                    name: PortEvent.type,
-                    optional: true
-                }
-            },
-            superTypes: []
-        },
-        PortInterface: {
-            name: PortInterface.$type,
-            properties: {
-                annotations: {
-                    name: PortInterface.annotations,
-                    defaultValue: [],
-                    optional: true
-                },
-                description: {
-                    name: PortInterface.description,
-                    optional: true
-                },
-                events: {
-                    name: PortInterface.events,
-                    defaultValue: [],
-                    optional: true
-                },
-                name: {
-                    name: PortInterface.name
-                }
-            },
-            superTypes: [StructureElement.$type]
         },
         PortReference: {
             name: PortReference.$type,

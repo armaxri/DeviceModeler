@@ -5,7 +5,7 @@ import { docComment } from '../doc/doc-comments.js';
 import { resolvedBehavior } from '../structure-imports.js';
 import { instanceType, compositeInstances, threadInstances, threadOf, threadSettings } from '../structure-model.js';
 import { crossesThreads, portEndpoint, portRoute, routeEndpointsOf, type PortEndpoint } from '../structure-routes.js';
-import { portTypeLabel } from '../structure-types.js';
+import { portDeclarationText } from '../structure-types.js';
 import type { Point, TextMeasure } from './diagram-model.js';
 import {
     IBD_OVERVIEW_ID, IBD_TYPES_ID, IbdMetrics, ibdTextWidth, type IbdEdge, type IbdGraph, type IbdLayoutResult, type IbdMember, type IbdNode, type IbdPort, type IbdPortSide
@@ -19,7 +19,7 @@ import { ibdLayoutFromModel } from './ibd-layout-annotations.js';
  * to right with orthogonal routing; the frame of the structure and the threads are compound nodes
  * (hierarchy handling INCLUDE_CHILDREN), ports are fixed on the borders of their nodes.
  *
- * The layout runs twice: the first run (ports on fixed sides: provided ports left, required ports
+ * The layout runs twice: the first run (ports on fixed sides: in ports left, out and inout ports
  * right) gives the arrangement of the nodes; the second one puts every port on the side facing the
  * ports it is connected to (a connection running backwards, e.g. a reply, then needs no detour), orders
  * the ports of each side by the position of their partners and routes the connectors.
@@ -62,7 +62,7 @@ export interface IbdChoice {
 
 /**
  * The elements of a file that can be shown: its systems, subsystems and components, the overview of all
- * components, and for a file without component types its data types (structs and interfaces).
+ * components, and for a file without component types its data types (structs).
  */
 export function ibdChoices(model: ast.StructureModel): IbdChoice[] {
     const result: IbdChoice[] = [];
@@ -89,9 +89,9 @@ export function defaultIbdElement(model: ast.StructureModel): string | undefined
     return (choices.find(c => c.kind === 'system') ?? choices.find(c => c.kind === 'subsystem') ?? choices.find(c => c.kind === 'overview') ?? choices[0])?.id;
 }
 
-/** The structs and interfaces declared in a file (shown as type boxes next to its diagram). */
-export function dataTypesOf(model: ast.StructureModel): Array<ast.StructDeclaration | ast.PortInterface> {
-    return model.elements.filter((e): e is ast.StructDeclaration | ast.PortInterface => (ast.isStructDeclaration(e) || ast.isPortInterface(e)) && !!e.name);
+/** The structs declared in a file (shown as type boxes next to its diagram). */
+export function dataTypesOf(model: ast.StructureModel): ast.StructDeclaration[] {
+    return model.elements.filter((e): e is ast.StructDeclaration => ast.isStructDeclaration(e) && !!e.name);
 }
 
 /** The element of a structure file containing the offset (a component type), for selecting the diagram by the cursor. */
@@ -118,8 +118,8 @@ async function createDefaultElk(): Promise<ElkInstance> {
 /**
  * Computes the diagram of a structure file: the internal block diagram of a subsystem or system, a
  * component type as a block with its ports, all component types of the file or (a file without
- * component types) its data types (see {@link StructureLayoutOptions.element}). The structs and
- * interfaces declared in the file are added as unconnected type boxes below the diagram (see
+ * component types) its data types (see {@link StructureLayoutOptions.element}). The structs declared
+ * in the file are added as unconnected type boxes below the diagram (see
  * {@link addTypeBoxes}). `undefined` if the file declares neither component types nor data types.
  */
 export async function layoutStructure(model: ast.StructureModel, options: StructureLayoutOptions = {}): Promise<IbdManualLayoutResult | undefined> {
@@ -207,8 +207,8 @@ function stereotypeOf(type: ast.ComponentType | undefined): string | undefined {
 }
 
 /**
- * An instance or component block: header (stereotype, name), the provided ports on the left and the
- * required ports on the right (the layout may move them to the other side), port labels inside.
+ * An instance or component block: header (stereotype, name), the in ports on the left and the out and
+ * inout ports on the right (the layout may move them to the other side), port labels inside.
  */
 function blockNode(id: string, kind: 'instance' | 'block', name: string, type: ast.ComponentType | undefined, typeName: string | undefined,
     measure: TextMeasure, description: string | undefined): IbdNode {
@@ -229,7 +229,7 @@ function blockNode(id: string, kind: 'instance' | 'block', name: string, type: a
         if (!port.name) {
             continue;
         }
-        node.ports.push(ibdPort(`${id}.${port.name}`, port, port.direction === 'provides' ? 'WEST' : 'EAST', measure));
+        node.ports.push(ibdPort(`${id}.${port.name}`, port, defaultPortSide(port), measure));
     }
     const left = Math.max(0, ...node.ports.filter(p => p.side === 'WEST').map(p => p.label.width));
     const right = Math.max(0, ...node.ports.filter(p => p.side === 'EAST').map(p => p.label.width));
@@ -239,13 +239,18 @@ function blockNode(id: string, kind: 'instance' | 'block', name: string, type: a
     return node;
 }
 
+/** The side of a port before the layout puts it on the side of its partners: in ports left, out and inout ports right. */
+function defaultPortSide(port: ast.Port): IbdPortSide {
+    return port.direction === 'in' ? 'WEST' : 'EAST';
+}
+
 function ibdPort(id: string, port: ast.Port, side: IbdPortSide, measure: TextMeasure): IbdPort {
-    const typeName = port.events.length === 0 && port.type?.name ? port.type.name : undefined;
+    const typeName = port.type?.name || undefined;
     const text = typeName ? `${port.name} : ${typeName}` : port.name;
     const width = textWidth(measure, text, M.portFont);
     return {
         id, name: port.name, direction: port.direction, kind: port.kind, typeName,
-        title: `${port.direction} ${port.kind} ${port.name} : ${portTypeLabel(port)}`,
+        title: portDeclarationText(port),
         side, x: 0, y: 0, size: M.portSize,
         label: { text, x: 0, y: 0, width, height: M.portFont + 3 }
     };
@@ -347,20 +352,17 @@ class BlockBuilder {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Data types (structs, interfaces) as type boxes
+// Data types (structs) as type boxes
 
-/** The text of a member row of a type box: `x : real`, `event up : integer`. */
+/** The text of a member row of a type box: `x : real`. */
 export function memberText(member: IbdMember): string {
     return `${member.prefix ?? ''}${member.name}${member.type ? ` : ${member.type}` : ''}`;
 }
 
-/** A type box: «struct» / «interface», the name, the fields / events in a compartment below. */
-function typeNode(id: string, type: ast.StructDeclaration | ast.PortInterface, measure: TextMeasure): IbdNode {
-    const struct = ast.isStructDeclaration(type);
-    const members: IbdMember[] = struct
-        ? type.fields.filter(f => f.name).map(f => ({ name: f.name, type: f.type?.name }))
-        : type.events.filter(e => e.name).map(e => ({ prefix: 'event ', name: e.name, type: e.type?.name }));
-    const stereotype = struct ? 'struct' : 'interface';
+/** A type box: «struct», the name, the fields in a compartment below. */
+function typeNode(id: string, type: ast.StructDeclaration, measure: TextMeasure): IbdNode {
+    const members: IbdMember[] = type.fields.filter(f => f.name).map(f => ({ name: f.name, type: f.type?.name }));
+    const stereotype = 'struct';
     const widths = [
         textWidth(measure, type.name, M.nameFont, true),
         textWidth(measure, `«${stereotype}»`, M.stereotypeFont),
@@ -379,11 +381,11 @@ function typeNode(id: string, type: ast.StructDeclaration | ast.PortInterface, m
 }
 
 /**
- * Adds the structs and interfaces of the file to a diagram as type boxes (in text order, in rows below
+ * Adds the structs of the file to a diagram as type boxes (in text order, in rows below
  * the diagram, left aligned with it, wrapped at its width – at least about 700 px). They are not
  * connected to anything: ports show their type in their label.
  */
-export function addTypeBoxes(result: IbdLayoutResult, types: ReadonlyArray<ast.StructDeclaration | ast.PortInterface>, measure: TextMeasure = approximateTextMeasure): void {
+export function addTypeBoxes(result: IbdLayoutResult, types: readonly ast.StructDeclaration[], measure: TextMeasure = approximateTextMeasure): void {
     const graph = result.graph;
     if (types.length === 0) {
         return;
@@ -512,7 +514,7 @@ class IbdBuilder {
             if (!port.name) {
                 continue;
             }
-            const ibd = ibdPort(this.unique(`${s}.${port.name}`), port, port.direction === 'provides' ? 'WEST' : 'EAST', this.measure);
+            const ibd = ibdPort(this.unique(`${s}.${port.name}`), port, defaultPortSide(port), this.measure);
             this.frame.ports.push(ibd);
             this.ports.set(ibd.id, { port: ibd, node: this.frame });
             this.elements.set(ibd.id, port);
@@ -616,6 +618,7 @@ class IbdBuilder {
             const edge: IbdEdge = {
                 id: this.unique(`${s}/${text}`),
                 kind, source, target,
+                ...(statement.source.port.ref?.direction === 'inout' && statement.target.port.ref?.direction === 'inout' ? { bidirectional: true } : {}),
                 crossThread: ast.isConnection(statement) && crossesThreads(statement),
                 title: `${kind} ${text.replace('->', ' -> ')}`,
                 points: []
@@ -649,8 +652,8 @@ class IbdBuilder {
     }
 
     /**
-     * Puts each port of an instance on the side facing its partners (by default provided ports left,
-     * required ports right), orders the ports of each side by the vertical position of their partners and
+     * Puts each port of an instance on the side facing its partners (by default in ports left, out and
+     * inout ports right), orders the ports of each side by the vertical position of their partners and
      * reverses edges running backwards (from right to left) for the second layout run.
      */
     private assignPortSides(centers: Map<string, Point>): void {

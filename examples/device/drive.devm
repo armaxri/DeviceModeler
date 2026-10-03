@@ -4,29 +4,29 @@ statemachine Drive {
     @CycleBased(10)
 
     interface:
-        /** Opens with the given speed in percent (port `ctrl`). */
+        /** Opens with the given speed in percent (port `up`). */
         in event up : integer
-        /** Closes with the given speed in percent (port `ctrl`). */
+        /** Closes with the given speed in percent (port `down`). */
         in event down : integer
         in event halt
-        /** An end switch was reached (port `sensors`). */
+        /** An end switch was reached (port `endSwitch`). */
         in event endSwitch
-        /** The motor current exceeded the limit (port `sensors`). */
+        /** The motor current exceeded the limit (port `overcurrent`). */
         in event overcurrent
         out event stopped
         out event blocked
         /** The current speed in percent, negative while closing (port `speed`). */
         var speed : integer = 0
-        /** Sets the duty cycle of the PWM output (port `pwm`). */
-        operation pwm(duty : integer) : void
+        /** The duty cycle of the PWM output in percent (port `duty`). */
+        var duty : integer = 0
 
     [*] -> Idle
 
     state Idle {
-        entry / speed = 0; pwm(0)
+        entry / speed = 0; duty = 0
     }
     state Running {
-        entry / pwm(speed)
+        entry / duty = speed
     }
 
     Idle -> Running : up / speed = valueof(up)

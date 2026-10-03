@@ -11,7 +11,7 @@ import { StateMachineFormatter } from './statemachine-formatter.js';
 export class StructureFormatter extends StateMachineFormatter {
 
     protected override format(node: AstNode): void {
-        if (ast.isStructDeclaration(node) || ast.isPortInterface(node) || ast.isComponent(node) || ast.isCompositeType(node) || ast.isThread(node)) {
+        if (ast.isStructDeclaration(node) || ast.isComponent(node) || ast.isCompositeType(node) || ast.isThread(node)) {
             const formatter = this.getNodeFormatter(node);
             const open = formatter.keyword('{');
             const close = formatter.keyword('}');
@@ -22,9 +22,9 @@ export class StructureFormatter extends StateMachineFormatter {
             }
             formatter.property('name').prepend(Formatting.oneSpace());
             formatter.property('description').prepend(Formatting.oneSpace());
-            if (ast.isStructDeclaration(node) || ast.isPortInterface(node)) {
-                // optional separators of fields and events: `x : real;`
-                this.getNodeFormatter<ast.StructDeclaration | ast.PortInterface>(node).keywords(',', ';').prepend(Formatting.noSpace());
+            if (ast.isStructDeclaration(node)) {
+                // optional separators of fields: `x : real;`
+                this.getNodeFormatter<ast.StructDeclaration>(node).keywords(',', ';').prepend(Formatting.noSpace());
             }
             this.formatAnnotations(node, true);
         } else if (ast.isPort(node) || ast.isComponentInstance(node) || ast.isConnection(node) || ast.isDelegation(node)) {
@@ -41,8 +41,8 @@ export class StructureFormatter extends StateMachineFormatter {
                 this.getNodeFormatter(node).property('description').prepend(Formatting.oneSpace());
             }
             this.formatAnnotations(node, false);
-        } else if (ast.isPortEvent(node) || ast.isStructField(node)) {
-            const formatter = this.getNodeFormatter<ast.PortEvent | ast.StructField>(node);
+        } else if (ast.isStructField(node)) {
+            const formatter = this.getNodeFormatter<ast.StructField>(node);
             formatter.keyword(':').prepend(Formatting.oneSpace()).append(Formatting.oneSpace());
         } else if (ast.isPortReference(node)) {
             this.getNodeFormatter(node).keyword('.').surround(Formatting.noSpace());
@@ -88,7 +88,7 @@ export class StructureFormatter extends StateMachineFormatter {
         const first = ast.isPort(node) ? this.getNodeFormatter(node).property('direction')
             : ast.isComponentInstance(node) ? this.getNodeFormatter(node).property('name')
                 : ast.isCompositeType(node) ? this.getNodeFormatter(node).property('kind')
-                    : this.getNodeFormatter(node).keywords('struct', 'interface', 'component', 'thread', 'connect', 'delegate');
+                    : this.getNodeFormatter(node).keywords('struct', 'component', 'thread', 'connect', 'delegate');
         first.prepend(newLine ? Formatting.newLine() : Formatting.oneSpace());
     }
 }

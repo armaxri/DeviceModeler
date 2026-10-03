@@ -7,30 +7,26 @@
  *
  *   import "types.devm"
  *
- *   interface DoorCmd {
- *       event open
- *       event close
- *   }
- *
  *   component DoorController "controls the door" {
  *       behavior "door.devm"
- *       provides async cmd   : DoorCmd
- *       requires async motor : event start : integer, event stop
- *       requires sync  pos   : Position
+ *       in async open                 // an event without data
+ *       out async up : integer        // an event carrying data
+ *       in sync pos : Position        // data
+ *       inout sync errors : integer   // shared data
  *   }
  *
  *   system Car {
- *       provides async diag : event request
+ *       in async open
  *       @priority(5) @period(10 ms)
  *       thread ControlTask {
  *           door  : DoorController
  *           motor : MotorDriver
  *       }
- *       connect door.motor -> motor.ctrl          // required -> provided
- *       delegate diag -> door.cmd                 // outer provided -> inner provided
+ *       connect door.up -> motor.up               // out -> in (data flow)
+ *       delegate open -> door.open                // outer in -> inner in
  *   }
  *
- * Types (built-in types, structs, interfaces, C++ types of imported headers) are referenced by name
+ * Types (built-in types, structs, C++ types of imported headers) are referenced by name
  * and resolved by structure-types.ts, component types, instances and ports are cross-references (see
  * structure-scope.ts). The rules (directions, kinds, types, threads, behavior) are checked by
  * structure-validator.ts and documented in docs/structure-language.md.
@@ -63,9 +59,9 @@ StructureImportPath:
 // Types
 
 StructureElement:
-    StructDeclaration | PortInterface | ComponentType;
+    StructDeclaration | ComponentType;
 
-// `struct Position { x : real  y : real }`: a data type of sync ports and event payloads.
+// `struct Position { x : real  y : real }`: a data type of ports.
 StructDeclaration:
     annotations+=StructureAnnotation* 'struct' name=StructureId (description=STRING)? '{'
         (fields+=StructField (',' | ';')?)*
@@ -74,16 +70,7 @@ StructDeclaration:
 StructField:
     name=StructureId ':' type=DataTypeReference;
 
-// A named group of events (the type of async ports): `interface DoorCmd { event open event close }`.
-PortInterface:
-    annotations+=StructureAnnotation* 'interface' name=StructureId (description=STRING)? '{'
-        (events+=PortEvent (',' | ';')?)*
-    '}';
-
-PortEvent:
-    'event' name=StructureId (':' type=DataTypeReference)?;
-
-// Built-in types (integer, real, boolean, string), structs, interfaces (`pkg.Name` for an element of
+// Built-in types (integer, real, boolean, string), structs (`pkg.Name` for an element of
 // an imported file with a package) and C++ types of imported headers (`motor::Mode`, `uint8_t`).
 DataTypeReference:
     name=StructureTypeReferenceName;
@@ -120,12 +107,13 @@ CompositeType:
         (ports+=Port | threads+=Thread | instances+=ComponentInstance | connections+=Connection | delegations+=Delegation)*
     '}';
 
-// `provides async cmd : DoorCmd`, `requires async motor : event start : integer, event stop`,
-// `requires sync pos : Position`. Async ports carry events (an interface or an inline list of events),
-// sync ports a data type.
+// Ports carry data in a direction (data flow): `in sync pos : Position`, `out sync speed : integer`,
+// `inout sync errors : integer` (sync: data values), `in async open`, `out async up : integer` (async:
+// one event named like the port, with an optional payload). The type is required for sync ports and
+// `inout` is not allowed for async ports (both checked by the validator).
 Port:
-    annotations+=StructureAnnotation* direction=('provides' | 'requires') kind=('sync' | 'async') name=StructureId ':'
-        (events+=PortEvent (',' events+=PortEvent)* | type=DataTypeReference);
+    annotations+=StructureAnnotation* direction=('in' | 'out' | 'inout') kind=('sync' | 'async') name=StructureId
+        (':' type=DataTypeReference)?;
 
 // ---------------------------------------------------------------------------------------------
 // Threads, instances, connections
@@ -144,12 +132,14 @@ ThreadMember:
 ComponentInstance:
     annotations+=StructureAnnotation* name=StructureId ':' type=[ComponentType:StructureQualifiedName] (description=STRING)?;
 
-// `connect door.motor -> motor.ctrl`: a required port to a provided port of another instance.
+// `connect door.up -> motor.up`: an out port of a part to an in port of another part (the direction of
+// the data flow); two inout ports in any order.
 Connection:
     annotations+=StructureAnnotation* 'connect' source=PortReference '->' target=PortReference;
 
-// `delegate diag -> door.cmd` (provided boundary port to a provided port of an instance) and
-// `delegate door.log -> log` (required port of an instance to a required boundary port).
+// `delegate open -> door.open` (in boundary port to an in port of a part) and `delegate diag.report ->
+// report` (out port of a part to an out boundary port): in the direction of the data flow; inout ports in
+// any order.
 Delegation:
     annotations+=StructureAnnotation* 'delegate' source=PortReference '->' target=PortReference;
 
@@ -177,7 +167,7 @@ SignedNumber returns string:
 // structure files as well (one language, devm.langium); they are accepted as names here (`in`, `state`,
 // `entry`, ...), so they can be used like before the merge (completion does not propose them).
 StructureId returns string:
-    ID | 'statemachine' | 'namespace' | 'internal' | 'in' | 'out' | 'const' | 'var' | 'readonly' | 'operation'
+    ID | 'statemachine' | 'namespace' | 'internal' | 'in' | 'out' | 'inout' | 'interface' | 'event' | 'const' | 'var' | 'readonly' | 'operation'
     | 'alias' | 'state' | 'region' | 'choice' | 'junction' | 'history' | 'deephistory' | 'entry' | 'exit'
     | 'after' | 'every' | 'always' | 'oncycle' | 'else' | 'default' | 'raise' | 'as' | 'valueof' | 'active'
     | 'true' | 'false' | 'null';

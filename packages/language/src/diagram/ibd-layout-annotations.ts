@@ -4,7 +4,7 @@
  *
  * - `@at(x, y)`: position of the frame (before `system` / `subsystem`), a thread, an instance, a
  *   component block (before `component`, in the overview of the component types) or a type box (before
- *   `struct` / `interface`), relative to its parent node (the frame, a thread; the canvas)
+ *   `struct`), relative to its parent node (the frame, a thread; the canvas)
  * - `@size(width, height)`: explicit (minimum) size of the same nodes, only if the user resized them
  * - `@via(x1, y1, x2, y2, …)`: waypoints of a connection / delegation, relative to its frame (the innermost
  *   node containing the nodes of both ports, so the waypoints move with a thread)
@@ -13,7 +13,7 @@
  *   subsystem / system for its boundary ports; the offset is optional.
  *
  * Only the annotations of the elements shown in the diagram are read and written (another subsystem of
- * the same file has its own diagram); the structs and interfaces of the file are shown in every diagram
+ * the same file has its own diagram); the structs of the file are shown in every diagram
  * of the file and have one position for all of them.
  */
 import { AstUtils, type AstNode } from 'langium';
@@ -29,7 +29,7 @@ import {
 export const IBD_LAYOUT_ANNOTATIONS: readonly string[] = ['at', 'size', 'via', 'port'];
 
 /** The elements with a node in a structure diagram (they can have `@at` and `@size`). */
-export const IBD_NODE_ELEMENTS: readonly string[] = ['CompositeType', 'Thread', 'ComponentInstance', 'Component', 'StructDeclaration', 'PortInterface'];
+export const IBD_NODE_ELEMENTS: readonly string[] = ['CompositeType', 'Thread', 'ComponentInstance', 'Component', 'StructDeclaration'];
 /** The elements with a connector (`@via`). */
 export const IBD_EDGE_ELEMENTS: readonly string[] = ['Connection', 'Delegation'];
 /** The elements whose ports are placed by `@port` (instances: the ports of their type; subsystems / systems: their boundary ports). */
@@ -248,7 +248,7 @@ function elementStart(element: Annotated, text: string): number {
 
 /** Threads, subsystems / systems and type declarations have their annotations on the line before them (formatter). */
 function annotationsOnOwnLine(element: Annotated): boolean {
-    return ast.isThread(element) || ast.isCompositeType(element) || ast.isComponent(element) || ast.isStructDeclaration(element) || ast.isPortInterface(element);
+    return ast.isThread(element) || ast.isCompositeType(element) || ast.isComponent(element) || ast.isStructDeclaration(element);
 }
 
 /**

@@ -14,15 +14,15 @@ import * as ast from '../generated/ast.js';
 import type { CppRange } from '../cpp-header/model.js';
 import { resolvedBehavior, resolvedStructureImports, visibleElements } from '../structure-imports.js';
 import { instanceType, threadOf, threadSettings } from '../structure-model.js';
-import { providersOf, type PortEndpoint } from '../structure-routes.js';
-import { portTypeLabel, resolveDataType } from '../structure-types.js';
+import { sourcesOf, type PortEndpoint } from '../structure-routes.js';
+import { portDeclarationText, resolveDataType } from '../structure-types.js';
 import { BUILTIN_TYPES } from '../typesystem.js';
 import { StateMachineDocumentationProvider } from '../doc/statemachine-documentation-provider.js';
 import { StateMachineCompletionProvider, StateMachineDefinitionProvider } from './cpp-lsp.js';
 
 /**
  * Language server features of structure files: go to definition (also for type names, import paths
- * and the behavior file), go to implementation ("go to provider" of required ports, see
+ * and the behavior file), go to implementation ("go to source" of the data of in ports, see
  * structure-routes.ts), hover (signature and documentation comment) and completion of type names.
  *
  * State machine files and structure files are one language (`.devm`), so these are the providers of
@@ -55,7 +55,7 @@ const FILE_START: Range = { start: { line: 0, character: 0 }, end: { line: 0, ch
 
 /**
  * Go to definition: the default (cross-references: component types, instances, ports, `behavior Door`),
- * and for type names the struct or interface (or the declaration in a C++ header), for import paths
+ * and for type names the struct (or the declaration in a C++ header), for import paths
  * and `behavior "door.devm"` the file. State machine files: {@link StateMachineDefinitionProvider}.
  */
 export class StructureDefinitionProvider extends StateMachineDefinitionProvider {
@@ -68,10 +68,6 @@ export class StructureDefinitionProvider extends StateMachineDefinitionProvider 
         const node = leaf?.astNode;
         if (leaf && ast.isDataTypeReference(node)) {
             const resolution = resolveDataType(node);
-            if (resolution.kind === 'interface') {
-                const link = nodeLink(resolution.interface, leaf);
-                return link ? [link] : undefined;
-            }
             if (resolution.kind === 'data' && resolution.struct) {
                 const link = nodeLink(resolution.struct, leaf);
                 return link ? [link] : undefined;
@@ -110,9 +106,10 @@ function fileLink(target: ast.StructureModel | ast.StateMachine, origin: CstNode
 }
 
 /**
- * Go to implementation = "go to provider": on a port reference (`door.motor` in a connection), an
- * instance or a port, the instances (or boundary ports) providing the required ports, across
- * connections and delegations of all levels below the enclosing structure (see `providersOf` in structure-routes.ts).
+ * Go to implementation = "go to source": on a port reference (`door.position` in a connection), an
+ * instance or a port, the instances (or boundary ports) sending the data of the in ports (sharing the
+ * data of inout ports), across connections and delegations of all levels below the enclosing structure
+ * (see `sourcesOf` in structure-routes.ts). On an out port of a component: the port itself.
  */
 export class StructureImplementationProvider implements ImplementationProvider {
 
@@ -126,14 +123,14 @@ export class StructureImplementationProvider implements ImplementationProvider {
         if (!element) {
             return undefined;
         }
-        const links = providersOf(element).map(provider => nodeLink(providerNode(provider), leaf)).filter((l): l is LocationLink => l !== undefined);
+        const links = sourcesOf(element).map(source => nodeLink(sourceNode(source), leaf)).filter((l): l is LocationLink => l !== undefined);
         return links.length > 0 ? links : undefined;
     }
 }
 
-/** The element a provider is shown at: the instance providing the port, or the boundary port (provided by the environment). */
-function providerNode(provider: PortEndpoint): AstNode {
-    return provider.instance ?? provider.port;
+/** The element a source is shown at: the instance sending the data, or the boundary port (the data comes from the environment). */
+function sourceNode(source: PortEndpoint): AstNode {
+    return source.instance ?? source.port;
 }
 
 /**
@@ -163,10 +160,10 @@ export class StructureDocumentationProvider extends StateMachineDocumentationPro
     }
 }
 
-/** A one-line signature of a structure element, e.g. `requires async motor : event start : integer`. */
+/** A one-line signature of a structure element, e.g. `out async up : integer`. */
 export function structureSignature(node: AstNode): string | undefined {
     if (ast.isPort(node)) {
-        return `${node.direction} ${node.kind} ${node.name} : ${portTypeLabel(node)}`;
+        return portDeclarationText(node);
     }
     if (ast.isComponent(node)) {
         const behavior = node.behavior ? ` (behavior ${node.behavior.path !== undefined ? `"${node.behavior.path}"` : node.behavior.machine?.$refText})` : '';
@@ -192,17 +189,11 @@ export function structureSignature(node: AstNode): string | undefined {
     if (ast.isStructDeclaration(node)) {
         return `struct ${node.name} { ${node.fields.map(f => `${f.name} : ${f.type?.name ?? '?'}`).join(', ')} }`;
     }
-    if (ast.isPortInterface(node)) {
-        return `interface ${node.name} { ${node.events.map(e => `event ${e.name}${e.type ? ` : ${e.type.name}` : ''}`).join(', ')} }`;
-    }
-    if (ast.isPortEvent(node)) {
-        return `event ${node.name}${node.type ? ` : ${node.type.name}` : ''}`;
-    }
     return undefined;
 }
 
 /**
- * Completion: the default completion, and for type names the built-in types, structs and interfaces.
+ * Completion: the default completion, and for type names the built-in types and structs.
  * The type of an instance in a thread is a component, outside of the threads a subsystem (see
  * docs/structure-language.md#threads); threads are assigned instances of components only.
  */
@@ -222,9 +213,9 @@ export class StructureCompletionProvider extends StateMachineCompletionProvider 
                 acceptor(context, { label: name, kind: CompletionItemKind.Keyword, detail: 'built-in type' });
             }
             for (const [name, element] of visibleElements(model)) {
-                if (ast.isStructDeclaration(element) || ast.isPortInterface(element)) {
+                if (ast.isStructDeclaration(element)) {
                     acceptor(context, {
-                        label: name, kind: ast.isStructDeclaration(element) ? CompletionItemKind.Struct : CompletionItemKind.Interface,
+                        label: name, kind: CompletionItemKind.Struct,
                         detail: structureSignature(element)
                     });
                 }

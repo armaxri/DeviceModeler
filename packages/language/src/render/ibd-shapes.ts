@@ -5,11 +5,10 @@ import type { IbdPort } from '../diagram/ibd-model.js';
  * Geometry of the shapes of the internal block diagram (see ibd-model.ts), shared by the SVG renderer
  * (ibd-svg.ts) and the Sprotty views of the web editor, so both draw the same diagram.
  *
- * Notation of the ports (docs/structure-language.md#diagram):
- * - a small square on the border of its node: **filled** = provided port, **hollow** = required port,
- * - **async** ports (events) show a chevron in the square pointing in the direction the events flow:
- *   into the node for provided ports (the component accepts the events), out of it for required ports
- *   (the component sends them); **sync** ports (data / calls) are plain squares.
+ * Notation of the ports (docs/structure-language.md#diagram): a small square on the border of its node,
+ * **hollow** = sync port (data values), **filled** = async port (an event); an arrow in the square shows
+ * the direction of the data: into the node for `in` ports, out of it for `out` ports, both ways for
+ * `inout` ports. Connectors have an arrowhead at the receiving end (both ends between inout ports).
  */
 
 /** Path of the tab of the frame (`ibd [system] Name`): a rectangle with a cut lower right corner. */
@@ -18,46 +17,70 @@ export function frameTabPath(width: number, height: number): string {
     return `M 0,0 H ${r(width)} V ${r(height - cut)} L ${r(width - cut)},${r(height)} H 0 Z`;
 }
 
-/** The CSS classes of a port: `ibd-port provided|required sync|async`. */
+/** The CSS classes of a port: `ibd-port flow-in|flow-out|flow-inout sync|async`. */
 export function portClasses(port: Pick<IbdPort, 'direction' | 'kind'>): string[] {
-    return ['ibd-port', port.direction === 'provides' ? 'provided' : 'required', port.kind];
+    return ['ibd-port', `flow-${port.direction}`, port.kind];
 }
 
-/** Whether the events of a port flow into its node (provided async ports) – the direction of its chevron. */
-function inward(port: Pick<IbdPort, 'direction'>): boolean {
-    return port.direction === 'provides';
-}
+/** Unit vectors pointing into the node from each side. */
+const INTO_NODE: Record<IbdPort['side'], Point> = { WEST: { x: 1, y: 0 }, EAST: { x: -1, y: 0 }, NORTH: { x: 0, y: 1 }, SOUTH: { x: 0, y: -1 } };
 
 /**
- * The chevron of an async port (relative to the top left corner of the port square), pointing in the
- * direction the events flow; `undefined` for sync ports.
+ * The arrow in the square of a port (relative to its top left corner) showing the direction of the data:
+ * pointing into the node (`in`), out of it (`out`) or both ways (`inout`).
  */
-export function portChevron(port: Pick<IbdPort, 'direction' | 'kind' | 'side' | 'size'>): string | undefined {
-    if (port.kind !== 'async') {
-        return undefined;
-    }
+export function portArrow(port: Pick<IbdPort, 'direction' | 'side' | 'size'>): string {
     const s = port.size;
-    // direction of the arrow: towards the inside of the node (inward) or away from it
-    const intoNode: Record<IbdPort['side'], Point> = { WEST: { x: 1, y: 0 }, EAST: { x: -1, y: 0 }, NORTH: { x: 0, y: 1 }, SOUTH: { x: 0, y: -1 } };
-    const base = intoNode[port.side];
-    const d = inward(port) ? base : { x: -base.x, y: -base.y };
+    const base = INTO_NODE[port.side];
+    const d = port.direction === 'out' ? { x: -base.x, y: -base.y } : base;
     const c = s / 2;
-    const depth = s * 0.2;
-    const spread = s * 0.27;
-    // tip and the two ends of the chevron
-    const tip = { x: c + d.x * depth, y: c + d.y * depth };
-    const back = { x: c - d.x * depth, y: c - d.y * depth };
-    const a = { x: back.x + d.y * spread, y: back.y + d.x * spread };
-    const b = { x: back.x - d.y * spread, y: back.y - d.x * spread };
-    return `M ${r(a.x)},${r(a.y)} L ${r(tip.x)},${r(tip.y)} L ${r(b.x)},${r(b.y)}`;
+    const half = s * 0.3;
+    const head = s * 0.22;
+    const tip = { x: c + d.x * half, y: c + d.y * half };
+    const tail = { x: c - d.x * half, y: c - d.y * half };
+    const arrowhead = (point: Point, dir: Point) => {
+        const a = { x: point.x - dir.x * head + dir.y * head, y: point.y - dir.y * head + dir.x * head };
+        const b = { x: point.x - dir.x * head - dir.y * head, y: point.y - dir.y * head - dir.x * head };
+        return `M ${r(a.x)},${r(a.y)} L ${r(point.x)},${r(point.y)} L ${r(b.x)},${r(b.y)}`;
+    };
+    const line = `M ${r(tail.x)},${r(tail.y)} L ${r(tip.x)},${r(tip.y)}`;
+    return [line, arrowhead(tip, d), ...(port.direction === 'inout' ? [arrowhead(tail, { x: -d.x, y: -d.y })] : [])].join(' ');
 }
 
 /** Tooltip of a port. */
 export function portTooltip(port: Pick<IbdPort, 'title' | 'direction' | 'kind'>): string {
     const what = port.kind === 'async'
-        ? (port.direction === 'provides' ? 'accepts the events' : 'sends the events')
-        : (port.direction === 'provides' ? 'provides the data' : 'requires the data');
+        ? (port.direction === 'out' ? 'sends the event' : 'receives the event')
+        : (port.direction === 'in' ? 'receives the data' : port.direction === 'out' ? 'sends the data' : 'shares the data');
     return `${port.title}\n(${what})`;
+}
+
+/**
+ * The arrowheads of a connector (filled triangles, the tip on the end of the route): at the receiving
+ * end (the target of the statement), at both ends between inout ports.
+ */
+export function connectorArrowheads(points: readonly Point[], bidirectional = false): string[] {
+    const heads: string[] = [];
+    const head = (tip: Point, from: Point) => {
+        const dx = tip.x - from.x;
+        const dy = tip.y - from.y;
+        const length = Math.hypot(dx, dy);
+        if (length < 0.01) {
+            return;
+        }
+        const u = { x: dx / length, y: dy / length };
+        const size = 8;
+        const width = 3.5;
+        const back = { x: tip.x - u.x * size, y: tip.y - u.y * size };
+        heads.push(`M ${r(tip.x)},${r(tip.y)} L ${r(back.x + u.y * width)},${r(back.y - u.x * width)} L ${r(back.x - u.y * width)},${r(back.y + u.x * width)} Z`);
+    };
+    if (points.length >= 2) {
+        head(points[points.length - 1], points[points.length - 2]);
+        if (bidirectional) {
+            head(points[0], points[1]);
+        }
+    }
+    return heads;
 }
 
 /** The behavior icon (a small state machine: two states and a transition) with its left edge at `x`, centered at `y`. */

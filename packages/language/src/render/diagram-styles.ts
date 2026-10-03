@@ -705,32 +705,32 @@ export const DIAGRAM_CSS = `
     stroke-width: 1.2px;
 }
 
-/* ports: filled = provided, hollow = required; the chevron of async ports shows the event direction */
+/* ports: hollow = sync (data), filled = async (event); the arrow shows the direction of the data (in / out / inout) */
 .ibd-port-shape {
     stroke: var(--devm-state-stroke);
     stroke-width: 1.3px;
 }
 
-.ibd-port.provided .ibd-port-shape {
+.ibd-port.async .ibd-port-shape {
     fill: var(--devm-state-stroke);
 }
 
-.ibd-port.required .ibd-port-shape {
+.ibd-port.sync .ibd-port-shape {
     fill: var(--devm-bg);
 }
 
-.ibd-port-chevron {
+.ibd-port-arrow {
     fill: none;
-    stroke-width: 1.5px;
+    stroke-width: 1.3px;
     stroke-linecap: round;
     stroke-linejoin: round;
 }
 
-.ibd-port.provided .ibd-port-chevron {
+.ibd-port.async .ibd-port-arrow {
     stroke: var(--devm-bg);
 }
 
-.ibd-port.required .ibd-port-chevron {
+.ibd-port.sync .ibd-port-arrow {
     stroke: var(--devm-state-stroke);
 }
 
@@ -742,7 +742,7 @@ export const DIAGRAM_CSS = `
     fill: var(--devm-muted);
 }
 
-/* data types (structs, interfaces of the file): value type boxes, never connected */
+/* data types (structs of the file): value type boxes, never connected */
 .ibd-type-shape {
     fill: var(--ibd-type-fill);
     stroke: var(--ibd-type-stroke);
@@ -807,6 +807,11 @@ export const DIAGRAM_CSS = `
     stroke-linejoin: round;
 }
 
+.ibd-connector-arrow {
+    fill: var(--devm-edge);
+    stroke: none;
+}
+
 .ibd-connector.cross-thread .ibd-connector-line {
     stroke-dasharray: 6 4;
 }
@@ -849,6 +854,10 @@ export const DIAGRAM_CSS = `
     stroke-width: 2.5px;
 }
 
+.ibd-connector.selected .ibd-connector-arrow {
+    fill: var(--devm-select);
+}
+
 /* route highlighting: the elements of the route of the selection (class on-route), the others dimmed */
 
 .ibd-connector.on-route .ibd-connector-line {
@@ -861,11 +870,15 @@ export const DIAGRAM_CSS = `
     stroke-width: 2px;
 }
 
-.ibd-port.provided.on-route .ibd-port-shape {
+.ibd-connector.on-route .ibd-connector-arrow {
     fill: var(--ibd-route);
 }
 
-.ibd-port.required.on-route .ibd-port-chevron {
+.ibd-port.async.on-route .ibd-port-shape {
+    fill: var(--ibd-route);
+}
+
+.ibd-port.sync.on-route .ibd-port-arrow {
     stroke: var(--ibd-route);
 }
 
@@ -882,6 +895,10 @@ export const DIAGRAM_CSS = `
 .ibd-node.on-route.selected > .ibd-instance-shape,
 .ibd-connector.on-route.selected .ibd-connector-line {
     stroke: var(--devm-select);
+}
+
+.ibd-connector.on-route.selected .ibd-connector-arrow {
+    fill: var(--devm-select);
 }
 
 .ibd-port.on-route.selected .ibd-port-shape {

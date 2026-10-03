@@ -7,8 +7,10 @@ import "drive-unit.devm"
 
 /** The garage door: remote control commands in, statistics out. */
 system GarageDoor {
-    provides async remote : DoorCmd
-    provides sync report : Diagnostics
+    in async open
+    in async close
+    in async stop
+    out sync report : Diagnostics
 
     @priority(5) @period(10 ms)
     thread ControlTask {
@@ -23,11 +25,17 @@ system GarageDoor {
     // a subsystem: outside of the threads, its parts run in the threads of DriveUnit
     drive : DriveUnit
 
-    connect door.motor -> drive.ctrl
-    connect drive.status -> door.status
+    connect door.up -> drive.up
+    connect door.down -> drive.down
+    connect door.halt -> drive.halt
+    connect drive.stopped -> door.stopped
+    connect drive.blocked -> door.blocked
     connect door.alarm -> buzzer.alarm
-    connect door.position -> sensor.position
-    connect diag.cycles -> door.cycles
-    delegate remote -> door.cmd
-    delegate report -> diag.report
+    connect sensor.position -> door.position
+    connect door.cycles -> diag.cycles
+    connect door.errors -> diag.errors
+    delegate open -> door.open
+    delegate close -> door.close
+    delegate stop -> door.stop
+    delegate diag.report -> report
 }

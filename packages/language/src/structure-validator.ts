@@ -7,7 +7,7 @@ import type { DevmServices } from './devm-module.js';
 import {
     argumentNumber, DURATION_UNITS, enclosingComposite, instanceType, portReferenceText, compositeInstances, threadsOf
 } from './structure-model.js';
-import { incompatibilityMessage, resolveDataType } from './structure-types.js';
+import { directionProblem, incompatibilityMessage, mismatchMessage, resolveDataType } from './structure-types.js';
 import { connectionThreads } from './structure-routes.js';
 import { resolveTypeName } from './typesystem.js';
 import { isModelPath } from './imports.js';
@@ -20,7 +20,6 @@ export function registerStructureValidationChecks(services: DevmServices): void 
     const checks: ValidationChecks<ast.DevmAstType> = {
         StructureModel: [validator.checkImports, validator.checkElementNames],
         StructDeclaration: validator.checkStruct,
-        PortInterface: validator.checkInterface,
         DataTypeReference: validator.checkDataTypeReference,
         Component: [validator.checkPortNames, validator.checkBehavior],
         CompositeType: [validator.checkPortNames, validator.checkCompositeNames, validator.checkPortUsage, validator.checkBoundaryPorts],
@@ -103,7 +102,7 @@ export class StructureValidator {
         }
     }
 
-    /** Names of structs, interfaces and component types are unique in a model and are not names of built-in types. */
+    /** Names of structs and component types are unique in a model and are not names of built-in types. */
     checkElementNames(model: ast.StructureModel, accept: ValidationAcceptor): void {
         const own = new Map<string, ast.StructureElement>();
         for (const element of model.elements) {
@@ -143,14 +142,7 @@ export class StructureValidator {
         }
     }
 
-    checkInterface(portInterface: ast.PortInterface, accept: ValidationAcceptor): void {
-        checkUnique(portInterface.events, 'event', accept);
-        for (const event of portInterface.events) {
-            this.checkDataType(event.type, `the event '${event.name}'`, accept);
-        }
-    }
-
-    /** Unknown type names (whether a data type or an interface is expected is checked by the containing element). */
+    /** Unknown type names. */
     checkDataTypeReference(reference: ast.DataTypeReference, accept: ValidationAcceptor): void {
         const resolution = resolveDataType(reference);
         if (resolution.kind === 'error') {
@@ -158,15 +150,13 @@ export class StructureValidator {
         }
     }
 
-    /** A data type (of a field, event payload or sync port) must not be an interface or `void`. */
+    /** A data type (of a field or port) must not be `void`. */
     protected checkDataType(reference: ast.DataTypeReference | undefined, what: string, accept: ValidationAcceptor): void {
         if (!reference) {
             return;
         }
         const resolution = resolveDataType(reference);
-        if (resolution.kind === 'interface') {
-            accept('error', `The interface '${reference.name}' is not a data type: it can only be the type of an async port (${what}).`, { node: reference, property: 'name' });
-        } else if (resolution.kind === 'data' && resolution.type === 'void') {
+        if (resolution.kind === 'data' && resolution.type === 'void') {
             accept('error', `'void' is not a data type (${what}).`, { node: reference, property: 'name' });
         }
     }
@@ -178,26 +168,20 @@ export class StructureValidator {
         checkUnique(type.ports, 'port', accept);
     }
 
+    /**
+     * Sync ports carry data of a type (`in sync pos : Position`); async ports one event with an optional
+     * payload (`out async up : integer`, `in async open`) and are `in` or `out` (data is shared by
+     * `inout sync` ports only).
+     */
     checkPort(port: ast.Port, accept: ValidationAcceptor): void {
-        if (port.kind === 'sync') {
-            if (port.events.length > 0) {
-                accept('error', `The sync port '${port.name}' carries data, not events: write 'sync ${port.name} : Type' or declare it 'async'.`, { node: port, property: 'kind' });
-                return;
-            }
-            this.checkDataType(port.type, `the sync port '${port.name}'`, accept);
+        if (port.kind === 'async' && port.direction === 'inout') {
+            accept('error', `The async port '${port.name}' cannot be 'inout': an event is sent ('out async') or received ('in async'). Shared data is an 'inout sync' port.`, { node: port, property: 'direction' });
+        }
+        if (port.kind === 'sync' && !port.type) {
+            accept('error', `The sync port '${port.name}' carries data: write '${port.direction} sync ${port.name} : Type' (a built-in type, a struct or a C/C++ type).`, { node: port, property: 'name' });
             return;
         }
-        checkUnique(port.events, 'event', accept);
-        for (const event of port.events) {
-            this.checkDataType(event.type, `the event '${event.name}'`, accept);
-        }
-        if (port.type) {
-            const resolution = resolveDataType(port.type);
-            if (resolution.kind === 'data') {
-                accept('error', `The async port '${port.name}' carries events: its type must be an interface ('interface ${port.type.name} { event ... }') or a list of events ('event a, event b : integer'), not the data type ${port.type.name}. Data ports are 'sync'.`,
-                    { node: port.type, property: 'name' });
-            }
-        }
+        this.checkDataType(port.type, `the ${port.kind} port '${port.name}'`, accept);
     }
 
     /** The ports of a component with a behavior must match the definition section of the state machine (see structure-behavior.ts). */
@@ -232,21 +216,17 @@ export class StructureValidator {
             return; // unresolved reference (reported by the linker)
         }
         for (const port of mapping.ports) {
-            for (const event of port.events) {
-                if (event.problem) {
-                    accept('error', event.problem, { node: event.event, property: 'name' });
-                }
-            }
-            if (port.data?.problem) {
-                accept('error', port.data.problem, { node: port.port, property: 'name' });
+            if (port.problem) {
+                accept('error', port.problem, { node: port.port, property: 'name' });
             }
         }
         for (const declaration of mapping.unmapped) {
-            const what = ast.isEventDeclaration(declaration) ? `The ${declaration.direction ?? 'in'} event` : 'The operation';
-            const port = ast.isEventDeclaration(declaration)
-                ? `a ${(declaration.direction ?? 'in') === 'in' ? 'provided' : 'required'} async port`
-                : 'a required sync port';
-            accept('warning', `${what} '${declaration.name}' of the state machine '${mapping.machine.name}' does not belong to any port of '${component.name}' (add it to ${port}).`,
+            const type = declaration.type ? ` : ${declaration.type.name}` : '';
+            const [what, port] = ast.isEventDeclaration(declaration)
+                ? [`The ${declaration.direction ?? 'in'} event`, `${declaration.direction === 'out' ? 'out' : 'in'} async ${declaration.name}${type}`]
+                : [`The ${declaration.readonly ? 'read-only ' : ''}variable`, `${declaration.readonly ? 'in' : 'out'} sync ${declaration.name}${type}`];
+            const inout = ast.isVariableDeclaration(declaration) && !declaration.readonly ? ' or \'inout sync\'' : '';
+            accept('warning', `${what} '${declaration.name}' of the state machine '${mapping.machine.name}' does not belong to any port of '${component.name}' (add the port '${port}'${inout}).`,
                 { node: behavior, property: behavior.path !== undefined ? 'path' : 'machine' });
         }
     }
@@ -317,18 +297,27 @@ export class StructureValidator {
     }
 
     /**
-     * Required ports of the instances are connected (or delegated); a sync required port has one provider
-     * only; connections are not duplicated.
+     * The ports of the parts receive their data: an in port (and an inout port) of a part is connected
+     * (or delegated), a sync in port has one source only (an async in port may receive the events of
+     * several sources); connections are not duplicated. Out ports may be left unconnected (nobody uses
+     * the data).
      */
     checkPortUsage(structure: ast.CompositeType, accept: ValidationAcceptor): void {
         const uses = new Map<string, Array<ast.Connection | ast.Delegation>>();
-        const keyOf = (reference: ast.PortReference | undefined) => reference?.instance?.ref && reference.port?.ref
-            ? `${reference.instance.ref.name}.${reference.port.ref.name}` : undefined;
+        const keyOf = (reference: ast.PortReference | undefined) => reference?.port?.ref
+            ? `${reference.instance ? `${reference.instance.ref?.name ?? '?'}.` : ''}${reference.port.ref.name}` : undefined;
+        const use = (key: string | undefined, element: ast.Connection | ast.Delegation) => {
+            if (key) {
+                uses.set(key, [...uses.get(key) ?? [], element]);
+            }
+        };
         const seen = new Set<string>();
         for (const element of [...structure.connections, ...structure.delegations]) {
             const source = keyOf(element.source);
-            if (source) {
-                uses.set(source, [...uses.get(source) ?? [], element]);
+            const target = keyOf(element.target);
+            use(target, element);
+            if (source !== target) {
+                use(source, element);
             }
             const text = `${element.$type}:${element.source ? portReferenceText(element.source) : ''}->${element.target ? portReferenceText(element.target) : ''}`;
             if (seen.has(text)) {
@@ -336,38 +325,52 @@ export class StructureValidator {
             }
             seen.add(text);
         }
+        /** The statements delivering data to a port (it is their target). */
+        const sources = (key: string, port: ast.Port) => (uses.get(key) ?? []).filter(e => e.target?.port?.ref === port && keyOf(e.target) === key);
+        const checkOneSource = (key: string, port: ast.Port, label: string) => {
+            if (port.kind !== 'sync' || port.direction === 'inout') {
+                return;
+            }
+            const statements = sources(key, port);
+            for (const extra of statements.slice(1)) {
+                accept('error', `The sync port '${label}' receives its data from one source only, but it has ${statements.length} sources.`, { node: extra, property: 'target' });
+            }
+        };
         for (const instance of compositeInstances(structure)) {
             for (const port of instanceType(instance)?.ports ?? []) {
-                if (port.direction !== 'requires') {
+                const key = `${instance.name}.${port.name}`;
+                if (port.direction === 'out') {
                     continue;
                 }
-                const connections = uses.get(`${instance.name}.${port.name}`) ?? [];
-                if (connections.length === 0) {
-                    accept('warning', `The required port '${instance.name}.${port.name}' is not connected.`, { node: instance, property: 'name' });
-                } else if (port.kind === 'sync' && connections.length > 1) {
-                    for (const extra of connections.slice(1)) {
-                        accept('error', `The sync port '${instance.name}.${port.name}' requires one provider, but it is connected ${connections.length} times.`, { node: extra, property: 'source' });
-                    }
+                if ((uses.get(key) ?? []).length === 0) {
+                    accept('warning', port.direction === 'in'
+                        ? `The in port '${key}' is not connected: it receives no ${port.kind === 'sync' ? 'data' : 'events'}.`
+                        : `The inout port '${key}' is not connected: it shares its data with no other port.`, { node: instance, property: 'name' });
+                    continue;
                 }
+                checkOneSource(key, port, key);
+            }
+        }
+        for (const port of structure.ports) {
+            if (port.direction === 'out') {
+                checkOneSource(port.name, port, port.name);
             }
         }
     }
 
-    /** Provided boundary ports are delegated to a part (a sync one to exactly one), required boundary ports are used by a part. */
+    /** The data of the boundary ports is passed on: in ports to parts, out ports from parts, inout ports to and from parts. */
     checkBoundaryPorts(structure: ast.CompositeType, accept: ValidationAcceptor): void {
         for (const port of structure.ports) {
-            if (port.direction === 'provides') {
-                const delegations = structure.delegations.filter(d => !d.source?.instance && d.source?.port?.ref === port);
-                if (delegations.length === 0) {
-                    accept('warning', `The provided port '${port.name}' is not delegated to a part ('delegate ${port.name} -> part.port').`, { node: port, property: 'name' });
-                } else if (port.kind === 'sync' && delegations.length > 1) {
-                    for (const extra of delegations.slice(1)) {
-                        accept('error', `The sync port '${port.name}' can be delegated to one provider only.`, { node: extra, property: 'target' });
-                    }
-                }
-            } else if (!structure.delegations.some(d => !d.target?.instance && d.target?.port?.ref === port)) {
-                accept('warning', `The required port '${port.name}' is not used by any part ('delegate part.port -> ${port.name}').`, { node: port, property: 'name' });
+            const delegated = structure.delegations.some(d => (!d.source?.instance && d.source?.port?.ref === port) || (!d.target?.instance && d.target?.port?.ref === port));
+            if (delegated || !port.name) {
+                continue;
             }
+            const message = port.direction === 'in'
+                ? `The in port '${port.name}' is not delegated to a part: nobody receives its ${port.kind === 'sync' ? 'data' : 'events'} ('delegate ${port.name} -> part.port').`
+                : port.direction === 'out'
+                    ? `The out port '${port.name}' is not delegated from a part: no part sends its ${port.kind === 'sync' ? 'data' : 'events'} ('delegate part.port -> ${port.name}').`
+                    : `The inout port '${port.name}' is not delegated to a part ('delegate ${port.name} -> part.port').`;
+            accept('warning', message, { node: port, property: 'name' });
         }
     }
 
@@ -387,16 +390,7 @@ export class StructureValidator {
                 { node: connection, property: source.instance ? 'target' : 'source' });
             return;
         }
-        if (from.direction === 'provides' && to.direction === 'requires') {
-            accept('error', `Connections go from the required to the provided port: write 'connect ${portReferenceText(target)} -> ${portReferenceText(source)}'.`, { node: connection, property: 'source' });
-            return;
-        }
-        if (from.direction !== 'requires') {
-            accept('error', `The source '${portReferenceText(source)}' of a connection must be a required port.`, { node: connection, property: 'source' });
-            return;
-        }
-        if (to.direction !== 'provides') {
-            accept('error', `The target '${portReferenceText(target)}' of a connection must be a provided port.`, { node: connection, property: 'target' });
+        if (!this.checkDirections(connection, from, to, accept)) {
             return;
         }
         this.checkCompatibility(connection, from, to, accept);
@@ -416,26 +410,27 @@ export class StructureValidator {
             return; // linking error
         }
         if (!!source.instance === !!target.instance) {
-            accept('error', 'A delegation connects a boundary port with a port of a part: \'delegate port -> part.port\' (provided) or \'delegate part.port -> port\' (required).',
+            accept('error', 'A delegation connects a boundary port with a port of a part: \'delegate port -> part.port\' (in) or \'delegate part.port -> port\' (out).',
                 { node: delegation, property: 'source' });
             return;
         }
-        if (from.direction !== to.direction) {
-            accept('error', `A delegation connects ports of the same direction, but '${portReferenceText(source)}' is ${direction(from)} and '${portReferenceText(target)}' is ${direction(to)}.`,
-                { node: delegation, property: 'target' });
-            return;
-        }
-        const outer = source.instance ? target : source;
-        const inner = source.instance ? source : target;
-        if (from.direction === 'provides' && source.instance) {
-            accept('error', `A provided port is delegated from the boundary to the part: write 'delegate ${portReferenceText(outer)} -> ${portReferenceText(inner)}'.`, { node: delegation, property: 'source' });
-            return;
-        }
-        if (from.direction === 'requires' && !source.instance) {
-            accept('error', `A required port is delegated from the part to the boundary: write 'delegate ${portReferenceText(inner)} -> ${portReferenceText(outer)}'.`, { node: delegation, property: 'source' });
+        if (!this.checkDirections(delegation, from, to, accept)) {
             return;
         }
         this.checkCompatibility(delegation, from, to, accept);
+    }
+
+    /** The directions of the ports of a connection or delegation (see `directionProblem`); false if they do not fit. */
+    protected checkDirections(node: ast.Connection | ast.Delegation, from: ast.Port, to: ast.Port, accept: ValidationAcceptor): boolean {
+        const kind = ast.isConnection(node) ? 'connect' : 'delegate';
+        const source = { port: from, text: portReferenceText(node.source!) };
+        const target = { port: to, text: portReferenceText(node.target!) };
+        const problem = directionProblem(kind, source, target, kind === 'delegate' ? (node.source?.instance ? 'target' : 'source') : undefined);
+        if (problem) {
+            accept('error', mismatchMessage(kind, source, target, [problem.message]), { node, property: problem.swapped ? 'source' : 'target' });
+            return false;
+        }
+        return true;
     }
 
     protected checkCompatibility(node: ast.Connection | ast.Delegation, from: ast.Port, to: ast.Port, accept: ValidationAcceptor): void {
@@ -526,10 +521,6 @@ export class StructureValidator {
             accept('error', `Invalid arguments: ${description}.`, { node: annotation, property: 'name' });
         }
     }
-}
-
-function direction(port: ast.Port): string {
-    return port.direction === 'provides' ? 'provided' : 'required';
 }
 
 /** Reports nodes with the same name as an earlier node. */

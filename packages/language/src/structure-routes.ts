@@ -3,10 +3,10 @@ import * as ast from './generated/ast.js';
 import { enclosingComposite, instanceType, compositeInstances, threadOf } from './structure-model.js';
 
 /**
- * Route analysis of structure models: the signal paths across connections (`connect`), delegations
+ * Route analysis of structure models: the data paths across connections (`connect`), delegations
  * (`delegate`) and the boundaries of composite instances through all levels of the hierarchy.
  * Pure functions over the (linked) AST, used by the validator, the language server ("go to
- * provider") and the diagram (highlighting the route of a selected port or instance).
+ * source") and the diagram (highlighting the route of a selected port or instance).
  *
  * Endpoints are ports in the *instance tree* of a root structure: a structure that is instantiated
  * several times has several sets of endpoints, distinguished by the instance path from the root
@@ -14,17 +14,18 @@ import { enclosingComposite, instanceType, compositeInstances, threadOf } from '
  * structure containing the node a query starts from, see {@link RouteOptions}); boundary ports of the
  * root are the ends of a route towards the outside.
  *
- * All hops are directed in *request direction*: from the side that requires a service (calls an
- * operation, reads data, sends an event) to the side that provides it:
- * - `connect a.r -> b.p`: from the required port `a.r` to the provided port `b.p`,
- * - `delegate p -> inst.q` (provided): from the boundary port `p` to the inner port `inst.q`,
- * - `delegate inst.r -> r` (required): from the inner port `inst.r` to the boundary port `r`,
+ * All hops are directed in the direction of the *data flow*, from the port sending the data (or the
+ * event) to the port receiving it:
+ * - `connect a.o -> b.i`: from the out port `a.o` to the in port `b.i`,
+ * - `delegate i -> inst.i` (in): from the boundary port `i` to the inner port `inst.i`,
+ * - `delegate inst.o -> o` (out): from the inner port `inst.o` to the boundary port `o`,
  * - `boundary` hops connect the port of a composite instance (`sub.p` in the parent) with the same
- *   port seen as boundary port inside the composite: inwards for provided ports, outwards for
- *   required ports.
- * Following the hops forward from a required port leads to its providers ({@link findProviders}),
- * backward from a provided port to its requirers ({@link findRequirers}); {@link portRoute} follows
- * both directions (the whole net the port belongs to).
+ *   port seen as boundary port inside the composite: inwards for in ports, outwards for out ports.
+ * Inout ports share their data: their hops (as written, and the boundary hops in both directions) are
+ * followed in both directions.
+ * Following the hops backward from an in port leads to its sources ({@link findSources}), forward from
+ * an out port to its targets ({@link findTargets}); {@link portRoute} follows both directions (the
+ * whole net the port belongs to).
  */
 
 /** A port in the instance tree of a root structure: a port of an instance or a boundary port of a structure. */
@@ -41,7 +42,7 @@ export interface PortEndpoint {
     readonly port: ast.Port;
 }
 
-/** A hop of a route, directed in request direction (see the comment of this module). */
+/** A hop of a route, directed in the direction of the data flow (see the comment of this module). */
 export interface RouteHop {
     readonly kind: 'connect' | 'delegate' | 'boundary';
     /** The connection or delegation (`undefined` for boundary hops). */
@@ -241,64 +242,60 @@ function outerBoundary(endpoint: PortEndpoint): PortEndpoint | undefined {
     return parent ? portEndpoint(parent, instance, endpoint.port, endpoint.path.slice(0, -1)) : undefined;
 }
 
-/** The hops leaving an endpoint in request direction. */
-export function outgoingHops(endpoint: PortEndpoint): RouteHop[] {
+/** The connections and delegations of the endpoint's structure where the endpoint is the source (`source`) or the target. */
+function statementHops(endpoint: PortEndpoint, end: 'source' | 'target'): RouteHop[] {
     const hops: RouteHop[] = [];
-    const structure = endpoint.structure;
-    for (const connection of structure.connections) {
-        const to = refersTo(connection.source, endpoint) && connection.target ? referenceEndpoint(connection.target, endpoint.path) : undefined;
-        if (to) {
-            hops.push({ kind: 'connect', node: connection, from: endpoint, to });
-        }
-    }
-    for (const delegation of structure.delegations) {
-        const to = refersTo(delegation.source, endpoint) && delegation.target ? referenceEndpoint(delegation.target, endpoint.path) : undefined;
-        if (to) {
-            hops.push({ kind: 'delegate', node: delegation, from: endpoint, to });
-        }
-    }
-    if (endpoint.port.direction === 'provides') {
-        const inner = innerBoundary(endpoint);
-        if (inner) {
-            hops.push({ kind: 'boundary', from: endpoint, to: inner });
-        }
-    } else {
-        const outer = outerBoundary(endpoint);
-        if (outer) {
-            hops.push({ kind: 'boundary', from: endpoint, to: outer });
+    const statements: Array<ast.Connection | ast.Delegation> = [...endpoint.structure.connections, ...endpoint.structure.delegations];
+    for (const node of statements) {
+        const kind = ast.isConnection(node) ? 'connect' : 'delegate';
+        if (end === 'source') {
+            const to = refersTo(node.source, endpoint) && node.target ? referenceEndpoint(node.target, endpoint.path) : undefined;
+            if (to) {
+                hops.push({ kind, node, from: endpoint, to });
+            }
+        } else {
+            const from = refersTo(node.target, endpoint) && node.source ? referenceEndpoint(node.source, endpoint.path) : undefined;
+            if (from) {
+                hops.push({ kind, node, from, to: endpoint });
+            }
         }
     }
     return hops;
 }
 
-/** The hops arriving at an endpoint in request direction. */
-export function incomingHops(endpoint: PortEndpoint): RouteHop[] {
+/** The boundary hops of an endpoint: into a composite instance (in, inout) and out of a composite (out, inout). */
+function boundaryHops(endpoint: PortEndpoint, end: 'source' | 'target'): RouteHop[] {
     const hops: RouteHop[] = [];
-    const structure = endpoint.structure;
-    for (const connection of structure.connections) {
-        const from = refersTo(connection.target, endpoint) && connection.source ? referenceEndpoint(connection.source, endpoint.path) : undefined;
-        if (from) {
-            hops.push({ kind: 'connect', node: connection, from, to: endpoint });
-        }
+    const direction = endpoint.port.direction;
+    const inner = innerBoundary(endpoint);
+    const outer = outerBoundary(endpoint);
+    if (inner && (direction === 'inout' || (direction === 'in') === (end === 'source'))) {
+        hops.push(direction === 'out' ? { kind: 'boundary', from: inner, to: endpoint } : { kind: 'boundary', from: endpoint, to: inner });
     }
-    for (const delegation of structure.delegations) {
-        const from = refersTo(delegation.target, endpoint) && delegation.source ? referenceEndpoint(delegation.source, endpoint.path) : undefined;
-        if (from) {
-            hops.push({ kind: 'delegate', node: delegation, from, to: endpoint });
-        }
-    }
-    if (endpoint.port.direction === 'requires') {
-        const inner = innerBoundary(endpoint);
-        if (inner) {
-            hops.push({ kind: 'boundary', from: inner, to: endpoint });
-        }
-    } else {
-        const outer = outerBoundary(endpoint);
-        if (outer) {
-            hops.push({ kind: 'boundary', from: outer, to: endpoint });
-        }
+    if (outer && (direction === 'inout' || (direction === 'out') === (end === 'source'))) {
+        hops.push(direction === 'in' ? { kind: 'boundary', from: outer, to: endpoint } : { kind: 'boundary', from: endpoint, to: outer });
     }
     return hops;
+}
+
+/** The hops leaving an endpoint in the direction of the data flow (all hops of an inout port). */
+export function outgoingHops(endpoint: PortEndpoint): RouteHop[] {
+    if (endpoint.port.direction === 'inout') {
+        return inoutHops(endpoint);
+    }
+    return [...statementHops(endpoint, 'source'), ...boundaryHops(endpoint, 'source')];
+}
+
+/** The hops arriving at an endpoint in the direction of the data flow (all hops of an inout port). */
+export function incomingHops(endpoint: PortEndpoint): RouteHop[] {
+    if (endpoint.port.direction === 'inout') {
+        return inoutHops(endpoint);
+    }
+    return [...statementHops(endpoint, 'target'), ...boundaryHops(endpoint, 'target')];
+}
+
+function inoutHops(endpoint: PortEndpoint): RouteHop[] {
+    return [...statementHops(endpoint, 'source'), ...statementHops(endpoint, 'target'), ...boundaryHops(endpoint, 'source')];
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -306,7 +303,8 @@ export function incomingHops(endpoint: PortEndpoint): RouteHop[] {
 
 /**
  * The route through the given endpoints: all endpoints and hops reachable in the given direction
- * (`both`: the whole net, `forward`: towards the providers, `backward`: towards the requirers).
+ * (`both`: the whole net, `forward`: in the direction of the data flow, towards the targets,
+ * `backward`: against it, towards the sources).
  */
 export function portRoute(start: PortEndpoint | readonly PortEndpoint[], direction: 'both' | 'forward' | 'backward' = 'both'): Route {
     const starts = Array.isArray(start) ? start as readonly PortEndpoint[] : [start as PortEndpoint];
@@ -348,17 +346,19 @@ export function routeOf(node: AstNode, options: RouteOptions = {}): Route {
 }
 
 /**
- * The providers of a required port: the ends of the route in request direction, i.e. provided ports of
- * component instances (and of composites without a delegation inside) and required boundary ports of
- * the root (provided by the environment of the root). Empty if the port is not connected.
+ * The sources of the data of a port (an in port, also of a composite or a boundary port): the ends of
+ * the route against the data flow, i.e. out ports of component instances (and of composites without a
+ * delegation inside) and in boundary ports of the root (the data comes from the environment of the
+ * root). For an inout port: the other ends of the shared data (see {@link sharingPorts}). Empty if the
+ * port is not connected.
  */
-export function findProviders(start: PortEndpoint): PortEndpoint[] {
-    return routeEnds(start, 'forward');
+export function findSources(start: PortEndpoint): PortEndpoint[] {
+    return start.port.direction === 'inout' ? sharingPorts(start) : routeEnds(start, 'backward');
 }
 
-/** The requirers (clients) of a provided port: the ends of the route against request direction. */
-export function findRequirers(start: PortEndpoint): PortEndpoint[] {
-    return routeEnds(start, 'backward');
+/** The targets of the data of a port (an out port): the ends of the route in the direction of the data flow (inout: see {@link findSources}). */
+export function findTargets(start: PortEndpoint): PortEndpoint[] {
+    return start.port.direction === 'inout' ? sharingPorts(start) : routeEnds(start, 'forward');
 }
 
 function routeEnds(start: PortEndpoint, direction: 'forward' | 'backward'): PortEndpoint[] {
@@ -368,20 +368,30 @@ function routeEnds(start: PortEndpoint, direction: 'forward' | 'backward'): Port
 }
 
 /**
- * The providers of the ports at a model element (a port reference, an instance, a port, see
- * {@link routeEndpointsOf}), for "go to provider": for each required port its providers, for a
- * provided port the port itself.
+ * The ports sharing the data of an inout port: the ends of its net (ports of component instances, of
+ * composites without a delegation inside and boundary ports of the root), without the port itself.
  */
-export function providersOf(node: AstNode, options: RouteOptions = {}): PortEndpoint[] {
+export function sharingPorts(start: PortEndpoint): PortEndpoint[] {
+    const route = portRoute(start, 'both');
+    return route.endpoints.filter(e => !sameEndpoint(e, start)
+        && (e.instance ? !innerBoundary(e) : e.path.length === 0));
+}
+
+/**
+ * The sources of the data at a model element (a port reference, an instance, a port, see
+ * {@link routeEndpointsOf}), for "go to source": for each in (and inout) port the ports its data comes
+ * from, for an out port of a component the port itself.
+ */
+export function sourcesOf(node: AstNode, options: RouteOptions = {}): PortEndpoint[] {
     const result: PortEndpoint[] = [];
     const seen = new Set<string>();
     for (const start of routeEndpointsOf(node, options)) {
-        const providers = start.port.direction === 'provides' && isComponentEndpoint(start) ? [start] : findProviders(start);
-        for (const provider of providers) {
-            const key = endpointKey(provider);
+        const sources = start.port.direction === 'out' && isComponentEndpoint(start) ? [start] : findSources(start);
+        for (const source of sources) {
+            const key = endpointKey(source);
             if (!seen.has(key)) {
                 seen.add(key);
-                result.push(provider);
+                result.push(source);
             }
         }
     }
@@ -405,8 +415,9 @@ export function effectiveThread(endpoint: PortEndpoint): ast.Thread | undefined 
 
 /**
  * The threads on both sides of a connection: the thread of a component instance, and for an instance of
- * a subsystem the thread of the component ports the connection leads to inside the subsystem (its
- * requirers for the source side, its providers for the target side) if they all run in the same thread
+ * a subsystem the thread of the component ports the connection leads to inside the subsystem (the
+ * sources of the data for the source side, its targets for the target side; the ports sharing the data
+ * for inout ports) if they all run in the same thread
  * (`undefined` otherwise). A connection crosses threads if both sides have a thread and they differ
  * (reported by the validator, drawn dashed in the diagram).
  */
@@ -424,7 +435,7 @@ export function connectionThreads(connection: ast.Connection): { source?: ast.Th
             return undefined;
         }
         // the component ports inside the subsystem: follow the boundary hop (and further) away from the connection
-        const ends = (direction === 'forward' ? findProviders(start) : findRequirers(start))
+        const ends = (direction === 'forward' ? findTargets(start) : findSources(start))
             .filter(e => e.path.length > 0 && isComponentEndpoint(e));
         const threads = new Set(ends.map(effectiveThread));
         return threads.size === 1 ? [...threads][0] : undefined;

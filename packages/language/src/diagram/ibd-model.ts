@@ -13,12 +13,12 @@ import type { DiagramLabel, Point, TextMeasure } from './diagram-model.js';
  * - boundary port of the structure:           `S.remote`
  * - thread:                                   `S/thread:ControlTask`
  * - instance (part):                          `S/door`
- * - port of an instance:                      `S/door.cmd`
- * - connection:                               `S/door.motor->drive.ctrl`
- * - delegation:                               `S/remote->door.cmd`
- * - component type shown as a block:          `C` (its ports `C.cmd`)
+ * - port of an instance:                      `S/door.open`
+ * - connection:                               `S/door.up->drive.up`
+ * - delegation:                               `S/open->door.open`
+ * - component type shown as a block:          `C` (its ports `C.open`)
  * - overview of all component types of a file: {@link IBD_OVERVIEW_ID}, the blocks as above
- * - struct / interface of the file:           `type:Position` (shown next to the diagram, unlinked)
+ * - struct of the file:                       `type:Position` (shown next to the diagram, unlinked)
  * - diagram of a file with data types only:   {@link IBD_TYPES_ID}.
  * Duplicates (invalid models) get a suffix `~1`, `~2`, ….
  */
@@ -26,9 +26,9 @@ import type { DiagramLabel, Point, TextMeasure } from './diagram-model.js';
 /**
  * `frame`: the enclosing frame of the shown subsystem or system (`ibd [system] GarageDoor`), `thread`: a
  * thread frame, `instance`: a part (`door : DoorController`), `block`: a component type shown on its own
- * (a component without parts, or the overview of the component types of a file), `type`: a struct or
- * interface declared in the file (a value type box «struct» / «interface» with its fields / events,
- * outside of the frame and never connected).
+ * (a component without parts, or the overview of the component types of a file), `type`: a struct
+ * declared in the file (a value type box «struct» with its fields, outside of the frame and never
+ * connected).
  */
 export type IbdNodeKind = 'frame' | 'thread' | 'instance' | 'block' | 'type';
 
@@ -37,9 +37,11 @@ export type IbdPortSide = 'WEST' | 'EAST' | 'NORTH' | 'SOUTH';
 export interface IbdPort {
     id: string;
     name: string;
-    direction: 'provides' | 'requires';
+    /** The direction of the data: `in` (received), `out` (sent), `inout` (shared). */
+    direction: 'in' | 'out' | 'inout';
+    /** `sync`: data values (hollow square), `async`: an event (filled square). */
     kind: 'sync' | 'async';
-    /** `cmd : DoorCmd` (tooltip). */
+    /** `out async up : integer` (tooltip). */
     title: string;
     side: IbdPortSide;
     /** Position of the port square (top left corner) relative to its node. */
@@ -48,16 +50,16 @@ export interface IbdPort {
     size: number;
     /**
      * The label (position relative to the node, inside an instance, outside of the frame): the port name
-     * and, for a port typed by a named type, the type (`cmd : DoorCmd`).
+     * and its type (`up : integer`; the name only for an event without payload).
      */
     label: DiagramLabel;
-    /** The named type of the port (`DoorCmd`, `integer`), shown in the label; `undefined` for a list of events. */
+    /** The type of the port (`Position`, `integer`), shown in the label; `undefined` for an event without payload. */
     typeName?: string;
 }
 
-/** A field of a struct (`x : real`) or an event of an interface (`event up : integer`) in a type box. */
+/** A field of a struct (`x : real`) in a type box. */
 export interface IbdMember {
-    /** `event ` for events. */
+    /** A keyword shown before the name (unused for fields). */
     prefix?: string;
     name: string;
     type?: string;
@@ -75,7 +77,7 @@ export interface IbdNode {
     name: string;
     /** Name of the type of an instance (`DoorController`), `?` if it cannot be resolved. */
     typeName?: string;
-    /** `component`, `subsystem`, `system`, `thread`; type boxes: `struct`, `interface`. */
+    /** `component`, `subsystem`, `system`, `thread`; type boxes: `struct`. */
     stereotype?: string;
     /** Threads: the settings shown below the name (`priority 5 · period 10 ms`); the frame: the text of its tab (`ibd [system] Car`). */
     details?: string;
@@ -89,7 +91,7 @@ export interface IbdNode {
     behavior?: IbdBehavior;
     /** Instances: the type is a subsystem (composite, can be opened). */
     composite?: IbdComposite;
-    /** Type boxes: the fields of a struct or the events of an interface. */
+    /** Type boxes: the fields of a struct. */
     members?: IbdMember[];
     ports: IbdPort[];
     children: IbdNode[];
@@ -112,13 +114,15 @@ export interface IbdComposite {
 export interface IbdEdge {
     id: string;
     kind: 'connect' | 'delegate';
-    /** Id of the port at the source of the statement (the required side). */
+    /** Id of the port at the source of the statement (the data flows from the source to the target). */
     source: string;
-    /** Id of the port at the target of the statement (the provided side). */
+    /** Id of the port at the target of the statement (the receiving side: arrowhead). */
     target: string;
+    /** Inout ports sharing data: the data flows in both directions (arrowheads at both ends). */
+    bidirectional?: boolean;
     /** The connection crosses threads: drawn dashed (see `connectionThreads`). */
     crossThread: boolean;
-    /** `connect door.motor -> drive.ctrl` (tooltip). */
+    /** `connect door.up -> drive.up` (tooltip). */
     title: string;
     /** Absolute coordinates of the orthogonal route. */
     points: Point[];
@@ -132,7 +136,7 @@ export interface IbdGraph {
     name: string;
     /**
      * What is shown: a subsystem / system (IBD), a component type (block), all component types of the file
-     * or (a file without component types) its data types. The structs and interfaces of the file are shown
+     * or (a file without component types) its data types. The structs of the file are shown
      * next to any of them (nodes of kind `type`).
      */
     kind: 'subsystem' | 'system' | 'component' | 'overview' | 'types';
@@ -155,7 +159,7 @@ export interface IbdLayoutResult {
 /** Id of the diagram showing all component types of a file. */
 export const IBD_OVERVIEW_ID = '#components';
 
-/** Id of the diagram of a file without component types: its structs and interfaces. */
+/** Id of the diagram of a file without component types: its structs. */
 export const IBD_TYPES_ID = '#types';
 
 /** Metrics shared by the layout and the rendering of the diagram. */
@@ -185,7 +189,7 @@ export const IbdMetrics = {
     framePadding: 24,
     /** Padding around the frame (the labels of the boundary ports are outside of it). */
     graphPadding: 16,
-    /** Type boxes (structs, interfaces): height of a field / event row, font size, distance of the boxes. */
+    /** Type boxes (structs): height of a field row, font size, distance of the boxes. */
     memberRow: 17,
     memberFont: 11,
     typeSpacing: 24

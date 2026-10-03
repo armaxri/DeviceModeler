@@ -4,13 +4,16 @@ import "components.devm"
 
 /** Motor control, PWM output and end switches. */
 subsystem DriveUnit {
-    provides async ctrl : MotorCmd
-    requires async status : MotorStatus
+    in async up : integer
+    in async down : integer
+    in async halt
+    out async stopped
+    out async blocked
 
     @priority(8) @period(1 ms) @stack(2048)
     thread MotorTask {
         motor : MotorController
-        pwm : PwmDriver             // called synchronously by the motor control
+        pwm : PwmDriver             // reads the duty cycle of the motor control
     }
     // the end switches and the current monitor are interrupt driven
     @priority(10) @stack(1024)
@@ -18,8 +21,12 @@ subsystem DriveUnit {
         switches : EndSwitches
     }
 
-    connect motor.pwm -> pwm.duty
-    connect switches.events -> motor.sensors
-    delegate ctrl -> motor.ctrl
-    delegate motor.status -> status
+    connect motor.duty -> pwm.duty
+    connect switches.endSwitch -> motor.endSwitch
+    connect switches.overcurrent -> motor.overcurrent
+    delegate up -> motor.up
+    delegate down -> motor.down
+    delegate halt -> motor.halt
+    delegate motor.stopped -> stopped
+    delegate motor.blocked -> blocked
 }

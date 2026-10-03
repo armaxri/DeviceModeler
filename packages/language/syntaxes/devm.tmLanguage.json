@@ -10,7 +10,7 @@
     },
     {
       "name": "keyword.control.devm",
-      "match": "\\b(statemachine|deephistory|component|interface|namespace|operation|subsystem|behavior|delegate|internal|junction|provides|readonly|requires|connect|default|history|oncycle|package|valueof|active|always|choice|import|region|struct|system|thread|after|alias|async|const|entry|event|every|false|raise|state|else|exit|null|sync|true|out|var|as|in)\\b"
+      "match": "\\b(statemachine|deephistory|component|interface|namespace|operation|subsystem|behavior|delegate|internal|junction|readonly|connect|default|history|oncycle|package|valueof|active|always|choice|import|region|struct|system|thread|after|alias|async|const|entry|event|every|false|inout|raise|state|else|exit|null|sync|true|out|var|as|in)\\b"
     },
     {
       "name": "string.quoted.double.devm",

@@ -2,7 +2,7 @@ import { AstUtils, GrammarUtils, type AstNode, type LangiumCoreServices } from '
 import * as ast from '../generated/ast.js';
 import { visibleElements } from '../structure-imports.js';
 import { enclosingComposite, compositeInstances, threadInstances, threadOf } from '../structure-model.js';
-import { incompatibilityMessage } from '../structure-types.js';
+import { incompatibilityMessage, mismatchMessage } from '../structure-types.js';
 import { BUILTIN_TYPES } from '../typesystem.js';
 import { EditError, mapOffset, quote, type EditResult, type TextEdit } from './model-edits.js';
 
@@ -16,8 +16,8 @@ import { EditError, mapOffset, quote, type EditResult, type TextEdit } from './m
 
 /** Keywords of the structure language (not allowed as names). */
 export const STRUCTURE_KEYWORDS: ReadonlySet<string> = new Set([
-    'package', 'import', 'struct', 'interface', 'event', 'component', 'behavior', 'subsystem', 'system',
-    'provides', 'requires', 'sync', 'async', 'thread', 'connect', 'delegate'
+    'package', 'import', 'struct', 'component', 'behavior', 'subsystem', 'system',
+    'in', 'out', 'inout', 'sync', 'async', 'thread', 'connect', 'delegate'
 ]);
 
 const ID_REGEX = /^[_a-zA-Z]\w*$/;
@@ -43,17 +43,17 @@ export interface PortEnd {
 /** How two ports chosen in the diagram are connected (see {@link planConnection}). */
 export interface ConnectionPlan {
     kind: 'connect' | 'delegate';
-    /** The end written first (the required side of a connection, see docs/structure-language.md). */
+    /** The end written first: the side the data comes from (see docs/structure-language.md). */
     source: PortEnd;
     target: PortEnd;
     /** The ports were chosen in the opposite order (the ends were swapped). */
     swapped: boolean;
-    /** The statement: `connect door.motor -> drive.ctrl`. */
+    /** The statement: `connect door.up -> drive.up`. */
     text: string;
 }
 
 /**
- * Two ports that could be connected (the right directions), but whose kinds, events or data types are
+ * Two ports that could be connected (the right directions), but whose kinds, data types or payloads are
  * incompatible: the connection is refused, the message explains why (see `incompatibilityMessage`).
  */
 export class IncompatiblePortsError extends EditError {
@@ -62,11 +62,11 @@ export class IncompatiblePortsError extends EditError {
     }
 }
 
-export type PortDirectionKind = { direction: 'provides' | 'requires', kind: 'sync' | 'async' };
+export type PortDirectionKind = { direction: 'in' | 'out' | 'inout', kind: 'sync' | 'async' };
 
 export interface NewPort extends PortDirectionKind {
     name?: string;
-    /** The type: a data type for sync ports, an interface or `event a, event b : T` for async ports. Default: `integer` / `event <name>`. */
+    /** The type: the data of a sync port (default `integer`), the payload of an async port (default: none). */
     type?: string;
 }
 
@@ -84,11 +84,12 @@ export function portEndText(end: PortEnd): string {
 
 /**
  * How the ports `a` and `b` (in the order they were chosen) of the parts or the boundary of a structure
- * are connected: two ports of parts with a `connect` from the required to the provided port (the ends
- * are swapped if the provided port was chosen first), a boundary port and a port of a part with the same
- * direction with a `delegate` (provided: outer -> inner, required: inner -> outer). Throws an
- * {@link EditError} if the ports cannot be connected – an {@link IncompatiblePortsError} if only their
- * kinds, events or data types do not fit (the message is the error of the validator).
+ * are connected, in the direction of the data flow whatever the order they were chosen in: two ports of
+ * parts with a `connect` from the out port to the in port, a boundary port and a port of a part with the
+ * same direction with a `delegate` (in: outer -> inner, out: inner -> outer); two inout ports in the
+ * order they were chosen. Throws an {@link EditError} if the ports cannot be connected – an
+ * {@link IncompatiblePortsError} if only their kinds, data types or payloads do not fit (the message is
+ * the error of the validator).
  */
 export function planConnection(structure: ast.CompositeType, a: PortEnd, b: PortEnd): ConnectionPlan {
     let kind: ConnectionPlan['kind'];
@@ -97,39 +98,58 @@ export function planConnection(structure: ast.CompositeType, a: PortEnd, b: Port
     if (!a.instance && !b.instance) {
         throw new EditError('Two boundary ports cannot be connected – delegate a boundary port to a port of a part.');
     }
+    const inoutProblem = () => {
+        const [inout, other] = a.port.direction === 'inout' ? [a, b] : [b, a];
+        return new EditError(`'${portEndText(inout)}' is an inout port (shared data): it is connected with inout ports only, '${portEndText(other)}' is an ${other.port.direction} port.`);
+    };
     if (a.instance && b.instance) {
         if (a.instance === b.instance) {
             throw new EditError(`'${a.port.name}' and '${b.port.name}' are ports of the same part '${a.instance.name}'.`);
         }
-        if (a.port.direction === b.port.direction) {
-            throw new EditError(`Both ports are ${a.port.direction === 'provides' ? 'provided' : 'required'} ports – connect a required port with a provided port.`);
-        }
         kind = 'connect';
-        [source, target] = a.port.direction === 'requires' ? [a, b] : [b, a];
+        if (a.port.direction === 'inout' || b.port.direction === 'inout') {
+            if (a.port.direction !== b.port.direction) {
+                throw inoutProblem();
+            }
+            [source, target] = [a, b];
+        } else if (a.port.direction === b.port.direction) {
+            throw new EditError(`Both ports are ${a.port.direction} ports – the data flows from an out port to an in port.`);
+        } else {
+            [source, target] = a.port.direction === 'out' ? [a, b] : [b, a];
+        }
     } else {
         const outer = a.instance ? b : a;
         const inner = a.instance ? a : b;
         if (outer.port.direction !== inner.port.direction) {
-            throw new EditError(`The boundary port '${outer.port.name}' is ${outer.port.direction === 'provides' ? 'provided' : 'required'}, `
-                + `'${portEndText(inner)}' is ${inner.port.direction === 'provides' ? 'provided' : 'required'} – a boundary port is delegated to a port of a part with the same direction.`);
+            if (outer.port.direction === 'inout' || inner.port.direction === 'inout') {
+                throw inoutProblem();
+            }
+            throw new EditError(`The boundary port '${outer.port.name}' is an ${outer.port.direction} port, '${portEndText(inner)}' an ${inner.port.direction} port `
+                + '– a boundary port is delegated to a port of a part with the same direction.');
         }
         kind = 'delegate';
-        [source, target] = outer.port.direction === 'provides' ? [outer, inner] : [inner, outer];
+        [source, target] = outer.port.direction === 'in' ? [outer, inner] : outer.port.direction === 'out' ? [inner, outer] : [a, b];
     }
     const statements: Array<ast.Connection | ast.Delegation> = kind === 'connect' ? structure.connections : structure.delegations;
     const same = (reference: ast.PortReference | undefined, end: PortEnd) =>
         !!reference && reference.port?.ref === end.port && reference.instance?.ref === end.instance;
-    if (statements.some(s => same(s.source, source) && same(s.target, target))) {
+    if (statements.some(s => (same(s.source, source) && same(s.target, target)) || (same(s.source, target) && same(s.target, source)))) {
         throw new EditError(`'${portEndText(source)}' and '${portEndText(target)}' are already connected.`);
     }
     const plan: ConnectionPlan = { kind, source, target, swapped: source !== a, text: `${kind} ${portEndText(source)} -> ${portEndText(target)}` };
-    const message = incompatibilityMessage(kind, { port: source.port, text: portEndText(source) }, { port: target.port, text: portEndText(target) });
+    const sourceSide = { port: source.port, text: portEndText(source) };
+    const targetSide = { port: target.port, text: portEndText(target) };
+    const message = incompatibilityMessage(kind, sourceSide, targetSide);
     if (message) {
         throw new IncompatiblePortsError(message, plan);
     }
-    if (kind === 'connect' && source.port.kind === 'sync'
-        && structure.connections.some(c => same(c.source, source))) {
-        throw new EditError(`The sync port '${portEndText(source)}' is already connected – a required sync port has one provider.`);
+    if (target.port.kind === 'sync' && target.port.direction !== 'inout') {
+        const existing = [...structure.connections, ...structure.delegations].find(s => same(s.target, target));
+        if (existing?.source) {
+            const from = existing.source.instance ? `${existing.source.instance.$refText}.${existing.source.port.$refText}` : existing.source.port.$refText;
+            throw new IncompatiblePortsError(mismatchMessage(kind, sourceSide, targetSide,
+                [`the sync port ${targetSide.text} already receives its data from ${from} (a sync port has one source)`]), plan);
+        }
     }
     return plan;
 }
@@ -198,35 +218,66 @@ export class StructureEditor {
 
     /** Adds a port to a component type (a component or the boundary of a structure). */
     addPort(owner: ast.ComponentType, port: NewPort): EditResult {
-        const name = port.name ?? this.freshName(port.direction === 'provides' ? 'in' : 'out', owner.ports.map(p => p.name));
+        if (port.kind === 'async' && port.direction === 'inout') {
+            throw new EditError('An async port is an in or an out port (an event is sent or received); shared data is an inout sync port.');
+        }
+        const name = port.name ?? this.freshName(port.direction, owner.ports.map(p => p.name));
         checkStructureName(name);
         if (owner.ports.some(p => p.name === name)) {
             throw new EditError(`'${owner.name}' already has a port '${name}'.`);
         }
-        const type = port.type?.trim() || (port.kind === 'sync' ? 'integer' : `event ${name}`);
-        const text = `${port.direction} ${port.kind} ${name} : ${type}`;
+        const type = port.type?.trim() || (port.kind === 'sync' ? 'integer' : '');
+        const text = `${port.direction} ${port.kind} ${name}${type ? ` : ${type}` : ''}`;
         const anchor = lastOf(owner.ports) ?? (ast.isComponent(owner) ? owner.behavior : undefined);
         return { ...inserted(this.insertInBody(owner, text, anchor)), createdName: name };
     }
 
-    setPortDirection(port: ast.Port, direction: 'provides' | 'requires'): EditResult {
+    /** Sets the direction of a port (`inout` only for sync ports). */
+    setPortDirection(port: ast.Port, direction: 'in' | 'out' | 'inout'): EditResult {
+        if (direction === 'inout' && port.kind === 'async') {
+            throw new EditError('An async port is an in or an out port (an event is sent or received); shared data is an inout sync port.');
+        }
         return this.replaceProperty(port, 'direction', direction);
     }
 
+    /**
+     * Sets the kind of a port. An inout port becoming async becomes an in port, an async port without
+     * payload becoming sync gets the type `integer` (sync ports carry data).
+     */
     setPortKind(port: ast.Port, kind: 'sync' | 'async'): EditResult {
-        return this.replaceProperty(port, 'kind', kind);
+        const result = this.replaceProperty(port, 'kind', kind);
+        const edits = [...result.edits];
+        if (kind === 'async' && port.direction === 'inout') {
+            edits.push(...this.replaceProperty(port, 'direction', 'in').edits);
+        }
+        if (kind === 'sync' && !port.type) {
+            edits.push(...this.setPortType(port, 'integer').edits);
+        }
+        return { edits: edits.sort((x, y) => y.offset - x.offset), selectOffset: port.$cstNode!.offset };
     }
 
-    /** Replaces the type of a port (everything after the colon): `DoorCmd`, `integer`, `event a, event b : integer`. */
+    /**
+     * Replaces the type of a port (everything after the colon): `Position`, `integer`; empty removes the
+     * payload of an async port (an event without data).
+     */
     setPortType(port: ast.Port, type: string): EditResult {
         const value = type.replace(/\s+/g, ' ').trim();
-        if (!value) {
-            throw new EditError('Please enter the type of the port.');
+        if (!value && port.kind === 'sync') {
+            throw new EditError('Please enter the type of the port: a sync port carries data.');
         }
         const cst = port.$cstNode!;
         const colon = GrammarUtils.findNodeForKeyword(cst, ':');
         if (!colon) {
-            throw new EditError('The model contains syntax errors. Please fix them first.');
+            const name = GrammarUtils.findNodeForProperty(cst, 'name');
+            if (!name) {
+                throw new EditError('The model contains syntax errors. Please fix them first.');
+            }
+            return { edits: value ? [{ offset: name.end, length: 0, text: ` : ${value}` }] : [], selectOffset: cst.offset };
+        }
+        if (!value) {
+            const name = GrammarUtils.findNodeForProperty(cst, 'name');
+            const start = name ? name.end : colon.offset;
+            return { edits: [{ offset: start, length: cst.end - start, text: '' }], selectOffset: cst.offset };
         }
         return { edits: [{ offset: colon.end, length: cst.end - colon.end, text: ` ${value}` }], selectOffset: cst.offset };
     }

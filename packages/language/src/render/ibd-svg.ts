@@ -1,7 +1,7 @@
 import { IbdMetrics, type IbdEdge, type IbdGraph, type IbdNode, type IbdPort } from '../diagram/ibd-model.js';
 import { helveticaTextWidth } from '../diagram/text-metrics.js';
 import { DIAGRAM_CSS } from './diagram-styles.js';
-import { behaviorIconPath, compositeIconPath, frameTabPath, ibdRoutePath, portChevron, portClasses, portTooltip } from './ibd-shapes.js';
+import { behaviorIconPath, compositeIconPath, connectorArrowheads, frameTabPath, ibdRoutePath, portArrow, portClasses, portTooltip } from './ibd-shapes.js';
 import { escapeXml, highlightClass, type DiagramTheme, type HighlightKind } from './svg.js';
 
 /*
@@ -123,7 +123,7 @@ class IbdSvgWriter {
         }
     }
 
-    /** A struct or interface: «struct» / «interface», the name, the fields / events. */
+    /** A struct: «struct», the name, the fields. */
     private typeBox(node: IbdNode, out: string[]): void {
         const center = node.width / 2;
         out.push(`<rect class="ibd-type-shape" x="0" y="0" width="${fmt(node.width)}" height="${fmt(node.height)}"/>`);
@@ -140,7 +140,7 @@ class IbdSvgWriter {
         });
         if (members.length === 0) {
             out.push(`<text class="ibd-type-member ibd-type-empty" x="${M.instancePadding}" y="${fmt(baseline(node.headerHeight + 5, M.memberRow, M.memberFont))}">`
-                + `${node.stereotype === 'interface' ? 'no events' : 'no fields'}</text>`);
+                + 'no fields</text>');
         }
     }
 
@@ -148,10 +148,7 @@ class IbdSvgWriter {
         out.push(`<g class="${this.classes(portClasses(port), port.id)}">`);
         out.push(`<title>${escapeXml(portTooltip(port))}</title>`);
         out.push(`<rect class="ibd-port-shape" x="${fmt(port.x)}" y="${fmt(port.y)}" width="${port.size}" height="${port.size}"/>`);
-        const chevron = portChevron(port);
-        if (chevron) {
-            out.push(`<path class="ibd-port-chevron" transform="translate(${fmt(port.x)}, ${fmt(port.y)})" d="${chevron}"/>`);
-        }
+        out.push(`<path class="ibd-port-arrow" transform="translate(${fmt(port.x)}, ${fmt(port.y)})" d="${portArrow(port)}"/>`);
         const label = port.typeName !== undefined
             ? `<tspan class="ibd-port-name">${escapeXml(port.name)}</tspan> : <tspan class="ibd-port-type">${escapeXml(port.typeName)}</tspan>`
             : escapeXml(port.label.text);
@@ -165,7 +162,9 @@ class IbdSvgWriter {
         }
         const classes = ['ibd-connector', edge.kind === 'delegate' ? 'delegation' : 'connection', ...(edge.crossThread ? ['cross-thread'] : [])];
         out.push(`<g class="${this.classes(classes, edge.id)}"><title>${escapeXml(edge.title)}</title>`
-            + `<path class="ibd-connector-line" d="${ibdRoutePath(edge.points)}"/></g>`);
+            + `<path class="ibd-connector-line" d="${ibdRoutePath(edge.points)}"/>`
+            + connectorArrowheads(edge.points, edge.bidirectional).map(d => `<path class="ibd-connector-arrow" d="${d}"/>`).join('')
+            + '</g>');
     }
 }
 

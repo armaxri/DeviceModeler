@@ -1,50 +1,63 @@
-// Component types of the garage door (examples/device). Components with a `behavior` are implemented
-// by a state machine; their ports must match its interfaces (see docs/structure-language.md).
+// Component types of the garage door (examples/device). Ports carry data in a direction: sync ports
+// data values, async ports one event (with an optional payload). Components with a `behavior` are
+// implemented by a state machine; their ports must match its interfaces (see docs/structure-language.md).
 import "types.devm"
 import "door_types.h"
 
 /** Opens and closes the door; implemented by controller.devm. */
 component DoorController {
     behavior "controller.devm"
-    provides async cmd : DoorCmd
-    provides async status : MotorStatus
-    requires async motor : MotorCmd
-    requires async alarm : event alarm
-    provides sync cycles : integer
-    requires sync position : door::Position
+    in async open                   // commands of the remote control (events without data)
+    in async close
+    in async stop
+    in async stopped                // the drive reached an end position
+    in async blocked                // the drive detected an obstacle
+    out async up : integer          // motor commands: speed in percent
+    out async down : integer
+    out async halt
+    out async alarm
+    in sync position : door::Position
+    out sync cycles : integer
+    inout sync errors : integer     // shared with the diagnosis
 }
 
 /** Motor control; implemented by drive.devm. */
 component MotorController {
     behavior "drive.devm"
-    provides async ctrl : MotorCmd
-    provides async sensors : event endSwitch, event overcurrent
-    requires async status : MotorStatus
-    provides sync speed : integer
-    requires sync pwm : integer
+    in async up : integer
+    in async down : integer
+    in async halt
+    in async endSwitch
+    in async overcurrent
+    out async stopped
+    out async blocked
+    out sync duty : integer         // duty cycle of the PWM output
+    out sync speed : integer
 }
 
 /** PWM output of the motor bridge (hardware driver). */
 component PwmDriver {
-    provides sync duty : integer
+    in sync duty : integer
 }
 
 /** End switches and current monitor (hardware driver, interrupt driven). */
 component EndSwitches {
-    requires async events : event endSwitch, event overcurrent
+    out async endSwitch
+    out async overcurrent
 }
 
 /** Encoder of the door leaf. */
 component PositionSensor {
-    provides sync position : door::Position
+    out sync position : door::Position
 }
 
 component Buzzer {
-    provides async alarm : event alarm
+    in async alarm
 }
 
 /** Collects statistics. */
 component Diagnosis {
-    requires sync cycles : integer
-    provides sync report : Diagnostics
+    in sync cycles : integer
+    inout sync errors : integer     // counted by the controller, reset after a report
+    out sync report : Diagnostics
 }

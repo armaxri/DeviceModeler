@@ -9,7 +9,7 @@ import * as ast from '../src/generated/ast.js';
 import { behaviorMapping } from '../src/structure-behavior.js';
 import { behaviorMachine, structureImportKind, resolvedStructureImports, visibleElements } from '../src/structure-imports.js';
 import { compositeInstances, threadOf, threadSettings, threadInstances } from '../src/structure-model.js';
-import { dataTypeOf, dataTypeName, isDataAssignable, portEvents, resolveDataType } from '../src/structure-types.js';
+import { dataTypeOf, dataTypeName, isDataAssignable, portDataType, resolveDataType } from '../src/structure-types.js';
 import { StructureModelLoader } from '../src/model-loader.js';
 import { createDevmServices } from '../src/devm-module.js';
 import { structureSignature } from '../src/lsp/structure-lsp.js';
@@ -33,15 +33,14 @@ const warnings = (parsed: { diagnostics: Diagnostic[] }) => messages(parsed.diag
 const infos = (parsed: { diagnostics: Diagnostic[] }) => messages(parsed.diagnostics, 3);
 
 const COMPONENTS = `
-interface Cmd { event open event close }
 struct Point { x : real  y : real }
 component Client {
-    requires async cmd : Cmd
-    requires sync pos : Point
+    out async cmd : integer
+    in sync pos : Point
 }
 component Server {
-    provides async cmd : Cmd
-    provides sync pos : Point
+    in async cmd : integer
+    out sync pos : Point
 }
 `;
 
@@ -64,16 +63,17 @@ package demo
 import "a.devm" "b.h"
 /** A point. */
 struct P { x : real; y : real }
-interface I { event a, event b : integer }
 component C "a component" {
     behavior "c.devm"
-    provides async p : I
-    requires async q : event a, event b : integer
-    requires sync r : P
+    in async p
+    out async q : integer
+    in sync r : P
+    out sync s : P
+    inout sync t : integer
 }
-subsystem Sub { provides async p : I  thread T { c : C }  delegate p -> c.p }
+subsystem Sub { in async p  thread T { c : C }  delegate p -> c.p }
 system S {
-    provides sync d : P
+    in sync d : P
     @priority(5) @period(10 ms) @stack(0x1000)
     thread T {
         c : C "first"
@@ -89,16 +89,18 @@ system S {
         expect(model.package).toBe('demo');
         expect(model.imports[0].paths.map(p => p.path)).toEqual(['a.devm', 'b.h']);
         expect(model.elements.map(e => `${e.$type}:${e.name}`)).toEqual([
-            'StructDeclaration:P', 'PortInterface:I', 'Component:C', 'CompositeType:Sub', 'CompositeType:S'
+            'StructDeclaration:P', 'Component:C', 'CompositeType:Sub', 'CompositeType:S'
         ]);
-        const component = model.elements[2] as ast.Component;
+        const component = model.elements[1] as ast.Component;
         expect(component.description).toBe('a component');
         expect(component.behavior?.path).toBe('c.devm');
-        expect(component.ports.map(p => `${p.direction} ${p.kind} ${p.name}`)).toEqual(['provides async p', 'requires async q', 'requires sync r']);
-        expect(component.ports[1].events.map(e => `${e.name}:${e.type?.name ?? ''}`)).toEqual(['a:', 'b:integer']);
-        const root = model.elements[4] as ast.CompositeType;
+        expect(component.ports.map(p => `${p.direction} ${p.kind} ${p.name}:${p.type?.name ?? ''}`)).toEqual([
+            'in async p:', 'out async q:integer', 'in sync r:P', 'out sync s:P', 'inout sync t:integer'
+        ]);
+        expect(component.ports.map(p => dataTypeName(portDataType(p)))).toEqual(['void', 'integer', 'P', 'P', 'integer']);
+        const root = model.elements[3] as ast.CompositeType;
         expect(root.kind).toBe('system');
-        expect((model.elements[3] as ast.CompositeType).kind).toBe('subsystem');
+        expect((model.elements[2] as ast.CompositeType).kind).toBe('subsystem');
         expect(compositeInstances(root).map(i => i.name)).toEqual(['c', 'u', 'e']);
         const [t, u] = root.threads;
         expect(threadSettings(t)).toEqual({ priority: 5, stack: 4096, periodNs: 10_000_000, period: '10 ms' });
@@ -109,8 +111,22 @@ system S {
     });
 
     test('syntax errors', async () => {
-        const parsed = await load('component C { provides cmd : I }');
+        const parsed = await load('component C { in cmd : I }');
         expect(parsed.hasSyntaxErrors).toBe(true);
+    });
+
+    test('the syntax of earlier versions gets a hint', async () => {
+        const port = 'Ports are written \'in|out|inout sync|async name : Type\' (e.g. \'in async open\', \'out sync speed : integer\'); \'provides\' and \'requires\' are no longer supported.';
+        for (const text of ['component C { provides async cmd : Cmd }', 'component C { requires sync pos : integer }', 'system S { provides async cmd : Cmd }']) {
+            const parsed = await load(text);
+            expect(parsed.diagnostics.map(d => d.message), text).toContain(port);
+        }
+        const parsed = await load('interface Cmd { event open }\ncomponent C { }');
+        expect(parsed.diagnostics.map(d => d.message)).toContain(
+            "Structure files have no interface declarations: an async port carries one event ('in async open', 'out async up : integer'). (In a state machine, interfaces are declared in its body.)");
+        const later = await load('component C { }\ninterface Cmd { event open }');
+        expect(later.diagnostics.map(d => d.message)).toContain(
+            "Structure files have no interface declarations: an async port carries one event ('in async open', 'out async up : integer'). (In a state machine, interfaces are declared in its body.)");
     });
 });
 
@@ -130,39 +146,47 @@ describe('structure language: the example', () => {
             // (drive is a subsystem outside of threads: its parts run in the MotorTask)
             expect(infos(parsed)).toEqual([
                 "The connection crosses threads ('ControlTask' -> 'MotorTask').",
+                "The connection crosses threads ('ControlTask' -> 'MotorTask').",
+                "The connection crosses threads ('ControlTask' -> 'MotorTask').",
                 "The connection crosses threads ('MotorTask' -> 'ControlTask').",
+                "The connection crosses threads ('MotorTask' -> 'ControlTask').",
+                "The connection crosses threads ('IoTask' -> 'ControlTask').",
                 "The connection crosses threads ('ControlTask' -> 'IoTask').",
-                "The connection crosses threads ('IoTask' -> 'ControlTask')."
+                "The connection crosses threads ('ControlTask' -> 'IoTask')."
             ]);
             const door = (parsed.model.elements[0] as ast.CompositeType).threads[0].instances[0];
             const type = door.type.ref as ast.Component;
             expect(type.name).toBe('DoorController');
             expect(behaviorMachine(type)?.name).toBe('DoorController');
-            // `cmd` is mapped onto the named interface `cmd:` of the state machine
+            // the ports are mapped onto the named interfaces `remote:` and `drive:` and the unnamed interface
             const mapping = behaviorMapping(type)!;
-            expect(mapping.ports[0].events.map(e => e.declaration?.$container.name)).toEqual(['cmd', 'cmd', 'cmd']);
+            expect(mapping.ports.map(p => `${p.port.name}:${(p.declaration?.$container as ast.InterfaceScope).name ?? ''}`)).toEqual([
+                'open:remote', 'close:remote', 'stop:remote', 'stopped:drive', 'blocked:drive', 'up:drive', 'down:drive', 'halt:drive',
+                'alarm:', 'position:', 'cycles:', 'errors:'
+            ]);
+            expect(mapping.ports.filter(p => p.problem)).toEqual([]);
             expect(mapping.unmapped).toEqual([]);
         }
     });
 });
 
 describe('structure language: linking across files', () => {
-    const TYPES = 'package types\nstruct Position { x : real  y : real }\ninterface Cmd { event go }';
-    const PARTS = 'import "types.devm"\ncomponent Motor { provides async ctrl : Cmd  provides sync pos : Position }';
+    const TYPES = 'package types\nstruct Position { x : real  y : real }\nstruct Speed { value : integer }';
+    const PARTS = 'import "types.devm"\ncomponent Motor { in async ctrl : Speed  out sync pos : Position }';
 
-    test('component types, structs and interfaces of imported files', async () => {
+    test('component types and structs of imported files', async () => {
         const parsed = await load(`
 import "parts.devm"
 import "types.devm"
-component Ctl { requires async m : types.Cmd  requires sync p : types.Position }
-system S { thread T { m : Motor  c : Ctl }  connect c.m -> m.ctrl  connect c.p -> m.pos }`, { 'parts.devm': PARTS, 'types.devm': TYPES });
+component Ctl { out async m : types.Speed  in sync p : types.Position }
+system S { thread T { m : Motor  c : Ctl }  connect c.m -> m.ctrl  connect m.pos -> c.p }`, { 'parts.devm': PARTS, 'types.devm': TYPES });
         expect(errors(parsed)).toEqual([]);
         const root = parsed.model.elements[1] as ast.CompositeType;
         const motor = root.threads[0].instances[0].type.ref!;
         expect(motor.name).toBe('Motor');
         expect(AstUtils.getDocument(motor).uri.path).toBe(parsed.document.uri.path.replace('main.devm', 'parts.devm'));
         expect(root.connections[0].target.port.ref?.name).toBe('ctrl');
-        expect([...visibleElements(parsed.model).keys()]).toEqual(['Ctl', 'S', 'Motor', 'Position', 'types.Position', 'Cmd', 'types.Cmd']);
+        expect([...visibleElements(parsed.model).keys()]).toEqual(['Ctl', 'S', 'Motor', 'Position', 'types.Position', 'Speed', 'types.Speed']);
     });
 
     test('elements of files that are not imported are not visible', async () => {
@@ -183,7 +207,7 @@ system S { thread T { m : Motor  c : Ctl }  connect c.m -> m.ctrl  connect c.p -
         const header = 'namespace geo { struct Position { double x; double y; }; enum class Mode { A, B }; }';
         const parsed = await load(`
 import "geo.h"
-component C { provides sync pos : geo::Position  provides sync mode : geo::Mode  provides sync n : uint8_t  provides sync bad : geo::Missing }`,
+component C { out sync pos : geo::Position  out sync mode : geo::Mode  out sync n : uint8_t  out sync bad : geo::Missing }`,
         { 'geo.h': header });
         expect(errors(parsed)).toEqual(["Unknown type 'geo::Missing'."]);
         const ports = (parsed.model.elements[0] as ast.Component).ports;
@@ -192,7 +216,7 @@ component C { provides sync pos : geo::Position  provides sync mode : geo::Mode 
     });
 
     test('behavior by state machine name (`import "door.devm"`, `behavior Door`)', async () => {
-        const parsed = await load('import "door.devm"\ncomponent C { behavior Door  provides async cmd : event open }', {
+        const parsed = await load('import "door.devm"\ncomponent C { behavior Door  in async open }', {
             'door.devm': 'statemachine Door { interface: in event open [*] -> A state A A -> A : open }'
         });
         expect(errors(parsed)).toEqual([]);
@@ -228,15 +252,14 @@ component C { provides sync pos : geo::Position  provides sync mode : geo::Mode 
 
 describe('structure language: validation', () => {
     test('a valid system', async () => {
-        const parsed = await system('thread T { c : Client  s : Server }  connect c.cmd -> s.cmd  connect c.pos -> s.pos');
+        const parsed = await system('thread T { c : Client  s : Server }  connect c.cmd -> s.cmd  connect s.pos -> c.pos');
         expect(parsed.diagnostics).toEqual([]);
     });
 
     test('duplicate names', async () => {
         const parsed = await load(`
 struct P { x : real  x : integer }
-interface I { event a event a }
-component P { provides async p : event e, event e  provides sync p : integer }
+component P { in async p  out sync p : integer }
 component K { }
 system S { thread T { a : K } thread T { a : K } }
 system integer { }`);
@@ -244,144 +267,198 @@ system integer { }`);
             "Duplicate name 'P'.",
             "'integer' is the name of a built-in type.",
             "Duplicate field 'x'.",
-            "Duplicate event 'a'.",
             "Duplicate port 'p'.",
-            "Duplicate event 'e'.",
             "Duplicate instance 'a'.",
             "Duplicate thread 'T'."
         ]);
     });
 
-    test('types of ports, events and fields', async () => {
+    test('types of ports and fields', async () => {
         const parsed = await load(`
-struct P { self : P  i : I  v : void }
-interface I { event a : I }
+struct P { self : P  v : void }
+component K { }
 component C {
-    provides async a : P
-    provides sync b : I
-    provides sync c : event x
-    provides sync d : Unknown
-    provides async e : I
+    in async a : P
+    out async b
+    in sync c
+    out sync d : Unknown
+    inout sync e : void
+    in sync f : K
 }`);
         expect(errors(parsed)).toEqual([
             "The struct 'P' contains itself (through 'self').",
-            "The interface 'I' is not a data type: it can only be the type of an async port (the field 'i').",
             "'void' is not a data type (the field 'v').",
-            "The interface 'I' is not a data type: it can only be the type of an async port (the event 'a').",
-            expect.stringContaining("The async port 'a' carries events: its type must be an interface"),
-            "The interface 'I' is not a data type: it can only be the type of an async port (the sync port 'b').",
-            "The sync port 'c' carries data, not events: write 'sync c : Type' or declare it 'async'.",
-            "Unknown type 'Unknown'."
+            "The sync port 'c' carries data: write 'in sync c : Type' (a built-in type, a struct or a C/C++ type).",
+            "Unknown type 'Unknown'.",
+            "'void' is not a data type (the sync port 'e').",
+            "'K' is a component type, not a data type."
         ]);
     });
 
-    test('connections go from required to provided ports of instances', async () => {
+    test('async ports are in or out ports', async () => {
+        const parsed = await load('component C { inout async x : integer  inout sync y : integer }');
+        expect(errors(parsed)).toEqual([
+            "The async port 'x' cannot be 'inout': an event is sent ('out async') or received ('in async'). Shared data is an 'inout sync' port."
+        ]);
+    });
+
+    test('connections go from out ports to in ports of instances', async () => {
         const parsed = await system(`
-    provides async x : Cmd
+    in async x : integer
     thread T { c : Client  s : Server  t : Server }
     connect s.cmd -> c.cmd
     connect c.cmd -> c.cmd
     connect s.pos -> t.pos
+    connect s.cmd -> t.cmd
     connect c.cmd -> x
     delegate x -> s.cmd`);
         expect(errors(parsed)).toEqual([
-            "Connections go from the required to the provided port: write 'connect c.cmd -> s.cmd'.",
-            "The target 'c.cmd' of a connection must be a provided port.",
-            "The source 's.pos' of a connection must be a required port.",
+            "s.cmd (in async integer) cannot be connected to c.cmd (out async integer): the data flows from the out port c.cmd to the in port s.cmd: write 'connect c.cmd -> s.cmd'.",
+            "c.cmd (out async integer) cannot be connected to c.cmd (out async integer): a connection goes from an out port to an in port, but c.cmd and c.cmd are both out ports.",
+            "s.pos (out sync Point) cannot be connected to t.pos (out sync Point): a connection goes from an out port to an in port, but s.pos and t.pos are both out ports.",
+            "s.cmd (in async integer) cannot be connected to t.cmd (in async integer): a connection goes from an out port to an in port, but s.cmd and t.cmd are both in ports.",
             "'connect' connects ports of parts ('a.port -> b.port'); boundary ports of 'S' are connected with 'delegate'."
         ]);
     });
 
-    test('kinds and types of connected ports', async () => {
+    test('kinds, types and payloads of connected ports', async () => {
         const parsed = await load(`
-interface Small { event open }
-interface Big { event open : integer  event close }
+struct P { x : real }
 component A {
-    requires async big : Big
-    requires async small : Small
-    requires sync n : real
-    requires sync i : integer
-    requires async k : Small
-    requires async e : event up : integer
+    out async none
+    out async n : integer
+    out async b : boolean
+    out sync i : integer
+    out sync r : real
+    out async k
+    out sync p : P
 }
 component B {
-    provides async big : Big
-    provides async small : Small
-    provides sync n : integer
-    provides sync r : real
-    provides async e : event up : boolean
+    in async none : integer
+    in async n
+    in async b : integer
+    in sync i : real
+    in sync r : integer
+    in sync k : integer
+    in sync p : P
 }
 system S {
     thread T { a : A  b : B }
-    connect a.big -> b.small
-    connect a.small -> b.big
+    connect a.none -> b.none
     connect a.n -> b.n
-    connect a.i -> b.r
-    connect a.k -> b.n
-    connect a.e -> b.e
+    connect a.b -> b.b
+    connect a.i -> b.i
+    connect a.r -> b.r
+    connect a.k -> b.k
+    connect a.p -> b.p
 }`);
         expect(errors(parsed)).toEqual([
-            "a.big (requires async Big) cannot be connected to b.small (provides async Small): event 'open' carries integer, but b.small expects no payload; event 'close' is not accepted by b.small.",
-            "a.small (requires async Small) cannot be connected to b.big (provides async Big): event 'open' has no payload, but b.big expects integer.",
-            "a.i (requires sync integer) cannot be connected to b.r (provides sync real): the data real of b.r is not assignable to integer (expected by a.i).",
-            "a.k (requires async Small) cannot be connected to b.n (provides sync integer): a.k is an async port (events), b.n is a sync port (data) – sync ports are connected with sync ports, async ports with async ports.",
-            "a.e (requires async event up : integer) cannot be connected to b.e (provides async event up : boolean): payload integer of 'up' is not assignable to boolean (expected by b.e)."
+            "a.none (out async) cannot be connected to b.none (in async integer): the event a.none has no payload, but b.none expects integer.",
+            "a.n (out async integer) cannot be connected to b.n (in async): the event a.n carries integer, but b.n expects no payload.",
+            "a.b (out async boolean) cannot be connected to b.b (in async integer): the payload boolean of a.b is not assignable to integer (expected by b.b).",
+            "a.r (out sync real) cannot be connected to b.r (in sync integer): the data real of a.r is not assignable to integer (expected by b.r).",
+            "a.k (out async) cannot be connected to b.k (in sync integer): a.k is an async port (an event), b.k is a sync port (data) – sync ports are connected with sync ports, async ports with async ports."
         ]);
-        // every incompatibility is an error
+        // every incompatibility is an error (integer -> real is allowed)
         expect(parsed.diagnostics.filter(d => d.severity !== 1 && /cannot be/.test(d.message))).toEqual([]);
     });
 
-    test('delegations: provided outer -> inner, required inner -> outer', async () => {
+    test('inout ports share data with inout ports, in any order', async () => {
+        const parsed = await load(`
+component A { inout sync s : integer  out sync o : integer  inout sync r : real }
+component B { inout sync s : integer  in sync i : integer  inout sync r : integer }
+system S {
+    thread T { a : A  b : B  c : B }
+    connect a.s -> b.s
+    connect c.s -> a.s
+    connect a.s -> b.i
+    connect a.o -> c.s
+    connect a.r -> b.r
+}`);
+        expect(errors(parsed)).toEqual([
+            "a.s (inout sync integer) cannot be connected to b.i (in sync integer): a.s is an inout port (shared data) and can only be connected to an inout port, but b.i is an in port.",
+            "a.o (out sync integer) cannot be connected to c.s (inout sync integer): c.s is an inout port (shared data) and can only be connected to an inout port, but a.o is an out port.",
+            "a.r (inout sync real) cannot be connected to b.r (inout sync integer): a.r and b.r share data of different types (real and integer)."
+        ]);
+        expect(warnings(parsed)).toEqual([
+            "The in port 'c.i' is not connected: it receives no data.",
+            "The inout port 'c.r' is not connected: it shares its data with no other port."
+        ]);
+    });
+
+    test('delegations: in outer -> inner, out inner -> outer, inout both ways', async () => {
         const parsed = await system(`
-    provides async x : Cmd
-    requires async y : Cmd
-    provides sync p : Point
-    requires async z : event other
-    thread T { c : Client  s : Server }
+    in async x : integer
+    out async y : integer
+    in sync p : Point
+    out async z : boolean
+    inout sync shared : integer
+    inout sync other : integer
+    thread T { c : Client  s : Server  d : Shared }
     delegate s.cmd -> x
     delegate y -> c.cmd
     delegate x -> c.cmd
     delegate x -> y
     delegate c.cmd -> z
-    delegate p -> s.pos`);
+    delegate p -> s.pos
+    delegate shared -> d.v
+    delegate d.v -> other
+    delegate x -> d.v`, 'component Shared { inout sync v : integer }');
         expect(errors(parsed)).toEqual([
-            "A provided port is delegated from the boundary to the part: write 'delegate x -> s.cmd'.",
-            "A required port is delegated from the part to the boundary: write 'delegate c.cmd -> y'.",
-            "A delegation connects ports of the same direction, but 'x' is provided and 'c.cmd' is required.",
-            "A delegation connects a boundary port with a port of a part: 'delegate port -> part.port' (provided) or 'delegate part.port -> port' (required).",
-            "c.cmd (requires async Cmd) cannot be delegated to z (requires async event other): event 'open' is not accepted by z; event 'close' is not accepted by z."
+            "s.cmd (in async integer) cannot be delegated to x (in async integer): the data of an in port flows from the boundary to the part: write 'delegate x -> s.cmd'.",
+            "y (out async integer) cannot be delegated to c.cmd (out async integer): the data of an out port flows from the part to the boundary: write 'delegate c.cmd -> y'.",
+            "x (in async integer) cannot be delegated to c.cmd (out async integer): a delegation connects ports of the same direction, but x is an in port and c.cmd is an out port.",
+            "A delegation connects a boundary port with a port of a part: 'delegate port -> part.port' (in) or 'delegate part.port -> port' (out).",
+            "c.cmd (out async integer) cannot be delegated to z (out async boolean): the payload integer of c.cmd is not assignable to boolean (expected by z).",
+            "p (in sync Point) cannot be delegated to s.pos (out sync Point): a delegation connects ports of the same direction, but p is an in port and s.pos is an out port.",
+            "x (in async integer) cannot be delegated to d.v (inout sync integer): d.v is an inout port (shared data) and can only be delegated to an inout port, but x is an in port."
         ]);
     });
 
     test('unconnected ports and boundary ports', async () => {
         const parsed = await system(`
-    provides async x : Cmd
-    requires async y : Cmd
+    in async x : integer
+    out async y : integer
+    inout sync z : integer
     thread T { c : Client  s : Server }`);
         expect(warnings(parsed)).toEqual([
-            "The required port 'c.cmd' is not connected.",
-            "The required port 'c.pos' is not connected.",
-            "The provided port 'x' is not delegated to a part ('delegate x -> part.port').",
-            "The required port 'y' is not used by any part ('delegate part.port -> y')."
+            "The in port 'c.pos' is not connected: it receives no data.",
+            "The in port 's.cmd' is not connected: it receives no events.",
+            "The in port 'x' is not delegated to a part: nobody receives its events ('delegate x -> part.port').",
+            "The out port 'y' is not delegated from a part: no part sends its events ('delegate part.port -> y').",
+            "The inout port 'z' is not delegated to a part ('delegate z -> part.port')."
         ]);
+        // out ports may be left unconnected
+        expect(warnings(parsed).filter(w => w.includes('c.cmd') || w.includes('s.pos'))).toEqual([]);
     });
 
-    test('a sync required port has one provider, async ports may have several', async () => {
+    test('a sync in port has one source, an async in port may have several', async () => {
         const parsed = await system(`
-    provides sync p : Point
+    in sync p : Point
+    out sync q : Point
     thread T { c : Client  s : Server  t : Server }
-    connect c.pos -> s.pos
-    connect c.pos -> t.pos
+    connect s.pos -> c.pos
+    connect t.pos -> c.pos
     connect c.cmd -> s.cmd
     connect c.cmd -> t.cmd
     connect c.cmd -> t.cmd
-    delegate p -> s.pos
-    delegate p -> t.pos`);
+    delegate p -> c.pos
+    delegate s.pos -> q
+    delegate t.pos -> q`, 'component Second { out async cmd : integer }');
         expect(errors(parsed)).toEqual([
-            "The sync port 'c.pos' requires one provider, but it is connected 2 times.",
-            "The sync port 'p' can be delegated to one provider only."
+            "The sync port 'c.pos' receives its data from one source only, but it has 3 sources.",
+            "The sync port 'c.pos' receives its data from one source only, but it has 3 sources.",
+            "The sync port 'q' receives its data from one source only, but it has 2 sources."
         ]);
         expect(warnings(parsed)).toEqual(['Duplicate connection.']);
+        // events of several sources are merged: an async in port may have several sources, an out port several targets
+        const merged = await system(`
+    thread T { c : Client  d : Client  s : Server }
+    connect c.cmd -> s.cmd
+    connect d.cmd -> s.cmd
+    connect s.pos -> c.pos
+    connect s.pos -> d.pos`);
+        expect(merged.diagnostics).toEqual([]);
     });
 
     test('an instance belongs to one thread', async () => {
@@ -390,7 +467,7 @@ system S {
     thread B { c  s  t }
     s : Server  t : Server
     thread C { t }
-    connect c.cmd -> s.cmd  connect c.pos -> s.pos`);
+    connect c.cmd -> s.cmd  connect s.pos -> c.pos`);
         expect(errors(parsed)).toEqual([
             "The instance 'c' is already assigned to the thread 'A'. An instance belongs to one thread only.",
             "The instance 's' is already assigned to the thread 'A'. An instance belongs to one thread only.",
@@ -403,20 +480,20 @@ system S {
     thread A { c : Client  t : Server }
     thread B { s : Server }
     connect c.cmd -> s.cmd
-    connect c.pos -> t.pos`);
+    connect t.pos -> c.pos`);
         expect(infos(parsed)).toEqual(["The connection crosses threads ('A' -> 'B')."]);
     });
 
     test('instances of components run in threads, instances of subsystems outside of threads', async () => {
         const parsed = await system(`
-    provides async x : Cmd
+    in async x : integer
     thread T { c : Client  inner : Sub }
     s : Server
     t : Server
     u : Sub
     thread U { t  u }
-    connect c.cmd -> s.cmd  connect c.pos -> t.pos
-    delegate x -> u.p`, 'subsystem Sub { provides async p : Cmd  thread W { s : Server }  delegate p -> s.cmd }');
+    connect c.cmd -> s.cmd  connect t.pos -> c.pos
+    delegate x -> u.p`, 'subsystem Sub { in async p : integer  thread W { s : Server }  delegate p -> s.cmd }');
         expect(errors(parsed)).toEqual([
             "'inner' is an instance of the subsystem 'Sub' and cannot be placed in the thread 'T': the parts of a subsystem run in the threads of the subsystem. Declare 'inner' outside of the threads.",
             "'u' is an instance of the subsystem 'Sub' and cannot be assigned to the thread 'U': the parts of a subsystem run in the threads of the subsystem. Only instances of components are assigned to threads.",
@@ -453,8 +530,7 @@ system Other { r : Root }`);
             'Invalid arguments: stack size of the thread in bytes: @stack(4096).'
         ]);
         expect(warnings(parsed)).toEqual([
-            "The required port 'c.cmd' is not connected.",
-            "The required port 'c.pos' is not connected.",
+            "The in port 'c.pos' is not connected: it receives no data.",
             "'@period' is given more than once; the first one is used.",
             "Unknown annotation '@color'.",
             "'@priority' is given more than once; the first one is used.",
@@ -468,7 +544,7 @@ describe('structure language: ports and behavior', () => {
 statemachine Door {
     interface cmd:
         in event open
-        in event close
+        in event close : integer
     interface:
         in event stopped : integer
         out event motor : integer
@@ -476,11 +552,17 @@ statemachine Door {
         event both
         var count : integer = 0
         var readonly ratio : real = 0.5
+        var shared : integer
+        const limit : integer = 3
         operation position() : real
-        operation setPwm(duty : integer) : void
-        operation unused() : void
+    interface other:
+        var count2 : integer
+        in event twice
+    interface more:
+        out event twice
     internal:
         event tick
+        var hidden : integer
     [*] -> A
     state A
     A -> A : cmd.open / raise alarm; raise motor : 1
@@ -490,49 +572,88 @@ statemachine Door {
         return load(`component C {\n    behavior "door.devm"\n${ports}\n}`, { 'door.devm': DOOR });
     }
 
-    test('ports matching the state machine', async () => {
+    test('ports matching the state machine: var, var readonly and events in all interfaces', async () => {
         const parsed = await component(`
-    provides async cmd : event open, event close
-    provides async status : event stopped : integer, event both
-    requires async out : event motor : integer, event alarm
-    provides sync count : integer
-    provides sync ratio : real
-    requires sync position : real
-    requires sync setPwm : integer`);
+    in async open
+    in async close : integer
+    in async stopped : integer
+    in async both
+    out async motor : integer
+    out async alarm
+    out sync count : integer
+    in sync ratio : real
+    inout sync shared : integer
+    out sync count2 : integer`);
         expect(errors(parsed)).toEqual([]);
-        expect(warnings(parsed)).toEqual(["The operation 'unused' of the state machine 'Door' does not belong to any port of 'C' (add it to a required sync port)."]);
+        // (`twice` is declared in two interfaces: no port can be mapped onto it)
+        expect(warnings(parsed)).toEqual([
+            "The in event 'twice' of the state machine 'Door' does not belong to any port of 'C' (add the port 'in async twice').",
+            "The out event 'twice' of the state machine 'Door' does not belong to any port of 'C' (add the port 'out async twice')."
+        ]);
+        const mapping = behaviorMapping(parsed.model.elements[0] as ast.Component)!;
+        expect(mapping.ports.map(p => `${p.port.name}:${p.declaration?.$type}`)).toEqual([
+            'open:EventDeclaration', 'close:EventDeclaration', 'stopped:EventDeclaration', 'both:EventDeclaration', 'motor:EventDeclaration',
+            'alarm:EventDeclaration', 'count:VariableDeclaration', 'ratio:VariableDeclaration', 'shared:VariableDeclaration', 'count2:VariableDeclaration'
+        ]);
+        // constants, operations and the internal scope are not mapped
+        expect(mapping.unmapped.map(d => d.name)).toEqual(['twice', 'twice']);
     });
 
     test('mismatches', async () => {
         const parsed = await component(`
-    provides async cmd : event open, event shut
-    requires async status : event stopped : integer
-    provides async x : event motor : integer
-    provides async y : event tick
-    requires async out : event motor : real, event alarm : integer
-    provides sync position : real
-    provides sync count : real
-    requires sync count2 : integer
-    requires sync setPwm : real
-    requires sync ratio : real`);
+    in async open : integer
+    in async shut
+    out async stopped : integer
+    in async motor : integer
+    in async tick
+    out async alarm : integer
+    in sync count : integer
+    out sync ratio : real
+    inout sync position : real
+    out sync limit : integer
+    out sync close : integer
+    in async count2
+    out sync shared : real
+    in async twice`);
         expect(errors(parsed)).toEqual([
-            "The state machine 'Door' has no in event 'shut' for the port 'cmd' (declare 'in event shut' in its interface).",
-            "The event 'stopped' of the required port 'status' must be an out event of 'Door', but it is an in event.",
-            "The event 'motor' of the provided port 'x' must be an in event of 'Door', but it is an out event.",
-            "The state machine 'Door' has no in event 'tick' for the port 'y' (declare 'in event tick' in its interface).",
-            "The event 'motor' of the port 'out' carries real, but the event of 'Door' carries integer.",
-            "The event 'alarm' of the port 'out' carries integer, but the event of 'Door' carries no value.",
-            "The state machine 'Door' has no variable 'position' for the provided sync port 'position' (declare 'var position : real' in its interface).",
-            "The variable 'count' of 'Door' has the type integer, but the port has the type real.",
-            "The state machine 'Door' has no operation 'count2' for the required sync port 'count2' (declare 'operation count2() : integer' or 'operation count2(value : integer) : void' in its interface).",
-            "The operation 'setPwm' of 'Door' must be 'operation setPwm() : real' or 'operation setPwm(value : real) : void' for the required sync port 'setPwm'.",
-            "The state machine 'Door' has no operation 'ratio' for the required sync port 'ratio' (declare 'operation ratio() : real' or 'operation ratio(value : real) : void' in its interface)."
+            "The port 'open' carries integer, but the event 'open' of 'Door' carries no value.",
+            "The state machine 'Door' has no element 'shut' for the port 'shut' (declare 'in event shut' in an interface).",
+            "The out async port 'stopped' must be an out event of 'Door', but 'stopped' is an in event.",
+            "The in async port 'motor' must be an in event of 'Door', but 'motor' is an out event.",
+            "The state machine 'Door' has no element 'tick' for the port 'tick' (declare 'in event tick' in an interface).",
+            "The port 'alarm' carries integer, but the event 'alarm' of 'Door' carries no value.",
+            "The in port 'count' is written by its source: the variable 'count' of 'Door' must be read-only ('var readonly count : integer').",
+            "The out port 'ratio' is written by the state machine: the variable 'ratio' of 'Door' must not be read-only ('var ratio : real').",
+            "The sync port 'position' is data: 'position' of 'Door' must be 'var position : real', not an operation.",
+            "The sync port 'limit' is data: 'limit' of 'Door' must be 'var limit : integer', not a constant.",
+            "The sync port 'close' is data: 'close' of 'Door' must be 'var close : integer', not an event.",
+            "The async port 'count2' is an event: 'count2' of 'Door' must be 'in event count2', not a variable.",
+            "The variable 'shared' of 'Door' has the type integer, but the port has the type real.",
+            "The port 'twice' is ambiguous: the state machine 'Door' declares 'twice' in interface other and interface more (port names are looked up in all interfaces)."
         ]);
         expect(warnings(parsed)).toEqual([
-            "The in event 'close' of the state machine 'Door' does not belong to any port of 'C' (add it to a provided async port).",
-            "The in event 'both' of the state machine 'Door' does not belong to any port of 'C' (add it to a provided async port).",
-            "The operation 'position' of the state machine 'Door' does not belong to any port of 'C' (add it to a required sync port).",
-            "The operation 'unused' of the state machine 'Door' does not belong to any port of 'C' (add it to a required sync port)."
+            "The in event 'close' of the state machine 'Door' does not belong to any port of 'C' (add the port 'in async close : integer').",
+            "The in event 'both' of the state machine 'Door' does not belong to any port of 'C' (add the port 'in async both').",
+            "The variable 'count2' of the state machine 'Door' does not belong to any port of 'C' (add the port 'out sync count2 : integer' or 'inout sync').",
+            "The in event 'twice' of the state machine 'Door' does not belong to any port of 'C' (add the port 'in async twice').",
+            "The out event 'twice' of the state machine 'Door' does not belong to any port of 'C' (add the port 'out async twice')."
+        ]);
+    });
+
+    test('state machine elements without a port', async () => {
+        const parsed = await component('in async open');
+        expect(warnings(parsed)).toEqual([
+            "The in event 'close' of the state machine 'Door' does not belong to any port of 'C' (add the port 'in async close : integer').",
+            "The in event 'stopped' of the state machine 'Door' does not belong to any port of 'C' (add the port 'in async stopped : integer').",
+            "The out event 'motor' of the state machine 'Door' does not belong to any port of 'C' (add the port 'out async motor : integer').",
+            "The out event 'alarm' of the state machine 'Door' does not belong to any port of 'C' (add the port 'out async alarm').",
+            "The in event 'both' of the state machine 'Door' does not belong to any port of 'C' (add the port 'in async both').",
+            "The variable 'count' of the state machine 'Door' does not belong to any port of 'C' (add the port 'out sync count : integer' or 'inout sync').",
+            "The read-only variable 'ratio' of the state machine 'Door' does not belong to any port of 'C' (add the port 'in sync ratio : real').",
+            "The variable 'shared' of the state machine 'Door' does not belong to any port of 'C' (add the port 'out sync shared : integer' or 'inout sync').",
+            "The variable 'count2' of the state machine 'Door' does not belong to any port of 'C' (add the port 'out sync count2 : integer' or 'inout sync').",
+            "The in event 'twice' of the state machine 'Door' does not belong to any port of 'C' (add the port 'in async twice').",
+            "The out event 'twice' of the state machine 'Door' does not belong to any port of 'C' (add the port 'out async twice')."
         ]);
     });
 
@@ -549,19 +670,14 @@ statemachine Door {
         const parsed = await load(`
 import "geo.h"
 struct Position { x : real  y : real }
-component C { behavior "m.devm"  provides sync pos : Position  provides sync other : geo::Position }`, {
+component C { behavior "m.devm"  out sync pos : Position  in async other : geo::Position }`, {
             'geo.h': header,
-            'm.devm': 'statemachine M { import "geo.h" interface: var pos : geo::Position var other : geo::Position [*] -> A state A }'
+            'm.devm': 'statemachine M { import "geo.h" interface: var pos : geo::Position in event other : geo::Position [*] -> A state A }'
         });
         expect(errors(parsed)).toEqual([]);
         const [pos, other] = (parsed.model.elements[1] as ast.Component).ports;
         expect(isDataAssignable(dataTypeOf(pos.type), dataTypeOf(other.type))).toBe(true);
         expect(resolveDataType(pos.type).kind).toBe('data');
-    });
-
-    test('events of an interface type', async () => {
-        const parsed = await load('interface I { event a  event b : integer }\ncomponent C { provides async p : I }');
-        expect(portEvents((parsed.model.elements[1] as ast.Component).ports[0]).map(e => e.name)).toEqual(['a', 'b']);
     });
 });
 
@@ -576,25 +692,22 @@ describe('structure language: formatter and language server', () => {
     }
 
     test('formatter', async () => {
-        const text = 'import "a.devm" "b.h"\nstruct P{x:real;y:real}\ninterface I{event a event b:integer}\ncomponent C "doc"{behavior "c.devm" provides async p:I requires sync q : P\nrequires async r:event a,event b : integer}\n/** The system. */\nsystem S{provides async x:I\n@priority( 5 ) @period(10ms)\nthread T{c:C\n  /** doc */\nd : C}\n e:C\nthread U {e}\nconnect c.r->d.p delegate x->c.p}';
+        const text = 'import "a.devm" "b.h"\nstruct P{x:real;y:real}\ncomponent C "doc"{behavior "c.devm" in   async p:integer in sync q : P\nout async r  inout  sync s:P}\n/** The system. */\nsystem S{in async x:integer\n@priority( 5 ) @period(10ms)\nthread T{c:C\n  /** doc */\nd : C}\n e:C\nthread U {e}\nconnect c.r->d.p delegate x->c.p}';
         expect(await format(text)).toBe(`import "a.devm" "b.h"
 struct P {
     x : real;
     y : real
 }
-interface I {
-    event a
-    event b : integer
-}
 component C "doc" {
     behavior "c.devm"
-    provides async p : I
-    requires sync q : P
-    requires async r : event a, event b : integer
+    in async p : integer
+    in sync q : P
+    out async r
+    inout sync s : P
 }
 /** The system. */
 system S {
-    provides async x : I
+    in async x : integer
     @priority(5) @period(10 ms)
     thread T {
         c : C
@@ -620,8 +733,8 @@ system S {
     const LSP_MAIN = `import "parts.devm"
 struct Position { x : real }
 /** Uses the motor. */
-component Ctl { behavior "door.devm"  requires async m : Cmd  requires sync p : real }
-component Pos { provides sync where : Position }
+component Ctl { behavior "door.devm"  out async m : Speed  in sync p : real }
+component Pos { out sync where : Position }
 system S {
     @priority(3)
     thread T { c : Ctl }
@@ -629,8 +742,8 @@ system S {
     connect c.m -> m.ctrl
 }`;
     const LSP_FILES = {
-        'parts.devm': 'interface Cmd { event go }\n/** Drives. */\ncomponent Motor { provides async ctrl : Cmd }',
-        'door.devm': 'statemachine Door { interface: out event go operation p() : real [*] -> A state A }'
+        'parts.devm': 'struct Speed { value : integer }\n/** Drives. */\ncomponent Motor { in async ctrl : Speed }',
+        'door.devm': 'statemachine Door { interface: out event m : Speed var readonly p : real [*] -> A state A }'
     };
 
     function offsetOf(document: LangiumDocument, text: string, occurrence = 0): { line: number, character: number } {
@@ -652,27 +765,32 @@ system S {
         const parsed = await load(LSP_MAIN, LSP_FILES);
         expect(errors(parsed)).toEqual([]);
         const document = parsed.document;
-        // type names: struct of the file, interface of an imported file
+        // type names: struct of the file, struct of an imported file
         const position = await definition(document, 'Position', 1);
         expect(position?.[0].targetUri).toBe(document.uri.toString());
         expect(position?.[0].targetSelectionRange.start.line).toBe(1);
-        const cmd = await definition(document, 'Cmd');
-        expect(cmd?.[0].targetUri).toMatch(/parts\.devm$/);
+        const speed = await definition(document, 'Speed');
+        expect(speed?.[0].targetUri).toMatch(/parts\.devm$/);
         // component type of an instance, port of a connection, behavior file, import path
         expect((await definition(document, 'Motor'))?.[0].targetUri).toMatch(/parts\.devm$/);
-        expect((await definition(document, 'ctrl'))?.[0].targetSelectionRange.start).toEqual({ line: 2, character: 33 });
+        expect((await definition(document, 'ctrl'))?.[0].targetSelectionRange.start).toEqual({ line: 2, character: 27 });
         expect((await definition(document, 'door.devm'))?.[0].targetUri).toMatch(/door\.devm$/);
         expect((await definition(document, 'parts.devm'))?.[0].targetUri).toMatch(/parts\.devm$/);
     });
 
-    test('go to implementation: the providers of a required port', async () => {
+    test('go to implementation: the sources of the data of an in port', async () => {
         const parsed = await load(LSP_MAIN, LSP_FILES);
         const document = parsed.document;
         const links = await services.Devm.lsp.ImplementationProvider!.getImplementation(document, {
+            textDocument: { uri: document.uri.toString() }, position: offsetOf(document, 'm.ctrl')
+        });
+        // the instance `c : Ctl` sends the data of `m.ctrl`
+        expect(links?.map(l => l.targetSelectionRange.start)).toEqual([{ line: 7, character: 15 }]);
+        // an out port of a component: the port itself
+        const own = await services.Devm.lsp.ImplementationProvider!.getImplementation(document, {
             textDocument: { uri: document.uri.toString() }, position: offsetOf(document, 'c.m')
         });
-        // the instance `m : Motor` provides `c.m`
-        expect(links?.map(l => l.targetSelectionRange.start)).toEqual([{ line: 8, character: 15 }]);
+        expect(own?.map(l => l.targetSelectionRange.start)).toEqual([{ line: 7, character: 15 }]);
     });
 
     test('hover and signatures', async () => {
@@ -680,7 +798,7 @@ system S {
         const root = parsed.model.elements[3] as ast.CompositeType;
         const ctl = parsed.model.elements[1] as ast.Component;
         expect(structureSignature(ctl)).toBe('component Ctl (behavior "door.devm")');
-        expect(structureSignature(ctl.ports[0])).toBe('requires async m : Cmd');
+        expect(structureSignature(ctl.ports[0])).toBe('out async m : Speed');
         expect(structureSignature(root.threads[0])).toBe('thread T (priority 3)');
         expect(structureSignature(root.threads[0].instances[0])).toBe('c : component Ctl (thread T)');
         expect(structureSignature(parsed.model.elements[0])).toBe('struct Position { x : real }');
@@ -689,13 +807,13 @@ system S {
     });
 
     test('completion of type names', async () => {
-        const parsed = await load('import "parts.devm"\nstruct Position { x : real }\ncomponent C { provides sync p : \n}', LSP_FILES);
+        const parsed = await load('import "parts.devm"\nstruct Position { x : real }\ncomponent C { out sync p : \n}', LSP_FILES);
         const document = parsed.document;
         const list = await services.Devm.lsp.CompletionProvider!.getCompletion(document, {
             textDocument: { uri: document.uri.toString() }, position: { line: 2, character: 32 }
         });
         const labels = list?.items.map(i => i.label) ?? [];
-        expect(labels).toEqual(expect.arrayContaining(['integer', 'real', 'boolean', 'string', 'Position', 'Cmd']));
+        expect(labels).toEqual(expect.arrayContaining(['integer', 'real', 'boolean', 'string', 'Position', 'Speed']));
         expect(labels).not.toContain('void');
     });
 

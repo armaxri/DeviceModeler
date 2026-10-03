@@ -9,15 +9,14 @@ import { isAssignable, resolveTypeName, sameType, typeName, type DevmType } from
  * fields.
  *
  * A type name denotes (in this order) a built-in type (`integer`, `real`, `boolean`, `string`), a
- * struct or interface of the model or of an imported structure file (`Position`, `types.Position` for
- * a file with `package types`) or a C++ type of an imported header (`motor::Mode`, `uint8_t`, mapped
- * like in state machines, see cpp-types.ts). Interfaces are not data types: they are the types of
- * async ports (event groups).
+ * struct of the model or of an imported structure file (`Position`, `types.Position` for a file with
+ * `package types`) or a C++ type of an imported header (`motor::Mode`, `uint8_t`, mapped like in state
+ * machines, see cpp-types.ts).
  *
  * The types share the type system of the state machines ({@link DevmType}); structs of structure files
  * are types of their own ({@link StructDataType}). Compatibility (see {@link isDataAssignable}):
  * identical types, `integer` -> `real`, and a struct of a structure file is the same type as a C++
- * struct with the same (unqualified) name, so a port typed `Position` matches an event of a state
+ * struct with the same (unqualified) name, so a port typed `Position` matches a variable of a state
  * machine typed `geo::Position` of an imported header.
  */
 
@@ -27,7 +26,7 @@ export interface StructDataType {
     readonly struct: ast.StructDeclaration;
 }
 
-/** The type of a data port, event payload or struct field. */
+/** The type of a port (data or event payload) or struct field. */
 export type DataType = DevmType | StructDataType;
 
 export function isStructDataType(type: unknown): type is StructDataType {
@@ -37,7 +36,6 @@ export function isStructDataType(type: unknown): type is StructDataType {
 /** The meaning of a type name. */
 export type DataTypeResolution =
     | { readonly kind: 'data', readonly type: DataType, readonly struct?: ast.StructDeclaration, readonly cpp?: CppDeclaration }
-    | { readonly kind: 'interface', readonly interface: ast.PortInterface }
     | { readonly kind: 'error', readonly message: string };
 
 const structTypes = new WeakMap<ast.StructDeclaration, StructDataType>();
@@ -67,9 +65,6 @@ export function resolveDataType(reference: ast.DataTypeReference | undefined): D
     if (ast.isStructDeclaration(element)) {
         return { kind: 'data', type: structType(element), struct: element };
     }
-    if (ast.isPortInterface(element)) {
-        return { kind: 'interface', interface: element };
-    }
     if (element) {
         return { kind: 'error', message: `'${name}' is a component type, not a data type.` };
     }
@@ -89,15 +84,10 @@ export function resolveDataType(reference: ast.DataTypeReference | undefined): D
     return { kind: 'error', message: `Unknown type '${name}'.${hint}` };
 }
 
-/** The data type denoted by a type reference (`error` for unknown names and interfaces). */
+/** The data type denoted by a type reference (`error` for unknown names). */
 export function dataTypeOf(reference: ast.DataTypeReference | undefined): DataType {
     const resolution = resolveDataType(reference);
     return resolution.kind === 'data' ? resolution.type : 'error';
-}
-
-/** The payload type of an event of a port or interface (`void` for an event without payload). */
-export function eventType(event: ast.PortEvent): DataType {
-    return event.type ? dataTypeOf(event.type) : 'void';
 }
 
 /** The name of a type for messages and hovers. */
@@ -146,39 +136,32 @@ export function isDataAssignable(target: DataType, source: DataType): boolean {
 // ---------------------------------------------------------------------------------------------
 // Ports
 
-/** The interface of an async port typed by an interface (`provides async cmd : DoorCmd`). */
-export function portInterface(port: ast.Port): ast.PortInterface | undefined {
-    if (!port.type) {
-        return undefined;
-    }
-    const resolution = resolveDataType(port.type);
-    return resolution.kind === 'interface' ? resolution.interface : undefined;
-}
+/** The direction of the data of a port: `in` (received), `out` (sent), `inout` (shared, sync only). */
+export type PortDirection = ast.Port['direction'];
 
-/** The events of an async port: the inline events or the events of its interface. */
-export function portEvents(port: ast.Port): readonly ast.PortEvent[] {
-    if (port.events.length > 0) {
-        return port.events;
-    }
-    return portInterface(port)?.events ?? [];
-}
-
-/** The data type of a sync port (`error` for async ports and unknown types). */
+/** The data type of a port: the data of a sync port, the payload of an async port (`void`: an event without payload). */
 export function portDataType(port: ast.Port): DataType {
-    return port.kind === 'sync' ? dataTypeOf(port.type) : 'error';
-}
-
-/** A short description of the type of a port: `Position`, `DoorCmd`, `event open, event start : integer`. */
-export function portTypeLabel(port: ast.Port): string {
-    if (port.events.length > 0) {
-        return port.events.map(e => `event ${e.name}${e.type ? ` : ${e.type.name}` : ''}`).join(', ');
+    if (!port.type) {
+        return port.kind === 'async' ? 'void' : 'error';
     }
-    return port.type?.name ?? '?';
+    return dataTypeOf(port.type);
 }
 
-/** The direction, kind and type of a port for messages: `requires async MotorCmd`, `provides sync integer`. */
+/** A short description of the type of a port: `Position`, `integer`, `` (an event without payload). */
+export function portTypeLabel(port: ast.Port): string {
+    return port.type?.name ?? (port.kind === 'async' ? '' : '?');
+}
+
+/** The direction, kind and type of a port for messages: `out async integer`, `in sync Position`, `in async` (no payload). */
 export function portSignature(port: ast.Port): string {
-    return `${port.direction} ${port.kind} ${portTypeLabel(port)}`;
+    const type = portTypeLabel(port);
+    return `${port.direction} ${port.kind}${type ? ` ${type}` : ''}`;
+}
+
+/** The declaration of a port as written: `out async up : integer`, `in async open`. */
+export function portDeclarationText(port: ast.Port): string {
+    const type = portTypeLabel(port);
+    return `${port.direction} ${port.kind} ${port.name}${type ? ` : ${type}` : ''}`;
 }
 
 /** A side of a connection or delegation for messages: the port and its text (`door.motor`, `remote`). */
@@ -188,61 +171,100 @@ export interface PortSide {
 }
 
 /**
- * The incompatibilities between the port at the source and the port at the target of a connection or
- * delegation (empty if they are compatible), each explaining concretely why. The request direction is
- * source -> target:
+ * The incompatibilities of the data of the port at the source and the port at the target of a
+ * connection or delegation (empty if they are compatible), each explaining concretely why. The data
+ * flows from the source to the target (for two inout ports in both directions):
  * - both ports have the same kind (sync / async),
- * - async: every event of the source must be accepted by the target, with an assignable payload
- *   (the target may accept more events),
- * - sync: the data of the target must be assignable to the data of the source (data flows from the
- *   provider back to the requester).
- * The ports are named by `sourceText` / `targetText` (default: their names).
+ * - sync: the data of the source must be assignable to the data of the target (`integer` -> `real`);
+ *   inout ports share the data: the same type,
+ * - async: both events carry no payload, or the payload of the source is assignable to the payload of
+ *   the target.
+ * The directions are checked by the validator (see {@link directionProblem}). The ports are named by
+ * `sourceText` / `targetText` (default: their names).
  */
 export function portIncompatibilities(source: ast.Port, target: ast.Port, sourceText = source.name, targetText = target.name): string[] {
     if (source.kind !== target.kind) {
-        const what = (kind: string) => kind === 'sync' ? 'a sync port (data)' : 'an async port (events)';
+        const what = (kind: string) => kind === 'sync' ? 'a sync port (data)' : 'an async port (an event)';
         return [`${sourceText} is ${what(source.kind)}, ${targetText} is ${what(target.kind)} – sync ports are connected with sync ports, async ports with async ports`];
     }
+    const sent = portDataType(source);
+    const expected = portDataType(target);
     if (source.kind === 'sync') {
-        const from = portDataType(target);
-        const to = portDataType(source);
-        return isDataAssignable(to, from) ? [] : [`the data ${dataTypeName(from)} of ${targetText} is not assignable to ${dataTypeName(to)} (expected by ${sourceText})`];
+        if (source.direction === 'inout' && target.direction === 'inout') {
+            return sameDataType(sent, expected) ? [] : [`${sourceText} and ${targetText} share data of different types (${dataTypeName(sent)} and ${dataTypeName(expected)})`];
+        }
+        return isDataAssignable(expected, sent) ? [] : [`the data ${dataTypeName(sent)} of ${sourceText} is not assignable to ${dataTypeName(expected)} (expected by ${targetText})`];
     }
-    const problems: string[] = [];
-    const accepted = new Map(portEvents(target).map(e => [e.name, e]));
-    for (const event of portEvents(source)) {
-        const other = accepted.get(event.name);
-        if (!other) {
-            problems.push(`event '${event.name}' is not accepted by ${targetText}`);
-            continue;
-        }
-        const sent = eventType(event);
-        const expected = eventType(other);
-        if (isDataAssignable(expected, sent)) {
-            continue;
-        }
-        if (sent === 'void') {
-            problems.push(`event '${event.name}' has no payload, but ${targetText} expects ${dataTypeName(expected)}`);
-        } else if (expected === 'void') {
-            problems.push(`event '${event.name}' carries ${dataTypeName(sent)}, but ${targetText} expects no payload`);
-        } else {
-            problems.push(`payload ${dataTypeName(sent)} of '${event.name}' is not assignable to ${dataTypeName(expected)} (expected by ${targetText})`);
-        }
+    if (isDataAssignable(expected, sent)) {
+        return [];
     }
-    return problems;
+    if (sent === 'void') {
+        return [`the event ${sourceText} has no payload, but ${targetText} expects ${dataTypeName(expected)}`];
+    }
+    if (expected === 'void') {
+        return [`the event ${sourceText} carries ${dataTypeName(sent)}, but ${targetText} expects no payload`];
+    }
+    return [`the payload ${dataTypeName(sent)} of ${sourceText} is not assignable to ${dataTypeName(expected)} (expected by ${targetText})`];
+}
+
+/**
+ * Why the directions of the ports of a connection (`connect`, both ports of parts) or of a delegation
+ * (`delegate`, `outer` tells which side is the boundary port) do not fit, `undefined` if they do. Data
+ * flows from the source to the target of the statement:
+ * - `connect`: from an out port to an in port; inout ports only with inout ports (in any order),
+ * - `delegate`: an in boundary port to an in port of a part (outer -> inner), an out port of a part to an
+ *   out boundary port (inner -> outer); inout ports only with inout ports (in any order).
+ * `swapped` is set if the statement is right when written the other way round.
+ */
+export function directionProblem(kind: 'connect' | 'delegate', source: PortSide, target: PortSide, outer?: 'source' | 'target'): { message: string, swapped?: boolean } | undefined {
+    const from = source.port.direction;
+    const to = target.port.direction;
+    if (from === 'inout' || to === 'inout') {
+        if (from === to) {
+            return undefined;
+        }
+        const [inout, other] = from === 'inout' ? [source, target] : [target, source];
+        return { message: `${inout.text} is an inout port (shared data) and can only be ${kind === 'connect' ? 'connected' : 'delegated'} to an inout port, but ${other.text} is an ${other.port.direction} port` };
+    }
+    if (kind === 'connect') {
+        if (from === 'out' && to === 'in') {
+            return undefined;
+        }
+        if (from === 'in' && to === 'out') {
+            return { message: `the data flows from the out port ${target.text} to the in port ${source.text}: write 'connect ${target.text} -> ${source.text}'`, swapped: true };
+        }
+        return { message: `a connection goes from an out port to an in port, but ${source.text} and ${target.text} are both ${from} ports` };
+    }
+    if (from !== to) {
+        return { message: `a delegation connects ports of the same direction, but ${source.text} is an ${from} port and ${target.text} is an ${to} port` };
+    }
+    const [outerSide, innerSide] = outer === 'target' ? [target, source] : [source, target];
+    if (from === 'in' && outer === 'target') {
+        return { message: `the data of an in port flows from the boundary to the part: write 'delegate ${outerSide.text} -> ${innerSide.text}'`, swapped: true };
+    }
+    if (from === 'out' && outer === 'source') {
+        return { message: `the data of an out port flows from the part to the boundary: write 'delegate ${innerSide.text} -> ${outerSide.text}'`, swapped: true };
+    }
+    return undefined;
 }
 
 /**
  * Why the ports of a connection (`connect`) or delegation (`delegate`) from `source` to `target` are
- * incompatible, as one message naming both ports with their signatures, undefined if they are compatible:
- * `door.motor (requires async MotorCmd) cannot be connected to drive.ctrl (provides async DriveCmd):
- * event 'halt' is not accepted by drive.ctrl.`
+ * incompatible (data: kinds, types and payloads; not the directions, see {@link directionProblem}), as
+ * one message naming both ports with their signatures, undefined if they are compatible:
+ * `door.up (out async integer) cannot be connected to drive.up (in async boolean): the payload integer
+ * of door.up is not assignable to boolean (expected by drive.up).`
  */
 export function incompatibilityMessage(kind: 'connect' | 'delegate', source: PortSide, target: PortSide): string | undefined {
     const problems = portIncompatibilities(source.port, target.port, source.text, target.text);
     if (problems.length === 0) {
         return undefined;
     }
+    return mismatchMessage(kind, source, target, problems);
+}
+
+/** `door.up (out async integer) cannot be connected to drive.up (in async boolean): problem; problem.` */
+export function mismatchMessage(kind: 'connect' | 'delegate', source: PortSide, target: PortSide, problems: readonly string[]): string {
     return `${source.text} (${portSignature(source.port)}) cannot be ${kind === 'connect' ? 'connected' : 'delegated'} to `
         + `${target.text} (${portSignature(target.port)}): ${problems.join('; ')}.`;
 }

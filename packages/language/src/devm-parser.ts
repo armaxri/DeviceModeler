@@ -15,7 +15,27 @@ export function isStructureText(text: string): boolean {
 export const MIXED_KINDS_MESSAGE = 'A .devm file contains either a state machine or structure elements';
 
 /** The keywords starting the structure elements of a `.devm` file (structure.langium). */
-const STRUCTURE_START_KEYWORDS = new Set(['package', 'import', 'struct', 'interface', 'component', 'subsystem', 'system', '@']);
+const STRUCTURE_START_KEYWORDS = new Set(['package', 'import', 'struct', 'component', 'subsystem', 'system', '@']);
+
+/** The message of a port written in the syntax of earlier versions (`provides async cmd : DoorCmd`). */
+export const LEGACY_PORT_MESSAGE = "Ports are written 'in|out|inout sync|async name : Type' (e.g. 'in async open', 'out sync speed : integer'); "
+    + "'provides' and 'requires' are no longer supported.";
+
+/** The message of an interface declaration in a structure file (earlier versions: groups of events). */
+export const LEGACY_INTERFACE_MESSAGE = "Structure files have no interface declarations: an async port carries one event "
+    + "('in async open', 'out async up : integer'). (In a state machine, interfaces are declared in its body.)";
+
+type TokenLike = { image: string };
+
+/** A hint for syntax of earlier versions of the structure language at the offending (or previous) token. */
+function legacyHint(tokens: ReadonlyArray<TokenLike | undefined>): string | undefined {
+    for (const token of tokens) {
+        if (token?.image === 'provides' || token?.image === 'requires') {
+            return LEGACY_PORT_MESSAGE;
+        }
+    }
+    return undefined;
+}
 
 /** The keywords accepted as names in a rule (the keyword alternatives of the name rule `StateMachineId` or `StructureId`). */
 function keywordsOf(grammar: Grammar, ruleName: string): Set<string> {
@@ -62,13 +82,25 @@ export class DevmParserErrorMessageProvider extends LangiumParserErrorMessagePro
         }
     }
 
+    override buildMismatchTokenMessage(options: Parameters<LangiumParserErrorMessageProvider['buildMismatchTokenMessage']>[0]): string {
+        return legacyHint([options.actual, options.previous]) ?? super.buildMismatchTokenMessage(options);
+    }
+
     override buildNoViableAltMessage(options: Parameters<LangiumParserErrorMessageProvider['buildNoViableAltMessage']>[0]): string {
+        const hint = legacyHint([options.actual[0], options.previous]) ?? (options.actual[0]?.image === 'interface' && options.ruleName.replace(/\u200B/g, '') === 'DevmFile' ? LEGACY_INTERFACE_MESSAGE : undefined);
+        if (hint) {
+            return hint;
+        }
         const seen = new Set<string>();
         const expectedPathsPerAlt = options.expectedPathsPerAlt.map(paths => this.collapse(paths, options.ruleName, seen)).filter(paths => paths.length > 0);
         return super.buildNoViableAltMessage({ ...options, expectedPathsPerAlt });
     }
 
     override buildEarlyExitMessage(options: Parameters<LangiumParserErrorMessageProvider['buildEarlyExitMessage']>[0]): string {
+        const hint = legacyHint([options.actual[0], options.previous]);
+        if (hint) {
+            return hint;
+        }
         return super.buildEarlyExitMessage({ ...options, expectedIterationPaths: this.collapse(options.expectedIterationPaths, options.ruleName, new Set()) });
     }
 
@@ -92,6 +124,13 @@ export class DevmParserErrorMessageProvider extends LangiumParserErrorMessagePro
         const token = options.firstRedundant;
         if (token.image === 'statemachine') {
             return `${MIXED_KINDS_MESSAGE}: a state machine cannot follow structure elements (write it into a file of its own).`;
+        }
+        if (token.image === 'interface') {
+            return LEGACY_INTERFACE_MESSAGE;
+        }
+        const hint = legacyHint([token]);
+        if (hint) {
+            return hint;
         }
         if (STRUCTURE_START_KEYWORDS.has(token.image)) {
             return `${MIXED_KINDS_MESSAGE}: \`${token.image}\` cannot follow the state machine (write structure elements into a file of their own).`;
