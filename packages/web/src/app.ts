@@ -366,12 +366,13 @@ export class HsmApp implements DiagramHost {
     }
 
     /**
-     * The controls that do not apply to structure files (`.dmf`: no layout settings, simulation and
-     * layout annotations yet) are disabled.
+     * The controls that do not apply to structure files (`.dmf`: the layout direction and the edge routing –
+     * structure diagrams are laid out from left to right with orthogonal connectors –, transition priorities
+     * and the simulation) are disabled. Auto-arrange and Automatic layout apply to both.
      */
     private updateFileControls(): void {
         const structure = languageOf(this.fileName) !== 'hsm';
-        for (const id of ['direction-select', 'routing-select', 'priorities-toggle', 'btn-simulate', 'btn-arrange']) {
+        for (const id of ['direction-select', 'routing-select', 'priorities-toggle', 'btn-simulate']) {
             const control = document.getElementById(id) as HTMLButtonElement | null;
             if (control) {
                 control.disabled = structure;

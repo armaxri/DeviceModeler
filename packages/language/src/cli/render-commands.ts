@@ -171,7 +171,7 @@ export async function runRenderCommand(patterns: string[], options: RenderComman
     // structure files: the internal block diagram of a subsystem or system (or the component types as
     // blocks, or the data types of a file without component types), with the structs and interfaces of the file
     for (const { file, model } of structures) {
-        const layout = await layoutStructure(model, { element: options.element });
+        const layout = await layoutStructure(model, { element: options.element, layout: settings.auto ? null : undefined });
         if (!layout) {
             logger.log(`${file}: no components, subsystems, systems or data types to render`);
             continue;

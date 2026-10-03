@@ -8,9 +8,11 @@ import { crossesThreads, portEndpoint, portRoute, routeEndpointsOf, type PortEnd
 import { portTypeLabel } from '../dmf-types.js';
 import type { Point, TextMeasure } from './diagram-model.js';
 import {
-    IBD_OVERVIEW_ID, IBD_TYPES_ID, type IbdEdge, type IbdGraph, type IbdLayoutResult, type IbdMember, type IbdNode, type IbdPort, type IbdPortSide
+    IBD_OVERVIEW_ID, IBD_TYPES_ID, IbdMetrics, ibdTextWidth, type IbdEdge, type IbdGraph, type IbdLayoutResult, type IbdMember, type IbdNode, type IbdPort, type IbdPortSide
 } from './ibd-model.js';
 import { approximateTextMeasure } from './layout.js';
+import { applyIbdManualLayout, type IbdManualLayout, type IbdManualLayoutResult } from './ibd-manual-layout.js';
+import { ibdLayoutFromModel } from './ibd-layout-annotations.js';
 
 /*
  * Layout of the internal block diagram of a structure (see ibd-model.ts) with ELK: layered from left
@@ -22,39 +24,6 @@ import { approximateTextMeasure } from './layout.js';
  * ports it is connected to (a connection running backwards, e.g. a reply, then needs no detour), orders
  * the ports of each side by the position of their partners and routes the connectors.
  */
-
-/** Metrics shared by the layout and the rendering of the diagram. */
-export const IbdMetrics = {
-    /** Side length of the port squares (centered on the border of their node). */
-    portSize: 12,
-    /** Vertical distance of the ports (and their labels) of a side of an instance. */
-    portRow: 22,
-    /** Font sizes (px): name of instances (bold), stereotypes, port labels, thread details, frame tab. */
-    nameFont: 13,
-    stereotypeFont: 11,
-    portFont: 11,
-    detailsFont: 11,
-    tabFont: 13,
-    /** Header of instances: stereotype line and name line. */
-    instanceHeader: 40,
-    instanceMinWidth: 120,
-    /** Horizontal padding of the header text and between the port labels of both sides. */
-    instancePadding: 12,
-    /** Space reserved in the header for the behavior / composite icon. */
-    iconWidth: 20,
-    /** Header of threads: `«thread» Name` and the details line. */
-    threadHeaderLine: 16,
-    threadPadding: 14,
-    /** Height of the tab of the frame (`ibd [system] Name`). */
-    tabHeight: 24,
-    framePadding: 24,
-    /** Padding around the frame (the labels of the boundary ports are outside of it). */
-    graphPadding: 16,
-    /** Type boxes (structs, interfaces): height of a field / event row, font size, distance of the boxes. */
-    memberRow: 17,
-    memberFont: 11,
-    typeSpacing: 24
-};
 
 const M = IbdMetrics;
 
@@ -69,6 +38,18 @@ export interface StructureLayoutOptions {
      * file without component types. Default: see {@link defaultIbdElement}.
      */
     element?: string;
+    /**
+     * The manual layout applied to the automatic layout: undefined (default) the one described by the
+     * layout annotations of the elements of the diagram ({@link ibdLayoutFromModel}), `null` none (the
+     * automatic layout).
+     */
+    layout?: IbdManualLayout | null;
+    /**
+     * The automatic layout of a previous call for the same text apart from layout annotations (e.g. after
+     * a drag in the diagram): it is reused instead of running ELK again if the diagram has the same
+     * elements.
+     */
+    reuse?: IbdGraph;
 }
 
 /** An element of a structure file that can be shown as a diagram. */
@@ -141,12 +122,40 @@ async function createDefaultElk(): Promise<ElkInstance> {
  * interfaces declared in the file are added as unconnected type boxes below the diagram (see
  * {@link addTypeBoxes}). `undefined` if the file declares neither component types nor data types.
  */
-export async function layoutStructure(model: ast.DmfModel, options: StructureLayoutOptions = {}): Promise<IbdLayoutResult | undefined> {
+export async function layoutStructure(model: ast.DmfModel, options: StructureLayoutOptions = {}): Promise<IbdManualLayoutResult | undefined> {
     const id = options.element && ibdChoices(model).some(c => c.id === options.element) ? options.element : defaultIbdElement(model);
     if (!id) {
         return undefined;
     }
     const measure = options.measure ?? approximateTextMeasure;
+    let auto: IbdLayoutResult | undefined;
+    if (options.reuse) {
+        // the elements and ids of the diagram without running ELK, then the positions of the previous layout
+        const elements = await automaticLayout(model, id, measure, undefined);
+        if (sameDiagramIds(elements.graph, options.reuse)) {
+            auto = { ...elements, graph: options.reuse };
+        }
+    }
+    auto ??= await automaticLayout(model, id, measure, options.elk as ElkInstance | undefined ?? (defaultElk ??= await createDefaultElk()));
+    const manual = options.layout === undefined ? ibdLayoutFromModel(model, auto) : options.layout ?? undefined;
+    if (!manual) {
+        return { ...auto, auto: auto.graph };
+    }
+    return { ...applyIbdManualLayout(auto, manual, { measure }), auto: auto.graph };
+}
+
+/**
+ * The elements of the diagram of a structure file (see {@link StructureLayoutOptions.element}) with their
+ * ids and hierarchy, without laying them out (cheap; e.g. to compute layout annotations of a changed
+ * model). `undefined` if there is nothing to show.
+ */
+export async function structureDiagramElements(model: ast.DmfModel, options: Pick<StructureLayoutOptions, 'element' | 'measure'> = {}): Promise<IbdLayoutResult | undefined> {
+    const id = options.element && ibdChoices(model).some(c => c.id === options.element) ? options.element : defaultIbdElement(model);
+    return id ? automaticLayout(model, id, options.measure ?? approximateTextMeasure, undefined) : undefined;
+}
+
+/** The automatic layout of the diagram `id`; without `elk` only the elements and ids (not laid out). */
+async function automaticLayout(model: ast.DmfModel, id: string, measure: TextMeasure, elk: ElkInstance | undefined): Promise<IbdLayoutResult> {
     let result: IbdLayoutResult;
     if (id === IBD_TYPES_ID) {
         result = {
@@ -160,7 +169,6 @@ export async function layoutStructure(model: ast.DmfModel, options: StructureLay
         if (ast.isComponent(type)) {
             result = new BlockBuilder(measure).single(type);
         } else {
-            const elk = options.elk as ElkInstance | undefined ?? (defaultElk ??= await createDefaultElk());
             result = await new IbdBuilder(type, measure).build(elk);
         }
     }
@@ -168,14 +176,19 @@ export async function layoutStructure(model: ast.DmfModel, options: StructureLay
     return result;
 }
 
+/** Whether two diagrams have the same nodes, ports and edges (by id; the layout may reorder the ports of a node). */
+function sameDiagramIds(a: IbdGraph, b: IbdGraph): boolean {
+    const key = (graph: IbdGraph) => [
+        ...ibdNodes(graph).map(({ node, parent }) => `${parent?.id ?? ''}/${node.id}:${node.ports.map(p => p.id).sort().join(',')}`),
+        ...graph.edges.map(e => `${e.id}:${e.source}->${e.target}`)
+    ].join('\n');
+    return a.id === b.id && key(a) === key(b);
+}
+
 // ---------------------------------------------------------------------------------------------
 // Shared helpers
 
-/** Width of a text in the given font size (the measure works with the sizes of DiagramMetrics). */
-function textWidth(measure: TextMeasure, text: string, fontSize: number, bold = false): number {
-    const width = measure(text, 'label').width * fontSize / 12;
-    return Math.ceil(bold ? width * 1.08 : width);
-}
+const textWidth = ibdTextWidth;
 
 function behaviorOf(type: ast.ComponentType | undefined): IbdNode['behavior'] {
     if (!ast.isComponent(type) || !type.behavior) {
@@ -447,9 +460,17 @@ class IbdBuilder {
         return id;
     }
 
-    async build(elk: ElkInstance): Promise<IbdLayoutResult> {
+    /** The diagram laid out with ELK; without `elk` only its elements (not laid out). */
+    async build(elk: ElkInstance | undefined): Promise<IbdLayoutResult> {
         this.createNodes();
         this.createEdges();
+        if (!elk) {
+            const graph: IbdGraph = {
+                id: this.frame.id, name: this.structure.name, kind: this.structure.kind, width: 0, height: 0,
+                children: [this.frame], edges: this.edges.map(e => e.edge)
+            };
+            return { graph, elements: this.elements, ids: this.ids, instances: this.instances };
+        }
         // first run: arrangement of the nodes; then the sides and the order of the ports are adjusted
         // to the arrangement (twice: the order depends on the sides of the partners)
         const first = await elk.layout(this.elkGraph());

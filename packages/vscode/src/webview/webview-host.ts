@@ -7,7 +7,7 @@ import type { FromWebview, LayoutCommand, NavigationState, OffsetEdit, ToWebview
 import { textHash } from '../common/text-hash.js';
 
 /** Controls of the toolbar that do not apply to structure files (`.dmf`). */
-const STATE_MACHINE_CONTROLS = ['direction-select', 'routing-select', 'priorities-toggle', 'btn-simulate', 'btn-arrange', 'btn-reset-layout', 'btn-cpp'];
+const STATE_MACHINE_CONTROLS = ['direction-select', 'routing-select', 'priorities-toggle', 'btn-simulate', 'btn-cpp'];
 
 export interface VsCodeApi {
     postMessage(message: unknown): void;
@@ -135,8 +135,9 @@ export class WebviewHost implements DiagramHost {
     }
 
     /**
-     * Structure files have no layout settings, simulation, layout annotations and code generation (yet); called
-     * when the document of the diagram is set (the layout buttons are also updated by the controller).
+     * Structure files have no layout direction / edge routing settings, simulation and code generation (Auto-arrange
+     * and Automatic layout apply to both); called when the document of the diagram is set (the layout buttons are
+     * also updated by the controller).
      */
     private updateFileControls(): void {
         const structure = isStructureFile(this.uri);

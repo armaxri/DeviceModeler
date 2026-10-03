@@ -42,12 +42,12 @@ export function createDiagramContainer(baseDiv: string, callbacks: DiagramCallba
 
         // internal block diagrams of structures (.dmf)
         configureModelElement(context, IbdTypes.graph, SGraphImpl, SGraphView);
-        configureModelElement(context, IbdTypes.frame, IbdNodeElement, IbdFrameView);
-        configureModelElement(context, IbdTypes.thread, IbdNodeElement, IbdThreadView);
-        // instances are dragged into threads (structure edits, see StructureDiagram.dragEnd)
+        // all nodes can be moved (manual layout); instances are also dragged into threads (structure edits, see StructureDiagram.dragEnd)
+        configureModelElement(context, IbdTypes.frame, IbdNodeElement, IbdFrameView, { enable: [moveFeature] });
+        configureModelElement(context, IbdTypes.thread, IbdNodeElement, IbdThreadView, { enable: [moveFeature] });
         configureModelElement(context, IbdTypes.instance, IbdNodeElement, IbdInstanceView, { enable: [moveFeature] });
-        configureModelElement(context, IbdTypes.block, IbdNodeElement, IbdInstanceView);
-        configureModelElement(context, IbdTypes.type, IbdNodeElement, IbdTypeView);
+        configureModelElement(context, IbdTypes.block, IbdNodeElement, IbdInstanceView, { enable: [moveFeature] });
+        configureModelElement(context, IbdTypes.type, IbdNodeElement, IbdTypeView, { enable: [moveFeature] });
         configureModelElement(context, IbdTypes.port, IbdPortElement, IbdPortView);
         configureModelElement(context, IbdTypes.canvas, SNodeImpl, IbdCanvasView, { disable: [selectFeature, moveFeature] });
         configureModelElement(context, IbdTypes.connector, IbdConnectorElement, IbdConnectorView);

@@ -28,6 +28,15 @@ function issueMarker(issue: Issue | undefined, x: number, y: number): VNode | un
     </g>;
 }
 
+/** Manual layout: the resize handle of a selected node (bottom right corner). */
+function resizeHandle(node: Readonly<IbdNodeElement>): VNode | undefined {
+    if (!node.resizable || !node.selected) {
+        return undefined;
+    }
+    const { width, height } = node.size;
+    return <rect class-resize-handle={true} x={width - 9} y={height - 9} width={9} height={9}><title>Drag to resize</title></rect>;
+}
+
 function nodeClasses(node: Readonly<IbdNodeElement>): Record<string, boolean> {
     return {
         'class-ibd-node': true,
@@ -52,7 +61,7 @@ export class IbdFrameView extends ShapeView {
         const { width, height } = node.size;
         return <g {...nodeClasses(node)}>
             {node.description ? <title>{node.description}</title> : undefined}
-            <rect class-ibd-frame-shape={true} x={0} y={0} width={width} height={height} />
+            <rect class-ibd-frame-shape={true} class-ibd-node-shape={true} x={0} y={0} width={width} height={height} />
             <path class-ibd-frame-tab={true} d={frameTabPath(node.tabWidth ?? 120, node.headerHeight)} />
             <text class-ibd-frame-title={true} x={8} y={baseline(0, node.headerHeight, M.tabFont)}>
                 <tspan class-ibd-frame-kind={true}>ibd</tspan>
@@ -61,6 +70,7 @@ export class IbdFrameView extends ShapeView {
             </text>
             {context.renderChildren(node)}
             {issueMarker(node.issue, (node.tabWidth ?? 120) + 10, node.headerHeight / 2)}
+            {resizeHandle(node)}
         </g>;
     }
 }
@@ -75,7 +85,7 @@ export class IbdThreadView extends ShapeView {
         const { width, height } = node.size;
         return <g {...nodeClasses(node)}>
             {node.description ? <title>{node.description}</title> : undefined}
-            <rect class-ibd-thread-shape={true} x={0} y={0} rx={6} ry={6} width={width} height={height} />
+            <rect class-ibd-thread-shape={true} class-ibd-node-shape={true} x={0} y={0} rx={6} ry={6} width={width} height={height} />
             <text class-ibd-thread-title={true} x={10} y={baseline(4, M.threadHeaderLine, M.nameFont)}>
                 <tspan class-ibd-stereotype={true}>«thread»</tspan>
                 {' '}
@@ -86,6 +96,7 @@ export class IbdThreadView extends ShapeView {
                 : undefined}
             {context.renderChildren(node)}
             {issueMarker(node.issue, width - 4, 4)}
+            {resizeHandle(node)}
         </g>;
     }
 }
@@ -103,7 +114,7 @@ export class IbdInstanceView extends ShapeView {
         const behaviorIcon = node.behavior && !node.composite ? behaviorIconPath(width - M.iconWidth - 2, node.headerHeight / 2) : undefined;
         return <g {...nodeClasses(node)}>
             {node.description ? <title>{node.description}</title> : undefined}
-            <rect class-ibd-instance-shape={true} x={0} y={0} rx={2} ry={2} width={width} height={height} />
+            <rect class-ibd-instance-shape={true} class-ibd-node-shape={true} x={0} y={0} rx={2} ry={2} width={width} height={height} />
             <text class-ibd-stereotype={true} class-ibd-block-stereotype={true} x={center} y={baseline(4, 15, M.stereotypeFont)}>{`«${node.stereotype ?? 'component'}»`}</text>
             {node.typeName !== undefined
                 ? <text class-ibd-instance-name={true} x={center} y={baseline(18, 18, M.nameFont)}>
@@ -128,6 +139,7 @@ export class IbdInstanceView extends ShapeView {
                 : undefined}
             {context.renderChildren(node)}
             {issueMarker(node.issue, width - 4, 4)}
+            {resizeHandle(node)}
         </g>;
     }
 }
@@ -148,7 +160,7 @@ export class IbdTypeView extends ShapeView {
         const row = (i: number) => baseline(node.headerHeight + 5 + i * M.memberRow, M.memberRow, M.memberFont);
         return <g {...nodeClasses(node)}>
             <title>{node.description ? `${node.description}\n` : ''}{`${node.stereotype ?? 'struct'} ${node.name} – click to show the declaration`}</title>
-            <rect class-ibd-type-shape={true} x={0} y={0} width={width} height={height} />
+            <rect class-ibd-type-shape={true} class-ibd-node-shape={true} x={0} y={0} width={width} height={height} />
             <rect class-ibd-type-header={true} x={0.6} y={0.6} width={width - 1.2} height={node.headerHeight - 0.6} />
             <text class-ibd-stereotype={true} class-ibd-type-stereotype={true} x={center} y={baseline(4, 15, M.stereotypeFont)}>{`«${node.stereotype ?? 'struct'}»`}</text>
             <text class-ibd-type-name={true} x={center} y={baseline(18, 18, M.nameFont)}>{node.name}</text>
@@ -164,6 +176,7 @@ export class IbdTypeView extends ShapeView {
                 ? <text class-ibd-type-member={true} class-ibd-type-empty={true} x={M.instancePadding} y={row(0)}>{node.stereotype === 'interface' ? 'no events' : 'no fields'}</text>
                 : undefined}
             {issueMarker(node.issue, width - 4, 4)}
+            {resizeHandle(node)}
         </g>;
     }
 }
@@ -183,7 +196,7 @@ export class IbdPortView extends ShapeView {
             class-selected={port.selected} class-mouseover={port.hoverFeedback} class-on-route={port.onRoute}
             class-has-error={port.issue?.severity === 'error'} class-has-warning={port.issue?.severity === 'warning'}
             class-connect-ok={port.connect === 'ok'} class-connect-problem={port.connect === 'problem'} class-connect-invalid={port.connect === 'invalid'}
-            class-connect-source={port.connectSource}>
+            class-connect-source={port.connectSource} class-movable={port.movable}>
             <title>{portTooltip({ title: port.title, direction: port.direction, kind: port.kind })}</title>
             <rect class-ibd-port-shape={true} x={0} y={0} width={size} height={size} />
             {chevron ? <path class-ibd-port-chevron={true} d={chevron} /> : undefined}
@@ -215,6 +228,13 @@ export class IbdConnectorView implements IView {
             <title>{edge.title + (edge.crossThread ? '\n(crosses threads)' : '')}</title>
             <path class-ibd-connector-hit={true} d={path} />
             <path class-ibd-connector-line={true} d={path} />
+            {edge.editable && edge.selected
+                ? <g class-bend-handles={true}>
+                    {...edge.waypoints.map(p => <circle class-bend-handle={true} cx={p.x} cy={p.y} r={4.5}>
+                        <title>Drag to move the waypoint, double-click to remove it</title>
+                    </circle>)}
+                </g>
+                : undefined}
             {issueMarker(edge.issue, (middle.x + next.x) / 2, (middle.y + next.y) / 2)}
         </g>;
     }

@@ -1,5 +1,4 @@
-import type { IbdEdge, IbdGraph, IbdNode, IbdPort } from '../diagram/ibd-model.js';
-import { IbdMetrics } from '../diagram/ibd-layout.js';
+import { IbdMetrics, type IbdEdge, type IbdGraph, type IbdNode, type IbdPort } from '../diagram/ibd-model.js';
 import { helveticaTextWidth } from '../diagram/text-metrics.js';
 import { DIAGRAM_CSS } from './diagram-styles.js';
 import { behaviorIconPath, compositeIconPath, frameTabPath, ibdRoutePath, portChevron, portClasses, portTooltip } from './ibd-shapes.js';

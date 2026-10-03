@@ -761,6 +761,24 @@ export function dmfRenameEdits(services: LangiumCoreServices, node: AstNode & { 
         const text = document.textDocument.getText().substring(reference.segment.offset, reference.segment.end);
         add(uri, { offset: reference.segment.offset, length: reference.segment.length, text: replaceLastSegment(text, name) });
     }
+    if (ast.isPort(node)) {
+        // the layout annotations placing the port (`@port(cmd, left, 40)`) on the instances of its type and on its subsystem / system
+        const owner = node.$container;
+        for (const document of documents.all) {
+            for (const element of AstUtils.streamAst(document.parseResult.value)) {
+                const placed = ast.isStructure(element) ? element === owner : ast.isComponentInstance(element) && element.type?.ref === owner;
+                if (!placed) {
+                    continue;
+                }
+                for (const annotation of (element as ast.Structure | ast.ComponentInstance).annotations) {
+                    const argument = annotation.name === 'port' ? annotation.arguments[0] : undefined;
+                    if (argument?.name === node.name && argument.$cstNode) {
+                        add(document.uri.toString(), { offset: argument.$cstNode.offset, length: argument.$cstNode.length, text: name });
+                    }
+                }
+            }
+        }
+    }
     return result;
 }
 

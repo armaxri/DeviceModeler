@@ -252,8 +252,8 @@ describe('internal block diagram: other elements', () => {
         expect(node(layout, 'type:MotorCmd').members?.map(memberText)).toEqual(['event up : integer', 'event down : integer', 'event halt']);
         expect(layout.elements.get('type:Diagnostics')?.$type).toBe('StructDeclaration');
         expect(ibdRouteElements(layout, 'type:Diagnostics')).toBeUndefined();
-        // a mixed file: the subsystem, the type boxes below its frame, nothing connected to them
-        const light = (await layoutStructure(await loadExample('light.dmf')))!;
+        // a mixed file: the subsystem, the type boxes below its frame (automatic layout: the example is arranged by hand), nothing connected to them
+        const light = (await layoutStructure(await loadExample('light.dmf'), { layout: null }))!;
         const [frame, ...boxes] = light.graph.children;
         expect(frame.details).toBe('ibd [subsystem] CourtesyLight');
         expect(boxes.map(b => `${b.kind} ${b.name}`)).toEqual(['type LightLevel', 'type LightCmd']);

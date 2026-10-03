@@ -52,5 +52,7 @@ export * from './dmf-formatter.js';
 export * from './lsp/dmf-lsp.js';
 export * from './diagram/ibd-model.js';
 export * from './diagram/ibd-layout.js';
+export * from './diagram/ibd-manual-layout.js';
+export * from './diagram/ibd-layout-annotations.js';
 export * from './render/ibd-shapes.js';
 export * from './render/ibd-svg.js';

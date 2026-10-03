@@ -7,9 +7,13 @@ import {
     isStructDeclaration, isStructure, isThread, layoutStructure, memberText, normalizeUri, planConnection, portEndpoint, portTypeLabel, resolveDataType, routeContinuations, routeIdsAt,
     threadInstances, threadOf, threadSettings, visibleElements,
     type Component, type ComponentInstance, type ComponentType, type DmfPortEnd, type DmfWorkspace, type EditResult, type IbdLayoutResult, type IbdNode,
-    type ParsedDmfModel, type Port, type PortEndpoint, type Structure, type StructureContext, type StructureLocation, type TextEdit, type Thread
+    type ParsedDmfModel, type Port, type PortEndpoint, type Structure, type StructureContext, type StructureLocation, type TextEdit, type Thread,
+    captureIbdLayout, cloneIbdLayout, edgeFrameOrigin, ibdContentOrigin, ibdLayoutTextEdits, structureDiagramElements, withoutIbdLayoutAnnotations,
+    type IbdGraph, type IbdManualLayout, type IbdManualLayoutResult, type NodeSide, type Point
 } from 'hsm-language';
 import type { DiagramHost, StatusSeverity, TextRange } from './diagram-controller.js';
+import type { DragInfo } from './diagram/listeners.js';
+import { LayoutEditor, replacementEdit } from './layout-editing.js';
 import type { HsmModelService } from './model-service.js';
 import { IbdTypes, toIbdSchema, type ConnectStatus } from './diagram/ibd-model.js';
 import type { Issue } from './diagram/model.js';
@@ -63,12 +67,19 @@ export interface StructureDiagramContext {
     setStatus(message: string, severity?: StatusSeverity): void;
     /** Opens a location (another file: through the host, with history). */
     navigate(location: DiagramLocation): void;
+    /** The diagram was updated (manual or automatic layout: the layout controls). */
+    layoutChanged(): void;
+    /** Whether the layout can be edited. */
+    canEditLayout(): boolean;
 }
 
 /** The parsed structure file and its diagram. */
 export interface StructureState {
     parsed: ParsedDmfModel;
-    layout: IbdLayoutResult;
+    /** The diagram (with the manual layout of the layout annotations applied, see `layout.effective`). */
+    layout: IbdManualLayoutResult;
+    /** The automatic layout (reused for changes of the layout annotations only). */
+    auto: IbdGraph;
     issues: Map<string, Issue>;
     /** The shown element (name of a structure / component type or the overview). */
     element: string;
@@ -131,6 +142,29 @@ export class StructureDiagram {
     private preview?: { svg: SVGSVGElement, line: SVGLineElement, move: (event: MouseEvent) => void };
     /** An edit is being applied (further edits of the same model are ignored). */
     private editing = false;
+    /** The next update follows a change of the layout annotations only (the automatic layout is reused). */
+    private layoutOnlyChange = false;
+
+    /** The manual layout editing (shared with the state machine diagram, see layout-editing.ts). */
+    readonly layoutEditor = new LayoutEditor<IbdManualLayout>({
+        effective: () => this.state?.layout.effective,
+        capture: () => captureIbdLayout(this.state!.auto),
+        write: layout => this.writeLayout(layout),
+        edge: edgeId => {
+            const graph = this.state?.layout.graph;
+            const edge = graph?.edges.find(e => e.id === edgeId);
+            const owners = graph && edge ? [edge.source, edge.target].map(port => ibdNodes(graph).find(n => n.node.ports.some(p => p.id === port))?.node.id) : [];
+            if (!graph || !edge || !owners[0] || !owners[1]) {
+                return undefined;
+            }
+            const origin = edgeFrameOrigin(graph.children, node => node.children, owners[0], owners[1]);
+            return {
+                route: edge.points,
+                waypoints: (edge.waypoints ?? []).map(p => ({ ...p })),
+                toFrame: point => ({ x: point.x - origin.x, y: point.y - origin.y })
+            };
+        }
+    });
 
     constructor(private readonly context: StructureDiagramContext) { }
 
@@ -203,9 +237,15 @@ export class StructureDiagram {
         if (!force && this.state?.parsed === parsed && this.state.element === (element ?? this.state.element)) {
             return;
         }
-        let layout: IbdLayoutResult | undefined;
+        let layout: IbdManualLayoutResult | undefined;
+        // only the layout annotations changed (a drag in the diagram): the automatic layout is reused
+        const previous = this.state;
+        const reuse = this.layoutOnlyChange && !force && previous && previous.element === (element ?? previous.element)
+            && withoutIbdLayoutAnnotations(previous.parsed.model, previous.parsed.text) === withoutIbdLayoutAnnotations(parsed.model, parsed.text)
+            ? previous.auto : undefined;
+        this.layoutOnlyChange = false;
         try {
-            layout = await layoutStructure(parsed.model, { element, measure: canvasTextMeasure, elk: this.context.elk });
+            layout = await layoutStructure(parsed.model, { element, measure: canvasTextMeasure, elk: this.context.elk, reuse });
         } catch (error) {
             console.error(error);
             banner.hidden = false;
@@ -226,7 +266,8 @@ export class StructureDiagram {
             renderBreadcrumb([]);
             return;
         }
-        this.state = { parsed, layout, issues: this.computeIssues(parsed, layout), element: elementOf(layout) };
+        this.state = { parsed, layout, auto: layout.auto ?? layout.graph, issues: this.computeIssues(parsed, layout), element: elementOf(layout) };
+        this.context.layoutChanged();
         for (const id of [...this.context.selection]) {
             if (!layout.elements.has(id)) {
                 this.context.selection.delete(id);
@@ -277,8 +318,10 @@ export class StructureDiagram {
             issues: this.state.issues,
             route: this.pendingPort ? undefined : this.route,
             connect: this.connectStatus ? new Map([...this.connectStatus].map(([id, s]) => [id, s.status])) : undefined,
-            pendingPort: this.pendingPort
+            pendingPort: this.pendingPort,
+            layoutEditable: this.context.canEditLayout()
         }));
+        byId('diagram-area').classList.toggle('manual-layout', this.isManualLayout());
         this.renderProperties();
     }
 
@@ -598,7 +641,7 @@ export class StructureDiagram {
      * Computes text edits on the current model, applies them to the text (undoable) and updates the
      * diagram. `rename`: start renaming the element at the `selectOffset` of the result (a new element).
      */
-    async applyEdit(producer: (editor: DmfEditor, state: StructureState) => EditResult | undefined, rename = false): Promise<boolean> {
+    async applyEdit(producer: (editor: DmfEditor, state: StructureState) => EditResult | undefined, rename = false, layout?: IbdManualLayout): Promise<boolean> {
         if (this.editing) {
             // (the producer refers to the model before the running edit)
             return false;
@@ -613,13 +656,14 @@ export class StructureDiagram {
         }
         this.editing = true;
         try {
-            return await this.applyEditOn(state, producer, rename);
+            return await this.applyEditOn(state, producer, rename, layout);
         } finally {
             this.editing = false;
         }
     }
 
-    private async applyEditOn(state: StructureState, producer: (editor: DmfEditor, state: StructureState) => EditResult | undefined, rename: boolean): Promise<boolean> {
+    private async applyEditOn(state: StructureState, producer: (editor: DmfEditor, state: StructureState) => EditResult | undefined, rename: boolean,
+        layout?: IbdManualLayout): Promise<boolean> {
         let result: EditResult | undefined;
         try {
             result = producer(new DmfEditor(state.parsed.text, state.parsed.model), state);
@@ -639,13 +683,30 @@ export class StructureDiagram {
         if (focused instanceof HTMLElement && byId('properties').contains(focused)) {
             focused.blur();
         }
-        if (!await this.context.host.applyTextEdits(result.edits)) {
+        const edits = layout ? await this.withLayout(state, result.edits, layout) : result.edits;
+        if (!await this.context.host.applyTextEdits(edits)) {
             return false;
         }
         this.pendingSelectOffset = result.selectOffset;
         this.pendingRename = rename && result.selectOffset !== undefined;
         await this.update();
         return true;
+    }
+
+    /**
+     * The structural `edits` followed by the layout annotation edits making the layout of the changed model
+     * equal to `layout` (computed on the changed text, so that their ranges do not overlap), as one edit.
+     */
+    private async withLayout(state: StructureState, edits: TextEdit[], layout: IbdManualLayout): Promise<TextEdit[]> {
+        const text = state.parsed.text;
+        const changed = applyEdits(text, edits);
+        const parsed = await this.context.language.parseStructure(changed);
+        const elements = parsed.hasSyntaxErrors ? undefined : await structureDiagramElements(parsed.model, { element: state.element, measure: canvasTextMeasure });
+        if (!elements) {
+            return edits;
+        }
+        const layoutEdits = ibdLayoutTextEdits(parsed.model, elements, changed, layout);
+        return layoutEdits.length === 0 ? edits : [replacementEdit(text, applyEdits(changed, layoutEdits))];
     }
 
     /** The message of the edit operation or the syntax error of the resulting text, undefined if the edit is fine. */
@@ -1025,22 +1086,53 @@ export class StructureDiagram {
     // ---- drag & drop, double-click, rename, delete
 
     /**
-     * An instance was dragged onto a thread: an instance of a component is moved into that thread. Dropped on
-     * the frame, an instance of a component is refused (it runs in a thread), an instance of a subsystem
-     * belongs there (dropped into a thread it is refused).
+     * Nodes were dragged: they keep their new positions (written as layout annotations; the first move in
+     * an automatically laid out diagram writes the whole arrangement). An instance dropped onto another
+     * thread is moved into that thread (dropped on the frame: out of its thread); an instance of a
+     * component is refused on the frame (it runs in a thread), an instance of a subsystem in a thread. In a
+     * manual layout the moved instance keeps the drop position (relative to its new thread).
      */
-    dragEnd(draggedId: string, dropTargetId: string | undefined): void {
+    dragEnd(draggedId: string, dropTargetId: string | undefined, info: DragInfo): void {
         const state = this.state;
-        const instance = state?.layout.elements.get(draggedId);
-        if (!state || !isComponentInstance(instance) || state.layout.instances.has(draggedId) || !this.isOwn(instance)) {
+        if (!state || !this.context.canEditLayout()) {
             this.render();
             return;
         }
-        const target = dropTargetId === `${state.layout.graph.id}#ibd` ? this.shownStructure() : dropTargetId ? state.layout.elements.get(dropTargetId) : undefined;
-        if (!isThread(target) && !isStructure(target)) {
+        const instance = state.layout.elements.get(draggedId);
+        const target = dropTargetId === `${state.layout.graph.id}#ibd` ? undefined : dropTargetId ? state.layout.elements.get(dropTargetId) : undefined;
+        const parentId = this.parentOf(draggedId);
+        const parent = parentId ? state.layout.elements.get(parentId) : undefined;
+        if (isComponentInstance(instance) && !state.layout.instances.has(draggedId) && this.isOwn(instance)
+            && (isThread(target) || isStructure(target)) && target !== parent) {
+            this.moveIntoThread(state, draggedId, instance, target, dropTargetId!, info);
+            return;
+        }
+        this.moveNodes(info);
+    }
+
+    /** The id of the parent node of a node (undefined: on the canvas). */
+    private parentOf(id: string): string | undefined {
+        return this.state ? ibdNodes(this.state.layout.graph).find(n => n.node.id === id)?.parent?.id : undefined;
+    }
+
+    /** Keeps a position inside the content area of the parent node. */
+    private clampToParent(parentId: string | undefined, position: Point): Point {
+        const origin = ibdContentOrigin(parentId ? this.ibdNode(parentId) : undefined);
+        return { x: Math.max(origin.x, position.x), y: Math.max(origin.y, position.y) };
+    }
+
+    private moveNodes(info: DragInfo): void {
+        const state = this.state;
+        const moves = state ? info.moved.filter(m => this.ibdNode(m.id) && this.isOwn(state.layout.elements.get(m.id)!)) : [];
+        if (moves.length === 0) {
             this.render();
             return;
         }
+        this.layoutEditor.moveNodes(moves.map(m => ({ id: m.id, ...this.clampToParent(this.parentOf(m.id), { x: m.x, y: m.y }) })));
+    }
+
+    /** Moves an instance into another thread (or out of its thread), keeping the drop position in a manual layout. */
+    private moveIntoThread(state: StructureState, id: string, instance: ComponentInstance, target: Thread | Structure, targetId: string, info: DragInfo): void {
         const type = instanceType(instance);
         if (isComponent(type) && isStructure(target)) {
             this.context.setStatus(`'${instance.name}' is an instance of the component ${type.name}: it runs in a thread – drop it into another thread.`, 'warning');
@@ -1052,11 +1144,92 @@ export class StructureDiagram {
             this.render();
             return;
         }
-        this.applyEdit(editor => editor.moveInstance(instance, target)).then(done => {
+        const moved = info.moved.find(m => m.id === id);
+        const targetNode = ibdNodes(state.layout.graph).find(n => n.node.id === targetId);
+        const layout = state.layout.effective && moved && targetNode ? cloneIbdLayout(state.layout.effective) : undefined;
+        if (layout && moved && targetNode) {
+            layout.nodes[id] = { ...layout.nodes[id], ...this.clampToParent(targetId, { x: moved.absoluteX - targetNode.x, y: moved.absoluteY - targetNode.y }) };
+        }
+        this.applyEdit(editor => editor.moveInstance(instance, target), false, layout).then(done => {
             if (done) {
                 this.context.setStatus(isThread(target) ? `Moved '${instance.name}' into the thread ${target.name}.` : `Moved '${instance.name}' out of the thread.`);
             }
         });
+    }
+
+    resizeEnd(id: string, width: number, height: number): void {
+        const node = this.ibdNode(id);
+        const owner = this.state?.layout.elements.get(id);
+        if (!node || !owner || !this.isOwn(owner) || !this.context.canEditLayout()) {
+            this.render();
+            return;
+        }
+        this.layoutEditor.resize(id, width, height, { x: node.x, y: node.y });
+    }
+
+    /** A port was dragged to a side of its node and an offset along it. */
+    portMoved(portId: string, side: NodeSide, offset: number): void {
+        if (!this.state || !this.context.canEditLayout()) {
+            return;
+        }
+        this.layoutEditor.change(layout => {
+            layout.ports[portId] = { side, offset };
+        });
+    }
+
+    /** Whether the diagram has layout annotations (manual layout). */
+    isManualLayout(): boolean {
+        return this.state?.layout.effective !== undefined;
+    }
+
+    /** Arranges the diagram automatically and writes the result as layout annotations. */
+    autoArrange(): void {
+        if (!this.state || !this.context.canEditLayout()) {
+            return;
+        }
+        this.layoutEditor.arrange().then(changed => {
+            if (changed) {
+                this.context.setStatus('Arranged automatically – the positions can be adjusted by hand (Ctrl+Z restores the previous layout).');
+            }
+        });
+    }
+
+    /** Removes the layout annotations of the diagram: it is laid out automatically. */
+    resetLayout(): void {
+        if (!this.state || !this.isManualLayout() || !this.context.canEditLayout()) {
+            return;
+        }
+        this.layoutEditor.reset().then(changed => {
+            if (changed) {
+                this.context.setStatus('Automatic layout – the layout annotations were removed (Ctrl+Z restores them).');
+            }
+        });
+    }
+
+    /**
+     * Writes the layout as annotations into the text (one undoable edit; undefined removes the layout
+     * annotations of the diagram) and updates the diagram. Resolves to false if the text did not change.
+     */
+    private async writeLayout(layout: IbdManualLayout | undefined): Promise<boolean> {
+        if (!this.state || this.state.parsed.text !== this.context.host.getText()) {
+            await this.update();
+        }
+        const state = this.state;
+        if (!state || state.parsed.hasSyntaxErrors || state.parsed.text !== this.context.host.getText()) {
+            this.context.setStatus('Please fix the syntax errors in the text first.', 'error');
+            this.render();
+            return false;
+        }
+        const edits = ibdLayoutTextEdits(state.parsed.model, state.layout, state.parsed.text, layout);
+        this.layoutOnlyChange = true;
+        if (edits.length === 0 || !await this.context.host.applyTextEdits(edits)) {
+            this.layoutOnlyChange = false;
+            // restores the positions of the dragged nodes
+            this.render();
+            return false;
+        }
+        await this.update();
+        return true;
     }
 
     /**
@@ -1405,6 +1578,9 @@ export class StructureDiagram {
                 h('li', {}, 'Connector: press on a port and drag to the other port – compatible ports turn green. A connection is written from the required to the provided port, a boundary port is delegated.'),
                 h('li', {}, 'Instances of components run in threads: click into a thread with the instance tool (on the frame: choose the thread next). Instances of subsystems are placed on the frame, outside of the threads.'),
                 h('li', {}, 'Drag an instance of a component into another thread to change its thread. Deleting a thread deletes its instances and their connections.'),
+                h('li', {}, 'Layout: drag the frame, threads, instances and type boxes to arrange them, the corner handle of a selected node to resize it, a port along the border of its instance (to another side). '
+                    + 'Double-click a selected connector to add a waypoint (drag it; double-click it to remove it). The positions are written as layout annotations (@at, @size, @port, @via); '
+                    + 'Automatic layout removes them.'),
                 h('li', {}, 'Double-click an instance to open its state machine or subsystem, its type name (or the type of a port) to open the type, its name (or ', h('kbd', {}, 'F2'), ') to rename it.'),
                 h('li', {}, 'Select a port, connector or instance to highlight the route of its signals (also through composites).'),
                 h('li', {}, h('kbd', {}, 'Del'), ' deletes, ', h('kbd', {}, 'Ctrl'), '+', h('kbd', {}, 'Z'), ' undoes; ', h('kbd', {}, 'Alt'), '+', h('kbd', {}, '←'), ' goes back.')),

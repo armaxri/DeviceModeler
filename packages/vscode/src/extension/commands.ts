@@ -139,21 +139,22 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
         showWritten(`Exported ${path.basename(target.path)}.`, [target]);
     });
 
-    // manual layout (experimental, layout annotations in the model): commands of the diagram (also
-    // buttons in its toolbar)
+    // manual layout (layout annotations in the model, state machines and structure files): commands of the
+    // diagram (also buttons in its toolbar)
     const layoutCommands: Record<string, LayoutCommand> = {
         'hsm.autoArrange': 'arrange',
         'hsm.resetLayout': 'reset'
     };
     for (const [id, command] of Object.entries(layoutCommands)) {
         register(id, async (arg?: unknown) => {
-            const uri = arg instanceof vscode.Uri ? arg : vscode.window.activeTextEditor?.document.languageId === 'hsm'
-                ? vscode.window.activeTextEditor.document.uri : undefined;
+            const language = vscode.window.activeTextEditor?.document.languageId;
+            const uri = arg instanceof vscode.Uri ? arg : language === 'hsm' || language === 'dmf'
+                ? vscode.window.activeTextEditor!.document.uri : undefined;
             if (uri && !commands.diagrams.get(uri)) {
                 await (await commands.diagrams.open(uri)).whenReady();
             }
             if (!commands.diagrams.layoutCommand(uri, command)) {
-                vscode.window.showWarningMessage('HSM: Open the diagram of an .hsm file first.');
+                vscode.window.showWarningMessage('HSM: Open the diagram of an .hsm or .dmf file first.');
             }
         });
     }

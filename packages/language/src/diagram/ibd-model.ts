@@ -1,5 +1,5 @@
 import type { AstNode } from 'langium';
-import type { DiagramLabel, Point } from './diagram-model.js';
+import type { DiagramLabel, Point, TextMeasure } from './diagram-model.js';
 
 /*
  * The diagram of a structure file (`.dmf`): an internal block diagram (IBD) in the style of SysML.
@@ -122,6 +122,8 @@ export interface IbdEdge {
     title: string;
     /** Absolute coordinates of the orthogonal route. */
     points: Point[];
+    /** Manual layout: the stored waypoints the route passes through (absolute). */
+    waypoints?: Point[];
 }
 
 export interface IbdGraph {
@@ -155,3 +157,42 @@ export const IBD_OVERVIEW_ID = '#components';
 
 /** Id of the diagram of a file without component types: its structs and interfaces. */
 export const IBD_TYPES_ID = '#types';
+
+/** Metrics shared by the layout and the rendering of the diagram. */
+export const IbdMetrics = {
+    /** Side length of the port squares (centered on the border of their node). */
+    portSize: 12,
+    /** Vertical distance of the ports (and their labels) of a side of an instance. */
+    portRow: 22,
+    /** Font sizes (px): name of instances (bold), stereotypes, port labels, thread details, frame tab. */
+    nameFont: 13,
+    stereotypeFont: 11,
+    portFont: 11,
+    detailsFont: 11,
+    tabFont: 13,
+    /** Header of instances: stereotype line and name line. */
+    instanceHeader: 40,
+    instanceMinWidth: 120,
+    /** Horizontal padding of the header text and between the port labels of both sides. */
+    instancePadding: 12,
+    /** Space reserved in the header for the behavior / composite icon. */
+    iconWidth: 20,
+    /** Header of threads: `«thread» Name` and the details line. */
+    threadHeaderLine: 16,
+    threadPadding: 14,
+    /** Height of the tab of the frame (`ibd [system] Name`). */
+    tabHeight: 24,
+    framePadding: 24,
+    /** Padding around the frame (the labels of the boundary ports are outside of it). */
+    graphPadding: 16,
+    /** Type boxes (structs, interfaces): height of a field / event row, font size, distance of the boxes. */
+    memberRow: 17,
+    memberFont: 11,
+    typeSpacing: 24
+};
+
+/** Width of a text in the given font size (the measure works with the sizes of DiagramMetrics). */
+export function ibdTextWidth(measure: TextMeasure, text: string, fontSize: number, bold = false): number {
+    const width = measure(text, 'label').width * fontSize / 12;
+    return Math.ceil(bold ? width * 1.08 : width);
+}

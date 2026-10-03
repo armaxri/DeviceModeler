@@ -224,11 +224,11 @@
         },
         {
           "command": "hsm.autoArrange",
-          "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram && !hsm.structureDiagramActive"
+          "when": "editorLangId == hsm || editorLangId == dmf || activeWebviewPanelId == hsm.diagram"
         },
         {
           "command": "hsm.resetLayout",
-          "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram && !hsm.structureDiagramActive"
+          "when": "editorLangId == hsm || editorLangId == dmf || activeWebviewPanelId == hsm.diagram"
         },
         {
           "command": "hsm.convertLayoutFile",
@@ -246,12 +246,12 @@
       "webview/title": [
         {
           "command": "hsm.autoArrange",
-          "when": "activeWebviewPanelId == hsm.diagram && !hsm.structureDiagramActive",
+          "when": "activeWebviewPanelId == hsm.diagram",
           "group": "hsmLayout@1"
         },
         {
           "command": "hsm.resetLayout",
-          "when": "activeWebviewPanelId == hsm.diagram && !hsm.structureDiagramActive",
+          "when": "activeWebviewPanelId == hsm.diagram",
           "group": "hsmLayout@2"
         }
       ]

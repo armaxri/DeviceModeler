@@ -1,13 +1,17 @@
 // The courtesy light of the garage door (examples/device): data types, components and a subsystem
 // declared in one file. The diagram shows the subsystem and, next to it, the struct and the interface.
+// The diagram is arranged by hand: the layout annotations (@at, @size, @port) keep the positions of the
+// type boxes right of the frame, the instances and the port of the lamp driver (docs/manual-layout.md).
 
 /** Brightness of the lamp. */
+@at(720, 16)
 struct LightLevel {
     brightness : integer
     warm : boolean
 }
 
 /** Commands of the light. */
+@at(720, 124)
 interface LightCmd {
     event on
     event off
@@ -26,13 +30,14 @@ component LedDriver {
 }
 
 /** The courtesy light: switched on and off by the remote control. */
+@at(112, 16)
 subsystem CourtesyLight {
     provides async cmd : LightCmd
 
-    @priority(1) @period(20 ms)
+    @priority(1) @period(20 ms) @at(41, 48) @size(500, 196)
     thread LightTask {
-        dimmer : Dimmer
-        led : LedDriver
+        @at(26, 52) dimmer : Dimmer
+        @at(330, 96) @port(level, top, 40) led : LedDriver
     }
 
     connect dimmer.level -> led.level

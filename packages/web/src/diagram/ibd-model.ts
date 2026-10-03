@@ -46,6 +46,8 @@ export class IbdNodeElement extends SNodeImpl {
     issue?: Issue;
     /** The node owns a port of the highlighted route. */
     onRoute = false;
+    /** Manual layout: the node shows a resize handle when it is selected. */
+    resizable = false;
 }
 
 export class IbdPortElement extends SShapeElementImpl {
@@ -68,12 +70,17 @@ export class IbdPortElement extends SShapeElementImpl {
     connect?: ConnectStatus;
     /** The start port of the connector being drawn. */
     connectSource = false;
+    /** Manual layout: the port can be dragged along the border of its node (to another side). */
+    movable = false;
 }
 
 export class IbdConnectorElement extends SChildElementImpl {
     static readonly DEFAULT_FEATURES = [selectFeature, hoverFeedbackFeature];
 
     kind: IbdEdge['kind'] = 'connect';
+    /** The ports at the ends (source: the required side of a connection). */
+    sourceId = '';
+    targetId = '';
     crossThread = false;
     title = '';
     points: Point[] = [];
@@ -81,6 +88,10 @@ export class IbdConnectorElement extends SChildElementImpl {
     hoverFeedback = false;
     issue?: Issue;
     onRoute = false;
+    /** Manual layout: the points the route passes through (absolute). */
+    waypoints: Point[] = [];
+    /** Manual layout: the waypoints can be moved when the connector is selected. */
+    editable = false;
 }
 
 export interface IbdSchemaOptions {
@@ -92,10 +103,23 @@ export interface IbdSchemaOptions {
     connect?: ReadonlyMap<string, ConnectStatus>;
     /** Drawing a connector: its start port. */
     pendingPort?: string;
+    /** The layout can be edited: nodes can be resized, ports moved along their border, waypoints of connectors moved. */
+    layoutEditable?: boolean;
 }
 
 /** Converts the laid out internal block diagram into the Sprotty model schema. */
 export function toIbdSchema(graph: IbdGraph, options: IbdSchemaOptions): SModelRoot {
+    // ports of instances and boundary ports can be placed by hand (not the ports of component blocks)
+    const movablePorts = new Set<string>();
+    if (options.layoutEditable) {
+        const visit = (node: IbdNode) => {
+            if (node.kind === 'instance' || node.kind === 'frame') {
+                node.ports.forEach(p => movablePorts.add(p.id));
+            }
+            node.children.forEach(visit);
+        };
+        graph.children.forEach(visit);
+    }
     const convertPort = (port: IbdPort): SModelElement => ({
         type: IbdTypes.port,
         id: port.id,
@@ -113,6 +137,7 @@ export function toIbdSchema(graph: IbdGraph, options: IbdSchemaOptions): SModelR
         onRoute: options.route?.has(port.id) ?? false,
         connect: options.connect?.get(port.id),
         connectSource: options.pendingPort === port.id,
+        movable: movablePorts.has(port.id),
         children: []
     } as SModelElement);
     const convertNode = (node: IbdNode): SModelElement => ({
@@ -134,15 +159,20 @@ export function toIbdSchema(graph: IbdGraph, options: IbdSchemaOptions): SModelR
         selected: options.selected.has(node.id),
         issue: options.issues.get(node.id),
         onRoute: options.route?.has(node.id) ?? false,
+        resizable: options.layoutEditable ?? false,
         children: [...node.children.map(convertNode), ...node.ports.map(convertPort)]
     } as SModelElement);
     const convertEdge = (edge: IbdEdge): SModelElement => ({
         type: IbdTypes.connector,
         id: edge.id,
         kind: edge.kind,
+        sourceId: edge.source,
+        targetId: edge.target,
         crossThread: edge.crossThread,
         title: edge.title,
         points: edge.points,
+        waypoints: edge.waypoints ?? [],
+        editable: options.layoutEditable ?? false,
         selected: options.selected.has(edge.id),
         issue: options.issues.get(edge.id),
         onRoute: options.route?.has(edge.id) ?? false,

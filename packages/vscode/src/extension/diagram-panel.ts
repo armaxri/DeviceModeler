@@ -182,7 +182,7 @@ export class DiagramManager implements vscode.Disposable {
         return panel;
     }
 
-    /** Context keys of the menus: whether the active diagram is a structure diagram (no layout commands). */
+    /** Context keys of the menus: whether the active diagram is a structure diagram (no code generation, no layout file conversion). */
     private updateContext(active: DiagramPanel | undefined): void {
         vscode.commands.executeCommand('setContext', 'hsm.structureDiagramActive', active !== undefined && isStructureDocument(active.uri));
     }

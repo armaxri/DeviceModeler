@@ -10,6 +10,9 @@ import {
 import { portIncompatibilities, resolveDataType } from './dmf-types.js';
 import { connectionThreads } from './dmf-routes.js';
 import { resolveTypeName } from './hsm-typesystem.js';
+import {
+    IBD_EDGE_ELEMENTS, IBD_LAYOUT_ANNOTATIONS, IBD_NODE_ELEMENTS, IBD_PORT_OWNERS, dmfAnnotationArguments, portAnnotation
+} from './diagram/ibd-layout-annotations.js';
 
 export function registerDmfValidationChecks(services: DmfServices): void {
     const validator = services.validation.DmfValidator;
@@ -38,7 +41,12 @@ export function registerDmfValidationChecks(services: DmfServices): void {
 export const DMF_ANNOTATIONS: Record<string, { readonly targets: readonly string[], readonly description: string }> = {
     priority: { targets: ['Thread'], description: 'priority of the thread: @priority(5)' },
     period: { targets: ['Thread'], description: 'period of a cyclic thread: @period(10 ms) (units s, ms, us, ns)' },
-    stack: { targets: ['Thread'], description: 'stack size of the thread in bytes: @stack(4096)' }
+    stack: { targets: ['Thread'], description: 'stack size of the thread in bytes: @stack(4096)' },
+    // layout annotations of the structure diagram (see docs/manual-layout.md, ibd-layout-annotations.ts)
+    at: { targets: IBD_NODE_ELEMENTS, description: 'position in the structure diagram: @at(x, y)' },
+    size: { targets: IBD_NODE_ELEMENTS, description: 'size in the structure diagram: @size(width, height)' },
+    via: { targets: IBD_EDGE_ELEMENTS, description: 'waypoints of the connector in the structure diagram: @via(x1, y1, x2, y2, ...)' },
+    port: { targets: IBD_PORT_OWNERS, description: 'side and offset of a port in the structure diagram: @port(name, left | right | top | bottom, offset)' }
 };
 
 /**
@@ -446,6 +454,10 @@ export class DmfValidator {
             accept('warning', `'@${annotation.name}' has no effect here (${known.description}).`, { node: annotation, property: 'name' });
             return;
         }
+        if (IBD_LAYOUT_ANNOTATIONS.includes(annotation.name)) {
+            this.checkLayoutAnnotation(annotation, owner, known.description, accept);
+            return;
+        }
         const argument = annotation.arguments[0];
         const value = argumentNumber(argument);
         const usage = () => accept('error', `Invalid arguments: ${known.description}.`, { node: annotation, property: 'name' });
@@ -473,6 +485,39 @@ export class DmfValidator {
         const duplicate = (owner as { annotations?: ast.DmfAnnotation[] }).annotations?.find(a => a.name === annotation.name);
         if (duplicate && duplicate !== annotation) {
             accept('warning', `'@${annotation.name}' is given more than once; the first one is used.`, { node: annotation, property: 'name' });
+        }
+    }
+
+    /** Layout annotations of the structure diagram: their arguments, duplicates, the ports of `@port`. */
+    private checkLayoutAnnotation(annotation: ast.DmfAnnotation, owner: AstNode, description: string, accept: ValidationAcceptor): void {
+        const name = annotation.name;
+        const siblings = (owner as { annotations?: ast.DmfAnnotation[] }).annotations ?? [];
+        if (name === 'port') {
+            const port = portAnnotation(annotation);
+            if (!port) {
+                accept('error', `Invalid arguments: ${description}.`, { node: annotation, property: 'name' });
+                return;
+            }
+            if (siblings.find(a => a.name === 'port' && portAnnotation(a)?.port === port.port) !== annotation) {
+                accept('error', `Duplicate annotation '@port' of the port '${port.port}'.`, { node: annotation, property: 'name' });
+                return;
+            }
+            const type = ast.isComponentInstance(owner) ? instanceType(owner) : ast.isStructure(owner) ? owner : undefined;
+            if (type && !type.ports.some(p => p.name === port.port)) {
+                accept('warning', `${ast.isStructure(owner) ? `${owner.kind} ${owner.name}` : `${type.name}`} has no port '${port.port}' (the annotation is ignored).`,
+                    { node: annotation, property: 'arguments', index: 0 });
+            }
+            return;
+        }
+        if (siblings.find(a => a.name === name) !== annotation) {
+            accept('error', `Duplicate annotation '@${name}'.`, { node: annotation, property: 'name' });
+            return;
+        }
+        const values = dmfAnnotationArguments(annotation);
+        const count = values?.length ?? 0;
+        if (!values || values.some(v => typeof v !== 'number') || (name === 'via' ? count < 2 || count % 2 !== 0 : count !== 2)
+            || (name === 'size' && (values as number[]).some(v => v < 0))) {
+            accept('error', `Invalid arguments: ${description}.`, { node: annotation, property: 'name' });
         }
     }
 }

@@ -12,7 +12,7 @@ import {
 } from 'hsm-language';
 import {
     applyManualLayout, captureLayout, contentOrigin, diagramElementIds, layoutFromModel, layoutTextEdits, toFrameCoordinates,
-    type ManualLayout, type Point
+    type ManualLayout, type NodeSide, type Point
 } from 'hsm-language';
 import { LayoutEditor, replacementEdit, sampleSpline } from './layout-editing.js';
 import { describeSyntaxProblem, type HsmModelService } from './model-service.js';
@@ -265,7 +265,9 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
                 this.updatePalette();
             },
             setStatus: (message, severity) => this.setStatus(message, severity),
-            navigate: location => this.navigate(location)
+            navigate: location => this.navigate(location),
+            layoutChanged: () => this.updateLayoutControls(),
+            canEditLayout: () => !this.simulationSession
         });
     }
 
@@ -294,9 +296,10 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         for (const id of LAYOUT_CONTROLS) {
             const control = document.getElementById(id);
             if (control instanceof HTMLButtonElement && !this.simulationSession) {
-                control.disabled = structure;
+                control.disabled = false;
             }
         }
+        this.updateLayoutControls();
     }
 
     /** Creates the diagram and the palette and registers the keyboard handlers. */
@@ -1128,7 +1131,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
      */
     dragEnd(draggedId: string, dropTargetId: string | undefined, info: DragInfo): void {
         if (this.structureMode) {
-            this.structure.dragEnd(draggedId, dropTargetId);
+            this.structure.dragEnd(draggedId, dropTargetId, info);
             return;
         }
         if (this.simulationSession) {
@@ -1367,7 +1370,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
 
     /** Whether the model has layout annotations (manual layout); otherwise the layout is computed automatically. */
     isManualLayout(): boolean {
-        return this.state?.effective !== undefined;
+        return this.structureMode ? this.structure.isManualLayout() : this.state?.effective !== undefined;
     }
 
     private bindLayoutControls(): void {
@@ -1377,7 +1380,8 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         this.updateLayoutControls();
     }
 
-    private updateLayoutControls(): void {
+    /** Shows *Automatic layout* only for a manual layout (also called by the structure diagram after its updates). */
+    updateLayoutControls(): void {
         const manual = this.isManualLayout();
         const reset = document.getElementById('btn-reset-layout');
         if (reset) {
@@ -1388,6 +1392,10 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
 
     /** Arranges everything automatically and writes the result as layout annotations. */
     autoArrange(): void {
+        if (this.structureMode) {
+            this.structure.autoArrange();
+            return;
+        }
         if (!this.state || this.simulationSession) {
             return;
         }
@@ -1400,6 +1408,10 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
 
     /** Removes all layout annotations: the diagram is laid out automatically. */
     resetLayout(): void {
+        if (this.structureMode) {
+            this.structure.resetLayout();
+            return;
+        }
         if (!this.state || this.simulationSession || !this.isManualLayout()) {
             return;
         }
@@ -1473,33 +1485,47 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     }
 
     resizeEnd(id: string, width: number, height: number): void {
-        if (this.layoutChangeable) {
+        if (this.structureMode) {
+            this.structure.resizeEnd(id, width, height);
+        } else if (this.layoutChangeable) {
             const node = this.state?.nodes.get(id);
             this.layoutEditor.resize(id, width, height, { x: node?.x ?? 0, y: node?.y ?? 0 });
         }
     }
 
     bendMoved(edgeId: string, index: number, point: Point): void {
-        if (this.layoutChangeable) {
+        if (this.structureMode) {
+            this.structure.layoutEditor.moveWaypoint(edgeId, index, point);
+        } else if (this.layoutChangeable) {
             this.layoutEditor.moveWaypoint(edgeId, index, point);
         }
     }
 
     bendAdded(edgeId: string, point: Point): void {
-        if (this.layoutChangeable) {
+        if (this.structureMode) {
+            this.structure.layoutEditor.addWaypoint(edgeId, point);
+        } else if (this.layoutChangeable) {
             this.layoutEditor.addWaypoint(edgeId, point);
         }
     }
 
     bendRemoved(edgeId: string, index: number): void {
-        if (this.layoutChangeable) {
+        if (this.structureMode) {
+            this.structure.layoutEditor.removeWaypoint(edgeId, index);
+        } else if (this.layoutChangeable) {
             this.layoutEditor.removeWaypoint(edgeId, index);
         }
     }
 
     labelMoved(edgeId: string, dx: number, dy: number): void {
-        if (this.layoutChangeable) {
+        if (!this.structureMode && this.layoutChangeable) {
             this.layoutEditor.moveLabel(edgeId, dx, dy);
+        }
+    }
+
+    portMoved(portId: string, side: NodeSide, offset: number): void {
+        if (this.structureMode) {
+            this.structure.portMoved(portId, side, offset);
         }
     }
 
