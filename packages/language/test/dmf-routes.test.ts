@@ -7,7 +7,7 @@ import * as ast from '../src/generated/ast.js';
 import { structureInstances } from '../src/dmf-model.js';
 import {
     effectiveThread, endpointLabel, endpointsOfPort, findProviders, findRequirers, portEndpoint, portRoute, providersOf, routeEndpointsOf, routeOf,
-    structureContexts, type PortEndpoint, type Route
+    connectionThreads, structureContexts, type PortEndpoint, type Route
 } from '../src/dmf-routes.js';
 import { DmfModelLoader } from '../src/hsm-document.js';
 import { createHsmServices } from '../src/hsm-module.js';
@@ -76,25 +76,20 @@ describe('route analysis: the garage door example', () => {
 
     test('threads of endpoints', () => {
         const drive = structureContexts(root)[1];
-        const [motor, switches, pwm] = structureInstances(drive.structure);
+        const [motor, pwm, switches] = structureInstances(drive.structure);
         expect(effectiveThread(portEndpoint(drive.structure, motor, motor.type.ref!.ports[0], drive.path))?.name).toBe('MotorTask');
-        expect(effectiveThread(portEndpoint(drive.structure, switches, switches.type.ref!.ports[0], drive.path))?.name).toBe('MotorTask');
-        // passive: neither the instance nor the composite instance `drive` is assigned to a thread
-        expect(effectiveThread(portEndpoint(drive.structure, pwm, pwm.type.ref!.ports[0], drive.path))).toBeUndefined();
+        expect(effectiveThread(portEndpoint(drive.structure, pwm, pwm.type.ref!.ports[0], drive.path))?.name).toBe('MotorTask');
+        expect(effectiveThread(portEndpoint(drive.structure, switches, switches.type.ref!.ports[0], drive.path))?.name).toBe('SwitchTask');
         expect(effectiveThread(endpoint(root, 'door.motor'))?.name).toBe('ControlTask');
+        // an instance of a subsystem has no thread of its own: its parts run in the threads of the subsystem
+        expect(effectiveThread(endpoint(root, 'drive.ctrl'))).toBeUndefined();
         expect(effectiveThread(endpoint(root, 'remote'))).toBeUndefined();
     });
 
-    test('a composite in a thread runs its unassigned parts', async () => {
-        const model = await load(`
-component C { provides async p : event e }
-structure Sub { provides async p : event e  thread Own { a : C }  b : C  delegate p -> b.p }
-system S { thread T { sub : Sub } }`);
-        const root = structure(model, 'S');
-        const sub = structureContexts(root)[1];
-        const [a, b] = structureInstances(sub.structure);
-        expect(effectiveThread(portEndpoint(sub.structure, a, a.type.ref!.ports[0], sub.path))?.name).toBe('Own');
-        expect(effectiveThread(portEndpoint(sub.structure, b, b.type.ref!.ports[0], sub.path))?.name).toBe('T');
+    test('connections to a subsystem: the threads of the component ports inside', () => {
+        const [motorCmd, status] = root.connections;
+        expect(connectionThreads(motorCmd)).toEqual({ source: expect.objectContaining({ name: 'ControlTask' }), target: expect.objectContaining({ name: 'MotorTask' }) });
+        expect(connectionThreads(status)).toEqual({ source: expect.objectContaining({ name: 'MotorTask' }), target: expect.objectContaining({ name: 'ControlTask' }) });
     });
 
     test('requirers of a provided port', () => {
@@ -140,15 +135,17 @@ describe('route analysis: hierarchy', () => {
     const MODEL = `
 component Server { provides async p : event e }
 component Client { requires async r : event e }
-structure Sub {
+subsystem Sub {
     provides async in : event e
     requires async out : event e
-    server : Server
-    client : Client
+    thread T {
+        server : Server
+        client : Client
+    }
     delegate in -> server.p
     delegate client.r -> out
 }
-structure Middle {
+subsystem Middle {
     provides async in : event e
     requires async out : event e
     sub : Sub
@@ -158,8 +155,10 @@ structure Middle {
 system Root {
     a : Middle
     b : Middle
-    x : Client
-    y : Server
+    thread T {
+        x : Client
+        y : Server
+    }
     connect x.r -> a.in
     connect a.out -> y.p
     connect b.out -> y.p
@@ -195,7 +194,7 @@ system Root {
     });
 
     test('unconnected ports have no providers', async () => {
-        const model = await load('component C { requires async r : event e }\nsystem S { c : C }');
+        const model = await load('component C { requires async r : event e }\nsystem S { thread T { c : C } }');
         expect(findProviders(endpoint(structure(model, 'S'), 'c.r'))).toEqual([]);
         expect(portRoute(endpoint(structure(model, 'S'), 'c.r')).hops).toEqual([]);
     });
@@ -203,9 +202,9 @@ system Root {
     test('recursive instantiation does not loop', async () => {
         const parsed = await loader.load(`
 component C { requires async r : event e }
-structure A { provides async p : event e  b : B  delegate p -> b.p }
-structure B { provides async p : event e  a : A  delegate p -> a.p }
-system S { a : A  c : C  connect c.r -> a.p }`, `file:///routes/recursive-${counter++}.dmf`);
+subsystem A { provides async p : event e  b : B  delegate p -> b.p }
+subsystem B { provides async p : event e  a : A  delegate p -> a.p }
+system S { a : A  thread T { c : C }  connect c.r -> a.p }`, `file:///routes/recursive-${counter++}.dmf`);
         const root = structure(parsed.model, 'S');
         expect(structureContexts(root).map(c => c.structure.name)).toEqual(['S', 'A', 'B']);
         expect(labels(findProviders(endpoint(root, 'c.r')))).toEqual(['a.b.a.p']);

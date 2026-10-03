@@ -247,14 +247,32 @@ export class DmfValidator {
         checkUnique(structure.threads, 'thread', accept);
     }
 
+    /**
+     * Instances of components run in a thread: they are declared in a thread or assigned to one by name.
+     * Instances of subsystems are placed outside of the threads (their parts run in the threads of the
+     * subsystem). Systems cannot be instantiated, subsystems not recursively.
+     */
     checkInstance(instance: ast.ComponentInstance, accept: ValidationAcceptor): void {
         const type = instanceType(instance);
+        if (!type) {
+            return; // linking error
+        }
         if (!isCompositeType(type)) {
+            if (!ast.isThread(instance.$container) && threadsOf(instance).length === 0) {
+                accept('error', `The component instance '${instance.name}' is outside of a thread: instances of components run in a thread. `
+                    + `Declare it in a thread ('thread T { ${instance.name} : ${instance.type?.$refText ?? type.name} }') or assign it to one ('thread T { ${instance.name} }').`,
+                    { node: instance, property: 'name' });
+            }
             return;
         }
         if (type.kind === 'system') {
-            accept('error', `'${type.name}' is a system and cannot be instantiated; declare it as 'structure ${type.name}' to use it as a part.`, { node: instance, property: 'type' });
+            accept('error', `'${type.name}' is a system and cannot be instantiated; declare it as 'subsystem ${type.name}' to use it as a part.`, { node: instance, property: 'type' });
             return;
+        }
+        if (ast.isThread(instance.$container)) {
+            accept('error', `'${instance.name}' is an instance of the subsystem '${type.name}' and cannot be placed in the thread '${instance.$container.name}': `
+                + `the parts of a subsystem run in the threads of the subsystem. Declare '${instance.name}' outside of the threads.`,
+                { node: instance, property: 'type' });
         }
         const structure = enclosingStructure(instance);
         const cycle = structure ? instantiationCycle(type, structure) : undefined;
@@ -268,8 +286,15 @@ export class DmfValidator {
         if (!instance) {
             return;
         }
-        const threads = threadsOf(instance);
+        const type = instanceType(instance);
         const thread = member.$container;
+        if (isCompositeType(type)) {
+            accept('error', `'${instance.name}' is an instance of the subsystem '${type.name}' and cannot be assigned to the thread '${thread.name}': `
+                + 'the parts of a subsystem run in the threads of the subsystem. Only instances of components are assigned to threads.',
+                { node: member, property: 'instance' });
+            return;
+        }
+        const threads = threadsOf(instance);
         const first = threads[0];
         if (first && first !== thread) {
             accept('error', `The instance '${instance.name}' is already assigned to the thread '${first.name}'. An instance belongs to one thread only.`, { node: member, property: 'instance' });

@@ -71,14 +71,14 @@ component C "a component" {
     requires async q : event a, event b : integer
     requires sync r : P
 }
-structure Sub { provides async p : I  c : C  delegate p -> c.p }
+subsystem Sub { provides async p : I  thread T { c : C }  delegate p -> c.p }
 system S {
     provides sync d : P
     @priority(5) @period(10 ms) @stack(0x1000)
     thread T {
         c : C "first"
-        u : Sub
     }
+    u : Sub
     e : C
     thread U { e }
     connect c.q -> e.p
@@ -98,7 +98,7 @@ system S {
         expect(component.ports[1].events.map(e => `${e.name}:${e.type?.name ?? ''}`)).toEqual(['a:', 'b:integer']);
         const root = model.elements[4] as ast.Structure;
         expect(root.kind).toBe('system');
-        expect((model.elements[3] as ast.Structure).kind).toBe('structure');
+        expect((model.elements[3] as ast.Structure).kind).toBe('subsystem');
         expect(structureInstances(root).map(i => i.name)).toEqual(['c', 'u', 'e']);
         const [t, u] = root.threads;
         expect(threadSettings(t)).toEqual({ priority: 5, stack: 4096, periodNs: 10_000_000, period: '10 ms' });
@@ -115,7 +115,7 @@ system S {
 });
 
 describe('structure language: the example', () => {
-    const files = ['system.dmf', 'components.dmf', 'drive.dmf', 'types.dmf'];
+    const files = ['system.dmf', 'components.dmf', 'drive.dmf', 'types.dmf', 'light.dmf'];
 
     test.each(files)('examples/device/%s has no errors or warnings', async file => {
         const device = new DmfModelLoader(createHsmServices(NodeFileSystem));
@@ -127,7 +127,7 @@ describe('structure language: the example', () => {
             expect(imported.hasErrors, imported.uri).toBe(false);
         }
         if (file === 'system.dmf') {
-            // (drive is a composite outside of threads: its parts run in the MotorTask)
+            // (drive is a subsystem outside of threads: its parts run in the MotorTask)
             expect(infos(parsed)).toEqual([
                 "The connection crosses threads ('ControlTask' -> 'MotorTask').",
                 "The connection crosses threads ('MotorTask' -> 'ControlTask').",
@@ -155,10 +155,10 @@ describe('structure language: linking across files', () => {
 import "parts.dmf"
 import "types.dmf"
 component Ctl { requires async m : types.Cmd  requires sync p : types.Position }
-system S { m : Motor  c : Ctl  connect c.m -> m.ctrl  connect c.p -> m.pos }`, { 'parts.dmf': PARTS, 'types.dmf': TYPES });
+system S { thread T { m : Motor  c : Ctl }  connect c.m -> m.ctrl  connect c.p -> m.pos }`, { 'parts.dmf': PARTS, 'types.dmf': TYPES });
         expect(errors(parsed)).toEqual([]);
         const root = parsed.model.elements[1] as ast.Structure;
-        const motor = root.instances[0].type.ref!;
+        const motor = root.threads[0].instances[0].type.ref!;
         expect(motor.name).toBe('Motor');
         expect(AstUtils.getDocument(motor).uri.path).toBe(parsed.document.uri.path.replace('main.dmf', 'parts.dmf'));
         expect(root.connections[0].target.port.ref?.name).toBe('ctrl');
@@ -166,7 +166,7 @@ system S { m : Motor  c : Ctl  connect c.m -> m.ctrl  connect c.p -> m.pos }`, {
     });
 
     test('elements of files that are not imported are not visible', async () => {
-        const parsed = await load('system S { m : Motor }', { 'parts.dmf': PARTS });
+        const parsed = await load('system S { thread T { m : Motor } }', { 'parts.dmf': PARTS });
         expect(errors(parsed)).toEqual([expect.stringContaining("Could not resolve reference to ComponentType named 'Motor'")]);
     });
 
@@ -216,7 +216,7 @@ component C { provides sync pos : geo::Position  provides sync mode : geo::Mode 
     });
 
     test('unresolved ports', async () => {
-        const parsed = await system('c : Client  s : Server  connect c.nothing -> s.cmd  connect x.cmd -> s.cmd  delegate missing -> s.cmd');
+        const parsed = await system('thread T { c : Client  s : Server }  connect c.nothing -> s.cmd  connect x.cmd -> s.cmd  delegate missing -> s.cmd');
         expect(errors(parsed)).toEqual([
             "The component type 'Client' of 'c' has no port 'nothing' (ports: cmd, pos).",
             expect.stringContaining("Could not resolve reference to ComponentInstance named 'x'"),
@@ -228,7 +228,7 @@ component C { provides sync pos : geo::Position  provides sync mode : geo::Mode 
 
 describe('structure language: validation', () => {
     test('a valid system', async () => {
-        const parsed = await system('c : Client  s : Server  connect c.cmd -> s.cmd  connect c.pos -> s.pos');
+        const parsed = await system('thread T { c : Client  s : Server }  connect c.cmd -> s.cmd  connect c.pos -> s.pos');
         expect(parsed.diagnostics).toEqual([]);
     });
 
@@ -238,7 +238,7 @@ struct P { x : real  x : integer }
 interface I { event a event a }
 component P { provides async p : event e, event e  provides sync p : integer }
 component K { }
-system S { thread T { a : K } thread T { } a : K }
+system S { thread T { a : K } thread T { a : K } }
 system integer { }`);
         expect(errors(parsed)).toEqual([
             "Duplicate name 'P'.",
@@ -278,7 +278,7 @@ component C {
     test('connections go from required to provided ports of instances', async () => {
         const parsed = await system(`
     provides async x : Cmd
-    c : Client  s : Server  t : Server
+    thread T { c : Client  s : Server  t : Server }
     connect s.cmd -> c.cmd
     connect c.cmd -> c.cmd
     connect s.pos -> t.pos
@@ -310,7 +310,7 @@ component B {
     provides sync r : real
 }
 system S {
-    a : A  b : B
+    thread T { a : A  b : B }
     connect a.big -> b.small
     connect a.small -> b.big
     connect a.n -> b.n
@@ -331,7 +331,7 @@ system S {
     requires async y : Cmd
     provides sync p : Point
     requires async z : event other
-    c : Client  s : Server
+    thread T { c : Client  s : Server }
     delegate s.cmd -> x
     delegate y -> c.cmd
     delegate x -> c.cmd
@@ -351,7 +351,7 @@ system S {
         const parsed = await system(`
     provides async x : Cmd
     requires async y : Cmd
-    c : Client  s : Server`);
+    thread T { c : Client  s : Server }`);
         expect(warnings(parsed)).toEqual([
             "The required port 'c.cmd' is not connected.",
             "The required port 'c.pos' is not connected.",
@@ -363,7 +363,7 @@ system S {
     test('a sync required port has one provider, async ports may have several', async () => {
         const parsed = await system(`
     provides sync p : Point
-    c : Client  s : Server  t : Server
+    thread T { c : Client  s : Server  t : Server }
     connect c.pos -> s.pos
     connect c.pos -> t.pos
     connect c.cmd -> s.cmd
@@ -394,26 +394,42 @@ system S {
 
     test('connections crossing threads are reported (info)', async () => {
         const parsed = await system(`
-    thread A { c : Client }
+    thread A { c : Client  t : Server }
     thread B { s : Server }
-    passive : Server
     connect c.cmd -> s.cmd
-    connect c.pos -> passive.pos`);
+    connect c.pos -> t.pos`);
         expect(infos(parsed)).toEqual(["The connection crosses threads ('A' -> 'B')."]);
+    });
+
+    test('instances of components run in threads, instances of subsystems outside of threads', async () => {
+        const parsed = await system(`
+    provides async x : Cmd
+    thread T { c : Client  inner : Sub }
+    s : Server
+    t : Server
+    u : Sub
+    thread U { t  u }
+    connect c.cmd -> s.cmd  connect c.pos -> t.pos
+    delegate x -> u.p`, 'subsystem Sub { provides async p : Cmd  thread W { s : Server }  delegate p -> s.cmd }');
+        expect(errors(parsed)).toEqual([
+            "'inner' is an instance of the subsystem 'Sub' and cannot be placed in the thread 'T': the parts of a subsystem run in the threads of the subsystem. Declare 'inner' outside of the threads.",
+            "'u' is an instance of the subsystem 'Sub' and cannot be assigned to the thread 'U': the parts of a subsystem run in the threads of the subsystem. Only instances of components are assigned to threads.",
+            "The component instance 's' is outside of a thread: instances of components run in a thread. Declare it in a thread ('thread T { s : Server }') or assign it to one ('thread T { s }')."
+        ]);
     });
 
     test('recursive instantiation and instances of systems', async () => {
         const parsed = await load(`
-structure A { b : B }
-structure B { a : A }
-structure Self { me : Self }
+subsystem A { b : B }
+subsystem B { a : A }
+subsystem Self { me : Self }
 system Root { a : A }
 system Other { r : Root }`);
         expect(errors(parsed)).toEqual([
             'Recursive instantiation: A -> B -> A.',
             'Recursive instantiation: B -> A -> B.',
             'Recursive instantiation: Self -> Self.',
-            "'Root' is a system and cannot be instantiated; declare it as 'structure Root' to use it as a part."
+            "'Root' is a system and cannot be instantiated; declare it as 'subsystem Root' to use it as a part."
         ]);
     });
 
@@ -423,7 +439,7 @@ system Other { r : Root }`);
     thread T { }
     @priority(1) @priority(2)
     thread U { }
-    @period(1 ms) c : Client`);
+    thread V { @period(1 ms) c : Client }`);
         expect(errors(parsed)).toEqual([
             'Invalid arguments: priority of the thread: @priority(5).',
             'Invalid arguments: period of a cyclic thread: @period(10 ms) (units s, ms, us, ns).',
@@ -589,7 +605,7 @@ system S {
     });
 
     test('the formatter keeps the examples', async () => {
-        for (const file of ['system.dmf', 'components.dmf', 'drive.dmf', 'types.dmf']) {
+        for (const file of ['system.dmf', 'components.dmf', 'drive.dmf', 'types.dmf', 'light.dmf']) {
             const text = fs.readFileSync(path.join(DEVICE_DIR, file), 'utf-8');
             expect(await format(text), file).toBe(text);
         }
@@ -603,7 +619,7 @@ component Pos { provides sync where : Position }
 system S {
     @priority(3)
     thread T { c : Ctl }
-    m : Motor
+    thread M { m : Motor }
     connect c.m -> m.ctrl
 }`;
     const LSP_FILES = {
@@ -650,7 +666,7 @@ system S {
             textDocument: { uri: document.uri.toString() }, position: offsetOf(document, 'c.m')
         });
         // the instance `m : Motor` provides `c.m`
-        expect(links?.map(l => l.targetSelectionRange.start)).toEqual([{ line: 8, character: 4 }]);
+        expect(links?.map(l => l.targetSelectionRange.start)).toEqual([{ line: 8, character: 15 }]);
     });
 
     test('hover and signatures', async () => {
@@ -677,10 +693,23 @@ system S {
         expect(labels).not.toContain('void');
     });
 
+    test('completion of instance types: components in threads, subsystems outside of them', async () => {
+        const text = 'component A { }\ncomponent B { }\nsubsystem Sub { }\nsystem Top { }\nsystem S {\n    thread T {\n        a : \n    }\n    s : \n}';
+        const parsed = await load(text);
+        const complete = async (line: number, character: number) => {
+            const list = await services.Dmf.lsp.CompletionProvider!.getCompletion(parsed.document, {
+                textDocument: { uri: parsed.document.uri.toString() }, position: { line, character }
+            });
+            return (list?.items ?? []).map(i => i.label).filter(l => /^[A-Z]/.test(l)).sort();
+        };
+        expect(await complete(6, 12)).toEqual(['A', 'B']);
+        expect(await complete(8, 8)).toEqual(['Sub']);
+    });
+
     test('document symbols', async () => {
         const parsed = await load(LSP_MAIN, LSP_FILES);
         const symbols = await services.Dmf.lsp.DocumentSymbolProvider!.getSymbols(parsed.document, { textDocument: { uri: parsed.document.uri.toString() } });
         expect(symbols.map(s => s.name)).toEqual(['Position', 'Ctl', 'Pos', 'S']);
-        expect(symbols[3].children?.map(s => s.name)).toEqual(['T', 'm']);
+        expect(symbols[3].children?.map(s => s.name)).toEqual(['T', 'M']);
     });
 });

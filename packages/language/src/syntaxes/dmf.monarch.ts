@@ -1,7 +1,7 @@
 // Monarch syntax highlighting for the dmf language.
 export default {
     keywords: [
-        'component','interface','structure','behavior','delegate','provides','requires','connect','package','import','struct','system','thread','async','event','sync'
+        'component','interface','subsystem','behavior','delegate','provides','requires','connect','package','import','struct','system','thread','async','event','sync'
     ],
     operators: [
         '->','::','-',',',';',':','.','@'

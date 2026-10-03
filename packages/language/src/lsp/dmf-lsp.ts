@@ -1,4 +1,7 @@
-import { AstUtils, CstUtils, GrammarAST, GrammarUtils, JSDocDocumentationProvider, type AstNode, type CstNode, type LangiumDocument, type MaybePromise } from 'langium';
+import {
+    AstUtils, CstUtils, GrammarAST, GrammarUtils, JSDocDocumentationProvider,
+    type AstNode, type AstNodeDescription, type CstNode, type LangiumDocument, type MaybePromise, type ReferenceInfo, type Stream
+} from 'langium';
 import {
     DefaultCompletionProvider, DefaultDefinitionProvider,
     type CompletionAcceptor, type CompletionContext, type ImplementationProvider, type LangiumServices, type NextFeature
@@ -183,7 +186,11 @@ export function dmfSignature(node: AstNode): string | undefined {
     return undefined;
 }
 
-/** Completion: the default completion, and for type names the built-in types, structs and interfaces. */
+/**
+ * Completion: the default completion, and for type names the built-in types, structs and interfaces.
+ * The type of an instance in a thread is a component, outside of the threads a subsystem (see
+ * docs/structure-language.md#threads); threads are assigned instances of components only.
+ */
 export class DmfCompletionProvider extends DefaultCompletionProvider {
 
     constructor(services: LangiumServices) {
@@ -210,5 +217,20 @@ export class DmfCompletionProvider extends DefaultCompletionProvider {
             return;
         }
         return super.completionFor(context, next, acceptor);
+    }
+
+    protected override getReferenceCandidates(refInfo: ReferenceInfo, context: CompletionContext): Stream<AstNodeDescription> {
+        const candidates = super.getReferenceCandidates(refInfo, context);
+        const container = refInfo.container;
+        if (refInfo.property === 'type' && ast.isComponentInstance(container)) {
+            const inThread = ast.isThread(container.$container);
+            return candidates.filter(d => inThread
+                ? d.type === ast.Component.$type
+                : d.type === ast.Structure.$type && !(ast.isStructure(d.node) && d.node.kind === 'system'));
+        }
+        if (refInfo.property === 'instance' && ast.isThreadMember(container)) {
+            return candidates.filter(d => !ast.isComponentInstance(d.node) || !ast.isStructure(instanceType(d.node)));
+        }
+        return candidates;
     }
 }

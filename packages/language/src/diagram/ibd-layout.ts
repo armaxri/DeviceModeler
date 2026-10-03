@@ -8,7 +8,7 @@ import { crossesThreads, portEndpoint, portRoute, routeEndpointsOf, type PortEnd
 import { portTypeLabel } from '../dmf-types.js';
 import type { Point, TextMeasure } from './diagram-model.js';
 import {
-    IBD_OVERVIEW_ID, type IbdEdge, type IbdGraph, type IbdLayoutResult, type IbdNode, type IbdPort, type IbdPortSide
+    IBD_OVERVIEW_ID, IBD_TYPES_ID, type IbdEdge, type IbdGraph, type IbdLayoutResult, type IbdMember, type IbdNode, type IbdPort, type IbdPortSide
 } from './ibd-model.js';
 import { approximateTextMeasure } from './layout.js';
 
@@ -49,7 +49,11 @@ export const IbdMetrics = {
     tabHeight: 24,
     framePadding: 24,
     /** Padding around the frame (the labels of the boundary ports are outside of it). */
-    graphPadding: 16
+    graphPadding: 16,
+    /** Type boxes (structs, interfaces): height of a field / event row, font size, distance of the boxes. */
+    memberRow: 17,
+    memberFont: 11,
+    typeSpacing: 24
 };
 
 const M = IbdMetrics;
@@ -60,8 +64,9 @@ export interface StructureLayoutOptions {
     /** An ELK instance (e.g. one running in a web worker). */
     elk?: unknown;
     /**
-     * What to show: the name of a structure, system or component type of the file, or
-     * {@link IBD_OVERVIEW_ID} for all component types. Default: see {@link defaultIbdElement}.
+     * What to show: the name of a subsystem, system or component type of the file,
+     * {@link IBD_OVERVIEW_ID} for all component types or {@link IBD_TYPES_ID} for the data types of a
+     * file without component types. Default: see {@link defaultIbdElement}.
      */
     element?: string;
 }
@@ -74,7 +79,10 @@ export interface IbdChoice {
     kind: IbdGraph['kind'];
 }
 
-/** The elements of a file that can be shown: its systems, structures and components, and the overview of all components. */
+/**
+ * The elements of a file that can be shown: its systems, subsystems and components, the overview of all
+ * components, and for a file without component types its data types (structs and interfaces).
+ */
 export function ibdChoices(model: ast.DmfModel): IbdChoice[] {
     const result: IbdChoice[] = [];
     const types = model.elements.filter(ast.isComponentType).filter(t => t.name);
@@ -85,16 +93,24 @@ export function ibdChoices(model: ast.DmfModel): IbdChoice[] {
     if (types.filter(ast.isComponent).length > 1) {
         result.push({ id: IBD_OVERVIEW_ID, label: 'all component types', kind: 'overview' });
     }
+    if (types.length === 0 && dataTypesOf(model).length > 0) {
+        result.push({ id: IBD_TYPES_ID, label: 'data types', kind: 'types' });
+    }
     return result;
 }
 
 /**
- * The element shown by default: the first system, else the first structure, else the overview of the
- * component types (if there are several), else the single component type.
+ * The element shown by default: the first system, else the first subsystem, else the overview of the
+ * component types (if there are several), else the single component type, else the data types.
  */
 export function defaultIbdElement(model: ast.DmfModel): string | undefined {
     const choices = ibdChoices(model);
-    return (choices.find(c => c.kind === 'system') ?? choices.find(c => c.kind === 'structure') ?? choices.find(c => c.kind === 'overview') ?? choices[0])?.id;
+    return (choices.find(c => c.kind === 'system') ?? choices.find(c => c.kind === 'subsystem') ?? choices.find(c => c.kind === 'overview') ?? choices[0])?.id;
+}
+
+/** The structs and interfaces declared in a file (shown as type boxes next to its diagram). */
+export function dataTypesOf(model: ast.DmfModel): Array<ast.StructDeclaration | ast.PortInterface> {
+    return model.elements.filter((e): e is ast.StructDeclaration | ast.PortInterface => (ast.isStructDeclaration(e) || ast.isPortInterface(e)) && !!e.name);
 }
 
 /** The element of a structure file containing the offset (a component type), for selecting the diagram by the cursor. */
@@ -119,9 +135,11 @@ async function createDefaultElk(): Promise<ElkInstance> {
 }
 
 /**
- * Computes the diagram of a structure file: the internal block diagram of a structure or system, a
- * component type as a block with its ports, or all component types of the file (see
- * {@link StructureLayoutOptions.element}). `undefined` if the file has no component types.
+ * Computes the diagram of a structure file: the internal block diagram of a subsystem or system, a
+ * component type as a block with its ports, all component types of the file or (a file without
+ * component types) its data types (see {@link StructureLayoutOptions.element}). The structs and
+ * interfaces declared in the file are added as unconnected type boxes below the diagram (see
+ * {@link addTypeBoxes}). `undefined` if the file declares neither component types nor data types.
  */
 export async function layoutStructure(model: ast.DmfModel, options: StructureLayoutOptions = {}): Promise<IbdLayoutResult | undefined> {
     const id = options.element && ibdChoices(model).some(c => c.id === options.element) ? options.element : defaultIbdElement(model);
@@ -129,15 +147,25 @@ export async function layoutStructure(model: ast.DmfModel, options: StructureLay
         return undefined;
     }
     const measure = options.measure ?? approximateTextMeasure;
-    if (id === IBD_OVERVIEW_ID) {
-        return new BlockBuilder(measure).overview(model.elements.filter(ast.isComponent));
+    let result: IbdLayoutResult;
+    if (id === IBD_TYPES_ID) {
+        result = {
+            graph: { id: IBD_TYPES_ID, name: 'Data types', kind: 'types', width: 0, height: 0, children: [], edges: [] },
+            elements: new Map(), ids: new Map(), instances: new Map()
+        };
+    } else if (id === IBD_OVERVIEW_ID) {
+        result = new BlockBuilder(measure).overview(model.elements.filter(ast.isComponent));
+    } else {
+        const type = model.elements.find((e): e is ast.ComponentType => ast.isComponentType(e) && e.name === id)!;
+        if (ast.isComponent(type)) {
+            result = new BlockBuilder(measure).single(type);
+        } else {
+            const elk = options.elk as ElkInstance | undefined ?? (defaultElk ??= await createDefaultElk());
+            result = await new IbdBuilder(type, measure).build(elk);
+        }
     }
-    const type = model.elements.find((e): e is ast.ComponentType => ast.isComponentType(e) && e.name === id)!;
-    if (ast.isComponent(type)) {
-        return new BlockBuilder(measure).single(type);
-    }
-    const elk = options.elk as ElkInstance | undefined ?? (defaultElk ??= await createDefaultElk());
-    return new IbdBuilder(type, measure).build(elk);
+    addTypeBoxes(result, dataTypesOf(model), measure);
+    return result;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -199,12 +227,14 @@ function blockNode(id: string, kind: 'instance' | 'block', name: string, type: a
 }
 
 function ibdPort(id: string, port: ast.Port, side: IbdPortSide, measure: TextMeasure): IbdPort {
-    const width = textWidth(measure, port.name, M.portFont);
+    const typeName = port.events.length === 0 && port.type?.name ? port.type.name : undefined;
+    const text = typeName ? `${port.name} : ${typeName}` : port.name;
+    const width = textWidth(measure, text, M.portFont);
     return {
-        id, name: port.name, direction: port.direction, kind: port.kind,
+        id, name: port.name, direction: port.direction, kind: port.kind, typeName,
         title: `${port.direction} ${port.kind} ${port.name} : ${portTypeLabel(port)}`,
         side, x: 0, y: 0, size: M.portSize,
-        label: { text: port.name, x: 0, y: 0, width, height: M.portFont + 3 }
+        label: { text, x: 0, y: 0, width, height: M.portFont + 3 }
     };
 }
 
@@ -301,6 +331,85 @@ class BlockBuilder {
         };
         return { graph, elements: this.elements, ids: this.ids, instances: new Map() };
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Data types (structs, interfaces) as type boxes
+
+/** The text of a member row of a type box: `x : real`, `event up : integer`. */
+export function memberText(member: IbdMember): string {
+    return `${member.prefix ?? ''}${member.name}${member.type ? ` : ${member.type}` : ''}`;
+}
+
+/** A type box: «struct» / «interface», the name, the fields / events in a compartment below. */
+function typeNode(id: string, type: ast.StructDeclaration | ast.PortInterface, measure: TextMeasure): IbdNode {
+    const struct = ast.isStructDeclaration(type);
+    const members: IbdMember[] = struct
+        ? type.fields.filter(f => f.name).map(f => ({ name: f.name, type: f.type?.name }))
+        : type.events.filter(e => e.name).map(e => ({ prefix: 'event ', name: e.name, type: e.type?.name }));
+    const stereotype = struct ? 'struct' : 'interface';
+    const widths = [
+        textWidth(measure, type.name, M.nameFont, true),
+        textWidth(measure, `«${stereotype}»`, M.stereotypeFont),
+        ...members.map(m => textWidth(measure, memberText(m), M.memberFont))
+    ];
+    return {
+        id, kind: 'type', name: type.name, stereotype, description: descriptionOf(type),
+        x: 0, y: 0,
+        width: Math.ceil(Math.max(100, ...widths) + 2 * M.instancePadding),
+        height: M.instanceHeader + Math.max(1, members.length) * M.memberRow + 10,
+        headerHeight: M.instanceHeader,
+        members,
+        ports: [],
+        children: []
+    };
+}
+
+/**
+ * Adds the structs and interfaces of the file to a diagram as type boxes (in text order, in rows below
+ * the diagram, left aligned with it, wrapped at its width – at least about 700 px). They are not
+ * connected to anything: ports show their type in their label.
+ */
+export function addTypeBoxes(result: IbdLayoutResult, types: ReadonlyArray<ast.StructDeclaration | ast.PortInterface>, measure: TextMeasure = approximateTextMeasure): void {
+    const graph = result.graph;
+    if (types.length === 0) {
+        return;
+    }
+    const used = new Set(ibdNodes(graph).map(n => n.node.id));
+    const nodes = types.map(type => {
+        let id = `type:${type.name}`;
+        for (let i = 1; used.has(id); i++) {
+            id = `type:${type.name}~${i}`;
+        }
+        used.add(id);
+        const node = typeNode(id, type, measure);
+        result.elements.set(id, type);
+        result.ids.set(type, id);
+        return node;
+    });
+    const empty = graph.children.length === 0;
+    const left = empty ? M.graphPadding : Math.min(...graph.children.map(c => c.x));
+    const top = empty ? M.graphPadding : graph.height + (graph.kind === 'subsystem' || graph.kind === 'system' ? 0 : M.typeSpacing - M.graphPadding);
+    const right = Math.max(left + 700, empty ? 0 : Math.max(...graph.children.map(c => c.x + c.width)));
+    let x = left;
+    let y = top;
+    let rowHeight = 0;
+    let width = graph.width;
+    for (const node of nodes) {
+        if (x > left && x + node.width > right) {
+            x = left;
+            y += rowHeight + M.typeSpacing;
+            rowHeight = 0;
+        }
+        node.x = x;
+        node.y = y;
+        x += node.width + M.typeSpacing;
+        rowHeight = Math.max(rowHeight, node.height);
+        width = Math.max(width, node.x + node.width + M.graphPadding);
+    }
+    graph.children.push(...nodes);
+    graph.width = width;
+    graph.height = y + rowHeight + M.graphPadding;
 }
 
 // ---------------------------------------------------------------------------------------------

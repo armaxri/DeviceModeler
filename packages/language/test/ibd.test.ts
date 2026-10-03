@@ -6,8 +6,8 @@ import { NodeFileSystem } from 'langium/node';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { runRenderCommand } from '../src/cli/render-commands.js';
 import * as ast from '../src/generated/ast.js';
-import { defaultIbdElement, ibdChoices, ibdElementAt, ibdNodes, ibdRouteElements, layoutStructure } from '../src/diagram/ibd-layout.js';
-import { IBD_OVERVIEW_ID, type IbdLayoutResult, type IbdNode } from '../src/diagram/ibd-model.js';
+import { defaultIbdElement, ibdChoices, ibdElementAt, ibdNodes, ibdRouteElements, layoutStructure, memberText } from '../src/diagram/ibd-layout.js';
+import { IBD_OVERVIEW_ID, IBD_TYPES_ID, type IbdLayoutResult, type IbdNode } from '../src/diagram/ibd-model.js';
 import { DmfModelLoader } from '../src/hsm-document.js';
 import { createHsmServices } from '../src/hsm-module.js';
 import { parseXml, type XmlElement } from '../src/importer/xml.js';
@@ -110,7 +110,7 @@ describe('internal block diagram: the garage door system', () => {
         expect(door.behavior?.machine).toBe('DoorController');
         expect(door.behavior?.uri).toMatch(/controller\.hsm$/);
         const drive = node(layout, 'GarageDoor/drive');
-        expect([drive.stereotype, drive.composite?.structure]).toEqual(['structure', 'DriveUnit']);
+        expect([drive.stereotype, drive.composite?.structure]).toEqual(['subsystem', 'DriveUnit']);
         expect(drive.composite?.uri).toMatch(/drive\.dmf$/);
         expect(door.ports.map(p => p.name).sort()).toEqual(['alarm', 'cmd', 'cycles', 'motor', 'position', 'status']);
         for (const { node: n } of ibdNodes(layout.graph).filter(n => n.node.kind === 'instance')) {
@@ -201,15 +201,17 @@ describe('internal block diagram: the garage door system', () => {
 });
 
 describe('internal block diagram: other elements', () => {
-    test('the drive unit: a passive instance outside of the thread, delegations to required boundary ports', async () => {
+    test('the drive unit: two threads, delegations to required boundary ports', async () => {
         const layout = (await layoutStructure(await loadExample('drive.dmf')))!;
         const frame = layout.graph.children[0];
-        expect(frame.details).toBe('ibd [structure] DriveUnit');
-        expect(frame.children.map(n => n.id)).toEqual(['DriveUnit/thread:MotorTask', 'DriveUnit/pwm']);
+        expect(frame.details).toBe('ibd [subsystem] DriveUnit');
+        expect(frame.children.map(n => n.id)).toEqual(['DriveUnit/thread:MotorTask', 'DriveUnit/thread:SwitchTask']);
         expect(frame.ports.map(p => `${p.name} ${p.side}`)).toEqual(['ctrl WEST', 'status EAST']);
         expect(node(layout, 'DriveUnit/thread:MotorTask').details).toBe('priority 8 · period 1 ms · stack 2048');
-        // a passive instance: no cross-thread connection
         expect(layout.graph.edges.find(e => e.id === 'DriveUnit/motor.pwm->pwm.duty')?.crossThread).toBe(false);
+        expect(layout.graph.edges.find(e => e.id === 'DriveUnit/switches.events->motor.sensors')?.crossThread).toBe(true);
+        // no data types declared in the file: no type boxes
+        expect(layout.graph.children.map(n => n.kind)).toEqual(['frame']);
         expect([...ibdRouteElements(layout, 'DriveUnit.status')!].sort()).toEqual([
             'DriveUnit.status', 'DriveUnit/motor', 'DriveUnit/motor.status', 'DriveUnit/motor.status->status'
         ]);
@@ -232,14 +234,45 @@ describe('internal block diagram: other elements', () => {
         expect(ibdRouteElements(single, 'Buzzer.alarm')).toBeUndefined();
         // an unknown element: the default
         expect((await layoutStructure(model, { element: 'Nope' }))!.graph.kind).toBe('overview');
-        // a file without component types
-        expect(await layoutStructure(await loadExample('types.dmf'))).toBeUndefined();
+        // ports show their named type in the label
+        expect(node(overview, 'DoorController').ports.find(p => p.name === 'cmd')?.label.text).toBe('cmd : DoorCmd');
+        expect(node(overview, 'DoorController').ports.find(p => p.name === 'alarm')?.label.text).toBe('alarm');
+    });
+
+    test('data types: the structs and interfaces of the file as unconnected type boxes', async () => {
+        // a file without component types: only the type boxes
+        const types = await loadExample('types.dmf');
+        expect(ibdChoices(types).map(c => `${c.kind} ${c.id}`)).toEqual([`types ${IBD_TYPES_ID}`]);
+        const layout = (await layoutStructure(types))!;
+        expect(layout.graph.kind).toBe('types');
+        expect(layout.graph.edges).toEqual([]);
+        expect(layout.graph.children.map(n => `${n.kind} ${n.stereotype} ${n.id}`)).toEqual([
+            'type struct type:Diagnostics', 'type interface type:DoorCmd', 'type interface type:MotorCmd', 'type interface type:MotorStatus'
+        ]);
+        expect(node(layout, 'type:MotorCmd').members?.map(memberText)).toEqual(['event up : integer', 'event down : integer', 'event halt']);
+        expect(layout.elements.get('type:Diagnostics')?.$type).toBe('StructDeclaration');
+        expect(ibdRouteElements(layout, 'type:Diagnostics')).toBeUndefined();
+        // a mixed file: the subsystem, the type boxes below its frame, nothing connected to them
+        const light = (await layoutStructure(await loadExample('light.dmf')))!;
+        const [frame, ...boxes] = light.graph.children;
+        expect(frame.details).toBe('ibd [subsystem] CourtesyLight');
+        expect(boxes.map(b => `${b.kind} ${b.name}`)).toEqual(['type LightLevel', 'type LightCmd']);
+        for (const box of boxes) {
+            expect(box.y).toBeGreaterThanOrEqual(frame.y + frame.height);
+            expect(box.x + box.width).toBeLessThanOrEqual(light.graph.width);
+            expect(box.y + box.height).toBeLessThanOrEqual(light.graph.height);
+        }
+        expect(light.graph.edges.every(e => !e.source.startsWith('type:') && !e.target.startsWith('type:'))).toBe(true);
+        const svg = renderIbdSvg(light.graph);
+        expect(svg).toContain('class="ibd-node ibd-type"');
+        expect(svg).toContain('«struct»');
+        expect(svg).toContain('<tspan class="ibd-port-type">LightLevel</tspan>');
     });
 
     test('several structures: the system is shown by default, the cursor selects another one', async () => {
         const text = `
 component A { provides sync p : integer  requires async e : event x }
-structure Inner { provides sync p : integer  a : A  delegate p -> a.p }
+subsystem Inner { provides sync p : integer  thread I { a : A }  delegate p -> a.p }
 system Top {
     thread T { a : A }
     b : A
@@ -249,7 +282,7 @@ system Top {
     connect b.e -> missing.e
 }`;
         const model = await load(text);
-        expect(ibdChoices(model).map(c => `${c.kind} ${c.id}`)).toEqual(['component A', 'structure Inner', 'system Top']);
+        expect(ibdChoices(model).map(c => `${c.kind} ${c.id}`)).toEqual(['component A', 'subsystem Inner', 'system Top']);
         expect(defaultIbdElement(model)).toBe('Top');
         expect(ibdElementAt(model, text.indexOf('delegate'))).toBe('Inner');
         const layout = (await layoutStructure(model))!;
@@ -281,8 +314,8 @@ describe('hsm render: structure files', () => {
         const code = await runRenderCommand([DEVICE], { out, theme: 'modern' }, { log: m => messages.push(m), error: m => messages.push(`error: ${m}`) });
         expect(code).toBe(0);
         // drive.dmf and drive.hsm: the structure gets its own name
-        expect(fs.readdirSync(out).sort()).toEqual(['components.svg', 'controller.svg', 'drive.dmf.svg', 'drive.svg', 'system.svg']);
-        expect(messages.some(m => /types\.dmf: no components/.test(m))).toBe(true);
+        expect(fs.readdirSync(out).sort()).toEqual(['components.svg', 'controller.svg', 'drive.dmf.svg', 'drive.svg', 'light.svg', 'system.svg', 'types.svg']);
+        expect(fs.readFileSync(path.join(out, 'types.svg'), 'utf-8')).toContain('class="ibd-node ibd-type"');
         const system = fs.readFileSync(path.join(out, 'system.svg'), 'utf-8');
         expect(system).toMatch(/^<\?xml/);
         expect(system).toContain('theme-modern');
@@ -299,6 +332,6 @@ describe('hsm render: structure files', () => {
         expect(await runRenderCommand([path.join(DEVICE, 'components.dmf')], { out, element: 'Buzzer' }, logger)).toBe(0);
         expect(fs.readFileSync(out, 'utf-8')).toContain('Buzzer');
         expect(await runRenderCommand([path.join(DEVICE, 'components.dmf')], { out, element: 'Nope' }, logger)).toBe(1);
-        expect(messages.at(-1)).toMatch(/no structure, system or component type 'Nope'/);
+        expect(messages.at(-1)).toMatch(/no subsystem, system or component type 'Nope'/);
     });
 });

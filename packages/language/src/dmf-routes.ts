@@ -394,29 +394,21 @@ export function isComponentEndpoint(endpoint: PortEndpoint): boolean {
 }
 
 /**
- * The thread an endpoint's instance runs in: its own thread, else the thread of the nearest enclosing
- * composite instance on the path that is assigned to a thread; `undefined` for passive instances (and
- * boundary ports).
+ * The thread an endpoint's instance runs in: the thread of a component instance; `undefined` for
+ * instances of subsystems (their parts run in threads of their own), boundary ports and component
+ * instances outside of any thread (an error reported by the validator).
  */
 export function effectiveThread(endpoint: PortEndpoint): ast.Thread | undefined {
-    if (!endpoint.instance) {
-        return undefined;
-    }
-    for (const instance of [...endpoint.path, endpoint.instance].reverse()) {
-        const thread = threadOf(instance);
-        if (thread) {
-            return thread;
-        }
-    }
-    return undefined;
+    const instance = endpoint.instance;
+    return instance && !isCompositeType(instanceType(instance)) ? threadOf(instance) : undefined;
 }
 
 /**
- * The threads on both sides of a connection, `undefined` for a passive side: the thread of the
- * instance, and for a composite instance outside of any thread the thread of the component ports the
- * connection leads to inside the composite (its requirers for the source side, its providers for the
- * target side), if they all run in the same thread. A connection crosses threads if both sides have a
- * thread and they differ (reported by the validator, drawn dashed in the diagram).
+ * The threads on both sides of a connection: the thread of a component instance, and for an instance of
+ * a subsystem the thread of the component ports the connection leads to inside the subsystem (its
+ * requirers for the source side, its providers for the target side) if they all run in the same thread
+ * (`undefined` otherwise). A connection crosses threads if both sides have a thread and they differ
+ * (reported by the validator, drawn dashed in the diagram).
  */
 export function connectionThreads(connection: ast.Connection): { source?: ast.Thread, target?: ast.Thread } {
     const side = (reference: ast.PortReference | undefined, direction: 'forward' | 'backward'): ast.Thread | undefined => {
@@ -424,15 +416,14 @@ export function connectionThreads(connection: ast.Connection): { source?: ast.Th
         if (!reference || !instance) {
             return undefined;
         }
-        const own = threadOf(instance);
-        if (own || !isCompositeType(instanceType(instance))) {
-            return own;
+        if (!isCompositeType(instanceType(instance))) {
+            return threadOf(instance);
         }
         const start = referenceEndpoint(reference);
         if (!start) {
             return undefined;
         }
-        // the component ports inside the composite: follow the boundary hop (and further) away from the connection
+        // the component ports inside the subsystem: follow the boundary hop (and further) away from the connection
         const ends = (direction === 'forward' ? findProviders(start) : findRequirers(start))
             .filter(e => e.path.length > 0 && isComponentEndpoint(e));
         const threads = new Set(ends.map(effectiveThread));

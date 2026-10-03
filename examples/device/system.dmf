@@ -20,7 +20,7 @@ system GarageDoor {
         sensor : PositionSensor
         diag : Diagnosis
     }
-    // a composite: its parts run in their own threads
+    // a subsystem: outside of the threads, its parts run in the threads of DriveUnit
     drive : DriveUnit
 
     connect door.motor -> drive.ctrl

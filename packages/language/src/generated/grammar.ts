@@ -646,7 +646,7 @@ export const DmfGrammar = (): Grammar => loadedDmfGrammar ?? (loadedDmfGrammar =
               "elements": [
                 {
                   "$type": "Keyword",
-                  "value": "structure"
+                  "value": "subsystem"
                 },
                 {
                   "$type": "Keyword",
@@ -5204,7 +5204,7 @@ export const DmfGrammar = (): Grammar => loadedDmfGrammar ?? (loadedDmfGrammar =
   ],
   "interfaces": [],
   "types": [],
-  "$comment": "/*\\n * Structure language of the Device Modeling Framework (DMF), file extension \`.dmf\`: the structure of\\n * a product (component types, ports, composite structures, threads, instances and connections),\\n * modeled alongside the state machines (\`.hsm\`) that describe the behavior of its components:\\n *\\n *   import \\"types.dmf\\"\\n *\\n *   interface DoorCmd {\\n *       event open\\n *       event close\\n *   }\\n *\\n *   component DoorController \\"controls the door\\" {\\n *       behavior \\"door.hsm\\"\\n *       provides async cmd   : DoorCmd\\n *       requires async motor : event start : integer, event stop\\n *       requires sync  pos   : Position\\n *   }\\n *\\n *   system Car {\\n *       provides async diag : event request\\n *       @priority(5) @period(10 ms)\\n *       thread ControlTask {\\n *           door  : DoorController\\n *           motor : MotorDriver\\n *       }\\n *       connect door.motor -> motor.ctrl          // required -> provided\\n *       delegate diag -> door.cmd                 // outer provided -> inner provided\\n *   }\\n *\\n * Types (built-in types, structs, interfaces, C++ types of imported headers) are referenced by name\\n * and resolved by dmf-types.ts, component types, instances and ports are cross-references (see\\n * dmf-scope.ts). The rules (directions, kinds, types, threads, behavior) are checked by\\n * dmf-validator.ts and documented in docs/structure-language.md.\\n */"
+  "$comment": "/*\\n * Structure language of the Device Modeling Framework (DMF), file extension \`.dmf\`: the structure of\\n * a product (component types, ports, subsystems, threads, instances and connections),\\n * modeled alongside the state machines (\`.hsm\`) that describe the behavior of its components:\\n *\\n *   import \\"types.dmf\\"\\n *\\n *   interface DoorCmd {\\n *       event open\\n *       event close\\n *   }\\n *\\n *   component DoorController \\"controls the door\\" {\\n *       behavior \\"door.hsm\\"\\n *       provides async cmd   : DoorCmd\\n *       requires async motor : event start : integer, event stop\\n *       requires sync  pos   : Position\\n *   }\\n *\\n *   system Car {\\n *       provides async diag : event request\\n *       @priority(5) @period(10 ms)\\n *       thread ControlTask {\\n *           door  : DoorController\\n *           motor : MotorDriver\\n *       }\\n *       connect door.motor -> motor.ctrl          // required -> provided\\n *       delegate diag -> door.cmd                 // outer provided -> inner provided\\n *   }\\n *\\n * Types (built-in types, structs, interfaces, C++ types of imported headers) are referenced by name\\n * and resolved by dmf-types.ts, component types, instances and ports are cross-references (see\\n * dmf-scope.ts). The rules (directions, kinds, types, threads, behavior) are checked by\\n * dmf-validator.ts and documented in docs/structure-language.md.\\n */"
 }`));
 
 let loadedHsmGrammar: Grammar | undefined;

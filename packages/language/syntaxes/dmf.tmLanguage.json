@@ -10,7 +10,7 @@
     },
     {
       "name": "keyword.control.dmf",
-      "match": "\\b(component|interface|structure|behavior|delegate|provides|requires|connect|package|import|struct|system|thread|async|event|sync)\\b"
+      "match": "\\b(component|interface|subsystem|behavior|delegate|provides|requires|connect|package|import|struct|system|thread|async|event|sync)\\b"
     },
     {
       "name": "string.quoted.double.dmf",

@@ -1,6 +1,7 @@
 import { AstUtils, GrammarUtils, type AstNode, type LangiumCoreServices } from 'langium';
 import * as ast from '../generated/ast.js';
-import { enclosingStructure, structureInstances, threadOf } from '../dmf-model.js';
+import { visibleElements } from '../dmf-imports.js';
+import { enclosingStructure, isCompositeType, structureInstances, threadInstances, threadOf } from '../dmf-model.js';
 import { portIncompatibilities } from '../dmf-types.js';
 import { BUILTIN_TYPES } from '../hsm-typesystem.js';
 import { EditError, mapOffset, quote, type EditResult, type TextEdit } from './model-edits.js';
@@ -15,7 +16,7 @@ import { EditError, mapOffset, quote, type EditResult, type TextEdit } from './m
 
 /** Keywords of the structure language (not allowed as names). */
 export const DMF_KEYWORDS: ReadonlySet<string> = new Set([
-    'package', 'import', 'struct', 'interface', 'event', 'component', 'behavior', 'structure', 'system',
+    'package', 'import', 'struct', 'interface', 'event', 'component', 'behavior', 'subsystem', 'system',
     'provides', 'requires', 'sync', 'async', 'thread', 'connect', 'delegate'
 ]);
 
@@ -152,8 +153,8 @@ export class DmfEditor {
     // Component types
 
     /** Adds a component type (`component C1 { }`) at the end of the file. */
-    addComponentType(kind: 'component' | 'structure' | 'system', name?: string): EditResult {
-        const typeName = name ?? this.freshName(kind === 'component' ? 'Component' : kind === 'structure' ? 'Structure' : 'System',
+    addComponentType(kind: 'component' | 'subsystem' | 'system', name?: string): EditResult {
+        const typeName = name ?? this.freshName(kind === 'component' ? 'Component' : kind === 'subsystem' ? 'Subsystem' : 'System',
             this.model.elements.map(e => e.name));
         checkDmfName(typeName);
         if (this.model.elements.some(e => e.name === typeName)) {
@@ -235,13 +236,22 @@ export class DmfEditor {
     }
 
     /**
-     * Adds an instance (`name : Type`) to a structure: into the given thread, or outside of the threads
-     * (a passive part). The name defaults to the type name starting with a lower case letter.
+     * Adds an instance (`name : Type`) to a subsystem or system: an instance of a component into the given
+     * thread (it is required), an instance of a subsystem outside of the threads (no thread may be given),
+     * see docs/structure-language.md#threads. The name defaults to the type name starting with a lower
+     * case letter.
      */
     addInstance(structure: ast.Structure, typeName: string, options: { name?: string, thread?: ast.Thread } = {}): EditResult {
         const type = typeName.trim();
         if (!/^[_a-zA-Z][\w]*(\.[_a-zA-Z]\w*)*$/.test(type)) {
             throw new EditError(`'${type}' is not a component type name.`);
+        }
+        const resolved = visibleElements(this.model).get(type);
+        if (ast.isComponent(resolved) && !options.thread) {
+            throw new EditError(`'${type}' is a component: its instances run in a thread – add the instance to a thread.`);
+        }
+        if (ast.isStructure(resolved) && options.thread) {
+            throw new EditError(`'${type}' is a subsystem: its instances are placed outside of the threads (its parts run in the threads of ${type}).`);
         }
         const simple = type.substring(type.lastIndexOf('.') + 1);
         const base = simple.charAt(0).toLowerCase() + simple.substring(1);
@@ -272,14 +282,22 @@ export class DmfEditor {
     }
 
     /**
-     * Moves an instance into a thread or (`target` = the structure) out of its thread. An instance
-     * declared in the structure and assigned to a thread by name (`thread T { door }`) loses that
-     * assignment; its declaration moves into the target thread.
+     * Moves an instance of a component into another thread. An instance declared in the body and assigned
+     * to a thread by name (`thread T { door }`) loses that assignment; its declaration moves into the
+     * target thread. `target` = the subsystem / system moves an instance out of its thread: allowed only
+     * for instances of subsystems (which do not belong into threads, see docs/structure-language.md#threads).
      */
     moveInstance(instance: ast.ComponentInstance, target: ast.Thread | ast.Structure): EditResult {
         const structure = enclosingStructure(instance);
         if (!structure || (ast.isThread(target) ? target.$container !== structure : target !== structure)) {
-            throw new EditError(`'${instance.name}' can only be moved within its structure.`);
+            throw new EditError(`'${instance.name}' can only be moved within its ${structure?.kind ?? 'subsystem'}.`);
+        }
+        const type = instance.type?.ref;
+        if (isCompositeType(type) && ast.isThread(target)) {
+            throw new EditError(`'${instance.name}' is an instance of the subsystem ${type.name}: it is placed outside of the threads (its parts run in the threads of ${type.name}).`);
+        }
+        if (ast.isComponent(type) && ast.isStructure(target)) {
+            throw new EditError(`'${instance.name}' is an instance of the component ${type.name}: it runs in a thread – move it into another thread.`);
         }
         const current = threadOf(instance);
         if ((ast.isThread(target) && current === target) || (ast.isStructure(target) && !current)) {
@@ -416,7 +434,8 @@ export class DmfEditor {
      * Deletes elements of the diagram:
      * - an instance with its connections, delegations and assignments to threads,
      * - a port with the connections and delegations of this file that use it,
-     * - a thread: its instances are kept (they become passive parts of the structure),
+     * - a thread with its instances (declared in it or assigned to it) and their connections and
+     *   delegations (instances of components run in a thread, see docs/structure-language.md#threads),
      * - connections, delegations, component types.
      */
     deleteElements(targets: readonly AstNode[]): EditResult {
@@ -427,6 +446,10 @@ export class DmfEditor {
         for (const target of targets) {
             if (ast.isThread(target)) {
                 threads.add(target);
+                for (const instance of threadInstances(target)) {
+                    nodes.add(instance);
+                    deletedInstances.add(instance);
+                }
             } else if (ast.isComponentInstance(target)) {
                 nodes.add(target);
                 deletedInstances.add(target);
@@ -470,25 +493,8 @@ export class DmfEditor {
             }
         }
         for (const thread of threads) {
-            if (!thread.$cstNode || [...nodes].some(n => isAncestor(n, thread))) {
-                continue;
-            }
-            // the instances declared in the thread stay in the structure
-            const range = this.rangeOf(thread);
-            const indent = this.indentOf(range.offset);
-            const kept = thread.instances.filter(i => !nodes.has(i) && i.$cstNode).map(i => {
-                const lines = this.nodeText(this.rangeOf(i), indent);
-                const comment = this.trailingComment(i.$cstNode!.end);
-                return indent + lines + (comment ? ' ' + comment : '');
-            });
-            const deletion = this.deletionEdit(range);
-            if (kept.length > 0) {
-                const lineStart = this.text.lastIndexOf('\n', range.offset - 1) + 1;
-                const end = deletion.offset + deletion.length;
-                const newline = end <= this.text.length && this.text.charAt(end - 1) === '\n' ? '\n' : '';
-                edits.push({ offset: lineStart, length: end - lineStart, text: kept.join('\n') + newline });
-            } else {
-                edits.push(deletion);
+            if (thread.$cstNode && ![...nodes].some(n => isAncestor(n, thread))) {
+                edits.push(this.deletionEdit(this.rangeOf(thread)));
             }
         }
         return { edits: mergeEdits(edits) };

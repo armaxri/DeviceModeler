@@ -8,7 +8,7 @@ import { layoutStateMachineWithLayout } from '../diagram/manual-layout.js';
 import { describeStateMachine, generateDocIndex, generateModelDoc, type DocFormat, type DocIndexEntry } from '../doc/model-doc.js';
 import type { DmfModel, StateMachine } from '../generated/ast.js';
 import { layoutStructure } from '../diagram/ibd-layout.js';
-import { IBD_OVERVIEW_ID } from '../diagram/ibd-model.js';
+import { IBD_OVERVIEW_ID, IBD_TYPES_ID } from '../diagram/ibd-model.js';
 import { DmfModelLoader, HsmModelLoader } from '../hsm-document.js';
 import { createHsmServices } from '../hsm-module.js';
 import { installNodeHeaderSupport } from '../node/cpp-headers-node.js';
@@ -34,8 +34,8 @@ export interface RenderCommandOptions extends DiagramCommandOptions {
     out?: string;
     format?: string;
     /**
-     * Structure files (`.dmf`): the structure, system or component type to show (default: the first
-     * system, else the first structure, else all component types).
+     * Structure files (`.dmf`): the subsystem, system or component type to show (default: the first
+     * system, else the first subsystem, else all component types, else the data types).
      */
     element?: string;
 }
@@ -168,15 +168,17 @@ export async function runRenderCommand(patterns: string[], options: RenderComman
     const { models, structures, failures: loadFailures } = await loadModels(files, logger);
     let failures = loadFailures;
     const single = files.length === 1 && options.out?.toLowerCase().endsWith('.svg');
-    // structure files: the internal block diagram of a structure (or the component types as blocks)
+    // structure files: the internal block diagram of a subsystem or system (or the component types as
+    // blocks, or the data types of a file without component types), with the structs and interfaces of the file
     for (const { file, model } of structures) {
         const layout = await layoutStructure(model, { element: options.element });
         if (!layout) {
-            logger.log(`${file}: no components, structures or systems to render`);
+            logger.log(`${file}: no components, subsystems, systems or data types to render`);
             continue;
         }
-        if (options.element && layout.graph.name !== options.element && !(layout.graph.kind === 'overview' && options.element === IBD_OVERVIEW_ID)) {
-            logger.error(`${file}: no structure, system or component type '${options.element}'`);
+        if (options.element && layout.graph.name !== options.element && !(layout.graph.kind === 'overview' && options.element === IBD_OVERVIEW_ID)
+            && !(layout.graph.kind === 'types' && options.element === IBD_TYPES_ID)) {
+            logger.error(`${file}: no subsystem, system or component type '${options.element}'`);
             failures++;
             continue;
         }
@@ -355,8 +357,8 @@ export function registerRenderCommands(program: Command): void {
         .option('--no-priorities', 'do not prefix transition labels with their priority')
         .option('--auto', 'lay out automatically, ignoring the layout annotations (@at, ...) of the models')
         .option('-f, --format <format>', 'output format (svg)', 'svg')
-        .option('-e, --element <name>', 'structure files: the structure, system or component type to render (default: the first system or structure)')
-        .description('renders the diagrams of state machines and structures (internal block diagrams) as standalone SVG files')
+        .option('-e, --element <name>', 'structure files: the subsystem, system or component type to render (default: the first system or subsystem)')
+        .description('renders the diagrams of state machines and structure files (internal block diagrams) as standalone SVG files')
         .action(async (files: string[], options: RenderCommandOptions) => {
             process.exitCode = await runRenderCommand(files, options);
         });

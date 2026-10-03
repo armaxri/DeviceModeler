@@ -7,7 +7,7 @@ import * as ast from './generated/ast.js';
  * and the diagram.
  */
 
-/** The structure (or system) whose body contains the node. */
+/** The subsystem or system whose body contains the node. */
 export function enclosingStructure(node: AstNode | undefined): ast.Structure | undefined {
     return node ? AstUtils.getContainerOfType(node, ast.isStructure) : undefined;
 }
@@ -30,7 +30,7 @@ export function instanceType(instance: ast.ComponentInstance | undefined): ast.C
     return instance?.type?.ref;
 }
 
-/** Whether the component type is a composite (structure or system). */
+/** Whether the component type is a composite (subsystem or system). */
 export function isCompositeType(type: ast.ComponentType | undefined): type is ast.Structure {
     return ast.isStructure(type);
 }
@@ -54,9 +54,9 @@ export function threadsOf(instance: ast.ComponentInstance): ast.Thread[] {
 }
 
 /**
- * The thread of an instance in its structure, `undefined` for an instance outside of any thread
- * (a passive instance: it runs in the threads of its callers, or for a composite, its parts run in
- * their own threads, see docs/structure-language.md).
+ * The thread of an instance in its subsystem or system, `undefined` for an instance outside of any
+ * thread: an instance of a subsystem (its parts run in the threads of the subsystem) or a component
+ * instance not assigned to a thread (an error, see docs/structure-language.md#threads).
  */
 export function threadOf(instance: ast.ComponentInstance): ast.Thread | undefined {
     return threadsOf(instance)[0];

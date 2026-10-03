@@ -1,0 +1,40 @@
+// The courtesy light of the garage door (examples/device): data types, components and a subsystem
+// declared in one file. The diagram shows the subsystem and, next to it, the struct and the interface.
+
+/** Brightness of the lamp. */
+struct LightLevel {
+    brightness : integer
+    warm : boolean
+}
+
+/** Commands of the light. */
+interface LightCmd {
+    event on
+    event off
+    event dim : integer
+}
+
+/** Fades the lamp in and out. */
+component Dimmer {
+    provides async cmd : LightCmd
+    requires sync level : LightLevel
+}
+
+/** PWM output of the LED lamp. */
+component LedDriver {
+    provides sync level : LightLevel
+}
+
+/** The courtesy light: switched on and off by the remote control. */
+subsystem CourtesyLight {
+    provides async cmd : LightCmd
+
+    @priority(1) @period(20 ms)
+    thread LightTask {
+        dimmer : Dimmer
+        led : LedDriver
+    }
+
+    connect dimmer.level -> led.level
+    delegate cmd -> dimmer.cmd
+}

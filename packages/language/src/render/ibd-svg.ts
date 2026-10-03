@@ -83,7 +83,7 @@ class IbdSvgWriter {
                 out.push(`<rect class="ibd-frame-shape" x="0" y="0" width="${fmt(node.width)}" height="${fmt(node.height)}"/>`);
                 out.push(`<path class="ibd-frame-tab" d="${frameTabPath(node.tabWidth ?? 120, node.headerHeight)}"/>`);
                 out.push(`<text class="ibd-frame-title" x="8" y="${fmt(baseline(0, node.headerHeight, M.tabFont))}">`
-                    + `<tspan class="ibd-frame-kind">ibd</tspan> [${escapeXml(node.stereotype ?? 'structure')}] `
+                    + `<tspan class="ibd-frame-kind">ibd</tspan> [${escapeXml(node.stereotype ?? 'subsystem')}] `
                     + `<tspan class="ibd-frame-name">${escapeXml(node.name)}</tspan></text>`);
                 break;
             case 'thread':
@@ -93,6 +93,9 @@ class IbdSvgWriter {
                 if (node.details) {
                     out.push(`<text class="ibd-thread-details" x="10" y="${fmt(baseline(4 + M.threadHeaderLine, M.threadHeaderLine, M.detailsFont))}">${escapeXml(node.details)}</text>`);
                 }
+                break;
+            case 'type':
+                this.typeBox(node, out);
                 break;
             default:
                 this.block(node, out);
@@ -111,13 +114,34 @@ class IbdSvgWriter {
         out.push(`<text class="ibd-instance-name" x="${fmt(center)}" y="${fmt(baseline(18, 18, M.nameFont))}">${escapeXml(name)}</text>`);
         out.push(`<line class="ibd-instance-separator" x1="0" y1="${fmt(node.headerHeight)}" x2="${fmt(node.width)}" y2="${fmt(node.headerHeight)}"/>`);
         if (node.composite) {
-            out.push(`<g class="ibd-icon ibd-composite-icon"><title>${escapeXml(`Composite: structure ${node.composite.structure}`)}</title>`
+            out.push(`<g class="ibd-icon ibd-composite-icon"><title>${escapeXml(`Subsystem ${node.composite.structure} (has an internal block diagram)`)}</title>`
                 + `<path d="${compositeIconPath(node.width - M.iconWidth - 2, node.headerHeight / 2)}"/></g>`);
         } else if (node.behavior) {
             const icon = behaviorIconPath(node.width - M.iconWidth - 2, node.headerHeight / 2);
             out.push(`<g class="ibd-icon ibd-behavior-icon"><title>${escapeXml(`Behavior: state machine ${node.behavior.machine ?? '?'}`)}</title>`
                 + icon.states.map(s => `<rect x="${fmt(s.x)}" y="${fmt(s.y)}" width="${s.width}" height="${s.height}" rx="2" ry="2"/>`).join('')
                 + `<path d="${icon.line}"/></g>`);
+        }
+    }
+
+    /** A struct or interface: «struct» / «interface», the name, the fields / events. */
+    private typeBox(node: IbdNode, out: string[]): void {
+        const center = node.width / 2;
+        out.push(`<rect class="ibd-type-shape" x="0" y="0" width="${fmt(node.width)}" height="${fmt(node.height)}"/>`);
+        out.push(`<rect class="ibd-type-header" x="0.6" y="0.6" width="${fmt(node.width - 1.2)}" height="${fmt(node.headerHeight - 0.6)}"/>`);
+        out.push(`<text class="ibd-stereotype ibd-type-stereotype" x="${fmt(center)}" y="${fmt(baseline(4, 15, M.stereotypeFont))}">«${escapeXml(node.stereotype ?? 'struct')}»</text>`);
+        out.push(`<text class="ibd-type-name" x="${fmt(center)}" y="${fmt(baseline(18, 18, M.nameFont))}">${escapeXml(node.name)}</text>`);
+        out.push(`<line class="ibd-type-separator" x1="0" y1="${fmt(node.headerHeight)}" x2="${fmt(node.width)}" y2="${fmt(node.headerHeight)}"/>`);
+        const members = node.members ?? [];
+        members.forEach((member, i) => {
+            out.push(`<text class="ibd-type-member" x="${M.instancePadding}" y="${fmt(baseline(node.headerHeight + 5 + i * M.memberRow, M.memberRow, M.memberFont))}">`
+                + (member.prefix ? `<tspan class="ibd-type-keyword">${escapeXml(member.prefix.trim())}</tspan> ` : '')
+                + `<tspan class="ibd-type-member-name">${escapeXml(member.name)}</tspan>`
+                + (member.type ? ` : <tspan class="ibd-type-member-type">${escapeXml(member.type)}</tspan>` : '') + '</text>');
+        });
+        if (members.length === 0) {
+            out.push(`<text class="ibd-type-member ibd-type-empty" x="${M.instancePadding}" y="${fmt(baseline(node.headerHeight + 5, M.memberRow, M.memberFont))}">`
+                + `${node.stereotype === 'interface' ? 'no events' : 'no fields'}</text>`);
         }
     }
 
@@ -129,7 +153,10 @@ class IbdSvgWriter {
         if (chevron) {
             out.push(`<path class="ibd-port-chevron" transform="translate(${fmt(port.x)}, ${fmt(port.y)})" d="${chevron}"/>`);
         }
-        out.push(`<text class="ibd-port-label" x="${fmt(port.label.x)}" y="${fmt(baseline(port.label.y, port.label.height, M.portFont))}">${escapeXml(port.label.text)}</text>`);
+        const label = port.typeName !== undefined
+            ? `<tspan class="ibd-port-name">${escapeXml(port.name)}</tspan> : <tspan class="ibd-port-type">${escapeXml(port.typeName)}</tspan>`
+            : escapeXml(port.label.text);
+        out.push(`<text class="ibd-port-label" x="${fmt(port.label.x)}" y="${fmt(baseline(port.label.y, port.label.height, M.portFont))}">${label}</text>`);
         out.push('</g>');
     }
 

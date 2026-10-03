@@ -1,6 +1,6 @@
 /*
  * Structure language of the Device Modeling Framework (DMF), file extension `.dmf`: the structure of
- * a product (component types, ports, composite structures, threads, instances and connections),
+ * a product (component types, ports, subsystems, threads, instances and connections),
  * modeled alongside the state machines (`.hsm`) that describe the behavior of its components:
  *
  *   import "types.dmf"
@@ -84,7 +84,7 @@ DataTypeReference:
     name=TypeReferenceName;
 
 // ---------------------------------------------------------------------------------------------
-// Components and structures
+// Components, subsystems and systems
 
 ComponentType:
     Component | Structure;
@@ -101,10 +101,17 @@ Component:
 Behavior:
     'behavior' (path=STRING | machine=[StateMachine:ID]);
 
-// A composite component type (`structure`) or the root of a product (`system`): boundary ports,
-// threads, instances of component types, connections and delegations.
+// A composite: a `subsystem` (a composite component type, instantiated in other subsystems and
+// systems) or the root of a product (`system`): boundary ports, threads with the instances of
+// components, instances of subsystems (outside of the threads: their parts run in threads of their
+// own), connections and delegations. (The AST type `Structure` covers both kinds.)
+//
+// Where an instance may be declared depends on the kind of its type, which is known only after
+// linking: instances of components belong into threads, instances of subsystems outside of them.
+// The validator checks this (dmf-validator.ts checkInstance / checkThreadMember) with messages telling
+// where to put the instance; a grammar rule per kind would only report unresolvable references.
 Structure:
-    annotations+=DmfAnnotation* kind=('structure' | 'system') name=ID (description=STRING)? '{'
+    annotations+=DmfAnnotation* kind=('subsystem' | 'system') name=ID (description=STRING)? '{'
         (ports+=Port | threads+=Thread | instances+=ComponentInstance | connections+=Connection | delegations+=Delegation)*
     '}';
 
@@ -118,9 +125,9 @@ Port:
 // ---------------------------------------------------------------------------------------------
 // Threads, instances, connections
 
-// A thread of execution: the instances declared in it (`door : DoorController`) or assigned to it by
-// name (`door`, for instances declared outside of any thread). Annotations: `@priority(5)`,
-// `@period(10 ms)`, `@stack(4096)`.
+// A thread of execution: the component instances declared in it (`door : DoorController`) or assigned
+// to it by name (`door`, for a component instance declared in the body of the subsystem). Annotations:
+// `@priority(5)`, `@period(10 ms)`, `@stack(4096)`.
 Thread:
     annotations+=DmfAnnotation* 'thread' name=ID (description=STRING)? '{'
         (instances+=ComponentInstance | members+=ThreadMember)*

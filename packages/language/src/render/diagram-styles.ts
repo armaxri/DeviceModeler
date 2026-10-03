@@ -588,13 +588,16 @@ export const DIAGRAM_CSS = `
     stroke-width: 1px;
 }
 
-/* ---- internal block diagrams of structures (.dmf, ibd-layout.ts) ---- */
+/* ---- internal block diagrams of subsystems and systems (.dmf, ibd-layout.ts) ---- */
 
 .theme-classic {
     --ibd-thread-fill: #f4f7fb;
     --ibd-thread-stroke: #7f95ab;
     --ibd-frame-stroke: #a80036;
     --ibd-tab-fill: #fbf3dd;
+    --ibd-type-fill: #f4f6f8;
+    --ibd-type-stroke: #6b7b8c;
+    --ibd-type-header: #e6ebf0;
 }
 
 .theme-modern {
@@ -602,6 +605,9 @@ export const DIAGRAM_CSS = `
     --ibd-thread-stroke: #8a96a3;
     --ibd-frame-stroke: #181818;
     --ibd-tab-fill: #ececec;
+    --ibd-type-fill: #fafafa;
+    --ibd-type-stroke: #7a7a7a;
+    --ibd-type-header: #efefef;
 }
 
 .theme-dark {
@@ -609,6 +615,9 @@ export const DIAGRAM_CSS = `
     --ibd-thread-stroke: #66727f;
     --ibd-frame-stroke: #9fb3c8;
     --ibd-tab-fill: #2d333b;
+    --ibd-type-fill: #22262c;
+    --ibd-type-stroke: #7d8a99;
+    --ibd-type-header: #2c323a;
 }
 
 .theme-classic, .theme-modern {
@@ -727,6 +736,68 @@ export const DIAGRAM_CSS = `
 
 .ibd-port-label {
     font-size: 11px;
+}
+
+.sprotty-graph .ibd-port-type {
+    fill: var(--hsm-muted);
+}
+
+/* data types (structs, interfaces of the file): value type boxes, never connected */
+.ibd-type-shape {
+    fill: var(--ibd-type-fill);
+    stroke: var(--ibd-type-stroke);
+    stroke-width: 1.2px;
+}
+
+.ibd-type-header {
+    fill: var(--ibd-type-header);
+    stroke: none;
+}
+
+.ibd-type-separator {
+    stroke: var(--ibd-type-stroke);
+    stroke-width: 0.8px;
+}
+
+.ibd-type-stereotype,
+.ibd-type-name {
+    text-anchor: middle;
+}
+
+.ibd-type-name {
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.ibd-type-member {
+    font-size: 11px;
+}
+
+.sprotty-graph .ibd-type-keyword,
+.sprotty-graph .ibd-type-member-type,
+.sprotty-graph .ibd-type-empty {
+    fill: var(--hsm-muted);
+}
+
+.ibd-type-keyword {
+    font-style: italic;
+}
+
+.ibd-node.mouseover > .ibd-type-shape {
+    stroke-width: 2.2px;
+}
+
+.ibd-node.selected > .ibd-type-shape {
+    stroke: var(--hsm-select);
+    stroke-width: 2.5px;
+}
+
+.ibd-node.has-error > .ibd-type-shape {
+    stroke: var(--hsm-error);
+}
+
+.route-highlight .ibd-type {
+    opacity: 0.4;
 }
 
 .ibd-connector-line {

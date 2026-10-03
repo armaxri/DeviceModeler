@@ -208,7 +208,7 @@ describe('CLI render and doc', () => {
         expect(await runRenderCommand([EXAMPLES_DIR], { out: dir, theme: 'dark', direction: 'right', routing: 'orthogonal' }, log)).toBe(0);
         // (with the structure files of examples/device: drive.dmf is rendered as drive.dmf.svg next to drive.svg of drive.hsm)
         expect(fs.readdirSync(dir).sort()).toEqual(['cd-player.svg', 'components.svg', 'controller.svg', 'conveyor.svg', 'door.svg', 'drive.dmf.svg', 'drive.svg',
-            'gate.svg', 'keyboard.svg', 'motor.svg', 'system.svg', 'traffic-light.svg']);
+            'gate.svg', 'keyboard.svg', 'light.svg', 'motor.svg', 'system.svg', 'traffic-light.svg', 'types.svg']);
         const svg = fs.readFileSync(path.join(dir, 'door.svg'), 'utf-8');
         expect(parseXml(svg).attributes.class).toContain('theme-dark');
         const single = path.join(dir, 'sub', 'door-classic.svg');

@@ -62,7 +62,7 @@ describe('structure edits: threads and instances', () => {
     }
     thread Thread1 {
     }
-    // a composite: its parts run in their own threads
+    // a subsystem: outside of the threads, its parts run in the threads of DriveUnit
     drive : DriveUnit`);
         expect(text.substring(result.selectOffset!)).toMatch(/^thread Thread1/);
     });
@@ -77,18 +77,24 @@ describe('structure edits: threads and instances', () => {
 `);
     });
 
-    test('add an instance into a thread and outside of threads', async () => {
+    test('add an instance of a component into a thread, of a subsystem outside of threads', async () => {
         const inThread = await edit('system.dmf', (e, m) => e.addInstance(structure(m, 'GarageDoor'), 'Buzzer', { thread: structure(m, 'GarageDoor').threads[1] }));
         expect(inThread.result.createdName).toBe('buzzer1');
         expect(inThread.text).toContain(`        diag : Diagnosis
         buzzer1 : Buzzer
     }`);
         expect(inThread.text.substring(inThread.result.selectOffset!)).toMatch(/^buzzer1 : Buzzer/);
-        const passive = await edit('system.dmf', (e, m) => e.addInstance(structure(m, 'GarageDoor'), 'PwmDriver', { name: 'pwm' }));
-        expect(passive.text).toContain(`    drive : DriveUnit
-    pwm : PwmDriver
+        const subsystem = await edit('system.dmf', (e, m) => e.addInstance(structure(m, 'GarageDoor'), 'DriveUnit', { name: 'drive2' }));
+        expect(subsystem.text).toContain(`    drive : DriveUnit
+    drive2 : DriveUnit
 
     connect door.motor -> drive.ctrl`);
+        // a component instance needs a thread, a subsystem instance must not be in one
+        const parsed = await load(deviceFile('system.dmf'));
+        const editor = new DmfEditor(parsed.text, parsed.model);
+        const s = structure(parsed.model, 'GarageDoor');
+        expect(() => editor.addInstance(s, 'PwmDriver')).toThrow("'PwmDriver' is a component: its instances run in a thread – add the instance to a thread.");
+        expect(() => editor.addInstance(s, 'DriveUnit', { thread: s.threads[0] })).toThrow(/'DriveUnit' is a subsystem: its instances are placed outside of the threads/);
     });
 
     test('add an instance into an empty thread', async () => {
@@ -102,7 +108,8 @@ describe('structure edits: threads and instances', () => {
         const editor = new DmfEditor(parsed.text, parsed.model);
         expect(() => editor.addThread(structure(parsed.model, 'GarageDoor'), 'door')).toThrow(EditError);
         expect(() => editor.addThread(structure(parsed.model, 'GarageDoor'), 'thread')).toThrow(/not a valid name/);
-        expect(() => editor.addInstance(structure(parsed.model, 'GarageDoor'), 'Buzzer', { name: 'IoTask' })).toThrow(/already has/);
+        const s = structure(parsed.model, 'GarageDoor');
+        expect(() => editor.addInstance(s, 'Buzzer', { name: 'IoTask', thread: s.threads[0] })).toThrow(/already has/);
     });
 
     test('move an instance between threads (with its comment)', async () => {
@@ -121,29 +128,17 @@ describe('structure edits: threads and instances', () => {
     }`);
     });
 
-    test('move an instance out of its thread and into a thread', async () => {
-        const out = await edit('system.dmf', (e, m) => {
-            const s = structure(m, 'GarageDoor');
-            return e.moveInstance(instance(s, 'sensor'), s);
-        });
-        expect(out.text).toContain(`    thread IoTask {
-        diag : Diagnosis
-    }`);
-        expect(out.text).toContain(`    drive : DriveUnit
-    sensor : PositionSensor
-`);
-        expect(out.text.substring(out.result.selectOffset!)).toMatch(/^sensor : PositionSensor/);
-        const into = await edit('drive.dmf', (e, m) => {
-            const s = structure(m, 'DriveUnit');
-            return e.moveInstance(instance(s, 'pwm'), s.threads[0]);
-        });
-        // the comment line before the instance moves with it
-        expect(into.text).toContain(`        switches : EndSwitches
-        // passive: runs in the thread of its caller
-        pwm : PwmDriver
-    }
-
-    connect motor.pwm -> pwm.duty`);
+    test('instances of components stay in threads, instances of subsystems outside of them', async () => {
+        const parsed = await load(deviceFile('system.dmf'));
+        const editor = new DmfEditor(parsed.text, parsed.model);
+        const s = structure(parsed.model, 'GarageDoor');
+        expect(() => editor.moveInstance(instance(s, 'sensor'), s)).toThrow("'sensor' is an instance of the component PositionSensor: it runs in a thread – move it into another thread.");
+        expect(() => editor.moveInstance(instance(s, 'drive'), s.threads[0])).toThrow(/'drive' is an instance of the subsystem DriveUnit: it is placed outside of the threads/);
+        expect(editor.moveInstance(instance(s, 'drive'), s).edits).toEqual([]);
+        // an invalid model: a subsystem instance in a thread can be moved out of it
+        const text = 'import "drive.dmf"\nsystem S {\n    thread T {\n        d : DriveUnit\n    }\n}\n';
+        const out = await edit('main.dmf', (e, m) => e.moveInstance(instance(structure(m, 'S'), 'd'), structure(m, 'S')), text);
+        expect(out.text).toBe('import "drive.dmf"\nsystem S {\n    thread T {\n    }\n\n    d : DriveUnit\n}\n');
     });
 
     test('move an instance assigned by name', async () => {
@@ -309,7 +304,7 @@ describe('structure edits: rename and delete', () => {
     test('delete a port with its connections', async () => {
         const { text } = await edit('drive.dmf', (e, m) => e.deleteElements([structure(m, 'DriveUnit').ports[0]]));
         expect(text).not.toContain('ctrl');
-        expect(text).toContain('structure DriveUnit {\n    requires async status : MotorStatus\n');
+        expect(text).toContain('subsystem DriveUnit {\n    requires async status : MotorStatus\n');
     });
 
     test('delete a port of a component type: its connections in the structures of other files', async () => {
@@ -331,16 +326,19 @@ describe('structure edits: rename and delete', () => {
         expect(workspace.portDeletionEdits('file:///ws/components.dmf', [])).toEqual(new Map());
     });
 
-    test('delete a thread: its instances stay in the structure', async () => {
+    test('delete a thread: with its instances and their connections', async () => {
         const { text, errors } = await edit('drive.dmf', (e, m) => e.deleteElements([structure(m, 'DriveUnit').threads[0]]));
-        expect(errors).toEqual([]);
-        expect(text).toContain(`    requires async status : MotorStatus
+        expect(text).not.toContain('MotorTask');
+        expect(text).not.toMatch(/motor|pwm/);
+        expect(text).toContain(`    // the end switches and the current monitor are interrupt driven
+    @priority(10) @stack(1024)
+    thread SwitchTask {
+        switches : EndSwitches
+    }
 
-    motor : MotorController
-    switches : EndSwitches
-    // passive: runs in the thread of its caller
-    pwm : PwmDriver`);
-        expect(text).not.toContain('@priority');
+}`);
+        // (the end switches are not connected any more)
+        expect(errors).toEqual([]);
     });
 
     test('delete connections, a thread with a deleted instance, assignments by name', async () => {
@@ -349,8 +347,8 @@ describe('structure edits: rename and delete', () => {
             return e.deleteElements([s.connections[0], s.delegations[1], s.threads[1], instance(s, 'diag')]);
         });
         expect(text).not.toContain('connect door.motor -> drive.ctrl');
-        expect(text).not.toContain('diag');
-        expect(text).toContain('    }\n    sensor : PositionSensor\n    // a composite');
+        expect(text).not.toMatch(/diag|sensor|IoTask/);
+        expect(text).toContain('        buzzer : Buzzer\n    }\n    // a subsystem');
         const named = 'import "components.dmf"\nsystem S {\n    thread A {\n        b\n    }\n    b : Buzzer\n}\n';
         const { text: result } = await edit('main.dmf', (e, m) => e.deleteElements([instance(structure(m, 'S'), 'b')]), named);
         expect(result).toBe('import "components.dmf"\nsystem S {\n    thread A {\n    }\n}\n');

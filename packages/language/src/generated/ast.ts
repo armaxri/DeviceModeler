@@ -45,7 +45,7 @@ export namespace Dmf {
         | "provides"
         | "requires"
         | "struct"
-        | "structure"
+        | "subsystem"
         | "sync"
         | "system"
         | "thread"
@@ -1735,7 +1735,7 @@ export interface Structure extends langium.AstNode {
     delegations: Array<Delegation>;
     description?: string;
     instances: Array<ComponentInstance>;
-    kind: 'structure' | 'system';
+    kind: 'subsystem' | 'system';
     name: string;
     ports: Array<Port>;
     threads: Array<Thread>;
