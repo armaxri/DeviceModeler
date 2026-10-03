@@ -1,5 +1,5 @@
 import { monaco } from './monaco.js';
-import { cppHover, DevmMonarchSyntax, isStructureText } from 'devm-language';
+import { cppHover, DevmMonarchSyntax, isStructureText, STATE_MACHINE_KEYWORDS, STRUCTURE_KEYWORDS } from 'devm-language';
 import type { DevmServices } from 'devm-language';
 import { DevmModelService } from './model-service.js';
 import type { Diagnostic, Range, TextEdit } from 'vscode-languageserver-types';
@@ -179,38 +179,54 @@ export class DevmLanguageSupport extends DevmModelService {
     }
 }
 
-type MonarchRule = { regex?: RegExp, include?: string, action?: { token?: string, cases?: Record<string, { token: string }> } };
+type MonarchRule = { regex?: RegExp, include?: string, action?: { token?: string, cases?: Record<string, { token: string }>, switchTo?: string } };
 
 /**
  * The generated Monarch grammar, adjusted for nicer highlighting: numbers, annotations (`@EventDriven`),
  * built-in type names and the `[*]` pseudo state.
+ *
+ * The keywords depend on the kind of the file (like the parser, see devm.langium): the first token
+ * `statemachine` starts a state machine file, anything else a structure file. The start state `initial`
+ * switches to the state `statemachine` or `structure`, which highlight only the keywords of their kind –
+ * the keywords of the other kind are names there (a struct field `state`, a variable `system`).
  */
 function monarchSyntax(syntax: object, typeNames: string[]): monaco.languages.IMonarchLanguage {
-    const generated = syntax as unknown as { tokenizer: Record<string, MonarchRule[]> };
+    const generated = syntax as unknown as { keywords: string[], tokenizer: Record<string, MonarchRule[]> };
     const rename: Record<string, string> = { HEX: 'number.hex', REAL: 'number.float', ID: 'identifier' };
-    const initial = generated.tokenizer.initial.map((rule): MonarchRule => {
-        const action = rule.action;
-        if (action?.token && rename[action.token]) {
-            return { ...rule, action: { ...action, token: rename[action.token] } };
-        }
-        if (action?.cases?.['@default']?.token === 'ID') {
-            return {
-                ...rule,
-                action: { cases: { '@keywords': { token: 'keyword' }, '@typeNames': { token: 'type' }, '@default': { token: 'identifier' } } }
-            };
-        }
-        return rule;
-    });
+    // keywords of both kinds: `import`, `interface`, `event`, `sync`
+    const structureOnly = new Set([...STRUCTURE_KEYWORDS].filter(k => k !== 'import' && !STATE_MACHINE_KEYWORDS.has(k)));
+    const machineKeywords = generated.keywords.filter(k => !structureOnly.has(k));
+    const structureKeywords = generated.keywords.filter(k => STRUCTURE_KEYWORDS.has(k));
+    const rules = (keywords: string): MonarchRule[] => [
+        { regex: /@[_a-zA-Z]\w*/, action: { token: 'annotation' } },
+        { regex: /\[\*\]/, action: { token: 'keyword' } },
+        ...generated.tokenizer.initial.map((rule): MonarchRule => {
+            const action = rule.action;
+            if (action?.token && rename[action.token]) {
+                return { ...rule, action: { ...action, token: rename[action.token] } };
+            }
+            if (action?.cases?.['@default']?.token === 'ID') {
+                return { ...rule, action: { cases: { [keywords]: { token: 'keyword' }, '@typeNames': { token: 'type' }, '@default': { token: 'identifier' } } } };
+            }
+            return rule;
+        })
+    ];
     return {
         ...syntax,
         typeNames,
+        machineKeywords,
+        structureKeywords,
+        start: 'initial',
         tokenizer: {
             ...generated.tokenizer,
             initial: [
-                { regex: /@[_a-zA-Z]\w*/, action: { token: 'annotation' } },
-                { regex: /\[\*\]/, action: { token: 'keyword' } },
-                ...initial
-            ]
+                { include: '@whitespace' },
+                { regex: /statemachine\b/, action: { token: 'keyword', switchTo: '@statemachine' } },
+                // (no progress, but a new state: allowed by Monarch)
+                { regex: /(?=\S)/, action: { token: '', switchTo: '@structure' } }
+            ],
+            statemachine: rules('@machineKeywords'),
+            structure: rules('@structureKeywords')
         }
     } as unknown as monaco.languages.IMonarchLanguage;
 }

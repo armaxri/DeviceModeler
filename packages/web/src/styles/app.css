@@ -314,7 +314,11 @@ main {
     color: #fff;
     font-size: 12px;
     pointer-events: none;
-    white-space: nowrap;
+    /* (long explanations, e.g. why two ports cannot be connected, wrap) */
+    width: max-content;
+    max-width: calc(100% - 40px);
+    box-sizing: border-box;
+    text-align: center;
     opacity: 0;
     transition: opacity 0.15s;
 }

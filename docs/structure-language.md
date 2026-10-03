@@ -345,7 +345,9 @@ import paths and the behavior file), go to implementation = go to the provider o
 (signature and documentation comment) and document symbols. `StructureModelLoader` (model-loader.ts) loads a
 structure file with everything it imports outside of a language server.
 
-The web app highlights structure files like state machines (one generated Monarch grammar), offers completion, hover, formatting and
+The web app highlights structure files with the generated Monarch grammar, with the keywords of the kind of the file
+(decided by the first token like the parser: a keyword of state machines used as a name in a structure file –
+a field `state` – is highlighted as a name, and vice versa), offers completion, hover, formatting and
 go to definition, and shows and edits their diagram (see [Diagram](#diagram) and
 [the editor](editor.md#structure-diagrams)); all files of `examples/device` are in its list of
 examples and resolve their imports against each other. State machines used as the behavior of components
