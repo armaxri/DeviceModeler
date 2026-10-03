@@ -3,12 +3,13 @@ import { SChildElementImpl, SNodeImpl, SShapeElementImpl, boundsFeature, hoverFe
 /** Ports while drawing a connector: can be connected (`ok`), with incompatible types (`problem`), not at all (`invalid`). */
 export type ConnectStatus = 'ok' | 'problem' | 'invalid';
 import type { SModelElement, SModelRoot } from 'sprotty-protocol';
-import type { DiagramLabel, IbdBehavior, IbdComposite, IbdEdge, IbdGraph, IbdNode, IbdNodeKind, IbdPort, Point } from 'hsm-language';
+import type { DiagramLabel, IbdBehavior, IbdComposite, IbdEdge, IbdGraph, IbdMember, IbdNode, IbdNodeKind, IbdPort, Point } from 'hsm-language';
 import type { Issue } from './model.js';
 
 /*
  * The Sprotty model of the internal block diagram of a structure (`.dmf`, see ibd-model.ts of the
- * language package): frame, thread and instance nodes with ports, connectors.
+ * language package): frame, thread and instance nodes with ports, connectors, type boxes (structs,
+ * interfaces of the file).
  */
 
 /** Types of the elements of the internal block diagram (used to select the views). */
@@ -18,13 +19,15 @@ export const IbdTypes = {
     thread: 'node:ibd-thread',
     instance: 'node:ibd-instance',
     block: 'node:ibd-block',
+    /** A struct or interface of the file (not connected). */
+    type: 'node:ibd-type',
     port: 'port:ibd',
     /** An invisible node covering the whole diagram (the labels of boundary ports are outside of the frame): fit to screen shows them. */
     canvas: 'node:ibd-canvas',
     connector: 'edge:ibd-connector'
 } as const satisfies Record<IbdNodeKind | 'graph' | 'port' | 'connector' | 'canvas', string>;
 
-/** A frame, thread, instance or component block. */
+/** A frame, thread, instance, component block or type box. */
 export class IbdNodeElement extends SNodeImpl {
     static override readonly DEFAULT_FEATURES = [selectFeature, boundsFeature, hoverFeedbackFeature];
 
@@ -38,6 +41,8 @@ export class IbdNodeElement extends SNodeImpl {
     tabWidth?: number;
     behavior?: IbdBehavior;
     composite?: IbdComposite;
+    /** Type boxes: fields / events. */
+    members?: IbdMember[];
     issue?: Issue;
     /** The node owns a port of the highlighted route. */
     onRoute = false;
@@ -51,6 +56,8 @@ export class IbdPortElement extends SShapeElementImpl {
     kind: IbdPort['kind'] = 'sync';
     side: IbdPort['side'] = 'WEST';
     title = '';
+    /** The named type shown in the label (`cmd : DoorCmd`). */
+    typeName?: string;
     /** The label, relative to the port. */
     label?: DiagramLabel;
     selected = false;
@@ -99,6 +106,7 @@ export function toIbdSchema(graph: IbdGraph, options: IbdSchemaOptions): SModelR
         kind: port.kind,
         side: port.side,
         title: port.title,
+        typeName: port.typeName,
         label: { ...port.label, x: port.label.x - port.x, y: port.label.y - port.y },
         selected: options.selected.has(port.id),
         issue: options.issues.get(port.id),
@@ -122,6 +130,7 @@ export function toIbdSchema(graph: IbdGraph, options: IbdSchemaOptions): SModelR
         tabWidth: node.tabWidth,
         behavior: node.behavior,
         composite: node.composite,
+        members: node.members,
         selected: options.selected.has(node.id),
         issue: options.issues.get(node.id),
         onRoute: options.route?.has(node.id) ?? false,

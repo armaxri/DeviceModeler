@@ -56,7 +56,7 @@ export class IbdFrameView extends ShapeView {
             <path class-ibd-frame-tab={true} d={frameTabPath(node.tabWidth ?? 120, node.headerHeight)} />
             <text class-ibd-frame-title={true} x={8} y={baseline(0, node.headerHeight, M.tabFont)}>
                 <tspan class-ibd-frame-kind={true}>ibd</tspan>
-                {` [${node.stereotype ?? 'structure'}] `}
+                {` [${node.stereotype ?? 'subsystem'}] `}
                 <tspan class-ibd-frame-name={true}>{node.name}</tspan>
             </text>
             {context.renderChildren(node)}
@@ -115,7 +115,7 @@ export class IbdInstanceView extends ShapeView {
             <line class-ibd-instance-separator={true} x1={0} y1={node.headerHeight} x2={width} y2={node.headerHeight} />
             {node.composite
                 ? <g class-ibd-icon={true} class-ibd-composite-icon={true}>
-                    <title>{`Composite: structure ${node.composite.structure}`}</title>
+                    <title>{`Subsystem ${node.composite.structure} (has an internal block diagram) – double-click to open it`}</title>
                     <path d={compositeIconPath(width - M.iconWidth - 2, node.headerHeight / 2)} />
                 </g>
                 : undefined}
@@ -127,6 +127,42 @@ export class IbdInstanceView extends ShapeView {
                 </g>
                 : undefined}
             {context.renderChildren(node)}
+            {issueMarker(node.issue, width - 4, 4)}
+        </g>;
+    }
+}
+
+/**
+ * A struct or interface of the file: a value type box «struct» / «interface» with the name and the fields
+ * / events; never connected (ports show their type in their label).
+ */
+@injectable()
+export class IbdTypeView extends ShapeView {
+    render(node: Readonly<IbdNodeElement>, context: RenderingContext): VNode | undefined {
+        if (!this.isVisible(node, context)) {
+            return undefined;
+        }
+        const { width, height } = node.size;
+        const center = width / 2;
+        const members = node.members ?? [];
+        const row = (i: number) => baseline(node.headerHeight + 5 + i * M.memberRow, M.memberRow, M.memberFont);
+        return <g {...nodeClasses(node)}>
+            <title>{node.description ? `${node.description}\n` : ''}{`${node.stereotype ?? 'struct'} ${node.name} – click to show the declaration`}</title>
+            <rect class-ibd-type-shape={true} x={0} y={0} width={width} height={height} />
+            <rect class-ibd-type-header={true} x={0.6} y={0.6} width={width - 1.2} height={node.headerHeight - 0.6} />
+            <text class-ibd-stereotype={true} class-ibd-type-stereotype={true} x={center} y={baseline(4, 15, M.stereotypeFont)}>{`«${node.stereotype ?? 'struct'}»`}</text>
+            <text class-ibd-type-name={true} x={center} y={baseline(18, 18, M.nameFont)}>{node.name}</text>
+            <line class-ibd-type-separator={true} x1={0} y1={node.headerHeight} x2={width} y2={node.headerHeight} />
+            {...members.map((member, i) => <text class-ibd-type-member={true} x={M.instancePadding} y={row(i)}>
+                {member.prefix ? <tspan class-ibd-type-keyword={true}>{member.prefix.trim()}</tspan> : undefined}
+                {member.prefix ? ' ' : undefined}
+                <tspan class-ibd-type-member-name={true}>{member.name}</tspan>
+                {member.type ? ' : ' : undefined}
+                {member.type ? <tspan class-ibd-type-member-type={true}>{member.type}</tspan> : undefined}
+            </text>)}
+            {members.length === 0
+                ? <text class-ibd-type-member={true} class-ibd-type-empty={true} x={M.instancePadding} y={row(0)}>{node.stereotype === 'interface' ? 'no events' : 'no fields'}</text>
+                : undefined}
             {issueMarker(node.issue, width - 4, 4)}
         </g>;
     }
@@ -151,7 +187,14 @@ export class IbdPortView extends ShapeView {
             <title>{portTooltip({ title: port.title, direction: port.direction, kind: port.kind })}</title>
             <rect class-ibd-port-shape={true} x={0} y={0} width={size} height={size} />
             {chevron ? <path class-ibd-port-chevron={true} d={chevron} /> : undefined}
-            {label ? <text class-ibd-port-label={true} x={label.x} y={baseline(label.y, label.height, M.portFont)}>{label.text}</text> : undefined}
+            {label
+                ? <text class-ibd-port-label={true} x={label.x} y={baseline(label.y, label.height, M.portFont)}>
+                    {port.typeName !== undefined
+                        ? [<tspan class-ibd-port-name={true}>{port.portName}</tspan>, ' : ',
+                            <tspan class-ibd-port-type={true}><title>{`${port.typeName} – double-click to open the type`}</title>{port.typeName}</tspan>]
+                        : label.text}
+                </text>
+                : undefined}
         </g>;
     }
 }

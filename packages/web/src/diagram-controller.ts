@@ -69,8 +69,8 @@ const TOOLS: Array<ToolDescription | 'separator'> = [
 const STRUCTURE_TOOLS: Array<ToolDescription | 'separator'> = [
     { tool: 'select', label: 'Select / move', key: 'V', icon: Icons.select, hint: '' },
     'separator',
-    { tool: 'thread', label: 'Thread', key: 'T', icon: Icons.thread, hint: 'Click into the structure to add a thread' },
-    { tool: 'instance', label: 'Instance (part)', key: 'I', icon: Icons.instance, hint: 'Click on a thread or the frame, then choose the component type' },
+    { tool: 'thread', label: 'Thread', key: 'T', icon: Icons.thread, hint: 'Click into the subsystem or system to add a thread' },
+    { tool: 'instance', label: 'Instance (part)', key: 'I', icon: Icons.instance, hint: 'Click into a thread to add a component instance, on the frame to add a subsystem instance (or a component: then choose its thread)' },
     'separator',
     { tool: 'port-provides-sync', label: 'Provided sync port (data)', key: '1', icon: Icons.providedSync, hint: 'Click on the frame, a component or an instance to add a provided sync port' },
     { tool: 'port-provides-async', label: 'Provided async port (events in)', key: '2', icon: Icons.providedAsync, hint: 'Click on the frame, a component or an instance to add a provided async port' },

@@ -32,10 +32,11 @@ const TITLES: Record<string, string> = {
     'gate.hsm': 'Gate with a motor submachine (imports motor.hsm)',
     'motor.hsm': 'Motor (submachine of the gate)',
     'conveyor.hsm': 'Conveyor (C++ enums, structs and constants of conveyor_types.h)',
-    'system.dmf': 'Garage door: system structure (.dmf, threads, ports, connections)',
-    'drive.dmf': 'Garage door: drive unit (composite structure)',
+    'system.dmf': 'Garage door: system (.dmf, threads, ports, connections)',
+    'drive.dmf': 'Garage door: drive unit (subsystem)',
     'components.dmf': 'Garage door: component types',
     'types.dmf': 'Garage door: data types and interfaces',
+    'light.dmf': 'Garage door: courtesy light (data types, components and a subsystem in one file)',
     'controller.hsm': 'Garage door: controller (behavior of DoorController)',
     'drive.hsm': 'Garage door: motor control (behavior of MotorController)'
 };

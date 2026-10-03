@@ -11,7 +11,7 @@ import {
     TransitionView
 } from './views.js';
 import { IbdConnectorElement, IbdNodeElement, IbdPortElement, IbdTypes } from './ibd-model.js';
-import { IbdCanvasView, IbdConnectorView, IbdFrameView, IbdInstanceView, IbdPortView, IbdThreadView } from './ibd-views.js';
+import { IbdCanvasView, IbdConnectorView, IbdFrameView, IbdInstanceView, IbdPortView, IbdThreadView, IbdTypeView } from './ibd-views.js';
 import { DiagramCallbacks, HsmMouseListener, HsmMoveMouseListener, HsmScrollMouseListener, HsmSelectMouseListener, SelectionTracker } from './listeners.js';
 
 export function createDiagramContainer(baseDiv: string, callbacks: DiagramCallbacks): Container {
@@ -47,6 +47,7 @@ export function createDiagramContainer(baseDiv: string, callbacks: DiagramCallba
         // instances are dragged into threads (structure edits, see StructureDiagram.dragEnd)
         configureModelElement(context, IbdTypes.instance, IbdNodeElement, IbdInstanceView, { enable: [moveFeature] });
         configureModelElement(context, IbdTypes.block, IbdNodeElement, IbdInstanceView);
+        configureModelElement(context, IbdTypes.type, IbdNodeElement, IbdTypeView);
         configureModelElement(context, IbdTypes.port, IbdPortElement, IbdPortView);
         configureModelElement(context, IbdTypes.canvas, SNodeImpl, IbdCanvasView, { disable: [selectFeature, moveFeature] });
         configureModelElement(context, IbdTypes.connector, IbdConnectorElement, IbdConnectorView);

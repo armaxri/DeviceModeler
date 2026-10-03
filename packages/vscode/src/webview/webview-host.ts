@@ -146,7 +146,7 @@ export class WebviewHost implements DiagramHost {
                 control.disabled = structure;
             }
         }
-        byId('btn-simulate').title = structure ? 'Structures cannot be simulated – open the state machine of a component'
+        byId('btn-simulate').title = structure ? 'Structure files cannot be simulated – open the state machine of a component'
             : 'Simulate the state machine (the model must not contain errors)';
     }
 

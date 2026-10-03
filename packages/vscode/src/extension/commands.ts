@@ -36,8 +36,8 @@ export async function parseModel(document: vscode.TextDocument): Promise<ParsedM
 
 /**
  * The diagram of a structure file (`.dmf`) as SVG document (`renderIbdSvg` of the language package, like
- * `hsm render`): the internal block diagram of `element` (a structure, system or component type; default:
- * the first system, else the first structure, else the component types).
+ * `hsm render`): the internal block diagram of `element` (a subsystem, system or component type; default:
+ * the first system, else the first subsystem, else the component types, else the data types).
  */
 export async function renderStructureSvg(document: vscode.TextDocument, element?: string): Promise<string> {
     if (!structureLoader) {
@@ -51,7 +51,7 @@ export async function renderStructureSvg(document: vscode.TextDocument, element?
     }
     const layout = await layoutStructure(parsed.model, { element: element || undefined });
     if (!layout) {
-        throw new Error(`${path.basename(document.uri.path)} declares no components, structures or systems.`);
+        throw new Error(`${path.basename(document.uri.path)} declares no components, subsystems, systems or data types.`);
     }
     const config = vscode.workspace.getConfiguration('hsm.diagram', document.uri);
     return renderIbdSvg(layout.graph, { theme: effectiveTheme(config.get<string>('theme', 'auto'), config.get<string>('lightTheme', 'classic'), false) });

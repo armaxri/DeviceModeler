@@ -2,9 +2,9 @@ import type { AstNode, LangiumDocument } from 'langium';
 import type { SModelElementImpl } from 'sprotty';
 import type { SModelRoot } from 'sprotty-protocol';
 import {
-    BUILTIN_TYPES, DmfEditor, EditError, IBD_OVERVIEW_ID, applyEdits, behaviorMachine, checkRename, mapOffset, endpointLabel, findProviders, findRequirers, ibdChoices, ibdElementAt,
+    BUILTIN_TYPES, DmfEditor, EditError, IBD_OVERVIEW_ID, IBD_TYPES_ID, applyEdits, behaviorMachine, checkRename, mapOffset, endpointLabel, findProviders, findRequirers, ibdChoices, ibdElementAt,
     ibdNodes, ibdRouteElements, instanceType, isComponent, isComponentInstance, isComponentType, isConnection, isDelegation, isPort, isPortInterface,
-    isStructDeclaration, isStructure, isThread, layoutStructure, normalizeUri, planConnection, portEndpoint, portTypeLabel, routeContinuations, routeIdsAt,
+    isStructDeclaration, isStructure, isThread, layoutStructure, memberText, normalizeUri, planConnection, portEndpoint, portTypeLabel, resolveDataType, routeContinuations, routeIdsAt,
     threadInstances, threadOf, threadSettings, visibleElements,
     type Component, type ComponentInstance, type ComponentType, type DmfPortEnd, type DmfWorkspace, type EditResult, type IbdLayoutResult, type IbdNode,
     type ParsedDmfModel, type Port, type PortEndpoint, type Structure, type StructureContext, type StructureLocation, type TextEdit, type Thread
@@ -219,7 +219,7 @@ export class StructureDiagram {
         if (!layout) {
             this.state = undefined;
             banner.hidden = false;
-            banner.textContent = 'The file declares no components, structures or systems – there is nothing to show in the diagram. '
+            banner.textContent = 'The file declares no components, subsystems, systems or data types – there is nothing to show in the diagram. '
                 + 'Add one with the buttons of the properties panel.';
             await this.context.show({ type: 'graph:ibd', id: '#empty', children: [] } as SModelRoot);
             this.renderProperties();
@@ -286,7 +286,7 @@ export class StructureDiagram {
     private updateSelector(choices: Array<{ id: string, label: string }>, current: string | undefined): void {
         let select = document.getElementById('ibd-element-select') as HTMLSelectElement | null;
         if (!select) {
-            select = h('select', { id: 'ibd-element-select', title: 'The structure or component type shown in the diagram' });
+            select = h('select', { id: 'ibd-element-select', title: 'The subsystem, system or component type shown in the diagram' });
             const box = h('div', { class: 'ibd-element-choice' }, h('span', {}, 'Show'), select);
             select.addEventListener('change', () => {
                 this.chosen.set(this.uri, select!.value);
@@ -737,16 +737,17 @@ export class StructureDiagram {
         const node = id ? this.state.layout.elements.get(id) : undefined;
         if (tool === 'thread') {
             if (!structure || !this.isOwn(structure)) {
-                this.context.setStatus('Threads are added to a structure or system: show one in the diagram.', 'warning');
+                this.context.setStatus('Threads are added to a subsystem or system: show one in the diagram.', 'warning');
                 return;
             }
             this.applyEdit(editor => editor.addThread(structure), true);
             this.context.toolDone();
         } else if (tool === 'instance') {
             if (!structure || !this.isOwn(structure)) {
-                this.context.setStatus('Instances are added to a structure or system: show one in the diagram.', 'warning');
+                this.context.setStatus('Instances are added to a subsystem or system: show one in the diagram.', 'warning');
                 return;
             }
+            // in a thread (or on an instance in a thread): a component; on the frame: a subsystem, or a component into a thread chosen next
             const thread = isThread(node) ? node : isComponentInstance(node) && !this.state.layout.instances.has(id!) ? threadOf(node) : undefined;
             this.chooseType(event, structure, thread);
         } else if (tool in PORT_TOOLS) {
@@ -814,24 +815,69 @@ export class StructureDiagram {
         return result;
     }
 
-    /** The instance tool: choose the component type, then the instance is added and renamed. */
+    /**
+     * The instance tool: choose the component type, then the instance is added and renamed. Instances of
+     * components run in a thread: clicked into a thread, the components are offered; clicked on the frame,
+     * the subsystems (placed outside of the threads) and the components – for a component the thread is
+     * chosen next (see docs/structure-language.md#threads).
+     */
     private chooseType(event: MouseEvent, structure: Structure, thread: Thread | undefined): void {
-        const types = this.instantiableTypes(structure);
+        const types = this.instantiableTypes(structure).filter(t => !thread || isComponent(t.type));
+        if (thread && types.length === 0) {
+            this.context.setStatus(`No component types are visible in this file – import a file declaring components to add instances to ${thread.name}.`, 'warning');
+            this.context.toolDone();
+            return;
+        }
+        const file = (type: ComponentType) => this.isOwn(type) ? '' : ` · ${documentOf(type)?.uri.path.replace(/^.*\//, '') ?? ''}`;
         showChooser({
             x: event.clientX + 4,
             y: event.clientY + 4,
-            title: `New instance in ${thread ? `thread ${thread.name}` : structure.name}`,
-            placeholder: 'component type',
+            title: thread ? `New component instance in thread ${thread.name}` : `New instance in ${structure.name}`,
+            placeholder: thread ? 'component type' : 'subsystem (or component: then its thread)',
             items: types.map(t => ({
                 value: t.name,
                 label: t.name,
-                detail: `${isStructure(t.type) ? 'structure' : 'component'}${this.isOwn(t.type) ? '' : ` · ${documentOf(t.type)?.uri.path.replace(/^.*\//, '') ?? ''}`}`
+                detail: isStructure(t.type) ? `subsystem · outside of the threads${file(t.type)}` : `component${thread ? '' : ' · choose its thread next'}${file(t.type)}`
             })),
             commit: value => {
+                const type = types.find(t => t.name === value)?.type;
+                if (!thread && isComponent(type)) {
+                    this.chooseThread(event, structure, value);
+                    return;
+                }
                 this.applyEdit(editor => editor.addInstance(structure, value, { thread }), true);
                 this.context.toolDone();
             },
             cancel: () => this.context.toolDone()
+        });
+    }
+
+    /** A component instance placed on the frame: it is added to a thread chosen by the user (instances of components run in threads). */
+    private chooseThread(event: MouseEvent, structure: Structure, typeName: string): void {
+        if (structure.threads.length === 0) {
+            this.context.setStatus(`'${typeName}' is a component: its instances run in a thread – add a thread first (tool T), then click into it with the instance tool.`, 'warning');
+            this.context.toolDone();
+            return;
+        }
+        showChooser({
+            x: event.clientX + 4,
+            y: event.clientY + 4,
+            title: `Thread of the new ${typeName} instance`,
+            placeholder: 'thread',
+            items: structure.threads.filter(t => t.name).map(t => ({ value: t.name, label: t.name, detail: threadDetails(t) })),
+            commit: value => {
+                const target = structure.threads.find(t => t.name === value);
+                this.applyEdit(editor => editor.addInstance(structure, typeName, { thread: target }), true).then(done => {
+                    if (done) {
+                        this.context.setStatus(`Added an instance of ${typeName} to the thread ${value}.`);
+                    }
+                });
+                this.context.toolDone();
+            },
+            cancel: () => {
+                this.context.setStatus('No instance added: instances of components run in a thread – click into a thread with the instance tool.', 'warning');
+                this.context.toolDone();
+            }
         });
     }
 
@@ -871,7 +917,7 @@ export class StructureDiagram {
         const structure = this.shownStructure();
         const source = this.endOf(id);
         if (!structure || !source || !this.isOwn(structure)) {
-            this.context.setStatus('Connectors are drawn in the diagram of a structure or system.', 'warning');
+            this.context.setStatus('Connectors are drawn in the diagram of a subsystem or system.', 'warning');
             return;
         }
         this.pendingPort = id;
@@ -978,7 +1024,11 @@ export class StructureDiagram {
 
     // ---- drag & drop, double-click, rename, delete
 
-    /** An instance was dragged onto a thread (or the frame): it is moved into that thread (out of its thread). */
+    /**
+     * An instance was dragged onto a thread: an instance of a component is moved into that thread. Dropped on
+     * the frame, an instance of a component is refused (it runs in a thread), an instance of a subsystem
+     * belongs there (dropped into a thread it is refused).
+     */
     dragEnd(draggedId: string, dropTargetId: string | undefined): void {
         const state = this.state;
         const instance = state?.layout.elements.get(draggedId);
@@ -991,10 +1041,20 @@ export class StructureDiagram {
             this.render();
             return;
         }
+        const type = instanceType(instance);
+        if (isComponent(type) && isStructure(target)) {
+            this.context.setStatus(`'${instance.name}' is an instance of the component ${type.name}: it runs in a thread – drop it into another thread.`, 'warning');
+            this.render();
+            return;
+        }
+        if (isStructure(type) && isThread(target)) {
+            this.context.setStatus(`'${instance.name}' is an instance of the subsystem ${type.name}: it stays outside of the threads (its parts run in the threads of ${type.name}).`, 'warning');
+            this.render();
+            return;
+        }
         this.applyEdit(editor => editor.moveInstance(instance, target)).then(done => {
             if (done) {
-                this.context.setStatus(isThread(target) ? `Moved '${instance.name}' into the thread ${target.name}.`
-                    : `'${instance.name}' runs in no thread of its own now (a passive part).`);
+                this.context.setStatus(isThread(target) ? `Moved '${instance.name}' into the thread ${target.name}.` : `Moved '${instance.name}' out of the thread.`);
             }
         });
     }
@@ -1011,7 +1071,14 @@ export class StructureDiagram {
         }
         const node = state.layout.elements.get(id);
         const element = event.target instanceof Element ? event.target : undefined;
-        if (isComponentInstance(node) && !state.layout.instances.has(id)) {
+        if (isPort(node) && element?.closest('.ibd-port-type')) {
+            this.goToDataType(node);
+        } else if (isStructDeclaration(node) || isPortInterface(node)) {
+            const range = this.rangeOf(id);
+            if (range) {
+                this.context.host.editTextAt(range.offset);
+            }
+        } else if (isComponentInstance(node) && !state.layout.instances.has(id)) {
             if (element?.closest('.ibd-instance-type')) {
                 this.goToType(node);
             } else if (element?.closest('.ibd-instance-label') || !this.openInstance(id, node)) {
@@ -1062,6 +1129,18 @@ export class StructureDiagram {
         this.context.navigate({ uri: document.uri.toString(), element: type.name, id: type.name, offset: type.$cstNode?.offset });
     }
 
+    /** Shows the declaration of the type of a port (a struct or interface of this or another structure file). */
+    goToDataType(port: Port): void {
+        const resolution = port.type ? resolveDataType(port.type) : undefined;
+        const declaration = resolution?.kind === 'interface' ? resolution.interface : resolution?.kind === 'data' ? resolution.struct : undefined;
+        const document = declaration ? documentOf(declaration) : undefined;
+        if (!declaration || !document) {
+            this.context.setStatus(`'${port.type?.name ?? portTypeLabel(port)}' is ${resolution?.kind === 'data' ? 'a built-in or C/C++ type' : 'not a struct or interface of a structure file'}.`, 'warning');
+            return;
+        }
+        this.context.navigate({ uri: document.uri.toString(), id: `type:${declaration.name}`, offset: declaration.$cstNode?.offset });
+    }
+
     /** Opens an inline editor to rename the element (instance, port, thread, structure, component type). */
     startRename(id: string): void {
         closeInlineEditor();
@@ -1071,7 +1150,7 @@ export class StructureDiagram {
             return;
         }
         const named = node as AstNode & { name: string };
-        const label = element.querySelector(':scope > .ibd-instance-name, :scope > .ibd-thread-title, :scope > .ibd-frame-title, .ibd-port-label') ?? element;
+        const label = element.querySelector(':scope > .ibd-instance-name, :scope > .ibd-thread-title, :scope > .ibd-frame-title, :scope > .ibd-type-name, .ibd-port-label') ?? element;
         const bounds = label.getBoundingClientRect();
         showInlineEditor({
             rect: { left: bounds.left, top: bounds.top, width: Math.max(bounds.width, 120), height: Math.max(bounds.height, 20) },
@@ -1164,7 +1243,7 @@ export class StructureDiagram {
         return true;
     }
 
-    /** Deletes the selected elements of the edited file (an instance with its connections, a thread keeping its instances, …). */
+    /** Deletes the selected elements of the edited file (an instance with its connections, a thread with its instances, …). */
     deleteSelection(): void {
         const state = this.state;
         if (!state) {
@@ -1180,6 +1259,9 @@ export class StructureDiagram {
             if (state.layout.instances.has(id) || !this.isOwn(node)) {
                 skipped = true;
                 continue;
+            }
+            if (isStructDeclaration(node) || isPortInterface(node)) {
+                continue; // (data types are deleted in the text)
             }
             nodes.push(node);
         }
@@ -1241,7 +1323,7 @@ export class StructureDiagram {
         const node = single ? state?.layout.elements.get(single) : undefined;
         const content: Array<HTMLElement | undefined> = [];
         if (!state) {
-            content.push(h('p', { class: 'hint' }, 'Structure file without component types.'), ...this.addTypeButtons());
+            content.push(h('p', { class: 'hint' }, 'Structure file without component types and data types.'), ...this.addTypeButtons());
         } else if (this.context.selection.size > 1) {
             content.push(h('h2', {}, `${this.context.selection.size} elements selected`),
                 h('div', { class: 'actions' }, h('button', { class: 'danger', onClick: () => this.deleteSelection() }, 'Delete')));
@@ -1254,10 +1336,10 @@ export class StructureDiagram {
     }
 
     private addTypeButtons(): HTMLElement[] {
-        const add = (kind: 'component' | 'structure' | 'system') => () => this.applyEditOnText(editor => editor.addComponentType(kind));
+        const add = (kind: 'component' | 'subsystem' | 'system') => () => this.applyEditOnText(editor => editor.addComponentType(kind));
         return [h('div', { class: 'actions' },
             h('button', { onClick: add('component') }, 'Add component'),
-            h('button', { onClick: add('structure') }, 'Add structure'),
+            h('button', { onClick: add('subsystem') }, 'Add subsystem'),
             h('button', { onClick: add('system') }, 'Add system'))];
     }
 
@@ -1295,8 +1377,9 @@ export class StructureDiagram {
                 h('dt', {}, 'Threads'), h('dd', {}, String(root.threads.length)),
                 h('dt', {}, 'Connections'), h('dd', {}, String(root.connections.length + root.delegations.length)));
         }
-        result.push(h('h2', {}, state.layout.graph.kind === 'overview' ? 'Component types' : state.layout.graph.name),
-            h('div', { class: 'kind' }, state.layout.graph.kind === 'overview' ? 'Structure file' : state.layout.graph.kind));
+        const kind = state.layout.graph.kind;
+        result.push(h('h2', {}, kind === 'overview' ? 'Component types' : kind === 'types' ? `Data types of ${fileName(this.uri)}` : state.layout.graph.name),
+            h('div', { class: 'kind' }, kind === 'overview' || kind === 'types' ? 'Structure file' : kind));
         if (isStructure(root) && this.isOwn(root)) {
             result.push(this.nameField(root));
         } else if (isComponent(root)) {
@@ -1320,15 +1403,17 @@ export class StructureDiagram {
             h('ul', { class: 'hint', style: 'padding-left:18px;margin:6px 0' },
                 h('li', {}, 'Pick a tool in the palette (thread, instance, ports, connector), then click into the diagram. Hold ', h('kbd', {}, 'Shift'), ' to keep the tool.'),
                 h('li', {}, 'Connector: press on a port and drag to the other port – compatible ports turn green. A connection is written from the required to the provided port, a boundary port is delegated.'),
-                h('li', {}, 'Drag an instance into a thread (or out of it onto the frame) to change its thread.'),
-                h('li', {}, 'Double-click an instance to open its state machine or structure, its type name to open the type, its name (or ', h('kbd', {}, 'F2'), ') to rename it.'),
+                h('li', {}, 'Instances of components run in threads: click into a thread with the instance tool (on the frame: choose the thread next). Instances of subsystems are placed on the frame, outside of the threads.'),
+                h('li', {}, 'Drag an instance of a component into another thread to change its thread. Deleting a thread deletes its instances and their connections.'),
+                h('li', {}, 'Double-click an instance to open its state machine or subsystem, its type name (or the type of a port) to open the type, its name (or ', h('kbd', {}, 'F2'), ') to rename it.'),
                 h('li', {}, 'Select a port, connector or instance to highlight the route of its signals (also through composites).'),
                 h('li', {}, h('kbd', {}, 'Del'), ' deletes, ', h('kbd', {}, 'Ctrl'), '+', h('kbd', {}, 'Z'), ' undoes; ', h('kbd', {}, 'Alt'), '+', h('kbd', {}, '←'), ' goes back.')),
             h('h2', { style: 'margin-top:18px' }, 'Notation'),
             h('ul', { class: 'hint', style: 'padding-left:18px;margin:6px 0' },
                 h('li', {}, 'Ports: filled square = provided, hollow square = required.'),
                 h('li', {}, 'Async ports (events) show a chevron in the direction of the events, sync ports (data) are plain squares.'),
-                h('li', {}, 'Dashed connectors cross threads.')));
+                h('li', {}, 'Dashed connectors cross threads.'),
+                h('li', {}, 'Boxes «struct» / «interface» below the diagram: the data types declared in the file (not connected; ports show their type after the name).')));
         return result;
     }
 
@@ -1424,6 +1509,14 @@ export class StructureDiagram {
                     h('dt', {}, isConnection(node) ? 'Provided' : 'To'), h('dd', {}, h('code', {}, node.target ? referenceText(node.target) : '?'))),
                 ...this.routePanel(state, id, node, undefined),
                 h('div', { class: 'actions' }, h('button', { onClick: () => this.context.host.editTextAt(this.rangeOf(id)?.end ?? 0) }, 'Edit in text'), remove));
+        } else if (isStructDeclaration(node) || isPortInterface(node)) {
+            const box = this.ibdNode(id);
+            result.push(h('h2', {}, node.name), h('div', { class: 'kind' }, isStructDeclaration(node) ? 'Struct (data type)' : 'Interface (events of async ports)'),
+                ...problems(issue),
+                this.isOwn(node) ? this.nameField(node) : undefined,
+                h('dl', {}, h('dt', {}, isStructDeclaration(node) ? 'Fields' : 'Events'),
+                    h('dd', {}, ...(box?.members?.length ? box.members.map(m => h('div', {}, h('code', {}, memberText(m)))) : ['–']))),
+                h('p', { class: 'hint' }, 'Edit the declaration in the text (it is selected there). Ports using the type show it after their name; double-click the type of a port to come here.'));
         } else if (isComponent(node)) {
             result.push(h('h2', {}, node.name), h('div', { class: 'kind' }, 'Component'), ...problems(issue), ...this.componentFields(node),
                 this.isOwn(node) ? h('div', { class: 'actions' }, remove) : undefined);
@@ -1470,26 +1563,38 @@ export class StructureDiagram {
         const thread = threadOf(node);
         const structure = this.shownStructure();
         const own = this.isOwn(node);
+        const subsystem = isStructure(type);
+        const where = subsystem ? ' · subsystem (outside of the threads)' : thread ? ` · thread ${thread.name}` : ' · no thread (an error)';
         const result: Array<HTMLElement | undefined> = [
             h('h2', {}, node.name),
-            h('div', { class: 'kind' }, `Instance of ${type?.name ?? node.type?.$refText ?? '?'}${thread ? ` · thread ${thread.name}` : ' · passive (no thread)'}`),
+            h('div', { class: 'kind' }, `Instance of ${type?.name ?? node.type?.$refText ?? '?'}${where}`),
             ...problems(issue)
         ];
         if (own && structure) {
             result.push(this.nameField(node));
-            const typeSelect = h('select', {}, ...this.instantiableTypes(structure).map(t => h('option', { value: t.name }, t.name)));
+            // (a component instance stays a component instance, a subsystem instance a subsystem instance: the thread rules differ)
+            const typeSelect = h('select', {}, ...this.instantiableTypes(structure).filter(t => !type || isStructure(t.type) === subsystem).map(t => h('option', { value: t.name }, t.name)));
             if (!type || ![...typeSelect.options].some(o => o.value === node.type?.$refText)) {
                 typeSelect.prepend(h('option', { value: node.type?.$refText ?? '' }, node.type?.$refText ?? '?'));
             }
             typeSelect.value = node.type?.$refText ?? '';
             typeSelect.addEventListener('change', () => this.applyEdit(editor => editor.setInstanceType(node, typeSelect.value)));
-            const threadSelect = h('select', {}, h('option', { value: '' }, '– none (passive)'), ...structure.threads.map(t => h('option', { value: t.name }, t.name)));
-            threadSelect.value = thread?.name ?? '';
-            threadSelect.addEventListener('change', () => {
-                const target = structure.threads.find(t => t.name === threadSelect.value) ?? structure;
-                this.applyEdit(editor => editor.moveInstance(node, target));
-            });
-            result.push(field('Type', typeSelect), field('Thread', threadSelect));
+            result.push(field('Type', typeSelect));
+            if (subsystem) {
+                result.push(h('p', { class: 'hint' }, `An instance of a subsystem is placed outside of the threads: its parts run in the threads of ${type.name}.`));
+            } else {
+                // instances of components run in a thread: no "none" choice (only for an invalid model without a thread)
+                const threadSelect = h('select', {}, ...(thread ? [] : [h('option', { value: '' }, '– choose a thread –')]),
+                    ...structure.threads.map(t => h('option', { value: t.name }, t.name)));
+                threadSelect.value = thread?.name ?? '';
+                threadSelect.addEventListener('change', () => {
+                    const target = structure.threads.find(t => t.name === threadSelect.value);
+                    if (target) {
+                        this.applyEdit(editor => editor.moveInstance(node, target));
+                    }
+                });
+                result.push(field('Thread', threadSelect));
+            }
         }
         const ibd = this.ibdNode(id);
         result.push(h('div', { class: 'actions' },
@@ -1518,7 +1623,7 @@ export class StructureDiagram {
             ...annotation('period', 'Period', settings.period, 'e.g. 10 ms (cyclic thread)'),
             ...annotation('stack', 'Stack size (bytes)', stackText, 'e.g. 4096'),
             h('dl', {}, h('dt', {}, 'Instances'), h('dd', {}, threadInstances(thread).map(i => i.name).join(', ') || '–')),
-            h('p', { class: 'hint' }, 'Drag instances into the thread (or out of it onto the frame). Deleting the thread keeps its instances (they become passive parts).'),
+            h('p', { class: 'hint' }, 'Drag instances of components into the thread. Deleting the thread also deletes its instances and their connections.'),
             own ? h('div', { class: 'actions' }, h('button', { onClick: () => this.context.setTool('instance') }, 'Add instance…'), remove) : undefined
         ].filter((e): e is HTMLElement => !!e);
     }
@@ -1562,8 +1667,8 @@ export class StructureDiagram {
                 h('div', { class: 'route-path' }, info.labels.join(' · '))));
         }
         const buttons = [
-            ...info.continuations.map(c => h('button', { onClick: () => this.context.navigate(c.location), title: 'Show the structure of the part, the route stays highlighted' }, `Follow into ${c.instance} ▸`)),
-            info.outward ? h('button', { onClick: () => this.context.navigate(info.outward!), title: 'Show the structure using this one' }, `◂ Follow out to ${info.outward.element}`) : undefined
+            ...info.continuations.map(c => h('button', { onClick: () => this.context.navigate(c.location), title: 'Show the internal block diagram of the subsystem, the route stays highlighted' }, `Follow into ${c.instance} ▸`)),
+            info.outward ? h('button', { onClick: () => this.context.navigate(info.outward!), title: 'Show the subsystem or system using this one' }, `◂ Follow out to ${info.outward.element}`) : undefined
         ].filter((b): b is HTMLButtonElement => !!b);
         if (buttons.length > 0) {
             result.push(h('div', { class: 'actions' }, ...buttons));
@@ -1575,7 +1680,13 @@ export class StructureDiagram {
 
 /** The element shown by a layout (the choice of the selector). */
 function elementOf(layout: IbdLayoutResult): string {
-    return layout.graph.kind === 'overview' ? IBD_OVERVIEW_ID : layout.graph.name;
+    return layout.graph.kind === 'overview' ? IBD_OVERVIEW_ID : layout.graph.kind === 'types' ? IBD_TYPES_ID : layout.graph.name;
+}
+
+/** `priority 5 · period 10 ms` of a thread (chooser). */
+function threadDetails(thread: Thread): string {
+    const settings = threadSettings(thread);
+    return [settings.priority !== undefined ? `priority ${settings.priority}` : '', settings.period ? `period ${settings.period}` : ''].filter(t => t).join(' · ') || 'thread';
 }
 
 /** The document containing an AST node. */

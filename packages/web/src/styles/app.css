@@ -371,9 +371,14 @@ main {
     color: var(--ui-muted, #6a737d);
 }
 
-/* the type name of an instance opens the type (double-click) */
-#sprotty .ibd-instance-type:hover {
+/* the type name of an instance and the type of a port open the type (double-click) */
+#sprotty .ibd-instance-type:hover,
+#sprotty .ibd-port-type:hover {
     text-decoration: underline;
+    cursor: pointer;
+}
+
+#sprotty .ibd-type {
     cursor: pointer;
 }
 
