@@ -4,7 +4,7 @@ import { AstUtils, URI, type LangiumDocument } from 'langium';
 import { NodeFileSystem } from 'langium/node';
 import { describe, expect, test } from 'vitest';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import type { Diagnostic, LocationLink } from 'vscode-languageserver-types';
+import { CompletionItemKind, type Diagnostic, type LocationLink } from 'vscode-languageserver-types';
 import * as ast from '../src/generated/ast.js';
 import { behaviorMapping } from '../src/structure-behavior.js';
 import { behaviorMachine, structureImportKind, resolvedStructureImports, visibleElements } from '../src/structure-imports.js';
@@ -44,9 +44,9 @@ component Server {
 }
 `;
 
-/** A system with the components above and the given body. */
+/** A subsystem (boundary ports allowed, unlike a system) with the components above and the given body. */
 async function system(body: string, extra = '') {
-    return load(`${COMPONENTS}\n${extra}\nsystem S {\n${body}\n}`);
+    return load(`${COMPONENTS}\n${extra}\nsubsystem S {\n${body}\n}`);
 }
 
 describe('structure language: parsing', () => {
@@ -532,6 +532,33 @@ system S {
         ]);
     });
 
+    test('a system is closed: no ports, no delegations', async () => {
+        const parsed = await load(`${COMPONENTS}
+system Top {
+    in async open : integer
+    out sync pos : Point
+    thread T { c : Client  s : Server }
+    connect s.pos -> c.pos
+    delegate open -> s.cmd
+    delegate s.pos -> pos
+}`);
+        const message = "'Top' is a system: the closed top level has no ports – model the environment (e.g. the remote control) as parts of the system, "
+            + "or declare it as 'subsystem Top'.";
+        const delegation = "A system has no boundary ports and so no delegations: connect the parts of 'Top' with 'connect a.port -> b.port'.";
+        expect(errors(parsed)).toEqual([message, message, delegation, delegation]);
+        // (no warnings about undelegated boundary ports on top of the errors)
+        expect(warnings(parsed).filter(w => w.includes('is not delegated'))).toEqual([]);
+        // the same body as a subsystem is valid
+        const subsystem = await system(`    in async open : integer
+    out sync pos : Point
+    thread T { c : Client  s : Server }
+    connect s.pos -> c.pos
+    delegate open -> s.cmd
+    delegate s.pos -> pos`);
+        expect(errors(subsystem)).toEqual([]);
+        expect(warnings(subsystem)).toEqual([]);
+    });
+
     test('recursive instantiation and instances of systems', async () => {
         const parsed = await load(`
 subsystem A { b : B }
@@ -859,6 +886,21 @@ system S {
         };
         expect(await complete(6, 12)).toEqual(['A', 'B']);
         expect(await complete(8, 8)).toEqual(['Sub']);
+    });
+
+    test('completion in a system: no port and delegation keywords (a system is closed)', async () => {
+        const text = 'component A { }\nsubsystem Sub {\n    \n}\nsystem S {\n    \n}';
+        const parsed = await load(text);
+        const keywords = async (line: number) => {
+            const list = await services.Devm.lsp.CompletionProvider!.getCompletion(parsed.document, {
+                textDocument: { uri: parsed.document.uri.toString() }, position: { line, character: 4 }
+            });
+            return (list?.items ?? []).filter(i => i.kind === CompletionItemKind.Keyword).map(i => i.label);
+        };
+        expect(await keywords(2)).toEqual(expect.arrayContaining(['in', 'out', 'inout', 'thread', 'connect', 'delegate']));
+        const inSystem = await keywords(5);
+        expect(inSystem).toEqual(expect.arrayContaining(['thread', 'connect']));
+        expect(inSystem.filter(k => ['in', 'out', 'inout', 'delegate'].includes(k))).toEqual([]);
     });
 
     test('document symbols', async () => {

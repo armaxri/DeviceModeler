@@ -12,6 +12,15 @@ export function enclosingComposite(node: AstNode | undefined): ast.CompositeType
     return node ? AstUtils.getContainerOfType(node, ast.isCompositeType) : undefined;
 }
 
+/**
+ * Why a system has no ports: it is the closed, complete top level of a product. Its environment (a remote
+ * control, a display, …) is modeled as parts of the system; a composite with boundary ports is a subsystem.
+ */
+export function systemPortsMessage(system: string): string {
+    return `'${system}' is a system: the closed top level has no ports – model the environment (e.g. the remote control) `
+        + `as parts of the system, or declare it as 'subsystem ${system}'.`;
+}
+
 /** All instances of a composite: those declared directly in its body and those declared in its threads, in text order. */
 export function compositeInstances(structure: ast.CompositeType): ast.ComponentInstance[] {
     const result: ast.ComponentInstance[] = [];

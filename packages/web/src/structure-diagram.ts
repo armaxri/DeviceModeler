@@ -5,7 +5,7 @@ import {
     BUILTIN_TYPES, StructureEditor, EditError, IncompatiblePortsError, IBD_OVERVIEW_ID, IBD_TYPES_ID, applyEdits, behaviorMachine, checkRename, mapOffset, endpointLabel, findSources, findTargets, ibdChoices, ibdElementAt,
     ibdNodes, ibdRouteElements, instanceType, isComponent, isComponentInstance, isComponentType, isConnection, isDelegation, isPort,
     isStructDeclaration, isCompositeType, isThread, layoutStructure, memberText, normalizeUri, planConnection, portEndpoint, portTypeLabel, resolveDataType, routeContinuations, routeIdsAt,
-    threadInstances, threadOf, threadSettings, visibleElements,
+    systemPortsMessage, threadInstances, threadOf, threadSettings, visibleElements,
     type Component, type ComponentInstance, type ComponentType, type PortEnd, type StructureWorkspace, type EditResult, type IbdLayoutResult, type IbdNode,
     type ParsedStructureModel, type Port, type PortEndpoint, type CompositeType, type StructureContext, type StructureLocation, type TextEdit, type Thread,
     captureIbdLayout, cloneIbdLayout, edgeFrameOrigin, ibdContentOrigin, ibdLayoutTextEdits, structureDiagramElements, withoutIbdLayoutAnnotations,
@@ -859,6 +859,10 @@ export class StructureDiagram {
             this.context.setStatus('Click on the frame, a component or an instance to add a port.', 'warning');
             return undefined;
         }
+        if (isCompositeType(owner) && owner.kind === 'system') {
+            this.context.setStatus(systemPortsMessage(owner.name), 'warning');
+            return undefined;
+        }
         if (!this.isOwn(owner)) {
             const file = documentOf(owner)?.uri.path.replace(/^.*\//, '') ?? 'another file';
             this.context.setStatus(`'${owner.name}' is declared in ${file} – open it to add ports (double-click the type name of the instance).`, 'warning');
@@ -1550,7 +1554,7 @@ export class StructureDiagram {
         const rows: HTMLElement[] = [];
         const result: HTMLElement[] = [];
         if (isCompositeType(root)) {
-            rows.push(h('dt', {}, 'Ports'), h('dd', {}, String(root.ports.length)),
+            rows.push(h('dt', {}, 'Ports'), h('dd', {}, root.kind === 'system' && root.ports.length === 0 ? 'none (closed)' : String(root.ports.length)),
                 h('dt', {}, 'Threads'), h('dd', {}, String(root.threads.length)),
                 h('dt', {}, 'Connections'), h('dd', {}, String(root.connections.length + root.delegations.length)));
         }
@@ -1564,6 +1568,10 @@ export class StructureDiagram {
         }
         if (rows.length > 0) {
             result.push(h('dl', {}, ...rows));
+        }
+        if (isCompositeType(root) && root.kind === 'system') {
+            result.push(h('p', { class: 'hint' }, 'A system is the closed, complete top level: it has no ports. Its environment (e.g. a remote control, a display) '
+                + 'is modeled as parts; a composite with boundary ports is a subsystem.'));
         }
         const context = this.shownContext;
         if (context && context.path.length > 0) {

@@ -5,7 +5,7 @@ import { behaviorMapping } from './structure-behavior.js';
 import { structureCppImports, resolvedBehavior, resolvedStructureImports, visibleElements } from './structure-imports.js';
 import type { DevmServices } from './devm-module.js';
 import {
-    argumentNumber, DURATION_UNITS, enclosingComposite, instanceType, portReferenceText, compositeInstances, threadsOf
+    argumentNumber, DURATION_UNITS, enclosingComposite, instanceType, portReferenceText, compositeInstances, systemPortsMessage, threadsOf
 } from './structure-model.js';
 import { directionProblem, incompatibilityMessage, mismatchMessage, resolveDataType } from './structure-types.js';
 import { connectionThreads } from './structure-routes.js';
@@ -22,7 +22,7 @@ export function registerStructureValidationChecks(services: DevmServices): void 
         StructDeclaration: validator.checkStruct,
         DataTypeReference: validator.checkDataTypeReference,
         Component: [validator.checkPortNames, validator.checkBehavior],
-        CompositeType: [validator.checkPortNames, validator.checkCompositeNames, validator.checkPortUsage, validator.checkBoundaryPorts],
+        CompositeType: [validator.checkPortNames, validator.checkCompositeNames, validator.checkSystemClosed, validator.checkPortUsage, validator.checkBoundaryPorts],
         Port: validator.checkPort,
         ComponentInstance: validator.checkInstance,
         ThreadMember: validator.checkThreadMember,
@@ -368,8 +368,28 @@ export class StructureValidator {
         }
     }
 
+    /**
+     * A system is the closed, complete top level of a product: no boundary ports (its environment is
+     * modeled as parts), and so no delegations.
+     */
+    checkSystemClosed(structure: ast.CompositeType, accept: ValidationAcceptor): void {
+        if (structure.kind !== 'system') {
+            return;
+        }
+        for (const port of structure.ports) {
+            accept('error', systemPortsMessage(structure.name), { node: port, property: port.name ? 'name' : undefined });
+        }
+        for (const delegation of structure.delegations) {
+            accept('error', `A system has no boundary ports and so no delegations: connect the parts of '${structure.name}' with 'connect a.port -> b.port'.`,
+                { node: delegation });
+        }
+    }
+
     /** The data of the boundary ports is passed on: in ports to parts, out ports from parts, inout ports to and from parts. */
     checkBoundaryPorts(structure: ast.CompositeType, accept: ValidationAcceptor): void {
+        if (structure.kind === 'system') {
+            return; // (no ports: checkSystemClosed)
+        }
         for (const port of structure.ports) {
             const delegated = structure.delegations.some(d => (!d.source?.instance && d.source?.port?.ref === port) || (!d.target?.instance && d.target?.port?.ref === port));
             if (delegated || !port.name) {

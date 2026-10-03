@@ -329,6 +329,13 @@ describe('structure edits: ports, annotations, behavior', () => {
         expect(removed.text).toContain('component DoorController {\n    in async open');
     });
 
+    test('a system has no ports: adding one is refused', async () => {
+        const parsed = await load('system Top {\n}\n', 'top.devm');
+        const top = structure(parsed.model, 'Top');
+        expect(() => new StructureEditor(parsed.text, parsed.model).addPort(top, { direction: 'in', kind: 'async' }))
+            .toThrow(/'Top' is a system: the closed top level has no ports/);
+    });
+
     test('add component types', async () => {
         const { text, result } = await edit('components.devm', e => e.addComponentType('component'));
         expect(text.endsWith('    in sync report : Diagnostics\n}\n\ncomponent Component1 {\n}\n')).toBe(true);

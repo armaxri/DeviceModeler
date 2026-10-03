@@ -225,6 +225,18 @@ export class StructureCompletionProvider extends StateMachineCompletionProvider 
         return super.completionFor(context, next, acceptor);
     }
 
+    /** A system is closed (no ports, no delegations): the keywords starting a port or a delegation are not proposed in its body. */
+    protected override filterKeyword(context: CompletionContext, keyword: GrammarAST.Keyword): boolean {
+        const rule = AstUtils.getContainerOfType(keyword, GrammarAST.isParserRule)?.name;
+        if ((rule === 'Port' || rule === 'Delegation') && context.node) {
+            const composite = AstUtils.getContainerOfType(context.node, ast.isCompositeType);
+            if (composite?.kind === 'system') {
+                return false;
+            }
+        }
+        return super.filterKeyword(context, keyword);
+    }
+
     protected override getReferenceCandidates(refInfo: ReferenceInfo, context: CompletionContext): Stream<AstNodeDescription> {
         const candidates = super.getReferenceCandidates(refInfo, context);
         const container = refInfo.container;

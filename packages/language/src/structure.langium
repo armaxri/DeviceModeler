@@ -15,7 +15,7 @@
  *       inout sync errors : integer   // shared data
  *   }
  *
- *   system Car {
+ *   subsystem Car {
  *       in async open
  *       @priority(5) @period(10 ms)
  *       thread ControlTask {
@@ -24,6 +24,12 @@
  *       }
  *       connect door.up -> motor.up               // out -> in (data flow)
  *       delegate open -> door.open                // outer in -> inner in
+ *   }
+ *
+ *   system Garage {                               // the closed top level: no ports
+ *       thread UiTask { remote : RemoteControl }
+ *       car : Car
+ *       connect remote.open -> car.open
  *   }
  *
  * Types (built-in types, structs, C++ types of imported headers) are referenced by name
@@ -94,7 +100,8 @@ Behavior:
     'behavior' (path=STRING | machine=[StateMachine:StructureId]);
 
 // A composite: a `subsystem` (a composite component type, instantiated in other subsystems and
-// systems) or the root of a product (`system`): boundary ports, threads with the instances of
+// systems) or the root of a product (`system`, closed: no ports and delegations – checked by the
+// validator): boundary ports, threads with the instances of
 // components, instances of subsystems (outside of the threads: their parts run in threads of their
 // own), connections and delegations. (The AST type `CompositeType` covers both kinds.)
 //

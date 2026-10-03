@@ -24,7 +24,7 @@ import type { DiagramLabel, Point, TextMeasure } from './diagram-model.js';
  */
 
 /**
- * `frame`: the enclosing frame of the shown subsystem or system (`ibd [system] GarageDoor`), `thread`: a
+ * `frame`: the enclosing frame of the shown subsystem or system (`ibd [system] GarageInstallation`, `ibd [subsystem] GarageDoor`), `thread`: a
  * thread frame, `instance`: a part (`door : DoorController`), `block`: a component type shown on its own
  * (a component without parts, or the overview of the component types of a file), `type`: a struct
  * declared in the file (a value type box «struct» with its fields, outside of the frame and never

@@ -250,7 +250,7 @@ system Root {
         const model = await load(`
 component Store { inout sync v : integer }
 subsystem Sub { inout sync v : integer  thread T { s : Store }  delegate v -> s.v }
-system Root {
+subsystem Root {
     inout sync env : integer
     a : Sub
     thread T { s : Store  t : Store }

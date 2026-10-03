@@ -1,7 +1,7 @@
 import { AstUtils, GrammarUtils, type AstNode, type LangiumCoreServices } from 'langium';
 import * as ast from '../generated/ast.js';
 import { visibleElements } from '../structure-imports.js';
-import { enclosingComposite, compositeInstances, threadInstances, threadOf } from '../structure-model.js';
+import { enclosingComposite, compositeInstances, systemPortsMessage, threadInstances, threadOf } from '../structure-model.js';
 import { incompatibilityMessage, mismatchMessage } from '../structure-types.js';
 import { BUILTIN_TYPES } from '../typesystem.js';
 import { EditError, mapOffset, quote, type EditResult, type TextEdit } from './model-edits.js';
@@ -221,6 +221,9 @@ export class StructureEditor {
 
     /** Adds a port to a component type (a component or the boundary of a structure). */
     addPort(owner: ast.ComponentType, port: NewPort): EditResult {
+        if (ast.isCompositeType(owner) && owner.kind === 'system') {
+            throw new EditError(systemPortsMessage(owner.name));
+        }
         if (port.kind === 'async' && port.direction === 'inout') {
             throw new EditError('An async port is an in or an out port (an event is sent or received); shared data is an inout sync port.');
         }
