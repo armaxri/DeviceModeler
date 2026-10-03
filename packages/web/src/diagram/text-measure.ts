@@ -1,9 +1,9 @@
 import { DiagramMetrics, type TextMeasure, type TextStyle } from 'devm-language';
 
-/** Font family used in the diagram. Must match `--hsm-font` in DIAGRAM_CSS (devm-language). */
+/** Font family used in the diagram. Must match `--devm-font` in DIAGRAM_CSS (devm-language). */
 export const DIAGRAM_FONT = '"Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif';
 
-/** Monospace font of the definition section. Must match `--hsm-mono` in DIAGRAM_CSS (devm-language). */
+/** Monospace font of the definition section. Must match `--devm-mono` in DIAGRAM_CSS (devm-language). */
 export const DIAGRAM_MONO_FONT = '"DejaVu Sans Mono", Menlo, Consolas, "Liberation Mono", monospace';
 
 let context: CanvasRenderingContext2D | null | undefined;

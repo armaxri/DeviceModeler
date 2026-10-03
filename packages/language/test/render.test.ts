@@ -44,7 +44,7 @@ describe('text metrics', () => {
 });
 
 describe('renderSvg', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-render-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-render-'));
 
     for (const file of EXAMPLES) {
         for (const direction of ['DOWN', 'RIGHT'] as const) {
@@ -59,12 +59,12 @@ describe('renderSvg', () => {
                     expect(svg).not.toMatch(/NaN|undefined|Infinity/);
                     const root = parseXml(svg);
                     expect(root.name).toBe('svg');
-                    expect(classes(root)).toEqual(expect.arrayContaining(['sprotty-graph', `theme-${theme}`, 'hsm-export']));
+                    expect(classes(root)).toEqual(expect.arrayContaining(['sprotty-graph', `theme-${theme}`, 'devm-export']));
                     expect(Number(root.attributes.width)).toBeGreaterThanOrEqual(graph.width);
                     expect(root.attributes.viewBox).toBe(`0 0 ${root.attributes.width} ${root.attributes.height}`);
                     expect(root.children.find(c => c.name === 'style')?.text).toContain('.theme-classic');
                     // one group per diagram element
-                    expect(withClass(root, 'hsm-node')).toHaveLength(nodes.length);
+                    expect(withClass(root, 'devm-node')).toHaveLength(nodes.length);
                     expect(withClass(root, 'state')).toHaveLength(nodes.filter(n => n.kind === 'state').length);
                     expect(withClass(root, 'region')).toHaveLength(nodes.filter(n => n.kind === 'region').length);
                     expect(withClass(root, 'transition')).toHaveLength(graph.edges.length);
@@ -115,25 +115,25 @@ describe('renderSvg', () => {
         const svg = renderSvg(layout.graph, { theme: 'dark', highlight, legend: true, title: 'Coverage <CdPlayer> & more', embedStyles: false });
         const root = parseXml(svg);
         expect(root.children.some(c => c.name === 'style')).toBe(false);
-        const covered = withClass(root, 'hsm-covered');
-        const uncovered = withClass(root, 'hsm-uncovered');
+        const covered = withClass(root, 'devm-covered');
+        const uncovered = withClass(root, 'devm-uncovered');
         // plus one sample state and transition per legend entry
         expect(covered.filter(e => classes(e).includes('state')).length).toBe(2);
         expect(uncovered.filter(e => classes(e).includes('state')).length).toBe(2);
         expect(uncovered.filter(e => classes(e).includes('transition')).length).toBe(2);
-        expect(withClass(root, 'my-class').map(classes)[0]).toEqual(['hsm-node', 'definition', 'my-class', 'other']);
-        expect(withClass(root, 'hsm-legend-label').map(e => e.text)).toEqual(['covered', 'not covered']);
-        expect(withClass(root, 'hsm-title')[0].text).toBe('Coverage <CdPlayer> & more');
+        expect(withClass(root, 'my-class').map(classes)[0]).toEqual(['devm-node', 'definition', 'my-class', 'other']);
+        expect(withClass(root, 'devm-legend-label').map(e => e.text)).toEqual(['covered', 'not covered']);
+        expect(withClass(root, 'devm-title')[0].text).toBe('Coverage <CdPlayer> & more');
         expect(Number(root.attributes.height)).toBeGreaterThan(layout.graph.height + 30 + 44);
         // the CSS classes are defined in the shared style sheet
-        expect(DIAGRAM_CSS).toContain('.hsm-node.hsm-covered > .state-shape');
-        expect(DIAGRAM_CSS).toContain('.transition.hsm-uncovered .transition-line');
+        expect(DIAGRAM_CSS).toContain('.devm-node.devm-covered > .state-shape');
+        expect(DIAGRAM_CSS).toContain('.transition.devm-uncovered .transition-line');
         expect(highlightClass('active')).toBe('active');
         expect(highlightClass('bad"class x')).toBe('x');
         // explicit legend and inline mode
         const inline = renderSvg(layout.graph, { legend: [{ kind: 'active', label: 'active state' }], xmlDeclaration: false });
         expect(inline.startsWith('<svg')).toBe(true);
-        expect(withClass(parseXml(inline), 'hsm-legend-label')[0].text).toBe('active state');
+        expect(withClass(parseXml(inline), 'devm-legend-label')[0].text).toBe('active state');
     });
 
     test('escapes text and survives degenerate graphs', () => {

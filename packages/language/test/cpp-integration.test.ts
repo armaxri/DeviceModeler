@@ -202,7 +202,7 @@ describe('C++ header imports: language server features', () => {
 
 describe('C++ header imports: Node.js hosts', () => {
     test('headers are read from the file system with the settings of the nearest devm.gen.json', async () => {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-headers-'));
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-headers-'));
         try {
             fs.mkdirSync(path.join(dir, 'models'));
             fs.mkdirSync(path.join(dir, 'include/app'), { recursive: true });

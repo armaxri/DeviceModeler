@@ -78,7 +78,7 @@ describe.skipIf(!GCC)('C code generator: conformance suite', () => {
     let workDirectory = '';
 
     beforeAll(async () => {
-        workDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-c-'));
+        workDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-c-'));
         await inParallel(scenarioFiles.filter(f => !SKIP[f]), Math.max(2, os.cpus().length), async file => {
             const directory = path.join(workDirectory, file.replace(/\.json$/, ''));
             fs.mkdirSync(directory);
@@ -135,7 +135,7 @@ describe.skipIf(!GCC && !CLANG)('C code generator: examples', () => {
             expect(errors(parsed)).toEqual([]);
             const result = generateC(parsed.model);
             expect(result.diagnostics).toEqual([]);
-            const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-c-example-'));
+            const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-c-example-'));
             try {
                 writeFiles(directory, result);
                 for (const compiler of compilers) {

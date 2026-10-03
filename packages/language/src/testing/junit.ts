@@ -5,7 +5,7 @@ import type { TestResult } from './runner.js';
  * systems (GitHub Actions, GitLab, Jenkins).
  */
 export function toJUnitXml(results: readonly TestResult[], options: { name?: string, fileName?: (uri: string) => string } = {}): string {
-    const name = options.name ?? 'hsm-tests';
+    const name = options.name ?? 'devm-tests';
     const fileName = options.fileName ?? ((uri: string) => uri);
     const suites = new Map<string, TestResult[]>();
     for (const result of results) {

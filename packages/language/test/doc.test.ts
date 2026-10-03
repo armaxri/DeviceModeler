@@ -204,7 +204,7 @@ describe('CLI render and doc', () => {
     });
 
     test('devm render', async () => {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cli-render-'));
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-cli-render-'));
         const log = logger();
         expect(await runRenderCommand([EXAMPLES_DIR], { out: dir, theme: 'dark', direction: 'right', routing: 'orthogonal' }, log)).toBe(0);
         // (with the structure files of examples/device)
@@ -226,7 +226,7 @@ describe('CLI render and doc', () => {
     });
 
     test('devm doc (Markdown and HTML)', async () => {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cli-doc-'));
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-cli-doc-'));
         const log = logger();
         const md = path.join(dir, 'md');
         expect(await runDocCommand([path.join(EXAMPLES_DIR, '*.devm')], { out: md }, log)).toBe(0);
@@ -242,7 +242,7 @@ describe('CLI render and doc', () => {
         expect(await runDocCommand([EXAMPLES_DIR], { out: html, format: 'html', title: 'Examples' }, log)).toBe(0);
         expect(fs.readdirSync(html).sort()).toEqual(['CdPlayer.html', 'Conveyor.html', 'Door.html', 'DoorController.html', 'Drive.html', 'Gate.html', 'Keyboard.html', 'Motor.html', 'TrafficLight.html', 'index.html']);
         const door = fs.readFileSync(path.join(html, 'Door.html'), 'utf-8');
-        expect(door).toContain('<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic hsm-export"');
+        expect(door).toContain('<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic devm-export"');
         expect(door).toContain('Automatic door with obstacle detection');
         expect(fs.readFileSync(path.join(html, 'index.html'), 'utf-8')).toContain('<h1>Examples</h1>');
         expect(log.messages.filter(m => m.startsWith('ERROR'))).toEqual([]);

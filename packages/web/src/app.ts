@@ -582,7 +582,7 @@ export class HsmApp implements DiagramHost {
             return;
         }
         const monacoRange = this.toRange(range);
-        this.decorations.set([{ range: monacoRange, options: { className: 'hsm-selected-range', isWholeLine: false } }]);
+        this.decorations.set([{ range: monacoRange, options: { className: 'devm-selected-range', isWholeLine: false } }]);
         this.editor.revealRangeInCenterIfOutsideViewport(monacoRange, monaco.editor.ScrollType.Smooth);
     }
 
@@ -590,7 +590,7 @@ export class HsmApp implements DiagramHost {
         const monacoRange = this.toRange(range);
         this.editor.setSelection(monacoRange);
         this.editor.revealRangeInCenterIfOutsideViewport(monacoRange, monaco.editor.ScrollType.Smooth);
-        this.decorations.set([{ range: monacoRange, options: { className: 'hsm-selected-range', isWholeLine: false } }]);
+        this.decorations.set([{ range: monacoRange, options: { className: 'devm-selected-range', isWholeLine: false } }]);
     }
 
     editTextAt(offset: number): void {

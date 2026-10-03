@@ -184,7 +184,7 @@ describe('internal block diagram: the garage door system', () => {
         const highlight = new Map([...ibdRouteElements(layout, 'GarageDoor/door.motor')!].map(id => [id, 'on-route']));
         const svg = renderIbdSvg(layout.graph, { theme: 'dark', highlight, routeHighlight: true });
         const root = parseXml(svg);
-        expect(root.attributes.class).toBe('sprotty-graph theme-dark hsm-export ibd-diagram route-highlight');
+        expect(root.attributes.class).toBe('sprotty-graph theme-dark devm-export ibd-diagram route-highlight');
         expect(withClass(root, 'ibd-frame')).toHaveLength(1);
         expect(withClass(root, 'ibd-thread')).toHaveLength(2);
         expect(withClass(root, 'ibd-instance')).toHaveLength(5);
@@ -309,7 +309,7 @@ system Top {
 
 describe('devm render: structure files', () => {
     test('renders the device example (structures and state machines)', async () => {
-        const out = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-ibd-'));
+        const out = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-ibd-'));
         const messages: string[] = [];
         const code = await runRenderCommand([DEVICE], { out, theme: 'modern' }, { log: m => messages.push(m), error: m => messages.push(`error: ${m}`) });
         expect(code).toBe(0);
@@ -325,7 +325,7 @@ describe('devm render: structure files', () => {
     });
 
     test('a single file with --element', async () => {
-        const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-ibd-')), 'buzzer.svg');
+        const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'devm-ibd-')), 'buzzer.svg');
         const messages: string[] = [];
         const logger = { log: (m: string) => messages.push(m), error: (m: string) => messages.push(`error: ${m}`) };
         expect(await runRenderCommand([path.join(DEVICE, 'components.devm')], { out, element: 'Buzzer' }, logger)).toBe(0);

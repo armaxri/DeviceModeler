@@ -163,7 +163,7 @@ describe.skipIf(!GXX)('C++ code generator: conformance suite', () => {
     let workDirectory = '';
 
     beforeAll(async () => {
-        workDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cpp-'));
+        workDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-cpp-'));
         const prepared: Prepared[] = [];
         for (const [i, file] of scenarioFiles.entries()) {
             if (SKIP[file]) {
@@ -249,7 +249,7 @@ describe.skipIf(!GXX && !CLANGXX)('C++ code generator: examples', () => {
         test(file, async () => {
             const parsed = await parse(fs.readFileSync(path.join(exampleDirectory, file), 'utf-8'));
             expect(errors(parsed)).toEqual([]);
-            const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cpp-example-'));
+            const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-cpp-example-'));
             try {
                 const tasks: Array<Promise<void>> = [];
                 for (const variant of variants) {
@@ -278,7 +278,7 @@ describe.skipIf(!GXX && !CLANGXX)('C++ code generator: examples', () => {
         expect(example, 'C++ example in docs/cpp-generator.md').toBeDefined();
         const parsed = await parse(fs.readFileSync(path.join(exampleDirectory, 'traffic-light.devm'), 'utf-8'));
         const result = generateCpp(parsed.model);
-        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cpp-doc-'));
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-cpp-doc-'));
         try {
             writeFiles(directory, result);
             // a few cycles instead of a minute
@@ -315,7 +315,7 @@ describe.skipIf(!GXX && !CLANGXX)('C++ code generator: examples', () => {
         expect(errors(parsed)).toEqual([]);
         const result = generateCpp(parsed.model);
         expect(result.diagnostics).toEqual([]);
-        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cpp-names-'));
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-cpp-names-'));
         try {
             writeFiles(directory, result);
             for (const compiler of compilers) {
@@ -340,7 +340,7 @@ describe.skipIf(!GXX && !CLANGXX)('C++ code generator: examples', () => {
             '}'
         ].join('\n'));
         const result = generateCpp(parsed.model);
-        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cpp-errors-'));
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-cpp-errors-'));
         try {
             writeFiles(directory, result);
             fs.writeFileSync(path.join(directory, 'main.cpp'), [

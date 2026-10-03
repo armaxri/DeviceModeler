@@ -489,7 +489,7 @@ describe('test runner', () => {
             @Test operation breaks() { raise open }
         `));
         const xml = toJUnitXml(results, { fileName: () => 'door.devmtest' });
-        expect(xml).toContain('<testsuites name="hsm-tests" tests="3" failures="1" errors="1"');
+        expect(xml).toContain('<testsuites name="devm-tests" tests="3" failures="1" errors="1"');
         expect(xml).toContain('<testsuite name="DoorTest" tests="3" failures="1" errors="1" skipped="0"');
         expect(xml).toMatch(/<testcase name="ok" classname="DoorTest" time="[\d.]+" file="door.devmtest"\/>/);
         expect(xml).toContain('<failure message="count &lt;positive&gt; (count = 0)" type="AssertionFailure">line 4: count &lt;positive&gt; (count = 0)');

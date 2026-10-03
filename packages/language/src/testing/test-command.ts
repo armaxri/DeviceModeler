@@ -217,7 +217,7 @@ export const renderCoverageDiagram: CoverageDiagramRenderer = async (machine, hi
     const { graph } = await layoutStateMachineWithLayout(machine);
     const kinds = new Map<string, HighlightKind>();
     for (const [id, cls] of Object.entries(highlight.classes)) {
-        kinds.set(id, cls === 'hsm-covered' ? 'covered' : 'uncovered');
+        kinds.set(id, cls === 'devm-covered' ? 'covered' : 'uncovered');
     }
     return renderSvg(graph, { highlight: kinds, legend: true, xmlDeclaration: false });
 };

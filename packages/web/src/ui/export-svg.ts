@@ -17,7 +17,7 @@ export function exportSvg(container: HTMLElement, width: number, height: number,
     svg.removeAttribute('style');
     svg.removeAttribute('id');
     svg.removeAttribute('tabindex');
-    svg.classList.add(themeClass, 'hsm-export');
+    svg.classList.add(themeClass, 'devm-export');
     const viewport = svg.querySelector(':scope > g');
     viewport?.removeAttribute('transform');
     for (const element of svg.querySelectorAll('.selected, .mouseover, .pending-source, .on-route')) {

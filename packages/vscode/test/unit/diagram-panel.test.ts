@@ -94,7 +94,7 @@ describe('DiagramPanel and its commands', () => {
     let modelPath: string;
 
     beforeEach(async () => {
-        dir = await fs.mkdtemp(path.join(os.tmpdir(), 'hsm-layout-'));
+        dir = await fs.mkdtemp(path.join(os.tmpdir(), 'devm-layout-'));
         modelPath = path.join(dir, 'lamp.devm');
         await fs.writeFile(modelPath, MODEL);
     });

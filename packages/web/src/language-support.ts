@@ -8,7 +8,7 @@ export { describeSyntaxProblem, type SyntaxProblem } from './model-service.js';
 
 /** Language id of the model files of the Device Modeler (`.devm`: state machines and structure files). */
 export const LANGUAGE_ID = 'devm';
-export const EDITOR_THEMES = { light: 'hsm-light', dark: 'hsm-dark' } as const;
+export const EDITOR_THEMES = { light: 'devm-light', dark: 'devm-dark' } as const;
 
 /**
  * Runs the Langium services of the `.devm` language directly in the browser and connects them

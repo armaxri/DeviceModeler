@@ -221,7 +221,7 @@ export function toCobertura(report: CoverageReport, options: CoverageReportOptio
         '<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">',
         `<coverage line-rate="${rate(all.linesCovered, all.linesValid)}" branch-rate="${rate(all.branchesCovered, all.branchesValid)}" `
         + `lines-covered="${all.linesCovered}" lines-valid="${all.linesValid}" branches-covered="${all.branchesCovered}" `
-        + `branches-valid="${all.branchesValid}" complexity="0" version="hsm-1" timestamp="${options.timestamp ?? Date.now()}">`,
+        + `branches-valid="${all.branchesValid}" complexity="0" version="devm-1" timestamp="${options.timestamp ?? Date.now()}">`,
         '  <sources>',
         `    <source>${escapeXml(options.sourceRoot ?? '.')}</source>`,
         '  </sources>',
@@ -307,8 +307,8 @@ export interface ReportFile {
 /**
  * Self-contained HTML report: `index.html` with the summary and one page per state machine listing
  * all elements (covered / uncovered, hits, covering tests) and guards, with the diagram if a
- * {@link CoverageDiagramRenderer} is given (covered elements have the class `hsm-covered`,
- * uncovered ones `hsm-uncovered`).
+ * {@link CoverageDiagramRenderer} is given (covered elements have the class `devm-covered`,
+ * uncovered ones `devm-uncovered`).
  */
 export async function toCoverageHtml(report: CoverageReport, options: CoverageHtmlOptions = {}): Promise<ReportFile[]> {
     const title = options.title ?? 'State machine coverage';
@@ -421,7 +421,7 @@ td.na { color: var(--muted); } small { color: var(--muted); }
 .tests { font-size: 12px; color: var(--muted); } code { font-size: 12.5px; word-break: break-word; }
 .diagram { margin: 16px 0; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
 .diagram svg { max-width: 100%; height: auto; }
-.hsm-covered { --hsm-coverage: var(--ok-strong); } .hsm-uncovered { --hsm-coverage: var(--bad-strong); }
+.devm-covered { --devm-coverage: var(--ok-strong); } .devm-uncovered { --devm-coverage: var(--bad-strong); }
 </style>
 </head>
 <body>

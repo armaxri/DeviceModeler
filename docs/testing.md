@@ -141,6 +141,6 @@ As API, `runTests(test, machine, { coverage: new CoverageCollector() })` collect
 a `CoverageCollector` can also be attached to any interpreter –
 `new StatechartInterpreter(machine, collector.attach(options))` – e.g. to show the coverage of a
 simulation session (`collector.highlight(machine)` returns the diagram element ids with the classes
-`hsm-covered` / `hsm-uncovered`). The report functions are `toCoverageText`, `toCoverageJson`, `toLcov`,
+`devm-covered` / `devm-uncovered`). The report functions are `toCoverageText`, `toCoverageJson`, `toLcov`,
 `toCobertura` and `toCoverageHtml` (with an optional `renderDiagram(machine, highlight)` hook that embeds the
 highlighted diagram).

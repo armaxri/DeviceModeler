@@ -334,8 +334,8 @@ function definitionPanel(machine: StateMachine, info: SelectionInfo, host: Prope
 
     const kind = h('select', {}, ...DECLARATION_KINDS.map(k => h('option', { value: k }, k)));
     const name = h('input', { spellcheck: 'false', placeholder: DECLARATION_PLACEHOLDERS['in event'].name });
-    const typeList = h('datalist', { id: 'hsm-type-names' }, ...['integer', 'real', 'boolean', 'string', 'void'].map(t => h('option', { value: t })));
-    const type = h('input', { spellcheck: 'false', list: 'hsm-type-names', placeholder: DECLARATION_PLACEHOLDERS['in event'].type });
+    const typeList = h('datalist', { id: 'devm-type-names' }, ...['integer', 'real', 'boolean', 'string', 'void'].map(t => h('option', { value: t })));
+    const type = h('input', { spellcheck: 'false', list: 'devm-type-names', placeholder: DECLARATION_PLACEHOLDERS['in event'].type });
     const value = h('input', { spellcheck: 'false', placeholder: 'initial value (optional)' });
     const valueField = field('Value', value);
     const namedInterfaces = scopes.filter(isInterfaceScope).map(s => s.name).filter((n): n is string => !!n);

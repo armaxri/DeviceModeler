@@ -15,7 +15,7 @@ export type DiagramTheme = 'classic' | 'modern' | 'dark';
 export const DIAGRAM_THEMES: readonly DiagramTheme[] = ['classic', 'modern', 'dark'];
 
 /**
- * Highlight of a diagram element: `'covered'` (CSS class `hsm-covered`), `'uncovered'` (`hsm-uncovered`),
+ * Highlight of a diagram element: `'covered'` (CSS class `devm-covered`), `'uncovered'` (`devm-uncovered`),
  * `'active'` (`active`, the look of active states in the simulation) or any other CSS class name(s).
  */
 export type HighlightKind = 'covered' | 'uncovered' | 'active' | (string & {});
@@ -32,7 +32,7 @@ export interface SvgRenderOptions {
     /**
      * Highlights of states, pseudo states and transitions by diagram element id (the ids of
      * `LayoutResult.ids`, e.g. `layout.ids.get(stateNode)`). The class is added to the `<g>` element
-     * of the node (class `hsm-node`) or transition (class `transition`).
+     * of the node (class `devm-node`) or transition (class `transition`).
      */
     highlight?: ReadonlyMap<string, HighlightKind>;
     /** Title shown above the diagram (and as `<title>` of the document). */
@@ -59,9 +59,9 @@ const LEGEND_ROW_HEIGHT = 22;
 export function highlightClass(kind: HighlightKind): string {
     switch (kind) {
         case 'covered':
-            return 'hsm-covered';
+            return 'devm-covered';
         case 'uncovered':
-            return 'hsm-uncovered';
+            return 'devm-uncovered';
         default:
             return kind.split(/\s+/).filter(c => /^-?[_a-zA-Z][\w-]*$/.test(c)).join(' ');
     }
@@ -94,7 +94,7 @@ export function renderSvg(graph: DiagramGraph, options: SvgRenderOptions = {}): 
     if (options.xmlDeclaration ?? true) {
         out.push('<?xml version="1.0" encoding="UTF-8"?>');
     }
-    out.push(`<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-${theme} hsm-export" width="${width}" height="${height}" `
+    out.push(`<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-${theme} devm-export" width="${width}" height="${height}" `
         + `viewBox="0 0 ${width} ${height}" font-family="Helvetica, Arial, sans-serif">`);
     out.push(`<title>${escapeXml(options.title ?? graph.name)}</title>`);
     if (options.embedStyles ?? true) {
@@ -102,7 +102,7 @@ export function renderSvg(graph: DiagramGraph, options: SvgRenderOptions = {}): 
     }
     out.push('<rect class="export-background" width="100%" height="100%"/>');
     if (options.title) {
-        out.push(`<text class="hsm-title" x="20" y="${TITLE_HEIGHT - 6}">${escapeXml(options.title)}</text>`);
+        out.push(`<text class="devm-title" x="20" y="${TITLE_HEIGHT - 6}">${escapeXml(options.title)}</text>`);
     }
     const renderer = new SvgWriter(highlight, graph.direction);
     out.push(top > 0 ? `<g transform="translate(0, ${top})">` : '<g>');
@@ -132,17 +132,17 @@ function legendEntries(legend: SvgRenderOptions['legend'], highlight: ReadonlyMa
 }
 
 function renderLegend(entries: LegendEntry[], x: number, y: number, width: number, height: number, out: string[]): void {
-    out.push(`<g class="hsm-legend" transform="translate(${x}, ${y})">`);
-    out.push(`<rect class="hsm-legend-frame" x="0" y="0" width="${width}" height="${height}" rx="3" ry="3"/>`);
+    out.push(`<g class="devm-legend" transform="translate(${x}, ${y})">`);
+    out.push(`<rect class="devm-legend-frame" x="0" y="0" width="${width}" height="${height}" rx="3" ry="3"/>`);
     entries.forEach((entry, i) => {
         const cls = highlightClass(entry.kind);
         const rowY = 8 + i * LEGEND_ROW_HEIGHT;
-        out.push(`<g class="hsm-node state ${cls}" transform="translate(10, ${rowY + 3})">`
+        out.push(`<g class="devm-node state ${cls}" transform="translate(10, ${rowY + 3})">`
             + '<rect class="state-shape" x="0" y="0" rx="5" ry="5" width="26" height="14"/></g>');
         const line: Point[] = [{ x: 44, y: rowY + 10 }, { x: 72, y: rowY + 10 }];
         out.push(`<g class="transition ${cls}"><path class="transition-line" d="${routePath(line, false)}"/>`
             + `<path class="transition-arrow" d="${arrowHead(line[0], line[1])}"/></g>`);
-        out.push(`<text class="hsm-legend-label" x="80" y="${rowY + 14}">${escapeXml(entry.label)}</text>`);
+        out.push(`<text class="devm-legend-label" x="80" y="${rowY + 14}">${escapeXml(entry.label)}</text>`);
     });
     out.push('</g>');
 }
@@ -163,7 +163,7 @@ class SvgWriter {
         const width = num(node.width);
         const height = num(node.height);
         const open = (kindClasses: string[]) =>
-            out.push(`<g class="${this.classes(['hsm-node', ...kindClasses], node.id)}" transform="translate(${fmt(x)}, ${fmt(y)})">`);
+            out.push(`<g class="${this.classes(['devm-node', ...kindClasses], node.id)}" transform="translate(${fmt(x)}, ${fmt(y)})">`);
         const title = (text: string) => out.push(`<title>${escapeXml(text)}</title>`);
         switch (node.kind) {
             case 'state': {

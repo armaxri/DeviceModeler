@@ -145,7 +145,7 @@ statemachine Door {
     });
 
     test('files are loaded relative to the importing file (Node file system)', async () => {
-        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-imports-'));
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-imports-'));
         fs.mkdirSync(path.join(directory, 'parts'));
         fs.writeFileSync(path.join(directory, 'parts', 'motor.devm'), MOTOR.replace('statemachine Motor {', 'statemachine Motor {\n    import "gear.devm"'));
         fs.writeFileSync(path.join(directory, 'parts', 'gear.devm'), 'statemachine Gear {\n    [*] -> S\n    state S\n}');
@@ -313,7 +313,7 @@ statemachine Door {
     });
 
     test('changing an imported file updates the importing document (language server)', async () => {
-        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-imports-update-'));
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-imports-update-'));
         fs.writeFileSync(path.join(directory, 'motor.devm'), MOTOR);
         const services = createHsmServices(NodeFileSystem);
         const loader = new HsmModelLoader(services);

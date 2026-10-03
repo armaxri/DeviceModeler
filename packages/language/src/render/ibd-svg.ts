@@ -42,7 +42,7 @@ export function renderIbdSvg(graph: IbdGraph, options: IbdSvgOptions = {}): stri
     if (options.xmlDeclaration ?? true) {
         out.push('<?xml version="1.0" encoding="UTF-8"?>');
     }
-    const rootClasses = ['sprotty-graph', `theme-${theme}`, 'hsm-export', 'ibd-diagram', ...(options.routeHighlight ? ['route-highlight'] : [])];
+    const rootClasses = ['sprotty-graph', `theme-${theme}`, 'devm-export', 'ibd-diagram', ...(options.routeHighlight ? ['route-highlight'] : [])];
     out.push(`<svg xmlns="http://www.w3.org/2000/svg" class="${rootClasses.join(' ')}" width="${width}" height="${height}" `
         + `viewBox="0 0 ${width} ${height}" font-family="Helvetica, Arial, sans-serif">`);
     out.push(`<title>${escapeXml(options.title ?? graph.name)}</title>`);
@@ -51,7 +51,7 @@ export function renderIbdSvg(graph: IbdGraph, options: IbdSvgOptions = {}): stri
     }
     out.push('<rect class="export-background" width="100%" height="100%"/>');
     if (options.title) {
-        out.push(`<text class="hsm-title" x="20" y="${TITLE_HEIGHT - 6}">${escapeXml(options.title)}</text>`);
+        out.push(`<text class="devm-title" x="20" y="${TITLE_HEIGHT - 6}">${escapeXml(options.title)}</text>`);
     }
     const writer = new IbdSvgWriter(options.highlight ?? new Map());
     out.push(top > 0 ? `<g transform="translate(0, ${top})">` : '<g>');

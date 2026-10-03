@@ -99,8 +99,8 @@ export interface CoverageReport {
 }
 
 /** Classes of diagram elements for coverage highlighting (see {@link CoverageDiagramRenderer}). */
-export const COVERED_CLASS = 'hsm-covered';
-export const UNCOVERED_CLASS = 'hsm-uncovered';
+export const COVERED_CLASS = 'devm-covered';
+export const UNCOVERED_CLASS = 'devm-uncovered';
 
 /**
  * Coverage of the diagram elements of a state machine: ids of diagram nodes and edges (as created by
@@ -110,7 +110,7 @@ export const UNCOVERED_CLASS = 'hsm-uncovered';
 export interface CoverageHighlight {
     readonly covered: readonly string[];
     readonly uncovered: readonly string[];
-    /** Diagram id -> `hsm-covered` / `hsm-uncovered`. */
+    /** Diagram id -> `devm-covered` / `devm-uncovered`. */
     readonly classes: Readonly<Record<string, string>>;
 }
 

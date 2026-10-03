@@ -1,86 +1,86 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic hsm-export ibd-diagram" width="1151" height="492" viewBox="0 0 1151 492" font-family="Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic devm-export ibd-diagram" width="1151" height="492" viewBox="0 0 1151 492" font-family="Helvetica, Arial, sans-serif">
 <title>GarageDoor</title>
 <style><![CDATA[
 .theme-classic, .theme-modern, .theme-dark {
-    --hsm-font: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
-    --hsm-select: #1a73e8;
-    --hsm-error: #d32f2f;
-    --hsm-warning: #f5a623;
-    --hsm-mono: "DejaVu Sans Mono", Menlo, Consolas, "Liberation Mono", monospace;
-    --hsm-def-fill: #fbfbf8;
-    --hsm-def-stroke: #b8b8b0;
-    --hsm-muted: #6e6e6e;
-    --hsm-keyword: #7a1f47;
+    --devm-font: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
+    --devm-select: #1a73e8;
+    --devm-error: #d32f2f;
+    --devm-warning: #f5a623;
+    --devm-mono: "DejaVu Sans Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --devm-def-fill: #fbfbf8;
+    --devm-def-stroke: #b8b8b0;
+    --devm-muted: #6e6e6e;
+    --devm-keyword: #7a1f47;
 }
 
 /* PlantUML "classic" skin: light yellow states with dark red borders */
 .theme-classic {
-    --hsm-bg: #ffffff;
-    --hsm-state-fill: #fefece;
-    --hsm-state-stroke: #a80036;
-    --hsm-text: #000000;
-    --hsm-edge: #a80036;
-    --hsm-pseudo: #000000;
-    --hsm-grid: #f3f3f3;
+    --devm-bg: #ffffff;
+    --devm-state-fill: #fefece;
+    --devm-state-stroke: #a80036;
+    --devm-text: #000000;
+    --devm-edge: #a80036;
+    --devm-pseudo: #000000;
+    --devm-grid: #f3f3f3;
 }
 
 /* current PlantUML default look */
 .theme-modern {
-    --hsm-bg: #ffffff;
-    --hsm-state-fill: #f1f1f1;
-    --hsm-state-stroke: #181818;
-    --hsm-text: #000000;
-    --hsm-edge: #181818;
-    --hsm-pseudo: #222222;
-    --hsm-grid: #f5f5f5;
+    --devm-bg: #ffffff;
+    --devm-state-fill: #f1f1f1;
+    --devm-state-stroke: #181818;
+    --devm-text: #000000;
+    --devm-edge: #181818;
+    --devm-pseudo: #222222;
+    --devm-grid: #f5f5f5;
 }
 
 .theme-dark {
-    --hsm-bg: #1e2227;
-    --hsm-state-fill: #2d333b;
-    --hsm-state-stroke: #9fb3c8;
-    --hsm-text: #e6edf3;
-    --hsm-edge: #9fb3c8;
-    --hsm-pseudo: #e6edf3;
-    --hsm-grid: #23282e;
-    --hsm-select: #58a6ff;
-    --hsm-def-fill: #252a30;
-    --hsm-def-stroke: #56606b;
-    --hsm-muted: #8b949e;
-    --hsm-keyword: #ff9ab5;
+    --devm-bg: #1e2227;
+    --devm-state-fill: #2d333b;
+    --devm-state-stroke: #9fb3c8;
+    --devm-text: #e6edf3;
+    --devm-edge: #9fb3c8;
+    --devm-pseudo: #e6edf3;
+    --devm-grid: #23282e;
+    --devm-select: #58a6ff;
+    --devm-def-fill: #252a30;
+    --devm-def-stroke: #56606b;
+    --devm-muted: #8b949e;
+    --devm-keyword: #ff9ab5;
 }
 
 .theme-modern {
-    --hsm-keyword: #0b4f9c;
+    --devm-keyword: #0b4f9c;
 }
 
 .sprotty-graph {
-    background: var(--hsm-bg);
-    font-family: var(--hsm-font);
+    background: var(--devm-bg);
+    font-family: var(--devm-font);
 }
 
 .sprotty-graph text {
-    font-family: var(--hsm-font);
-    fill: var(--hsm-text);
+    font-family: var(--devm-font);
+    fill: var(--devm-text);
     user-select: none;
     -webkit-user-select: none;
 }
 
 .export-background {
-    fill: var(--hsm-bg);
+    fill: var(--devm-bg);
 }
 
 /* ---- states ---- */
 
 .state-shape {
-    fill: var(--hsm-state-fill);
-    stroke: var(--hsm-state-stroke);
+    fill: var(--devm-state-fill);
+    stroke: var(--devm-state-stroke);
     stroke-width: 1.5px;
 }
 
 .state-separator {
-    stroke: var(--hsm-state-stroke);
+    stroke: var(--devm-state-stroke);
     stroke-width: 1.5px;
 }
 
@@ -101,7 +101,7 @@
 }
 
 .region-separator {
-    stroke: var(--hsm-state-stroke);
+    stroke: var(--devm-state-stroke);
     stroke-width: 1.2px;
     stroke-dasharray: 6 4;
 }
@@ -113,9 +113,9 @@
 }
 
 .region.selected > .region-shape {
-    fill: var(--hsm-select);
+    fill: var(--devm-select);
     fill-opacity: 0.06;
-    stroke: var(--hsm-select);
+    stroke: var(--devm-select);
     stroke-width: 1.5px;
     stroke-dasharray: 4 3;
 }
@@ -125,19 +125,19 @@
 .initial-shape,
 .junction-shape,
 .final-inner {
-    fill: var(--hsm-pseudo);
+    fill: var(--devm-pseudo);
 }
 
 .final-outer {
-    fill: var(--hsm-bg);
-    stroke: var(--hsm-pseudo);
+    fill: var(--devm-bg);
+    stroke: var(--devm-pseudo);
     stroke-width: 1.5px;
 }
 
 .choice-shape,
 .history-shape {
-    fill: var(--hsm-state-fill);
-    stroke: var(--hsm-state-stroke);
+    fill: var(--devm-state-fill);
+    stroke: var(--devm-state-stroke);
     stroke-width: 1.5px;
 }
 
@@ -148,19 +148,19 @@
 }
 
 .sync-shape {
-    fill: var(--hsm-pseudo);
+    fill: var(--devm-pseudo);
 }
 
 .entry-shape,
 .exit-shape {
-    fill: var(--hsm-bg);
-    stroke: var(--hsm-pseudo);
+    fill: var(--devm-bg);
+    stroke: var(--devm-pseudo);
     stroke-width: 1.5px;
 }
 
 .exit-cross {
     fill: none;
-    stroke: var(--hsm-pseudo);
+    stroke: var(--devm-pseudo);
     stroke-width: 1.3px;
 }
 
@@ -173,7 +173,7 @@
 .submachine-icon rect,
 .submachine-icon line {
     fill: none;
-    stroke: var(--hsm-state-stroke);
+    stroke: var(--devm-state-stroke);
     stroke-width: 1.2px;
 }
 
@@ -188,13 +188,13 @@
 /* ---- definition section ---- */
 
 .definition-shape {
-    fill: var(--hsm-def-fill);
-    stroke: var(--hsm-def-stroke);
+    fill: var(--devm-def-fill);
+    stroke: var(--devm-def-stroke);
     stroke-width: 1.2px;
 }
 
 .definition-separator {
-    stroke: var(--hsm-def-stroke);
+    stroke: var(--devm-def-stroke);
     stroke-width: 1px;
 }
 
@@ -209,7 +209,7 @@
 .sprotty-graph .definition-kind {
     font-size: 11px;
     font-style: italic;
-    fill: var(--hsm-muted);
+    fill: var(--devm-muted);
 }
 
 .definition-line {
@@ -217,24 +217,24 @@
 }
 
 .sprotty-graph .definition-line {
-    font-family: var(--hsm-mono);
+    font-family: var(--devm-mono);
 }
 
 .sprotty-graph .definition-scope {
-    fill: var(--hsm-keyword);
+    fill: var(--devm-keyword);
 }
 
 /* ---- transitions ---- */
 
 .transition-line {
     fill: none;
-    stroke: var(--hsm-edge);
+    stroke: var(--devm-edge);
     stroke-width: 1.2px;
 }
 
 .transition-arrow {
-    fill: var(--hsm-edge);
-    stroke: var(--hsm-edge);
+    fill: var(--devm-edge);
+    stroke: var(--devm-edge);
     stroke-width: 0.6px;
     stroke-linejoin: round;
 }
@@ -255,55 +255,55 @@
 
 /* ---- interaction feedback ---- */
 
-.hsm-node.mouseover > .state-shape,
-.hsm-node.mouseover > .choice-shape,
-.hsm-node.mouseover > .history-shape {
+.devm-node.mouseover > .state-shape,
+.devm-node.mouseover > .choice-shape,
+.devm-node.mouseover > .history-shape {
     stroke-width: 2.5px;
 }
 
-.hsm-node.mouseover > .initial-shape,
-.hsm-node.mouseover > .junction-shape,
-.hsm-node.mouseover > .sync-shape,
-.hsm-node.mouseover > .entry-shape,
-.hsm-node.mouseover > .exit-shape,
-.hsm-node.mouseover > .definition-shape,
-.hsm-node.mouseover > .final-outer {
-    stroke: var(--hsm-select);
+.devm-node.mouseover > .initial-shape,
+.devm-node.mouseover > .junction-shape,
+.devm-node.mouseover > .sync-shape,
+.devm-node.mouseover > .entry-shape,
+.devm-node.mouseover > .exit-shape,
+.devm-node.mouseover > .definition-shape,
+.devm-node.mouseover > .final-outer {
+    stroke: var(--devm-select);
     stroke-width: 2px;
 }
 
-.hsm-node.selected > .state-shape,
-.hsm-node.selected > .choice-shape,
-.hsm-node.selected > .history-shape,
-.hsm-node.selected > .entry-shape,
-.hsm-node.selected > .exit-shape,
-.hsm-node.selected > .definition-shape,
-.hsm-node.selected > .final-outer {
-    stroke: var(--hsm-select);
+.devm-node.selected > .state-shape,
+.devm-node.selected > .choice-shape,
+.devm-node.selected > .history-shape,
+.devm-node.selected > .entry-shape,
+.devm-node.selected > .exit-shape,
+.devm-node.selected > .definition-shape,
+.devm-node.selected > .final-outer {
+    stroke: var(--devm-select);
     stroke-width: 2.5px;
 }
 
-.hsm-node.selected > .state-separator,
-.hsm-node.selected > .definition-separator {
-    stroke: var(--hsm-select);
+.devm-node.selected > .state-separator,
+.devm-node.selected > .definition-separator {
+    stroke: var(--devm-select);
 }
 
-.hsm-node.selected > .initial-shape,
-.hsm-node.selected > .sync-shape,
-.hsm-node.selected > .junction-shape {
-    stroke: var(--hsm-select);
+.devm-node.selected > .initial-shape,
+.devm-node.selected > .sync-shape,
+.devm-node.selected > .junction-shape {
+    stroke: var(--devm-select);
     stroke-width: 3px;
 }
 
-.hsm-node.pending-source > .state-shape,
-.hsm-node.pending-source > .choice-shape,
-.hsm-node.pending-source > .history-shape,
-.hsm-node.pending-source > .initial-shape,
-.hsm-node.pending-source > .sync-shape,
-.hsm-node.pending-source > .entry-shape,
-.hsm-node.pending-source > .exit-shape,
-.hsm-node.pending-source > .junction-shape {
-    stroke: var(--hsm-select);
+.devm-node.pending-source > .state-shape,
+.devm-node.pending-source > .choice-shape,
+.devm-node.pending-source > .history-shape,
+.devm-node.pending-source > .initial-shape,
+.devm-node.pending-source > .sync-shape,
+.devm-node.pending-source > .entry-shape,
+.devm-node.pending-source > .exit-shape,
+.devm-node.pending-source > .junction-shape {
+    stroke: var(--devm-select);
     stroke-width: 3px;
     stroke-dasharray: 5 3;
 }
@@ -313,46 +313,46 @@
 }
 
 .transition.selected .transition-line {
-    stroke: var(--hsm-select);
+    stroke: var(--devm-select);
     stroke-width: 2px;
 }
 
 .transition.selected .transition-arrow {
-    fill: var(--hsm-select);
-    stroke: var(--hsm-select);
+    fill: var(--devm-select);
+    stroke: var(--devm-select);
 }
 
 .transition.selected .transition-label text {
-    fill: var(--hsm-select);
+    fill: var(--devm-select);
 }
 
 /* ---- problems ---- */
 
-.hsm-node.has-error > .state-shape,
-.hsm-node.has-error > .choice-shape,
-.hsm-node.has-error > .entry-shape,
-.hsm-node.has-error > .exit-shape,
-.hsm-node.has-error > .definition-shape,
-.hsm-node.has-error > .history-shape {
-    stroke: var(--hsm-error);
+.devm-node.has-error > .state-shape,
+.devm-node.has-error > .choice-shape,
+.devm-node.has-error > .entry-shape,
+.devm-node.has-error > .exit-shape,
+.devm-node.has-error > .definition-shape,
+.devm-node.has-error > .history-shape {
+    stroke: var(--devm-error);
 }
 
 .transition.has-error .transition-line {
-    stroke: var(--hsm-error);
+    stroke: var(--devm-error);
     stroke-dasharray: 5 3;
 }
 
 .issue circle {
-    stroke: var(--hsm-bg);
+    stroke: var(--devm-bg);
     stroke-width: 1.5px;
 }
 
 .issue-error circle {
-    fill: var(--hsm-error);
+    fill: var(--devm-error);
 }
 
 .issue-warning circle {
-    fill: var(--hsm-warning);
+    fill: var(--devm-warning);
 }
 
 .sprotty-graph .issue text {
@@ -362,26 +362,26 @@
     text-anchor: middle;
 }
 
-.hsm-export .issue {
+.devm-export .issue {
     display: none;
 }
 
 /* ---- simulation ---- */
 
 .theme-classic, .theme-modern {
-    --hsm-active-fill: #d4f5cc;
-    --hsm-active-fill-composite: #effbeb;
-    --hsm-active-stroke: #1e8e3e;
-    --hsm-taken: #ff6d00;
-    --hsm-breakpoint: #e53935;
+    --devm-active-fill: #d4f5cc;
+    --devm-active-fill-composite: #effbeb;
+    --devm-active-stroke: #1e8e3e;
+    --devm-taken: #ff6d00;
+    --devm-breakpoint: #e53935;
 }
 
 .theme-dark {
-    --hsm-active-fill: #1f4a2b;
-    --hsm-active-fill-composite: #22362a;
-    --hsm-active-stroke: #4ade80;
-    --hsm-taken: #ffa94d;
-    --hsm-breakpoint: #ff5252;
+    --devm-active-fill: #1f4a2b;
+    --devm-active-fill-composite: #22362a;
+    --devm-active-stroke: #4ade80;
+    --devm-taken: #ffa94d;
+    --devm-breakpoint: #ff5252;
 }
 
 .state-shape,
@@ -390,61 +390,61 @@
     transition: fill 0.25s, stroke 0.9s ease-out, stroke-width 0.9s ease-out;
 }
 
-.hsm-node.active > .state-shape {
-    fill: var(--hsm-active-fill);
-    stroke: var(--hsm-active-stroke);
+.devm-node.active > .state-shape {
+    fill: var(--devm-active-fill);
+    stroke: var(--devm-active-stroke);
     stroke-width: 3px;
 }
 
-.hsm-node.active.composite > .state-shape {
-    fill: var(--hsm-active-fill-composite);
+.devm-node.active.composite > .state-shape {
+    fill: var(--devm-active-fill-composite);
 }
 
-.hsm-node.active > .state-separator {
-    stroke: var(--hsm-active-stroke);
+.devm-node.active > .state-separator {
+    stroke: var(--devm-active-stroke);
     stroke-width: 2px;
 }
 
-.hsm-node.active > .state-name {
+.devm-node.active > .state-name {
     font-weight: bold;
 }
 
-.hsm-node.active > .final-outer {
-    stroke: var(--hsm-active-stroke);
+.devm-node.active > .final-outer {
+    stroke: var(--devm-active-stroke);
     stroke-width: 3px;
 }
 
-.hsm-node.active > .final-inner {
-    fill: var(--hsm-active-stroke);
+.devm-node.active > .final-inner {
+    fill: var(--devm-active-stroke);
 }
 
 /* taken transitions are highlighted immediately and fade out when the flag is removed */
 .transition.taken .transition-line {
     transition: none;
-    stroke: var(--hsm-taken);
+    stroke: var(--devm-taken);
     stroke-width: 3.5px;
 }
 
 .transition.taken .transition-arrow {
     transition: none;
-    fill: var(--hsm-taken);
-    stroke: var(--hsm-taken);
+    fill: var(--devm-taken);
+    stroke: var(--devm-taken);
 }
 
 .breakpoint-marker circle {
-    fill: var(--hsm-breakpoint);
-    stroke: var(--hsm-bg);
+    fill: var(--devm-breakpoint);
+    stroke: var(--devm-bg);
     stroke-width: 1.5px;
 }
 
-.hsm-export .breakpoint-marker {
+.devm-export .breakpoint-marker {
     display: none;
 }
 
 /* ---- manual layout (experimental) ---- */
 
 .resize-handle {
-    fill: var(--hsm-select);
+    fill: var(--devm-select);
     stroke: #fff;
     stroke-width: 1px;
     cursor: nwse-resize;
@@ -452,7 +452,7 @@
 
 .bend-handle {
     fill: #fff;
-    stroke: var(--hsm-select);
+    stroke: var(--devm-select);
     stroke-width: 1.5px;
     cursor: move;
 }
@@ -461,124 +461,124 @@
     cursor: move;
 }
 
-.hsm-export .resize-handle,
-.hsm-export .bend-handle {
+.devm-export .resize-handle,
+.devm-export .bend-handle {
     display: none;
 }
 
 /* ---- coverage (renderSvg highlight: 'covered' / 'uncovered') ---- */
 
 .theme-classic, .theme-modern {
-    --hsm-covered-fill: #d4f5cc;
-    --hsm-covered-stroke: #1e8e3e;
-    --hsm-uncovered-fill: #fde0e0;
-    --hsm-uncovered-stroke: #d32f2f;
+    --devm-covered-fill: #d4f5cc;
+    --devm-covered-stroke: #1e8e3e;
+    --devm-uncovered-fill: #fde0e0;
+    --devm-uncovered-stroke: #d32f2f;
 }
 
 .theme-dark {
-    --hsm-covered-fill: #1f4a2b;
-    --hsm-covered-stroke: #4ade80;
-    --hsm-uncovered-fill: #4a1f24;
-    --hsm-uncovered-stroke: #ff6b6b;
+    --devm-covered-fill: #1f4a2b;
+    --devm-covered-stroke: #4ade80;
+    --devm-uncovered-fill: #4a1f24;
+    --devm-uncovered-stroke: #ff6b6b;
 }
 
-.hsm-node.hsm-covered > .state-shape,
-.hsm-node.hsm-covered > .choice-shape,
-.hsm-node.hsm-covered > .history-shape {
-    fill: var(--hsm-covered-fill);
-    stroke: var(--hsm-covered-stroke);
+.devm-node.devm-covered > .state-shape,
+.devm-node.devm-covered > .choice-shape,
+.devm-node.devm-covered > .history-shape {
+    fill: var(--devm-covered-fill);
+    stroke: var(--devm-covered-stroke);
     stroke-width: 2px;
 }
 
-.hsm-node.hsm-covered.composite > .state-shape,
-.hsm-node.hsm-uncovered.composite > .state-shape {
+.devm-node.devm-covered.composite > .state-shape,
+.devm-node.devm-uncovered.composite > .state-shape {
     fill-opacity: 0.5;
 }
 
-.hsm-node.hsm-covered > .state-separator {
-    stroke: var(--hsm-covered-stroke);
+.devm-node.devm-covered > .state-separator {
+    stroke: var(--devm-covered-stroke);
 }
 
-.hsm-node.hsm-covered > .initial-shape,
-.hsm-node.hsm-covered > .junction-shape,
-.hsm-node.hsm-covered > .sync-shape,
-.hsm-node.hsm-covered > .final-inner {
-    fill: var(--hsm-covered-stroke);
+.devm-node.devm-covered > .initial-shape,
+.devm-node.devm-covered > .junction-shape,
+.devm-node.devm-covered > .sync-shape,
+.devm-node.devm-covered > .final-inner {
+    fill: var(--devm-covered-stroke);
 }
 
-.hsm-node.hsm-covered > .final-outer,
-.hsm-node.hsm-covered > .entry-shape,
-.hsm-node.hsm-covered > .exit-shape,
-.hsm-node.hsm-covered > .exit-cross {
-    stroke: var(--hsm-covered-stroke);
+.devm-node.devm-covered > .final-outer,
+.devm-node.devm-covered > .entry-shape,
+.devm-node.devm-covered > .exit-shape,
+.devm-node.devm-covered > .exit-cross {
+    stroke: var(--devm-covered-stroke);
 }
 
-.hsm-node.hsm-uncovered > .state-shape,
-.hsm-node.hsm-uncovered > .choice-shape,
-.hsm-node.hsm-uncovered > .history-shape {
-    fill: var(--hsm-uncovered-fill);
-    stroke: var(--hsm-uncovered-stroke);
+.devm-node.devm-uncovered > .state-shape,
+.devm-node.devm-uncovered > .choice-shape,
+.devm-node.devm-uncovered > .history-shape {
+    fill: var(--devm-uncovered-fill);
+    stroke: var(--devm-uncovered-stroke);
     stroke-width: 2px;
     stroke-dasharray: 6 3;
 }
 
-.hsm-node.hsm-uncovered > .state-separator {
-    stroke: var(--hsm-uncovered-stroke);
+.devm-node.devm-uncovered > .state-separator {
+    stroke: var(--devm-uncovered-stroke);
 }
 
-.hsm-node.hsm-uncovered > .initial-shape,
-.hsm-node.hsm-uncovered > .junction-shape,
-.hsm-node.hsm-uncovered > .sync-shape,
-.hsm-node.hsm-uncovered > .final-inner {
-    fill: var(--hsm-uncovered-stroke);
+.devm-node.devm-uncovered > .initial-shape,
+.devm-node.devm-uncovered > .junction-shape,
+.devm-node.devm-uncovered > .sync-shape,
+.devm-node.devm-uncovered > .final-inner {
+    fill: var(--devm-uncovered-stroke);
 }
 
-.hsm-node.hsm-uncovered > .final-outer,
-.hsm-node.hsm-uncovered > .entry-shape,
-.hsm-node.hsm-uncovered > .exit-shape,
-.hsm-node.hsm-uncovered > .exit-cross {
-    stroke: var(--hsm-uncovered-stroke);
+.devm-node.devm-uncovered > .final-outer,
+.devm-node.devm-uncovered > .entry-shape,
+.devm-node.devm-uncovered > .exit-shape,
+.devm-node.devm-uncovered > .exit-cross {
+    stroke: var(--devm-uncovered-stroke);
 }
 
-.transition.hsm-covered .transition-line {
-    stroke: var(--hsm-covered-stroke);
+.transition.devm-covered .transition-line {
+    stroke: var(--devm-covered-stroke);
     stroke-width: 2px;
 }
 
-.transition.hsm-covered .transition-arrow {
-    fill: var(--hsm-covered-stroke);
-    stroke: var(--hsm-covered-stroke);
+.transition.devm-covered .transition-arrow {
+    fill: var(--devm-covered-stroke);
+    stroke: var(--devm-covered-stroke);
 }
 
-.transition.hsm-uncovered .transition-line {
-    stroke: var(--hsm-uncovered-stroke);
+.transition.devm-uncovered .transition-line {
+    stroke: var(--devm-uncovered-stroke);
     stroke-width: 2px;
     stroke-dasharray: 6 3;
 }
 
-.transition.hsm-uncovered .transition-arrow {
-    fill: var(--hsm-uncovered-stroke);
-    stroke: var(--hsm-uncovered-stroke);
+.transition.devm-uncovered .transition-arrow {
+    fill: var(--devm-uncovered-stroke);
+    stroke: var(--devm-uncovered-stroke);
 }
 
-.sprotty-graph .transition.hsm-uncovered .transition-label text {
-    fill: var(--hsm-uncovered-stroke);
+.sprotty-graph .transition.devm-uncovered .transition-label text {
+    fill: var(--devm-uncovered-stroke);
 }
 
 /* ---- title and legend of rendered SVG files (renderSvg) ---- */
 
-.hsm-title {
+.devm-title {
     font-size: 16px;
     font-weight: bold;
 }
 
-.hsm-legend-label {
+.devm-legend-label {
     font-size: 12px;
 }
 
-.hsm-legend-frame {
-    fill: var(--hsm-bg);
-    stroke: var(--hsm-def-stroke);
+.devm-legend-frame {
+    fill: var(--devm-bg);
+    stroke: var(--devm-def-stroke);
     stroke-width: 1px;
 }
 
@@ -661,7 +661,7 @@
 
 .sprotty-graph .ibd-thread-details {
     font-size: 11px;
-    fill: var(--hsm-muted);
+    fill: var(--devm-muted);
 }
 
 .sprotty-graph .ibd-stereotype {
@@ -681,13 +681,13 @@
 }
 
 .ibd-instance-shape {
-    fill: var(--hsm-state-fill);
-    stroke: var(--hsm-state-stroke);
+    fill: var(--devm-state-fill);
+    stroke: var(--devm-state-stroke);
     stroke-width: 1.5px;
 }
 
 .ibd-instance-separator {
-    stroke: var(--hsm-state-stroke);
+    stroke: var(--devm-state-stroke);
     stroke-width: 0.8px;
     stroke-opacity: 0.45;
 }
@@ -695,22 +695,22 @@
 .ibd-icon rect,
 .ibd-icon path {
     fill: none;
-    stroke: var(--hsm-state-stroke);
+    stroke: var(--devm-state-stroke);
     stroke-width: 1.2px;
 }
 
 /* ports: filled = provided, hollow = required; the chevron of async ports shows the event direction */
 .ibd-port-shape {
-    stroke: var(--hsm-state-stroke);
+    stroke: var(--devm-state-stroke);
     stroke-width: 1.3px;
 }
 
 .ibd-port.provided .ibd-port-shape {
-    fill: var(--hsm-state-stroke);
+    fill: var(--devm-state-stroke);
 }
 
 .ibd-port.required .ibd-port-shape {
-    fill: var(--hsm-bg);
+    fill: var(--devm-bg);
 }
 
 .ibd-port-chevron {
@@ -721,11 +721,11 @@
 }
 
 .ibd-port.provided .ibd-port-chevron {
-    stroke: var(--hsm-bg);
+    stroke: var(--devm-bg);
 }
 
 .ibd-port.required .ibd-port-chevron {
-    stroke: var(--hsm-state-stroke);
+    stroke: var(--devm-state-stroke);
 }
 
 .ibd-port-label {
@@ -733,7 +733,7 @@
 }
 
 .sprotty-graph .ibd-port-type {
-    fill: var(--hsm-muted);
+    fill: var(--devm-muted);
 }
 
 /* data types (structs, interfaces of the file): value type boxes, never connected */
@@ -770,7 +770,7 @@
 .sprotty-graph .ibd-type-keyword,
 .sprotty-graph .ibd-type-member-type,
 .sprotty-graph .ibd-type-empty {
-    fill: var(--hsm-muted);
+    fill: var(--devm-muted);
 }
 
 .ibd-type-keyword {
@@ -782,12 +782,12 @@
 }
 
 .ibd-node.selected > .ibd-type-shape {
-    stroke: var(--hsm-select);
+    stroke: var(--devm-select);
     stroke-width: 2.5px;
 }
 
 .ibd-node.has-error > .ibd-type-shape {
-    stroke: var(--hsm-error);
+    stroke: var(--devm-error);
 }
 
 .route-highlight .ibd-type {
@@ -796,7 +796,7 @@
 
 .ibd-connector-line {
     fill: none;
-    stroke: var(--hsm-edge);
+    stroke: var(--devm-edge);
     stroke-width: 1.3px;
     stroke-linejoin: round;
 }
@@ -821,7 +821,7 @@
 .ibd-node.selected > .ibd-instance-shape,
 .ibd-node.selected > .ibd-thread-shape,
 .ibd-node.selected > .ibd-frame-shape {
-    stroke: var(--hsm-select);
+    stroke: var(--devm-select);
     stroke-width: 2.5px;
 }
 
@@ -830,7 +830,7 @@
 }
 
 .ibd-port.selected .ibd-port-shape {
-    stroke: var(--hsm-select);
+    stroke: var(--devm-select);
     stroke-width: 2.5px;
 }
 
@@ -839,7 +839,7 @@
 }
 
 .ibd-connector.selected .ibd-connector-line {
-    stroke: var(--hsm-select);
+    stroke: var(--devm-select);
     stroke-width: 2.5px;
 }
 
@@ -875,11 +875,11 @@
 
 .ibd-node.on-route.selected > .ibd-instance-shape,
 .ibd-connector.on-route.selected .ibd-connector-line {
-    stroke: var(--hsm-select);
+    stroke: var(--devm-select);
 }
 
 .ibd-port.on-route.selected .ibd-port-shape {
-    stroke: var(--hsm-select);
+    stroke: var(--devm-select);
     stroke-width: 2.5px;
 }
 
@@ -897,15 +897,15 @@
 
 .ibd-node.has-error > .ibd-instance-shape,
 .ibd-node.has-error > .ibd-thread-shape {
-    stroke: var(--hsm-error);
+    stroke: var(--devm-error);
 }
 
 .ibd-connector.has-error .ibd-connector-line {
-    stroke: var(--hsm-error);
+    stroke: var(--devm-error);
 }
 
 .ibd-port.has-error .ibd-port-shape {
-    stroke: var(--hsm-error);
+    stroke: var(--devm-error);
 }
 ]]></style>
 <rect class="export-background" width="100%" height="100%"/>

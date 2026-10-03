@@ -42,8 +42,8 @@ const svg = renderSvg(layout.graph, {
     theme: 'classic',                        // 'classic' | 'modern' | 'dark'
     title: 'CdPlayer – test coverage',       // optional heading above the diagram
     highlight: new Map([                     // diagram element id -> highlight
-        [layout.ids.get(playingState)!, 'covered'],       // CSS class hsm-covered (green)
-        [layout.ids.get(ejectTransition)!, 'uncovered'],  // CSS class hsm-uncovered (red, dashed)
+        [layout.ids.get(playingState)!, 'covered'],       // CSS class devm-covered (green)
+        [layout.ids.get(ejectTransition)!, 'uncovered'],  // CSS class devm-uncovered (red, dashed)
         [layout.ids.get(pausedState)!, 'active']          // CSS class active (like the simulation)
     ]),                                      // any other value is used as CSS class name(s)
     legend: true,                            // legend of the used highlights (or [{ kind, label }])
@@ -52,9 +52,9 @@ const svg = renderSvg(layout.graph, {
 });
 ```
 
-`highlight` applies to states, pseudo states (`<g class="hsm-node …">`) and transitions (`<g class="transition …">`);
+`highlight` applies to states, pseudo states (`<g class="devm-node …">`) and transitions (`<g class="transition …">`);
 the ids are those of `LayoutResult.ids` (AST node → id) and `LayoutResult.elements` (id → AST node). The
-classes `hsm-covered` and `hsm-uncovered` are defined in `DIAGRAM_CSS` for all themes.
+classes `devm-covered` and `devm-uncovered` are defined in `DIAGRAM_CSS` for all themes.
 
 ## Model documentation
 

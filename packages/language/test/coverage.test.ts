@@ -247,9 +247,9 @@ testclass T for statemachine Door {
         expect(covered(coverage)).toEqual(['A', 'C', '#machine#initial->A', 'A->c', 'c->C', 'A#reaction1']);
         expect(coverage.elements.every(e => e.tests.length === 0)).toBe(true);
         const highlight = collector.highlight(loaded.machines[0])!;
-        expect(highlight.classes['c']).toBe('hsm-covered');
-        expect(highlight.classes['#machine#initial']).toBe('hsm-covered');
-        expect(highlight.classes['B']).toBe('hsm-uncovered');
+        expect(highlight.classes['c']).toBe('devm-covered');
+        expect(highlight.classes['#machine#initial']).toBe('devm-covered');
+        expect(highlight.classes['B']).toBe('devm-uncovered');
         expect(highlight.uncovered).toContain('B->A');
         collector.reset();
         expect(covered(collector.machineCoverage(loaded.machines[0])!)).toEqual([]);
@@ -363,7 +363,7 @@ testclass T for statemachine Choice {
             `<svg data-machine="${machine.name}" data-unused="${highlight.classes['Unused']}"></svg>`);
         const withDiagram = await toCoverageHtml(report, { renderDiagram, diagramSource: m => collector.diagramSource(m) });
         expect(renderDiagram).toHaveBeenCalledTimes(1);
-        expect(withDiagram[1].content).toContain('<svg data-machine="Choice" data-unused="hsm-uncovered"></svg>');
+        expect(withDiagram[1].content).toContain('<svg data-machine="Choice" data-unused="devm-uncovered"></svg>');
     });
 
     test('thresholds', async () => {
@@ -385,7 +385,7 @@ describe('devm test --coverage', () => {
     const examples = path.resolve(__dirname, '../../../examples');
 
     async function run(args: Parameters<typeof runTestCommand>[1], testFiles?: string[]): Promise<{ code: number, output: string, dir: string }> {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-coverage-'));
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-coverage-'));
         const output: string[] = [];
         const log = vi.spyOn(console, 'log').mockImplementation((...parts: unknown[]) => { output.push(parts.join(' ')); });
         const error = vi.spyOn(console, 'error').mockImplementation((...parts: unknown[]) => { output.push(parts.join(' ')); });
@@ -421,12 +421,12 @@ describe('devm test --coverage', () => {
         // the HTML pages contain the diagram with highlighted elements
         const page = fs.readFileSync(path.join(dir, 'html/Door.html'), 'utf-8');
         expect(page).toContain('<svg');
-        expect(page).toContain('hsm-covered');
+        expect(page).toContain('devm-covered');
     });
 
     test('thresholds which are not met fail the run', async () => {
         // a test which only enters the door covers 1 of its 9 states
-        const partial = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-partial-'));
+        const partial = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-partial-'));
         fs.copyFileSync(path.join(examples, 'door.devm'), path.join(partial, 'door.devm'));
         fs.writeFileSync(path.join(partial, 'enter.devmtest'), 'testclass EnterOnly for statemachine Door {\n    @Test\n    operation enters() {\n        enter\n        assert active(Closed)\n    }\n}\n');
         const failing = await run({ coverageFormat: 'text', coverageThreshold: 'states=100' }, [path.join(partial, 'enter.devmtest')]);

@@ -376,7 +376,7 @@ describe('layout annotations: command line', () => {
 
     test('migrate-layout writes the layout file into the model; import writes annotations', async () => {
         const os = await import('node:os');
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-layout-'));
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-layout-'));
         try {
             const model = path.join(dir, 'm.devm');
             const text = `statemachine M {

@@ -5,6 +5,6 @@ import { DIAGRAM_CSS } from 'devm-language';
  * (`DIAGRAM_CSS` in packages/language/src/render/diagram-styles.ts): it is injected into the page.
  */
 const style = document.createElement('style');
-style.id = 'hsm-diagram-styles';
+style.id = 'devm-diagram-styles';
 style.textContent = DIAGRAM_CSS;
 document.head.append(style);

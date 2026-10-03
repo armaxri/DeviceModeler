@@ -183,7 +183,7 @@ function position(text: string, search: string, occurrence = 0, delta = 0) {
 }
 
 beforeAll(async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'hsm-lsp-'));
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'devm-lsp-'));
     await fs.mkdir(path.join(dir, 'models'));
     await fs.mkdir(path.join(dir, 'tests'));
     await fs.writeFile(path.join(dir, 'models/lamp.devm'), LAMP);

@@ -74,7 +74,7 @@ function vertexClasses(node: Readonly<VertexNode>): Record<string, boolean> {
     return {
         'class-active': node.active,
         'class-breakpoint': node.breakpoint,
-        'class-hsm-node': true,
+        'class-devm-node': true,
         'class-selected': node.selected,
         'class-mouseover': node.hoverFeedback,
         'class-pending-source': node.pendingSource,

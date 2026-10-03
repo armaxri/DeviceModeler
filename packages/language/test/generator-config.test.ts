@@ -117,7 +117,7 @@ describe('runGeneration / devm generate', () => {
 
     let dir: string;
     beforeEach(() => {
-        dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-gen-'));
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-gen-'));
         fs.mkdirSync(path.join(dir, 'models/sub'), { recursive: true });
         fs.writeFileSync(path.join(dir, 'models/door.devm'), example('door.devm'));
         fs.writeFileSync(path.join(dir, 'models/sub/keyboard.devm'), example('keyboard.devm'));

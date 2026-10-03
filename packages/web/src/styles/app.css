@@ -264,7 +264,7 @@ main {
 #sprotty {
     position: absolute;
     inset: 0;
-    background: var(--hsm-bg);
+    background: var(--devm-bg);
 }
 
 #sprotty svg:focus {
@@ -393,7 +393,7 @@ main {
 }
 
 .connector-preview line {
-    stroke: var(--hsm-select, #1a73e8);
+    stroke: var(--devm-select, #1a73e8);
     stroke-width: 1.6;
     stroke-dasharray: 5 4;
 }
@@ -417,7 +417,7 @@ main {
 }
 
 #sprotty .ibd-port.connect-source .ibd-port-shape {
-    stroke: var(--hsm-select, #1a73e8);
+    stroke: var(--devm-select, #1a73e8);
     stroke-width: 3px;
 }
 
@@ -829,7 +829,7 @@ body.ui-dark #properties .problems li.error { background: #3d1f1f; color: #ffb4b
 
 /* ---- editor decorations ---- */
 
-.hsm-selected-range {
+.devm-selected-range {
     background: rgba(26, 115, 232, 0.14);
     border-radius: 2px;
 }
