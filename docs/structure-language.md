@@ -152,7 +152,7 @@ the same type as a C++ struct with the same unqualified name (`Position` and `ge
 | unknown type, unresolved component type / instance / port / state machine, import or behavior file not found, unsupported import | error |
 | connection not from a required to a provided port, `connect` with a boundary port | error |
 | delegation not between a boundary port and a port of a part, different directions, provided delegated inwards → outwards, required outwards → inwards | error |
-| incompatible kinds / events / payload types / data types of connected or delegated ports | error |
+| incompatible kinds / events / payload types / data types of connected or delegated ports – the message names both ports with their signatures and the reason, e.g. *door.motor (requires async MotorCmd) cannot be connected to drive.ctrl (provides async DriveCmd): event 'halt' is not accepted by drive.ctrl*, *… payload integer of 'up' is not assignable to boolean (expected by drive.ctrl)* | error |
 | a sync required port connected more than once (one provider), a sync provided boundary port delegated more than once | error |
 | an instance of a component outside of a thread (neither declared in a thread nor assigned to one), an instance of a subsystem in a thread or assigned to one | error |
 | an instance in more than one thread | error |
@@ -311,8 +311,9 @@ applied on top of it (`applyIbdManualLayout` in `ibd-manual-layout.ts`, read and
 **Editing** (`src/edit/structure-edits.ts`): `StructureEditor` turns the diagram operations into minimal text edits
 (add threads, instances, ports, connections and component types; move instances between threads; edit
 ports, thread annotations and the behavior of components; rename; delete), `planConnection` decides
-between `connect` and `delegate` and the order of the ends of two chosen ports (and reports
-incompatibilities with `portIncompatibilities`), `structureRenameEdits` renames an element and its references
+between `connect` and `delegate` and the order of the ends of two chosen ports and refuses ports that
+cannot be connected (`IncompatiblePortsError` with the message of the validator, `incompatibilityMessage`
+in structure-types.ts, for incompatible kinds, events and types), `structureRenameEdits` renames an element and its references
 in all loaded files (Langium references; qualified references keep their qualifier). An instance of a
 component is added to a thread, an instance of a subsystem outside of the threads; moving an instance of a
 component out of its thread or an instance of a subsystem into one is refused. Deleting a thread deletes it

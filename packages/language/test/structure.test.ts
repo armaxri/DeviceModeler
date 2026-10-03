@@ -302,12 +302,14 @@ component A {
     requires sync n : real
     requires sync i : integer
     requires async k : Small
+    requires async e : event up : integer
 }
 component B {
     provides async big : Big
     provides async small : Small
     provides sync n : integer
     provides sync r : real
+    provides async e : event up : boolean
 }
 system S {
     thread T { a : A  b : B }
@@ -316,13 +318,17 @@ system S {
     connect a.n -> b.n
     connect a.i -> b.r
     connect a.k -> b.n
+    connect a.e -> b.e
 }`);
         expect(errors(parsed)).toEqual([
-            "Incompatible ports 'a.big' and 'b.small': the event 'open' carries integer, but 'small' expects no value; the event 'close' is not accepted by 'small'.",
-            "Incompatible ports 'a.small' and 'b.big': the event 'open' carries no value, but 'big' expects integer.",
-            "Incompatible ports 'a.i' and 'b.r': the type real of 'r' is not compatible with the type integer of 'i'.",
-            "Incompatible ports 'a.k' and 'b.n': 'k' is async, 'n' is sync."
+            "a.big (requires async Big) cannot be connected to b.small (provides async Small): event 'open' carries integer, but b.small expects no payload; event 'close' is not accepted by b.small.",
+            "a.small (requires async Small) cannot be connected to b.big (provides async Big): event 'open' has no payload, but b.big expects integer.",
+            "a.i (requires sync integer) cannot be connected to b.r (provides sync real): the data real of b.r is not assignable to integer (expected by a.i).",
+            "a.k (requires async Small) cannot be connected to b.n (provides sync integer): a.k is an async port (events), b.n is a sync port (data) – sync ports are connected with sync ports, async ports with async ports.",
+            "a.e (requires async event up : integer) cannot be connected to b.e (provides async event up : boolean): payload integer of 'up' is not assignable to boolean (expected by b.e)."
         ]);
+        // every incompatibility is an error
+        expect(parsed.diagnostics.filter(d => d.severity !== 1 && /cannot be/.test(d.message))).toEqual([]);
     });
 
     test('delegations: provided outer -> inner, required inner -> outer', async () => {
@@ -343,7 +349,7 @@ system S {
             "A required port is delegated from the part to the boundary: write 'delegate c.cmd -> y'.",
             "A delegation connects ports of the same direction, but 'x' is provided and 'c.cmd' is required.",
             "A delegation connects a boundary port with a port of a part: 'delegate port -> part.port' (provided) or 'delegate part.port -> port' (required).",
-            "Incompatible ports 'c.cmd' and 'z': the event 'open' is not accepted by 'z'; the event 'close' is not accepted by 'z'."
+            "c.cmd (requires async Cmd) cannot be delegated to z (requires async event other): event 'open' is not accepted by z; event 'close' is not accepted by z."
         ]);
     });
 

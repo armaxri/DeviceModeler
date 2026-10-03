@@ -2,7 +2,7 @@ import { AstUtils, GrammarUtils, type AstNode, type LangiumCoreServices } from '
 import * as ast from '../generated/ast.js';
 import { visibleElements } from '../structure-imports.js';
 import { enclosingComposite, compositeInstances, threadInstances, threadOf } from '../structure-model.js';
-import { portIncompatibilities } from '../structure-types.js';
+import { incompatibilityMessage } from '../structure-types.js';
 import { BUILTIN_TYPES } from '../typesystem.js';
 import { EditError, mapOffset, quote, type EditResult, type TextEdit } from './model-edits.js';
 
@@ -50,8 +50,16 @@ export interface ConnectionPlan {
     swapped: boolean;
     /** The statement: `connect door.motor -> drive.ctrl`. */
     text: string;
-    /** Incompatibilities of the ports (kinds, events, types), empty if they are compatible. */
-    problems: string[];
+}
+
+/**
+ * Two ports that could be connected (the right directions), but whose kinds, events or data types are
+ * incompatible: the connection is refused, the message explains why (see `incompatibilityMessage`).
+ */
+export class IncompatiblePortsError extends EditError {
+    constructor(message: string, readonly plan: ConnectionPlan) {
+        super(message);
+    }
 }
 
 export type PortDirectionKind = { direction: 'provides' | 'requires', kind: 'sync' | 'async' };
@@ -79,8 +87,8 @@ export function portEndText(end: PortEnd): string {
  * are connected: two ports of parts with a `connect` from the required to the provided port (the ends
  * are swapped if the provided port was chosen first), a boundary port and a port of a part with the same
  * direction with a `delegate` (provided: outer -> inner, required: inner -> outer). Throws an
- * {@link EditError} if the ports cannot be connected; incompatible types are reported in
- * {@link ConnectionPlan.problems} (the connection can be made, the validator reports the error).
+ * {@link EditError} if the ports cannot be connected – an {@link IncompatiblePortsError} if only their
+ * kinds, events or data types do not fit (the message is the error of the validator).
  */
 export function planConnection(structure: ast.CompositeType, a: PortEnd, b: PortEnd): ConnectionPlan {
     let kind: ConnectionPlan['kind'];
@@ -114,15 +122,16 @@ export function planConnection(structure: ast.CompositeType, a: PortEnd, b: Port
     if (statements.some(s => same(s.source, source) && same(s.target, target))) {
         throw new EditError(`'${portEndText(source)}' and '${portEndText(target)}' are already connected.`);
     }
-    const problems = portIncompatibilities(source.port, target.port);
+    const plan: ConnectionPlan = { kind, source, target, swapped: source !== a, text: `${kind} ${portEndText(source)} -> ${portEndText(target)}` };
+    const message = incompatibilityMessage(kind, { port: source.port, text: portEndText(source) }, { port: target.port, text: portEndText(target) });
+    if (message) {
+        throw new IncompatiblePortsError(message, plan);
+    }
     if (kind === 'connect' && source.port.kind === 'sync'
         && structure.connections.some(c => same(c.source, source))) {
-        problems.push(`the sync port '${portEndText(source)}' is already connected (a required sync port has one provider)`);
+        throw new EditError(`The sync port '${portEndText(source)}' is already connected – a required sync port has one provider.`);
     }
-    return {
-        kind, source, target, swapped: source !== a, problems,
-        text: `${kind} ${portEndText(source)} -> ${portEndText(target)}`
-    };
+    return plan;
 }
 
 type BodyNode = ast.CompositeType | ast.Component | ast.Thread;

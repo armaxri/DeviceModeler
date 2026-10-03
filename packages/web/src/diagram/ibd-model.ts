@@ -1,6 +1,6 @@
 import { SChildElementImpl, SNodeImpl, SShapeElementImpl, boundsFeature, hoverFeedbackFeature, selectFeature } from 'sprotty';
 
-/** Ports while drawing a connector: can be connected (`ok`), with incompatible types (`problem`), not at all (`invalid`). */
+/** Ports while drawing a connector: can be connected (`ok`), incompatible kinds / events / types (`problem`, refused with an explanation), not at all (`invalid`). */
 export type ConnectStatus = 'ok' | 'problem' | 'invalid';
 import type { SModelElement, SModelRoot } from 'sprotty-protocol';
 import type { DiagramLabel, IbdBehavior, IbdComposite, IbdEdge, IbdGraph, IbdMember, IbdNode, IbdNodeKind, IbdPort, Point } from 'devm-language';

@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest';
 import * as ast from '../src/generated/ast.js';
 import { compositeInstances } from '../src/structure-model.js';
 import { StructureWorkspace, routeContinuations, routeIdsAt } from '../src/structure-workspace.js';
-import { StructureEditor, structureRenameEdits, planConnection, type PortEnd } from '../src/edit/structure-edits.js';
+import { StructureEditor, structureRenameEdits, planConnection, IncompatiblePortsError, type PortEnd } from '../src/edit/structure-edits.js';
 import { applyEdits, EditError, type EditResult } from '../src/edit/model-edits.js';
 import { StructureModelLoader } from '../src/model-loader.js';
 
@@ -185,7 +185,7 @@ describe('structure edits: connections', () => {
         expect(required).toContain('    delegate ctrl -> motor.ctrl\n    delegate motor.status -> status\n}');
     });
 
-    test('invalid connections are refused, incompatible ones reported', async () => {
+    test('invalid and incompatible connections are refused', async () => {
         const parsed = await load(deviceFile('system.devm'));
         const s = structure(parsed.model, 'GarageDoor');
         expect(() => planConnection(s, end(s, 'door.cmd'), end(s, 'buzzer.alarm'))).toThrow(/Both ports are provided/);
@@ -193,9 +193,25 @@ describe('structure edits: connections', () => {
         expect(() => planConnection(s, end(s, 'remote'), end(s, 'door.motor'))).toThrow(/same direction/);
         expect(() => planConnection(s, end(s, 'door.motor'), end(s, 'drive.ctrl'))).toThrow(/already connected/);
         expect(() => planConnection(s, end(s, 'door.alarm'), end(s, 'door.cmd'))).toThrow(/same part/);
-        const plan = planConnection(s, end(s, 'door.alarm'), end(s, 'sensor.position'));
-        expect(plan.problems[0]).toMatch(/is async, 'position' is sync/);
-        expect(planConnection(s, end(s, 'diag.cycles'), end(s, 'drive.ctrl')).problems.length).toBeGreaterThan(0);
+        const refused = (a: string, b: string) => {
+            try {
+                planConnection(s, end(s, a), end(s, b));
+            } catch (error) {
+                expect(error).toBeInstanceOf(IncompatiblePortsError);
+                return (error as IncompatiblePortsError).message;
+            }
+            throw new Error(`${a} and ${b} were not refused`);
+        };
+        expect(refused('door.alarm', 'sensor.position')).toBe(
+            "door.alarm (requires async event alarm) cannot be connected to sensor.position (provides sync door::Position): door.alarm is an async port (events), "
+            + 'sensor.position is a sync port (data) – sync ports are connected with sync ports, async ports with async ports.');
+        // chosen the other way round: the same message (from the required port)
+        expect(refused('sensor.position', 'door.alarm')).toBe(refused('door.alarm', 'sensor.position'));
+        expect(refused('diag.cycles', 'drive.ctrl')).toMatch(/^diag\.cycles \(requires sync integer\) cannot be connected to drive\.ctrl \(provides async MotorCmd\)/);
+        expect(refused('door.alarm', 'drive.ctrl')).toBe(
+            "door.alarm (requires async event alarm) cannot be connected to drive.ctrl (provides async MotorCmd): event 'alarm' is not accepted by drive.ctrl.");
+        // the editor writes nothing
+        expect(() => new StructureEditor(parsed.text, parsed.model).addConnection(s, end(s, 'door.alarm'), end(s, 'drive.ctrl'))).toThrow(IncompatiblePortsError);
     });
 });
 

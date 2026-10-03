@@ -176,32 +176,73 @@ export function portTypeLabel(port: ast.Port): string {
     return port.type?.name ?? '?';
 }
 
+/** The direction, kind and type of a port for messages: `requires async MotorCmd`, `provides sync integer`. */
+export function portSignature(port: ast.Port): string {
+    return `${port.direction} ${port.kind} ${portTypeLabel(port)}`;
+}
+
+/** A side of a connection or delegation for messages: the port and its text (`door.motor`, `remote`). */
+export interface PortSide {
+    readonly port: ast.Port;
+    readonly text: string;
+}
+
 /**
  * The incompatibilities between the port at the source and the port at the target of a connection or
- * delegation (empty if they are compatible). The request direction is source -> target:
+ * delegation (empty if they are compatible), each explaining concretely why. The request direction is
+ * source -> target:
+ * - both ports have the same kind (sync / async),
  * - async: every event of the source must be accepted by the target, with an assignable payload
  *   (the target may accept more events),
  * - sync: the data of the target must be assignable to the data of the source (data flows from the
  *   provider back to the requester).
+ * The ports are named by `sourceText` / `targetText` (default: their names).
  */
-export function portIncompatibilities(source: ast.Port, target: ast.Port): string[] {
+export function portIncompatibilities(source: ast.Port, target: ast.Port, sourceText = source.name, targetText = target.name): string[] {
     if (source.kind !== target.kind) {
-        return [`'${source.name}' is ${source.kind}, '${target.name}' is ${target.kind}`];
+        const what = (kind: string) => kind === 'sync' ? 'a sync port (data)' : 'an async port (events)';
+        return [`${sourceText} is ${what(source.kind)}, ${targetText} is ${what(target.kind)} – sync ports are connected with sync ports, async ports with async ports`];
     }
     if (source.kind === 'sync') {
         const from = portDataType(target);
         const to = portDataType(source);
-        return isDataAssignable(to, from) ? [] : [`the type ${dataTypeName(from)} of '${target.name}' is not compatible with the type ${dataTypeName(to)} of '${source.name}'`];
+        return isDataAssignable(to, from) ? [] : [`the data ${dataTypeName(from)} of ${targetText} is not assignable to ${dataTypeName(to)} (expected by ${sourceText})`];
     }
     const problems: string[] = [];
     const accepted = new Map(portEvents(target).map(e => [e.name, e]));
     for (const event of portEvents(source)) {
         const other = accepted.get(event.name);
         if (!other) {
-            problems.push(`the event '${event.name}' is not accepted by '${target.name}'`);
-        } else if (!isDataAssignable(eventType(other), eventType(event))) {
-            problems.push(`the event '${event.name}' carries ${payloadLabel(eventType(event))}, but '${target.name}' expects ${payloadLabel(eventType(other))}`);
+            problems.push(`event '${event.name}' is not accepted by ${targetText}`);
+            continue;
+        }
+        const sent = eventType(event);
+        const expected = eventType(other);
+        if (isDataAssignable(expected, sent)) {
+            continue;
+        }
+        if (sent === 'void') {
+            problems.push(`event '${event.name}' has no payload, but ${targetText} expects ${dataTypeName(expected)}`);
+        } else if (expected === 'void') {
+            problems.push(`event '${event.name}' carries ${dataTypeName(sent)}, but ${targetText} expects no payload`);
+        } else {
+            problems.push(`payload ${dataTypeName(sent)} of '${event.name}' is not assignable to ${dataTypeName(expected)} (expected by ${targetText})`);
         }
     }
     return problems;
+}
+
+/**
+ * Why the ports of a connection (`connect`) or delegation (`delegate`) from `source` to `target` are
+ * incompatible, as one message naming both ports with their signatures, undefined if they are compatible:
+ * `door.motor (requires async MotorCmd) cannot be connected to drive.ctrl (provides async DriveCmd):
+ * event 'halt' is not accepted by drive.ctrl.`
+ */
+export function incompatibilityMessage(kind: 'connect' | 'delegate', source: PortSide, target: PortSide): string | undefined {
+    const problems = portIncompatibilities(source.port, target.port, source.text, target.text);
+    if (problems.length === 0) {
+        return undefined;
+    }
+    return `${source.text} (${portSignature(source.port)}) cannot be ${kind === 'connect' ? 'connected' : 'delegated'} to `
+        + `${target.text} (${portSignature(target.port)}): ${problems.join('; ')}.`;
 }

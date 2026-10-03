@@ -7,7 +7,7 @@ import type { DevmServices } from './devm-module.js';
 import {
     argumentNumber, DURATION_UNITS, enclosingComposite, instanceType, portReferenceText, compositeInstances, threadsOf
 } from './structure-model.js';
-import { portIncompatibilities, resolveDataType } from './structure-types.js';
+import { incompatibilityMessage, resolveDataType } from './structure-types.js';
 import { connectionThreads } from './structure-routes.js';
 import { resolveTypeName } from './typesystem.js';
 import { isModelPath } from './imports.js';
@@ -439,9 +439,10 @@ export class StructureValidator {
     }
 
     protected checkCompatibility(node: ast.Connection | ast.Delegation, from: ast.Port, to: ast.Port, accept: ValidationAcceptor): void {
-        const problems = portIncompatibilities(from, to);
-        if (problems.length > 0) {
-            accept('error', `Incompatible ports '${portReferenceText(node.source!)}' and '${portReferenceText(node.target!)}': ${problems.join('; ')}.`, { node, property: 'target' });
+        const message = incompatibilityMessage(ast.isConnection(node) ? 'connect' : 'delegate',
+            { port: from, text: portReferenceText(node.source!) }, { port: to, text: portReferenceText(node.target!) });
+        if (message) {
+            accept('error', message, { node, property: 'target' });
         }
     }
 

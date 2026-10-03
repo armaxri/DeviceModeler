@@ -2,7 +2,7 @@ import type { AstNode, LangiumDocument } from 'langium';
 import type { SModelElementImpl } from 'sprotty';
 import type { SModelRoot } from 'sprotty-protocol';
 import {
-    BUILTIN_TYPES, StructureEditor, EditError, IBD_OVERVIEW_ID, IBD_TYPES_ID, applyEdits, behaviorMachine, checkRename, mapOffset, endpointLabel, findProviders, findRequirers, ibdChoices, ibdElementAt,
+    BUILTIN_TYPES, StructureEditor, EditError, IncompatiblePortsError, IBD_OVERVIEW_ID, IBD_TYPES_ID, applyEdits, behaviorMachine, checkRename, mapOffset, endpointLabel, findProviders, findRequirers, ibdChoices, ibdElementAt,
     ibdNodes, ibdRouteElements, instanceType, isComponent, isComponentInstance, isComponentType, isConnection, isDelegation, isPort, isPortInterface,
     isStructDeclaration, isCompositeType, isThread, layoutStructure, memberText, normalizeUri, planConnection, portEndpoint, portTypeLabel, resolveDataType, routeContinuations, routeIdsAt,
     threadInstances, threadOf, threadSettings, visibleElements,
@@ -1009,15 +1009,17 @@ export class StructureDiagram {
             }
             try {
                 const plan = planConnection(structure, source, other);
-                this.connectStatus.set(otherId, plan.problems.length > 0
-                    ? { status: 'problem', message: `${plan.text} – incompatible: ${plan.problems.join('; ')}` }
-                    : { status: 'ok', message: `${plan.text}${plan.swapped ? ' (from the required port)' : ''}` });
+                this.connectStatus.set(otherId, { status: 'ok', message: `${plan.text}${plan.swapped ? ' (from the required port)' : ''}` });
             } catch (error) {
-                this.connectStatus.set(otherId, { status: 'invalid', message: error instanceof Error ? error.message : String(error) });
+                // incompatible kinds, events or types: orange, the hint explains why (cannot be connected either)
+                this.connectStatus.set(otherId, {
+                    status: error instanceof IncompatiblePortsError ? 'problem' : 'invalid',
+                    message: error instanceof Error ? error.message : String(error)
+                });
             }
         }
         this.showPreview(event);
-        this.context.setHint('Drag to (or click) the port to connect – green: compatible, orange: incompatible types (Esc cancels)');
+        this.context.setHint('Drag to (or click) the port to connect – green: compatible, orange: incompatible (the hint tells why; Esc cancels)');
         this.render();
     }
 
@@ -1031,7 +1033,8 @@ export class StructureDiagram {
         if (!structure || !source || !target) {
             return;
         }
-        if (status?.status === 'invalid') {
+        if (status && status.status !== 'ok') {
+            // refused (incompatible or invalid): nothing is written, the message explains why
             this.context.setStatus(status.message, 'error');
             this.render();
             this.context.toolDone();
@@ -1044,11 +1047,7 @@ export class StructureDiagram {
             return result;
         }).then(done => {
             if (done && plan) {
-                if (plan.problems.length > 0) {
-                    this.context.setStatus(`Added '${plan.text}' – but the ports are incompatible: ${plan.problems.join('; ')}.`, 'warning');
-                } else {
-                    this.context.setStatus(`Added '${plan.text}'${plan.swapped ? ' (written from the required to the provided port)' : ''}.`);
-                }
+                this.context.setStatus(`Added '${plan.text}'${plan.swapped ? ' (written from the required to the provided port)' : ''}.`);
             }
         });
         this.context.toolDone();
@@ -1095,7 +1094,7 @@ export class StructureDiagram {
             }
             const status = element ? this.connectStatus?.get(element.id.substring(8)) : undefined;
             line.setAttribute('class', status ? `status-${status.status}` : '');
-            this.context.setHint(status ? status.message : 'Drag to (or click) the port to connect – green: compatible, orange: incompatible types (Esc cancels)');
+            this.context.setHint(status ? status.message : 'Drag to (or click) the port to connect – green: compatible, orange: incompatible (the hint tells why; Esc cancels)');
         };
         area.addEventListener('mousemove', move);
         this.preview = { svg, line, move };

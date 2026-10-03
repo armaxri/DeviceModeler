@@ -703,9 +703,10 @@ export class DevmApp implements DiagramHost {
         element.textContent = message;
         element.className = severity === 'info' ? '' : severity;
         clearTimeout(this.statusTimer);
+        // (long explanations, e.g. why two ports cannot be connected, stay long enough to be read)
         this.statusTimer = setTimeout(() => {
             element.textContent = '';
-        }, 6000);
+        }, Math.max(6000, message.length * 80));
     }
 }
 

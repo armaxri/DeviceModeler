@@ -218,7 +218,7 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
   provider)
 - 🧪 Internal block diagram (SysML style, PlantUML themes, ELK with orthogonal routing): `devm render`, the
   web editor and VS Code; graphical editing as text edits (threads, instances, ports, connectors with
-  compatibility feedback, rename across files, delete with the connections in other files, properties),
+  compatibility feedback – incompatible ports are refused with the explanation of the validator –, rename across files, delete with the connections in other files, properties),
   route highlighting, navigation between systems, subsystems, component types and state machines
   (*Used by*, *Follow into*, back / forward; like in PlantUML a subsystem opened directly is shown on its
   own – routes end at its boundary ports –, reached from a containing structure it is shown as that part,
@@ -239,7 +239,7 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
     state machine classes, thread setup)
   - `devm doc` for structure files (structure documentation with the diagrams, port tables, routes)
   - ports of an instance whose type is declared in another file are not editable in the diagram (edit them in
-    the type); incompatible connections are created with a warning
+    the type)
   - renames and deletions of several files are undone together in VS Code only (the web app changes the other
     files directly); the web app has no real workspace (a virtual file list)
   - state machines cannot use the structs of structure files (shared C/C++ headers instead); a validation of
