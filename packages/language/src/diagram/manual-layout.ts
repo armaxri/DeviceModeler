@@ -24,43 +24,30 @@ import type {
 } from './diagram-model.js';
 import { DiagramMetrics, MACHINE_ID, approximateTextMeasure, layoutStateMachine } from './layout.js';
 import { layoutFromModel } from './layout-annotations.js';
-import { POINT_PORT_KINDS, crossesRect, distributePorts, routeOrthogonal, type OrthogonalRoute } from './orthogonal-router.js';
-
-export const MANUAL_LAYOUT_VERSION = 1;
+import {
+    LayoutTree, MANUAL_LAYOUT_VERSION, TOLERANCE, center, cloneLayout, crossesRect, distributePorts, edgeFrameOrigin, insideRect, overlaps, placeChildren, routeThroughWaypoints,
+    type BaseEdgeLayout, type BaseManualLayout, type BaseNodeLayout, type LayoutMode, type OrthogonalRoute, type Rect
+} from './layout-core/index.js';
 
 /** File name extension of layout sidecar files (`model.hsm` -> `model.hsm.layout`). */
 export const LAYOUT_FILE_EXTENSION = '.layout';
 
-export type LayoutMode = 'auto' | 'manual';
-
 export type RegionOrientation = 'vertical' | 'horizontal';
 
-export interface NodeLayout {
-    /** Position relative to the parent node (for regions: ignored, regions are stacked). */
-    x: number;
-    y: number;
-    /** Explicit size (resized by the user or imported); the node is never smaller than its content. */
-    width?: number;
-    height?: number;
+/** A stored node of a state machine diagram (see {@link BaseNodeLayout}). */
+export interface NodeLayout extends BaseNodeLayout {
     /** States with regions: whether the regions are stacked vertically or placed side by side. */
     regions?: RegionOrientation;
 }
 
-export interface EdgeLayout {
-    /** Bend points in the coordinate system of the edge's frame node (see `edgeFrame`). */
-    bends?: Point[];
-    /** Offset of the label from its computed position. */
-    label?: Point;
-}
+/** A stored transition: waypoints in the coordinate system of its frame node, the offset of its label. */
+export type EdgeLayout = BaseEdgeLayout;
 
-export interface ManualLayout {
-    version: number;
-    mode: LayoutMode;
-    /** Layout direction used to place new elements (default: the direction of the layout options). */
-    direction?: LayoutDirection;
-    nodes: Record<string, NodeLayout>;
-    edges: Record<string, EdgeLayout>;
-}
+/** The manual layout of a state machine diagram (the shared data model with {@link NodeLayout}s). */
+export type ManualLayout = BaseManualLayout<NodeLayout, EdgeLayout>;
+
+/** Vertices whose border is not straight: the routes end in the middle of the side. */
+export const POINT_PORT_KINDS: ReadonlySet<DiagramNodeKind> = new Set<DiagramNodeKind>(['initial', 'final', 'choice', 'junction', 'history', 'deephistory', 'entry', 'exit']);
 
 export interface ManualLayoutResult extends LayoutResult {
     /**
@@ -191,7 +178,7 @@ export function serializeManualLayout(layout: ManualLayout): string {
 }
 
 export function cloneManualLayout(layout: ManualLayout): ManualLayout {
-    return JSON.parse(JSON.stringify(layout)) as ManualLayout;
+    return cloneLayout(layout);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -357,25 +344,17 @@ export function applyManualLayout(auto: LayoutResult, layout: ManualLayout, opti
     }).run(auto);
 }
 
-interface Rect {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-}
-
 const ROOT_PADDING = 20;
 const NODE_SPACING = 30;
-const TOLERANCE = 0.5;
 const ROUND_KINDS: ReadonlySet<DiagramNodeKind> = new Set<DiagramNodeKind>(['initial', 'final', 'junction', 'history', 'deephistory', 'entry', 'exit']);
 
 class ManualLayoutEngine {
 
-    /** Cloned diagram nodes (modified in place). */
-    private readonly nodes = new Map<string, DiagramNode>();
-    private readonly parents = new Map<string, string>();
+    /** The cloned diagram nodes (modified in place) and their hierarchy. */
+    private readonly tree: LayoutTree<DiagramNode>;
+    private readonly nodes: Map<string, DiagramNode>;
     /** Absolute bounds of the nodes in the automatic layout. */
-    private readonly autoBounds = new Map<string, Rect>();
+    private readonly autoBounds: Map<string, Rect>;
     /** Relative position of the nodes in the automatic layout. */
     private readonly autoPositions = new Map<string, Point>();
     private readonly root: DiagramNode;
@@ -396,16 +375,12 @@ class ManualLayoutEngine {
             children: node.children.map(clone)
         });
         this.root = { id: MACHINE_ID, kind: 'state', x: 0, y: 0, width: graph.width, height: graph.height, children: graph.children.map(clone) };
-        const collect = (node: DiagramNode, parent: DiagramNode, ax: number, ay: number) => {
-            this.nodes.set(node.id, node);
-            this.parents.set(node.id, parent.id);
-            this.autoPositions.set(node.id, { x: node.x, y: node.y });
-            this.autoBounds.set(node.id, { x: ax + node.x, y: ay + node.y, width: node.width, height: node.height });
-            node.children.forEach(child => collect(child, node, ax + node.x, ay + node.y));
-        };
-        this.root.children.forEach(child => collect(child, this.root, 0, 0));
-        this.nodes.set(MACHINE_ID, this.root);
-        this.autoBounds.set(MACHINE_ID, { x: 0, y: 0, width: graph.width, height: graph.height });
+        this.tree = new LayoutTree<DiagramNode>(this.root, node => node.children);
+        this.nodes = this.tree.nodes;
+        this.autoBounds = this.tree.absoluteBounds();
+        for (const [id, node] of this.nodes) {
+            this.autoPositions.set(id, { x: node.x, y: node.y });
+        }
         this.edges = graph.edges.map(edge => {
             this.autoEdges.set(edge.id, edge);
             return { ...edge, points: edge.points.map(p => ({ ...p })), label: edge.label ? { ...edge.label } : undefined };
@@ -450,16 +425,7 @@ class ManualLayoutEngine {
     // Structure helpers
 
     private path(id: string): string[] {
-        const result = [id];
-        let current = this.parents.get(id);
-        while (current) {
-            result.unshift(current);
-            current = this.parents.get(current);
-        }
-        if (result[0] !== MACHINE_ID) {
-            result.unshift(MACHINE_ID);
-        }
-        return result;
+        return this.tree.path(id);
     }
 
     /**
@@ -468,43 +434,16 @@ class ManualLayoutEngine {
      * self transition: the parent of the vertex).
      */
     private edgeFrame(edge: DiagramEdge): string {
-        const source = this.path(edge.source);
-        const target = this.path(edge.target);
-        let frame = MACHINE_ID;
-        for (let i = 0; i < Math.min(source.length, target.length) && source[i] === target[i]; i++) {
-            frame = source[i];
-        }
-        if (edge.source === edge.target) {
-            frame = this.parents.get(edge.source) ?? MACHINE_ID;
-        }
-        return frame;
+        return this.tree.frameOf(edge.source, edge.target);
     }
 
     private absolutePosition(id: string): Point {
-        let x = 0;
-        let y = 0;
-        for (let current: string | undefined = id; current && current !== MACHINE_ID; current = this.parents.get(current)) {
-            const node = this.nodes.get(current)!;
-            x += node.x;
-            y += node.y;
-        }
-        return { x, y };
+        return this.tree.absolutePosition(id);
     }
 
     /** Bounds of a node relative to the frame node (which must be an ancestor or the node itself). */
     private boundsIn(id: string, frame: string): Rect {
-        const node = this.nodes.get(id)!;
-        if (id === frame) {
-            return { x: 0, y: 0, width: node.width, height: node.height };
-        }
-        let x = 0;
-        let y = 0;
-        for (let current: string | undefined = id; current && current !== frame; current = this.parents.get(current)) {
-            const n = this.nodes.get(current)!;
-            x += n.x;
-            y += n.y;
-        }
-        return { x, y, width: node.width, height: node.height };
+        return this.tree.boundsIn(id, frame);
     }
 
     private autoBoundsIn(id: string, frame: string): Rect {
@@ -603,30 +542,15 @@ class ManualLayoutEngine {
         for (const child of children) {
             this.layoutNode(child);
         }
-        const pinned = children.filter(c => this.stored(c.id) && c.kind !== 'region');
-        const unpinned = children.filter(c => !this.stored(c.id) && c.kind !== 'region');
-        for (const child of pinned) {
-            const stored = this.stored(child.id)!;
-            child.x = stored.x;
-            child.y = stored.y;
-        }
-        // pinned content must not overlap the header of the state: shift it as a whole
-        if (pinned.length > 0) {
-            const dx = Math.max(0, left - Math.min(...pinned.map(c => c.x)));
-            const dy = Math.max(0, top - Math.min(...pinned.map(c => c.y)));
-            if (dx > 0 || dy > 0) {
-                this.shifts.set(owner.id, { x: dx, y: dy });
-                for (const child of pinned) {
-                    child.x += dx;
-                    child.y += dy;
-                }
-            }
-        }
-        separate(pinned);
-        const placed: DiagramNode[] = [...pinned];
-        for (const child of unpinned) {
-            this.placeNew(child, pinned, placed, left, top);
-            placed.push(child);
+        // pinned content must not overlap the header of the state: it is shifted as a whole
+        const shift = placeChildren({
+            children: children.filter(c => c.kind !== 'region'),
+            stored: child => this.stored(child.id),
+            auto: child => this.autoPositions.get(child.id)!,
+            left, top
+        });
+        if (shift) {
+            this.shifts.set(owner.id, shift);
         }
         if (owner.kind !== 'state' || !owner.regions) {
             this.routeEdges(owner.id);
@@ -658,53 +582,6 @@ class ManualLayoutEngine {
             }
         }
         return { x: right, y: bottom };
-    }
-
-    /** Places a node without stored position near its position in the automatic layout, without overlaps. */
-    private placeNew(node: DiagramNode, pinned: DiagramNode[], placed: DiagramNode[], left: number, top: number): void {
-        const auto = this.autoPositions.get(node.id)!;
-        let target = { ...auto };
-        if (pinned.length > 0) {
-            // keep the offset of the nearest pinned sibling (in the automatic layout)
-            const distance = (n: DiagramNode) => {
-                const p = this.autoPositions.get(n.id)!;
-                return Math.hypot(p.x - auto.x, p.y - auto.y);
-            };
-            const nearest = pinned.reduce((a, b) => distance(a) <= distance(b) ? a : b);
-            const nearestAuto = this.autoPositions.get(nearest.id)!;
-            target = { x: auto.x + nearest.x - nearestAuto.x, y: auto.y + nearest.y - nearestAuto.y };
-        }
-        target = { x: Math.max(left, target.x), y: Math.max(top, target.y) };
-        const free = (x: number, y: number) => x >= left - TOLERANCE && y >= top - TOLERANCE
-            && placed.every(other => !overlaps({ x, y, width: node.width, height: node.height }, other, NODE_SPACING / 2));
-        if (free(target.x, target.y)) {
-            node.x = target.x;
-            node.y = target.y;
-            return;
-        }
-        const gap = NODE_SPACING;
-        const candidates: Point[] = [];
-        for (const other of placed) {
-            candidates.push(
-                { x: other.x + other.width + gap, y: other.y },
-                { x: other.x, y: other.y + other.height + gap },
-                { x: other.x - node.width - gap, y: other.y },
-                { x: other.x, y: other.y - node.height - gap },
-                { x: other.x + other.width + gap, y: target.y },
-                { x: target.x, y: other.y + other.height + gap }
-            );
-        }
-        let best: Point | undefined;
-        let bestDistance = Number.POSITIVE_INFINITY;
-        for (const candidate of candidates) {
-            const d = Math.hypot(candidate.x - target.x, candidate.y - target.y);
-            if (d < bestDistance && free(candidate.x, candidate.y)) {
-                best = candidate;
-                bestDistance = d;
-            }
-        }
-        node.x = best?.x ?? left;
-        node.y = best?.y ?? Math.max(top, ...placed.map(p => p.y + p.height + gap));
     }
 
     // -----------------------------------------------------------------------------------------
@@ -781,8 +658,8 @@ class ManualLayoutEngine {
             placed.push(points);
             routes.push({
                 edge, points, waypoints: through, cuts,
-                source: { vertex: edge.source, rect: source, kind: this.nodes.get(edge.source)!.kind },
-                target: { vertex: edge.target, rect: target, kind: this.nodes.get(edge.target)!.kind }
+                source: { vertex: edge.source, rect: source, fixed: POINT_PORT_KINDS.has(this.nodes.get(edge.source)!.kind) },
+                target: { vertex: edge.target, rect: target, fixed: POINT_PORT_KINDS.has(this.nodes.get(edge.target)!.kind) }
             });
         }
         // (the ends of routes through waypoints stay where they are: shifting them could move a waypoint)
@@ -869,36 +746,13 @@ class ManualLayoutEngine {
      */
     private routeLegs(edge: DiagramEdge, source: Rect, target: Rect, waypoints: Point[], obstacles: Rect[], containers: Rect[],
         placed: Point[][], frame: string): { points: Point[], cuts: number[] } | undefined {
-        const stops: Rect[] = [source, ...waypoints.map(p => ({ x: p.x, y: p.y, width: 0, height: 0 })), target];
         const fixedKind = (id: string) => POINT_PORT_KINDS.has(this.nodes.get(id)!.kind);
-        const points: Point[] = [];
-        const cuts: number[] = [];
-        let exclude: number | undefined;
-        for (let i = 0; i + 1 < stops.length; i++) {
-            const from = stops[i];
-            const to = stops[i + 1];
-            // a waypoint inside a vertex: that vertex is crossed
-            const legObstacles = obstacles.filter(o => ![from, to].some(r => r.width === 0 && insideRect(r, o)));
-            const leg = routeOrthogonal({
-                source: from, target: to, obstacles: legObstacles, containers, placed,
-                sourceFixed: i > 0 || fixedKind(edge.source),
-                targetFixed: i + 2 < stops.length || fixedKind(edge.target),
-                sourceExclude: exclude,
-                bounds: this.routingBounds(frame, [...stops, ...obstacles])
-            });
-            if (!leg) {
-                return undefined;
-            }
-            if (i > 0) {
-                cuts.push(points.length - 1);
-            }
-            points.push(...(i === 0 ? leg : leg.slice(1)));
-            const a = leg[leg.length - 2];
-            const b = leg[leg.length - 1];
-            // the direction back to where the route arrived
-            exclude = Math.abs(b.x - a.x) >= Math.abs(b.y - a.y) ? (b.x > a.x ? 2 : 0) : (b.y > a.y ? 3 : 1);
-        }
-        return { points, cuts };
+        return routeThroughWaypoints({
+            source, target, waypoints, obstacles, containers, placed,
+            sourceFixed: fixedKind(edge.source),
+            targetFixed: fixedKind(edge.target),
+            bounds: this.routingBounds(frame, [source, ...waypoints.map(p => ({ x: p.x, y: p.y, width: 0, height: 0 })), target, ...obstacles])
+        });
     }
 
     /**
@@ -1222,52 +1076,6 @@ class ManualLayoutEngine {
 // ---------------------------------------------------------------------------------------------
 // Geometry
 
-/**
- * Pinned nodes must not overlap (they may have grown since the layout was stored, e.g. because of a
- * longer text, or the layout was imported from a tool with other fonts): overlapping nodes are pushed
- * to the right or down, whichever is shorter.
- */
-function separate(nodes: DiagramNode[]): void {
-    const gap = 20;
-    for (let iteration = 0; iteration < 100; iteration++) {
-        let changed = false;
-        const sorted = [...nodes].sort((a, b) => a.x - b.x || a.y - b.y);
-        for (let i = 0; i < sorted.length; i++) {
-            for (let j = i + 1; j < sorted.length; j++) {
-                const a = sorted[i];
-                const b = sorted[j];
-                if (!overlaps(a, b, 0)) {
-                    continue;
-                }
-                const dx = a.x + a.width + gap - b.x;
-                const dy = a.y + a.height + gap - b.y;
-                if (dx <= dy || b.y < a.y) {
-                    b.x += dx;
-                } else {
-                    b.y += dy;
-                }
-                changed = true;
-            }
-        }
-        if (!changed) {
-            return;
-        }
-    }
-}
-
-function insideRect(p: Point, rect: Rect): boolean {
-    return p.x > rect.x && p.x < rect.x + rect.width && p.y > rect.y && p.y < rect.y + rect.height;
-}
-
-function center(rect: Rect): Point {
-    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-}
-
-function overlaps(a: Rect, b: Rect, margin: number): boolean {
-    return a.x < b.x + b.width + margin && b.x < a.x + a.width + margin
-        && a.y < b.y + b.height + margin && b.y < a.y + a.height + margin;
-}
-
 /** The point where the line from the center of the shape towards `toward` leaves the shape. */
 export function borderPoint(rect: Rect, kind: DiagramNodeKind, toward: Point): Point {
     const c = center(rect);
@@ -1423,24 +1231,5 @@ export function toFrameCoordinates(graph: DiagramGraph, edge: DiagramEdge, point
 
 /** Absolute position of the frame node of a transition (see `ManualLayoutEngine.edgeFrame`). */
 export function frameOrigin(graph: DiagramGraph, edge: DiagramEdge): Point {
-    const paths = new Map<string, Array<{ id: string, x: number, y: number }>>();
-    const visit = (nodes: DiagramNode[], path: Array<{ id: string, x: number, y: number }>, ax: number, ay: number) => {
-        for (const node of nodes) {
-            const entry = { id: node.id, x: ax + node.x, y: ay + node.y };
-            paths.set(node.id, [...path, entry]);
-            visit(node.children, [...path, entry], entry.x, entry.y);
-        }
-    };
-    visit(graph.children, [], 0, 0);
-    const source = paths.get(edge.source) ?? [];
-    const target = paths.get(edge.target) ?? [];
-    let origin: Point = { x: 0, y: 0 };
-    for (let i = 0; i < Math.min(source.length, target.length) && source[i].id === target[i].id; i++) {
-        origin = { x: source[i].x, y: source[i].y };
-    }
-    if (edge.source === edge.target) {
-        const parent = source[source.length - 2];
-        origin = parent ? { x: parent.x, y: parent.y } : { x: 0, y: 0 };
-    }
-    return origin;
+    return edgeFrameOrigin(graph.children, node => node.children, edge.source, edge.target);
 }

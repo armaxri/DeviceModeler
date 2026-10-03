@@ -12,6 +12,7 @@ export * from './hsm-import-validator.js';
 export * from './model-utils.js';
 export * from './diagram/diagram-model.js';
 export * from './diagram/layout.js';
+export * from './diagram/layout-core/index.js';
 export * from './diagram/manual-layout.js';
 export * from './diagram/layout-annotations.js';
 export * from './diagram/diagram-ids.js';

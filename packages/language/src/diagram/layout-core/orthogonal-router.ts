@@ -1,6 +1,6 @@
 /**
- * Orthogonal routing of transitions around obstacles (used by the manual layout, where the vertices are
- * placed by hand and the routes of the automatic layout no longer fit).
+ * Orthogonal routing of edges around obstacles (used by the manual layouts of state machine and structure
+ * diagrams, where the nodes are placed by hand and the routes of the automatic layout no longer fit).
  *
  * A route leaves the source at the middle of one of its sides and enters the target at the middle of one
  * of its sides (a waypoint is a source / target of size 0). In between it runs on a sparse grid made of the lines along the (inflated) borders of the
@@ -9,7 +9,7 @@
  * top of each other. Afterwards the ends of several routes at the same side of a vertex are spread along
  * the side ({@link distributePorts}).
  */
-import type { DiagramNodeKind, Point } from './diagram-model.js';
+import type { Point } from '../diagram-model.js';
 
 export interface RouterRect {
     x: number;
@@ -294,7 +294,8 @@ export interface RoutedEnd {
     /** Id of the vertex. */
     vertex: string;
     rect: RouterRect;
-    kind: DiagramNodeKind;
+    /** The route ends in the middle of a side (a vertex whose border is not straight, e.g. a round shape). */
+    fixed: boolean;
 }
 
 export interface OrthogonalRoute {
@@ -302,9 +303,6 @@ export interface OrthogonalRoute {
     source: RoutedEnd;
     target: RoutedEnd;
 }
-
-/** Vertices whose border is not straight: the routes end in the middle of the side. */
-export const POINT_PORT_KINDS: ReadonlySet<DiagramNodeKind> = new Set<DiagramNodeKind>(['initial', 'final', 'choice', 'junction', 'history', 'deephistory', 'entry', 'exit']);
 
 /**
  * Spreads the ends of several routes at the same side of a vertex along the side (ordered by the
@@ -315,7 +313,7 @@ export function distributePorts(routes: OrthogonalRoute[]): void {
     for (const route of routes) {
         for (const atStart of [true, false]) {
             const end = atStart ? route.source : route.target;
-            if (POINT_PORT_KINDS.has(end.kind) || route.points.length < 2) {
+            if (end.fixed || route.points.length < 2) {
                 continue;
             }
             const side = sideOf(end.rect, atStart ? route.points[0] : route.points[route.points.length - 1]);
@@ -344,7 +342,7 @@ export function distributePorts(routes: OrthogonalRoute[]): void {
         let positions = sorted.map((_, i) => from + gap * (i + 1));
         // a straight route to a vertex with a fixed port (e.g. a final state) keeps its position, the
         // others are placed around it (a jog in the straight line would look odd)
-        const straight = sorted.findIndex(({ route, atStart }) => route.points.length === 2 && POINT_PORT_KINDS.has((atStart ? route.target : route.source).kind));
+        const straight = sorted.findIndex(({ route, atStart }) => route.points.length === 2 && (atStart ? route.target : route.source).fixed);
         if (straight >= 0) {
             const center = sorted[straight].route.points[0][horizontalSide ? 'x' : 'y'];
             const around = sorted.map((_, i) => center + (i - straight) * gap);

@@ -6,14 +6,15 @@ import {
     EditError, ModelEditor, allVertices, applyEdits, definitionRange, isEventDeclaration, isInterfaceScope, isOperationDeclaration,
     isScopeContainer, isValidIdentifier, isPseudoState, isRegion, isState, isStateMachine, isTransition, isVertex, layoutStateMachine,
     qualifiedName, scopeOf, siblingVertices, transitionLabel, finalNodeId, DEFINITION_ID, MACHINE_ID,
-    nodeText as nodeTextOf, type DeletionTarget, type DiagramEdge, type DiagramNode, type DiagramNodeKind, type DiagramSubmachine, type EdgeRouting, type EditResult,
+    nodeText as nodeTextOf, type DeletionTarget, type DiagramNode, type DiagramNodeKind, type DiagramSubmachine, type EdgeRouting, type EditResult,
     type LayoutDirection, type LayoutResult,
     type NewVertexKind, type ParsedDmfModel, type ParsedModel, type ScopeContainer, type TextEdit, type Transition, type TransitionSource, type TransitionTarget, type Vertex
 } from 'hsm-language';
 import {
-    applyManualLayout, captureLayout, cloneManualLayout, contentOrigin, diagramElementIds, layoutFromModel, layoutTextEdits, toFrameCoordinates,
+    applyManualLayout, captureLayout, contentOrigin, diagramElementIds, layoutFromModel, layoutTextEdits, toFrameCoordinates,
     type ManualLayout, type Point
 } from 'hsm-language';
+import { LayoutEditor, replacementEdit, sampleSpline } from './layout-editing.js';
 import { describeSyntaxProblem, type HsmModelService } from './model-service.js';
 import { createDiagramContainer } from './diagram/di.config.js';
 import type { DiagramCallbacks, DragInfo } from './diagram/listeners.js';
@@ -1390,7 +1391,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         if (!this.state || this.simulationSession) {
             return;
         }
-        this.writeLayout(captureLayout(this.state.auto.graph, this.settings.direction)).then(changed => {
+        this.layoutEditor.arrange().then(changed => {
             if (changed) {
                 this.setStatus('Arranged automatically – the positions can be adjusted by hand (Ctrl+Z restores the previous layout).');
             }
@@ -1402,25 +1403,16 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         if (!this.state || this.simulationSession || !this.isManualLayout()) {
             return;
         }
-        this.writeLayout(undefined).then(changed => {
+        this.layoutEditor.reset().then(changed => {
             if (changed) {
                 this.setStatus('Automatic layout – the layout annotations were removed (Ctrl+Z restores them).');
             }
         });
     }
 
-    /**
-     * Changes the layout: `change` modifies the current layout with all nodes pinned at their current
-     * positions (in a model without layout annotations: the automatic layout, so that the first change
-     * writes the whole layout).
-     */
-    private changeLayout(change: (layout: ManualLayout) => void): void {
-        if (!this.state || this.simulationSession) {
-            return;
-        }
-        const layout = cloneManualLayout(this.state.effective ?? captureLayout(this.state.auto.graph, this.settings.direction));
-        change(layout);
-        this.writeLayout(layout);
+    /** Whether the layout can be changed (a model is shown, no simulation is running). */
+    private get layoutChangeable(): boolean {
+        return this.state !== undefined && !this.simulationSession;
     }
 
     /**
@@ -1473,103 +1465,59 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             return;
         }
         const moves = info.moved.filter(m => state.nodes.has(m.id));
-        if (moves.length === 0) {
+        if (moves.length === 0 || !this.layoutChangeable) {
             this.render();
             return;
         }
-        this.changeLayout(layout => {
-            for (const move of moves) {
-                const position = this.clampToParent(state.parents.get(move.id), { x: move.x, y: move.y });
-                layout.nodes[move.id] = { ...layout.nodes[move.id], ...position };
-            }
-        });
+        this.layoutEditor.moveNodes(moves.map(move => ({ id: move.id, ...this.clampToParent(state.parents.get(move.id), { x: move.x, y: move.y }) })));
     }
 
     resizeEnd(id: string, width: number, height: number): void {
-        this.changeLayout(layout => {
+        if (this.layoutChangeable) {
             const node = this.state?.nodes.get(id);
-            layout.nodes[id] = { ...(layout.nodes[id] ?? { x: node?.x ?? 0, y: node?.y ?? 0 }), width, height };
-        });
-    }
-
-    /** The waypoints of a transition (absolute). */
-    private shownBends(edgeId: string): { edge: DiagramEdge, bends: Point[] } | undefined {
-        const edge = this.state?.layout.graph.edges.find(e => e.id === edgeId);
-        return edge ? { edge, bends: (edge.waypoints ?? []).map(p => ({ ...p })) } : undefined;
-    }
-
-    private storeBends(edge: DiagramEdge, bends: Point[]): void {
-        const graph = this.state?.layout.graph;
-        if (!graph) {
-            return;
+            this.layoutEditor.resize(id, width, height, { x: node?.x ?? 0, y: node?.y ?? 0 });
         }
-        this.changeLayout(layout => {
-            const entry = { ...layout.edges[edge.id] };
-            if (bends.length > 0) {
-                entry.bends = bends.map(p => toFrameCoordinates(graph, edge, p));
-            } else {
-                delete entry.bends;
-            }
-            if (entry.bends || entry.label) {
-                layout.edges[edge.id] = entry;
-            } else {
-                delete layout.edges[edge.id];
-            }
-        });
     }
 
     bendMoved(edgeId: string, index: number, point: Point): void {
-        const shown = this.shownBends(edgeId);
-        if (shown && index >= 0 && index < shown.bends.length) {
-            shown.bends[index] = point;
-            this.storeBends(shown.edge, shown.bends);
+        if (this.layoutChangeable) {
+            this.layoutEditor.moveWaypoint(edgeId, index, point);
         }
     }
 
     bendAdded(edgeId: string, point: Point): void {
-        const shown = this.shownBends(edgeId);
-        if (!shown) {
-            return;
+        if (this.layoutChangeable) {
+            this.layoutEditor.addWaypoint(edgeId, point);
         }
-        // insert the point between the waypoints of the part of the route which was clicked
-        const route = shown.edge.routing === 'spline' ? sampleSpline(shown.edge.points) : shown.edge.points;
-        const at = (p: Point) => {
-            let best = 0;
-            let bestDistance = Number.POSITIVE_INFINITY;
-            for (let i = 0; i + 1 < route.length; i++) {
-                const d = segmentDistance(p, route[i], route[i + 1]);
-                if (d < bestDistance - 0.01) {
-                    best = i;
-                    bestDistance = d;
-                }
-            }
-            const a = route[best];
-            const b = route[best + 1];
-            const length = Math.hypot(b.x - a.x, b.y - a.y);
-            const t = length > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (length * length))) : 0;
-            return best + t;
-        };
-        const position = at(point);
-        const index = shown.bends.filter(w => at(w) < position).length;
-        shown.bends.splice(index, 0, point);
-        this.storeBends(shown.edge, shown.bends);
     }
 
     bendRemoved(edgeId: string, index: number): void {
-        const shown = this.shownBends(edgeId);
-        if (shown && index >= 0 && index < shown.bends.length) {
-            shown.bends.splice(index, 1);
-            this.storeBends(shown.edge, shown.bends);
+        if (this.layoutChangeable) {
+            this.layoutEditor.removeWaypoint(edgeId, index);
         }
     }
 
     labelMoved(edgeId: string, dx: number, dy: number): void {
-        this.changeLayout(layout => {
-            const entry = { ...layout.edges[edgeId] };
-            entry.label = { x: (entry.label?.x ?? 0) + dx, y: (entry.label?.y ?? 0) + dy };
-            layout.edges[edgeId] = entry;
-        });
+        if (this.layoutChangeable) {
+            this.layoutEditor.moveLabel(edgeId, dx, dy);
+        }
     }
+
+    /** The manual layout editing of the state machine diagram (see layout-editing.ts). */
+    private readonly layoutEditor = new LayoutEditor<ManualLayout>({
+        effective: () => this.state?.effective,
+        capture: () => captureLayout(this.state!.auto.graph, this.settings.direction),
+        write: layout => this.writeLayout(layout),
+        edge: edgeId => {
+            const graph = this.state?.layout.graph;
+            const edge = graph?.edges.find(e => e.id === edgeId);
+            return graph && edge ? {
+                route: edge.routing === 'spline' ? sampleSpline(edge.points) : edge.points,
+                waypoints: (edge.waypoints ?? []).map(p => ({ ...p })),
+                toFrame: point => toFrameCoordinates(graph, edge, point)
+            } : undefined;
+        }
+    });
 
     // -----------------------------------------------------------------------------------------
     // Simulation
@@ -1916,49 +1864,10 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     }
 }
 
-/** Points on a spline route (start, (control, control, end)*). */
-function sampleSpline(points: Point[]): Point[] {
-    const result = [points[0]];
-    for (let i = 0; i + 3 < points.length; i += 3) {
-        const [a, b, c, d] = [points[i], points[i + 1], points[i + 2], points[i + 3]];
-        for (let k = 1; k <= 8; k++) {
-            const t = k / 8;
-            const u = 1 - t;
-            result.push({
-                x: u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x,
-                y: u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y
-            });
-        }
-    }
-    return result;
-}
-
-/** Distance of a point from the line segment a-b. */
-function segmentDistance(p: Point, a: Point, b: Point): number {
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const length = dx * dx + dy * dy;
-    const t = length > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / length)) : 0;
-    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
-}
-
 /** The id (qualified name) of a vertex after moving it into `target`. */
 function movedId(vertex: Vertex, target: ScopeContainer): string {
     const owner = isRegion(target) ? target.$container : target;
     return isStateMachine(owner) || !isState(owner) ? vertex.name : `${qualifiedName(owner)}.${vertex.name}`;
-}
-
-/** One edit which turns `text` into `changed` (the differing middle part). */
-function replacementEdit(text: string, changed: string): TextEdit {
-    let start = 0;
-    while (start < text.length && start < changed.length && text[start] === changed[start]) {
-        start++;
-    }
-    let end = 0;
-    while (end < text.length - start && end < changed.length - start && text[text.length - 1 - end] === changed[changed.length - 1 - end]) {
-        end++;
-    }
-    return { offset: start, length: text.length - start - end, text: changed.substring(start, changed.length - end) };
 }
 
 /** The model text without layout annotations (the input of the automatic layout). */

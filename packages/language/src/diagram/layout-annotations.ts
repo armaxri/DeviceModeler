@@ -16,6 +16,9 @@ import {
 import { diagramElementIds } from './diagram-ids.js';
 import { DEFINITION_ID } from './layout.js';
 import { createManualLayout, type EdgeLayout, type ManualLayout, type NodeLayout } from './manual-layout.js';
+import {
+    annotationSlotEdits, insertAnnotations, type LayoutArgument, type AnnotationSlot, type WantedAnnotation, type WrittenAnnotation
+} from './layout-core/annotation-edits.js';
 
 /** A layout annotation value: numbers, or the orientation of `@regions`. */
 type Value = number[] | string;
@@ -248,26 +251,22 @@ function desiredAnnotations(element: LayoutNode, layout: ManualLayout | undefine
     return result;
 }
 
-/** Numbers are written as integers. */
-function round(value: number): number {
-    const rounded = Math.round(value);
-    return Object.is(rounded, -0) ? 0 : rounded;
-}
-
-function normalize(value: Value): Value {
-    return typeof value === 'string' ? value : value.map(round);
-}
-
-function annotationText(name: string, value: Value): string {
-    return typeof value === 'string' ? `@${name}("${value}")` : `@${name}(${value.map(round).join(', ')})`;
-}
-
-function sameValue(annotation: ast.Annotation, value: Value): boolean {
-    if (typeof value === 'string') {
-        return stringValue(annotation) === value;
+/** The arguments of an annotation as read by the annotation writer (numbers and strings), undefined if one cannot be read. */
+function writtenArguments(annotation: ast.Annotation): LayoutArgument[] | undefined {
+    const result: LayoutArgument[] = [];
+    for (const argument of annotation.arguments) {
+        const value = ast.isStringLiteral(argument) ? argument.value : numberValue(argument);
+        if (value === undefined) {
+            return undefined;
+        }
+        result.push(value);
     }
-    const numbers = annotationNumbers(annotation);
-    return numbers !== undefined && numbers.length === value.length && numbers.every((n, i) => n === round(value[i]));
+    return result;
+}
+
+function written(annotation: ast.Annotation): WrittenAnnotation {
+    const cst = annotation.$cstNode!;
+    return { name: annotation.name, layout: isLayoutAnnotation(annotation), args: writtenArguments(annotation), offset: cst.offset, end: cst.end };
 }
 
 /**
@@ -278,63 +277,38 @@ function sameValue(annotation: ast.Annotation, value: Value): boolean {
  * (automatic layout). Other annotations (`@CycleBased`, ...) are not changed. Entries of the layout
  * without a model element are ignored. Applying the edits and reading the layout again
  * ({@link layoutFromModel}) yields the layout with rounded numbers; computing the edits again then
- * yields no edits.
+ * yields no edits. (The edits are computed by the shared {@link annotationSlotEdits}.)
  */
 export function layoutTextEdits(machine: ast.StateMachine, text: string, layout: ManualLayout | undefined): TextEdit[] {
     const ids = diagramElementIds(machine);
-    const edits: TextEdit[] = [];
-    const deletions: Array<{ offset: number, end: number }> = [];
+    const slots: AnnotationSlot[] = [];
     for (const element of annotatedElements(machine)) {
         const desired = desiredAnnotations(element, layout, ids);
+        const wanted = (names: readonly string[]): WantedAnnotation[] => [...desired]
+            .filter(([name]) => names.includes(name))
+            .map(([name, value]) => ({ name, args: typeof value === 'string' ? [value] : value }));
         // element annotations before the element, container annotations in its body
-        const roles: Array<{ names: readonly string[], all: ast.Annotation[], insert: (added: string) => TextEdit }> = [];
         if (isAnnotatedElement(element)) {
-            roles.push({ names: ELEMENT_LAYOUT_ANNOTATIONS, all: elementAnnotations(element), insert: added => insertBefore(element, text, added) });
+            slots.push({
+                written: elementAnnotations(element).filter(a => a.$cstNode).map(written),
+                wanted: wanted(ELEMENT_LAYOUT_ANNOTATIONS),
+                insert: added => insertBefore(element, text, added)
+            });
         }
         if (isContainer(element)) {
-            roles.push({ names: CONTAINER_LAYOUT_ANNOTATIONS, all: containerAnnotations(element), insert: added => insertIntoBody(element, text, added) });
-        }
-        for (const role of roles) {
-            const all = role.all.filter(a => a.$cstNode);
-            const existing = all.filter(isLayoutAnnotation);
-            const kept: ast.Annotation[] = [];
-            const removed: ast.Annotation[] = [];
-            const missing = new Map([...desired].filter(([name]) => role.names.includes(name)));
-            for (const annotation of existing) {
-                const value = missing.get(annotation.name);
-                if (value === undefined) {
-                    removed.push(annotation);
-                    continue;
-                }
-                missing.delete(annotation.name);
-                kept.push(annotation);
-                if (!sameValue(annotation, value)) {
-                    const cst = annotation.$cstNode!;
-                    edits.push({ offset: cst.offset, length: cst.length, text: annotationText(annotation.name, normalize(value)) });
-                }
-            }
-            const added = [...missing].map(([name, value]) => annotationText(name, value)).join(' ');
-            const others = all.filter(a => !isLayoutAnnotation(a));
-            const anchor = [...kept, ...others].sort((a, b) => a.$cstNode!.end - b.$cstNode!.end).pop();
-            if (added && anchor) {
-                edits.push({ offset: anchor.$cstNode!.end, length: 0, text: ` ${added}` });
-            } else if (added && removed.length > 0) {
-                // the new annotations take the place of the first removed one
-                const first = removed.sort((a, b) => a.$cstNode!.offset - b.$cstNode!.offset).shift()!;
-                edits.push({ offset: first.$cstNode!.offset, length: first.$cstNode!.length, text: added });
-            } else if (added) {
-                edits.push(role.insert(added));
-            }
-            deletions.push(...removed.map(a => ({ offset: a.$cstNode!.offset, end: a.$cstNode!.end })));
+            slots.push({
+                written: containerAnnotations(element).filter(a => a.$cstNode).map(written),
+                wanted: wanted(CONTAINER_LAYOUT_ANNOTATIONS),
+                insert: added => insertIntoBody(element, text, added)
+            });
         }
     }
-    edits.push(...deletionEdits(text, deletions, edits));
-    return mergeInsertions(edits);
+    return annotationSlotEdits(text, slots);
 }
 
 /** Inserts annotations before an element without annotations: on a new line if the element starts a line. */
 function insertBefore(element: AnnotatedElement, text: string, annotations: string): TextEdit {
-    return insertAt(element.$cstNode!.offset, text, annotations);
+    return insertAnnotations(element.$cstNode!.offset, text, annotations);
 }
 
 /**
@@ -349,7 +323,7 @@ function insertIntoBody(container: AnnotationContainer, text: string, annotation
     ];
     const first = members.filter(m => m.$cstNode).sort((a, b) => a.$cstNode!.offset - b.$cstNode!.offset)[0];
     if (first) {
-        return insertAt(first.$cstNode!.offset, text, annotations);
+        return insertAnnotations(first.$cstNode!.offset, text, annotations);
     }
     // empty body: before the closing brace
     const close = text.lastIndexOf('}', container.$cstNode!.end - 1);
@@ -358,87 +332,4 @@ function insertIntoBody(container: AnnotationContainer, text: string, annotation
     return indent.trim() === ''
         ? { offset: lineStart, length: 0, text: `${indent}    ${annotations}\n` }
         : { offset: close, length: 0, text: ` ${annotations} ` };
-}
-
-function insertAt(offset: number, text: string, annotations: string): TextEdit {
-    const lineStart = text.lastIndexOf('\n', offset - 1) + 1;
-    const indent = text.substring(lineStart, offset);
-    if (indent.trim() === '') {
-        return { offset, length: 0, text: `${annotations}\n${indent}` };
-    }
-    return { offset, length: 0, text: `${annotations} ` };
-}
-
-/**
- * Edits removing annotations: with the white space separating them from the rest of the line, or the
- * whole line if nothing else remains on it.
- */
-function deletionEdits(text: string, deletions: Array<{ offset: number, end: number }>, others: TextEdit[]): TextEdit[] {
-    const byLine = new Map<number, Array<{ offset: number, end: number }>>();
-    for (const deletion of deletions) {
-        const lineStart = text.lastIndexOf('\n', deletion.offset - 1) + 1;
-        byLine.set(lineStart, [...(byLine.get(lineStart) ?? []), deletion]);
-    }
-    const result: TextEdit[] = [];
-    for (const [lineStart, ranges] of byLine) {
-        const newline = text.indexOf('\n', lineStart);
-        const lineEnd = newline < 0 ? text.length : newline;
-        const touched = others.some(e => e.offset >= lineStart && e.offset <= lineEnd);
-        let rest = text.substring(lineStart, lineEnd);
-        for (const range of [...ranges].sort((a, b) => b.offset - a.offset)) {
-            rest = rest.substring(0, range.offset - lineStart) + rest.substring(range.end - lineStart);
-        }
-        if (!touched && rest.trim() === '') {
-            result.push({ offset: lineStart, length: (newline < 0 ? text.length : newline + 1) - lineStart, text: '' });
-            continue;
-        }
-        // neighboring annotations (separated by white space only) are removed together
-        const merged: Array<{ offset: number, end: number }> = [];
-        for (const range of [...ranges].sort((a, b) => a.offset - b.offset)) {
-            const last = merged[merged.length - 1];
-            if (last && text.substring(last.end, range.offset).trim() === '' && !others.some(e => e.offset > last.end && e.offset < range.offset)) {
-                last.end = range.end;
-            } else {
-                merged.push({ ...range });
-            }
-        }
-        for (const range of merged) {
-            // the annotations and the white space after them (before them at the end of the line)
-            let end = range.end;
-            while (end < lineEnd && /[ \t]/.test(text[end])) {
-                end++;
-            }
-            let start = range.offset;
-            if (end === lineEnd) {
-                end = range.end;
-                while (start > lineStart && /[ \t]/.test(text[start - 1])) {
-                    start--;
-                }
-                if (others.some(e => e.offset >= start && e.offset <= range.offset)) {
-                    start = range.offset;
-                }
-            } else if (others.some(e => e.offset > range.end && e.offset <= end)) {
-                end = range.end;
-            }
-            result.push({ offset: start, length: end - start, text: '' });
-        }
-    }
-    return result;
-}
-
-/** Sorts the edits; insertions at the same offset are combined (in the order they were created). */
-function mergeInsertions(edits: TextEdit[]): TextEdit[] {
-    const sorted = edits.map((edit, index) => ({ edit, index }))
-        .sort((a, b) => a.edit.offset - b.edit.offset || a.edit.length - b.edit.length || a.index - b.index)
-        .map(e => e.edit);
-    const result: TextEdit[] = [];
-    for (const edit of sorted) {
-        const last = result[result.length - 1];
-        if (last && last.length === 0 && edit.length === 0 && last.offset === edit.offset) {
-            result[result.length - 1] = { ...last, text: last.text + edit.text };
-        } else {
-            result.push(edit);
-        }
-    }
-    return result;
 }
