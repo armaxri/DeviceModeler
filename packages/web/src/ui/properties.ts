@@ -1,6 +1,6 @@
 import type { AstNode } from 'langium';
 import {
-    allTransitions, allVertices, definitionLines, getStateMachine, isInterfaceScope, isPseudoState, isRegion, isState, isStateMachine, isTransition,
+    allTransitions, allVertices, definitionLines, elementAnnotations, getStateMachine, isInterfaceScope, isPseudoState, isRegion, isState, isStateMachine, isTransition,
     nodeText, outgoingTransitions, qualifiedName, scopeOf, stateAction, containerName, transitionPriority, DECLARATION_KINDS,
     type DeclarationKind, type DiagramNodeKind, type EditResult, type ModelEditor, type NewDeclaration, type ScopeContainer, type StateMachine,
     type Vertex
@@ -30,6 +30,8 @@ export interface PropertiesHost {
     checkEdit(producer: (editor: ModelEditor) => EditResult | undefined): string | undefined;
     /** Moves the cursor of the text editor to the given diagram element. */
     editInText(id: string): void;
+    /** Removes the anchors (`@from` / `@to`) of the ends of a transition: they are placed automatically again. */
+    anchorReset(edgeId: string): void;
 }
 
 const PSEUDO_LABELS: Record<string, string> = {
@@ -210,6 +212,7 @@ function machinePanel(model: StateMachine | undefined, host: PropertiesHost): HT
                     h('i', {}, 'Clear positions'), ' removes the annotations (automatic arrangement again). Hold ', h('kbd', {}, 'Shift'),
                     ' while dropping to move it into the state below the mouse.'),
                 h('li', {}, 'Drag the corner of a selected state to resize it; double-click a transition to add a waypoint, double-click a waypoint to remove it.'),
+                h('li', {}, 'Drag the square at the start or end of a selected transition along the border of its state to anchor it there; double-click the square to place it automatically again.'),
                 h('li', {}, h('kbd', {}, 'Del'), ' deletes, ', h('kbd', {}, 'F2'), ' renames, ', h('kbd', {}, 'Ctrl'), '+', h('kbd', {}, 'Z'), ' undoes.'),
                 h('li', {}, 'Text and diagram are always in sync – edit whichever you prefer.'))])
     ];
@@ -302,7 +305,14 @@ function transitionPanel(transition: import('hsm-language').Transition, info: Se
                 ? h('p', { class: 'hint' }, `The outgoing transitions of '${sourceName}' are checked in the order of the text; reorder the lines to change the priority.`)
                 : undefined
         ]),
-        actionsSection(h('button', { class: 'danger', onClick: () => host.deleteSelection() }, 'Delete'))
+        actionsSection(
+            elementAnnotations(transition).some(a => a.name === 'from' || a.name === 'to') && info.id
+                ? h('button', {
+                    title: 'Remove the anchors of the start and end of the transition (@from / @to): they are placed automatically again',
+                    onClick: () => host.anchorReset(info.id!)
+                }, 'Reset endpoints')
+                : undefined,
+            h('button', { class: 'danger', onClick: () => host.deleteSelection() }, 'Delete'))
     ];
 }
 

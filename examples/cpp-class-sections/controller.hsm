@@ -5,6 +5,7 @@
 statemachine Controller "Restarts a device after failures" {
     namespace example
     import "config.h"
+    import "driver.h"
     import "<vector>"
 
     interface:

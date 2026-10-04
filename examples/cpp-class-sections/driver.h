@@ -1,4 +1,5 @@
-// The hardware driver of the application (not imported by the model: the model only stores a pointer).
+// The hardware driver of the application, imported by the model: the controller holds a reference to it (bound by
+// the constructor) and only the C++ code of the application uses it.
 #ifndef EPIC_PROJECT_DRIVER_H
 #define EPIC_PROJECT_DRIVER_H
 

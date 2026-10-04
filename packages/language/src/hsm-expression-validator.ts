@@ -2,7 +2,8 @@ import {
     LAYOUT_ANNOTATIONS, annotationOwner, containerAnnotations, elementAnnotations, isElementAnnotation, semanticAnnotations,
     type AnnotatedElement, type AnnotationContainer
 } from './model-annotations.js';
-import { annotationNumbers } from './diagram/layout-annotations.js';
+import { annotationAnchor, annotationNumbers } from './diagram/layout-annotations.js';
+import { isAnchorSide } from './diagram/edge-anchors.js';
 import {
     AstUtils, DefaultDocumentValidator, DocumentValidator, isReference,
     type AstNode, type LangiumDocument, type ValidationAcceptor, type ValidationOptions
@@ -103,13 +104,15 @@ export class HsmExpressionValidator {
             regions: [ast.isState],
             via: [ast.isTransition],
             label: [ast.isTransition],
+            from: [ast.isTransition],
+            to: [ast.isTransition],
             initial: [ast.isStateMachine, ast.isState, ast.isRegion],
             final: [ast.isStateMachine, ast.isState, ast.isRegion],
             definitions: [ast.isStateMachine]
         };
         const elements: Record<string, string> = {
             at: 'states, pseudo states and regions', size: 'states and regions', regions: 'states', via: 'transitions',
-            label: 'transitions', initial: 'the state machine, states and regions', final: 'the state machine, states and regions',
+            label: 'transitions', from: 'transitions', to: 'transitions', initial: 'the state machine, states and regions', final: 'the state machine, states and regions',
             definitions: 'the state machine'
         };
         if (!allowed[name].some(is => is(owner))) {
@@ -129,6 +132,10 @@ export class HsmExpressionValidator {
             }
             return;
         }
+        if (name === 'from' || name === 'to') {
+            this.checkAnchorAnnotation(annotation, owner as ast.Transition, accept);
+            return;
+        }
         const numbers = annotationNumbers(annotation);
         if (!numbers) {
             const index = annotation.arguments.findIndex(a => annotationNumbers({ ...annotation, arguments: [a] } as ast.Annotation) === undefined);
@@ -141,6 +148,32 @@ export class HsmExpressionValidator {
                 : name === 'definitions' ? 'x, y and optionally width and height'
                     : name === 'size' ? 'width and height' : name === 'label' ? 'the offset dx, dy' : 'x and y';
             accept('error', `@${name} takes ${expected}.`, { node: annotation, property: 'name' });
+        }
+    }
+
+    /** `@from(side, position)` / `@to(side, position)`: a side of the state and a position along it in percent. */
+    private checkAnchorAnnotation(annotation: ast.Annotation, transition: ast.Transition, accept: ValidationAcceptor): void {
+        const name = annotation.name;
+        const side = annotation.arguments[0];
+        if (annotation.arguments.length !== 2 || !ast.isStringLiteral(side) || !isAnchorSide(side.value)) {
+            accept('error', `@${name} takes a side ("top", "right", "bottom" or "left") and the position along the side in percent (0 to 100).`,
+                { node: annotation, property: 'name' });
+            return;
+        }
+        const anchor = annotationAnchor(annotation);
+        if (!anchor) {
+            accept('error', `The position of @${name} must be a number.`, { node: annotation, property: 'arguments', index: 1 });
+            return;
+        }
+        if (anchor.position < 0 || anchor.position > 100) {
+            accept('error', `The position of @${name} must be between 0 and 100 (percent of the side).`, { node: annotation, property: 'arguments', index: 1 });
+            return;
+        }
+        const end = name === 'from' ? (transition.initial ? undefined : transition.source?.ref) : (transition.final ? undefined : transition.target?.ref);
+        const pseudo = name === 'from' ? transition.initial : transition.final;
+        if (pseudo || (end && !ast.isState(end))) {
+            accept('warning', `@${name} is ignored: the ${name === 'from' ? 'source' : 'target'} of the transition is a pseudo state `
+                + '(only the ends at states can be anchored).', { node: annotation, property: 'name' });
         }
     }
 

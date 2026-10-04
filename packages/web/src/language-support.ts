@@ -254,6 +254,39 @@ export class HsmLanguageSupport extends HsmModelService {
             releaseDocumentSemanticTokens: () => undefined
         });
 
+        // quick fixes (the import of the header declaring an unknown C++ type of a class section)
+        monaco.languages.registerCodeActionProvider(LANGUAGE_ID, {
+            provideCodeActions: async (model, range) => {
+                if (!isEditedModel(model)) {
+                    return { actions: [], dispose: () => undefined };
+                }
+                const parsed = await this.parse(model.getValue());
+                const diagnostics = parsed.diagnostics.filter(d => d.code !== undefined
+                    && monaco.Range.areIntersectingOrTouching(toMonacoRange(d.range), range));
+                if (diagnostics.length === 0) {
+                    return { actions: [], dispose: () => undefined };
+                }
+                const actions = await services.lsp.CodeActionProvider?.getCodeActions(parsed.document, {
+                    textDocument: { uri: parsed.document.uri.toString() },
+                    range: { start: { line: range.startLineNumber - 1, character: range.startColumn - 1 }, end: { line: range.endLineNumber - 1, character: range.endColumn - 1 } },
+                    context: { diagnostics }
+                }) ?? [];
+                return {
+                    actions: actions.flatMap(action => 'edit' in action && action.edit ? [{
+                        title: action.title,
+                        kind: action.kind,
+                        isPreferred: action.isPreferred,
+                        edit: {
+                            edits: Object.values(action.edit.changes ?? {}).flat().map(edit => ({
+                                resource: model.uri, versionId: model.getVersionId(), textEdit: toMonacoEdit(edit)
+                            }))
+                        }
+                    }] : []),
+                    dispose: () => undefined
+                };
+            }
+        });
+
         monaco.languages.registerReferenceProvider(LANGUAGE_ID, {
             provideReferences: async (model, position, context) => {
                 if (!isEditedModel(model)) {

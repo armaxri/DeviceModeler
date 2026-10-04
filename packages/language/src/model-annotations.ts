@@ -11,6 +11,8 @@
  *   - `@regions("vertical" | "horizontal")`: arrangement of the regions of a state
  *   - `@via(x1, y1, x2, y2, ...)`: waypoints of a transition (relative to the transition's frame)
  *   - `@label(dx, dy)`: offset of the label of a transition
+ *   - `@from(side, position)`, `@to(side, position)`: anchor of the start / end of a transition on the border of
+ *     its source / target state (side `"top" | "right" | "bottom" | "left"`, position along the side in percent)
  * - container annotations, belonging to the state machine, state or region in whose body they are written:
  *   - `@initial(x, y)`, `@final(x, y)`: position of the implicit initial / final pseudo state
  *   - `@definitions(x, y)`: position of the definition section (state machine only)
@@ -20,7 +22,7 @@
 import * as ast from './generated/ast.js';
 
 /** Layout annotations of states, pseudo states, regions and transitions (written before the element). */
-export const ELEMENT_LAYOUT_ANNOTATIONS: readonly string[] = ['at', 'size', 'regions', 'via', 'label'];
+export const ELEMENT_LAYOUT_ANNOTATIONS: readonly string[] = ['at', 'size', 'regions', 'via', 'label', 'from', 'to'];
 /** Layout annotations of containers (state machine, states, regions; written in their body). */
 export const CONTAINER_LAYOUT_ANNOTATIONS: readonly string[] = ['initial', 'final', 'definitions'];
 /** All layout annotations. */

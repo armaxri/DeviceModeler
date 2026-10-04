@@ -13,7 +13,7 @@ const files = {
 const headerFiles = {
     ...import.meta.glob('../../../examples/cpp-types/*.h', { query: '?raw', import: 'default', eager: true }),
     ...import.meta.glob('../../../examples/cpp-enum-values/*.h', { query: '?raw', import: 'default', eager: true }),
-    ...import.meta.glob('../../../examples/cpp-class-sections/config.h', { query: '?raw', import: 'default', eager: true })
+    ...import.meta.glob('../../../examples/cpp-class-sections/*.h', { query: '?raw', import: 'default', eager: true })
 } as Record<string, string>;
 
 /** The headers of the examples by file name. */

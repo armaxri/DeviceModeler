@@ -97,3 +97,15 @@ describe('lineCoverage', () => {
         ]);
     });
 });
+
+describe('selectTests (attribute `test` of a launch configuration)', () => {
+    const text = 'testclass A for statemachine M {\n@Test operation one() { }\n@Test operation two() { }\n}\n'
+        + 'testclass B for statemachine M {\n@Test operation one() { }\n}\n';
+    it('selects a test class, a test of a class or a test by name', async () => {
+        const { selectTests } = await import('../../src/extension/debug.js');
+        expect(selectTests('file:///t.hsmtest', text, 'A')).toEqual([{ uri: 'file:///t.hsmtest', testClass: 'A' }]);
+        expect(selectTests('file:///t.hsmtest', text, 'A.two')).toEqual([{ uri: 'file:///t.hsmtest', testClass: 'A', test: 'two' }]);
+        expect(selectTests('file:///t.hsmtest', text, 'one').map(s => `${s.testClass}.${s.test}`)).toEqual(['A.one', 'B.one']);
+        expect(() => selectTests('file:///t.hsmtest', text, 'A.three')).toThrow(/No test class or test 'A.three'/);
+    });
+});
