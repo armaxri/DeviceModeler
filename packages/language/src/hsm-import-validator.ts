@@ -9,7 +9,9 @@ import {
 } from './imports.js';
 import { isKnownType } from './hsm-expression-validator.js';
 import { isComposite } from './model-utils.js';
-import { UNKNOWN_CPP_TYPE, unknownCppTypeDiagnostic, unknownCppTypes } from './cpp-unknown-types.js';
+import {
+    forwardDeclaredCppTypeDiagnostic, forwardDeclaredCppTypes, INCOMPLETE_CPP_TYPE, UNKNOWN_CPP_TYPE, unknownCppTypeDiagnostic, unknownCppTypes
+} from './cpp-unknown-types.js';
 
 export function registerImportValidationChecks(services: HsmServices): void {
     const validator = services.validation.HsmImportValidator;
@@ -45,12 +47,18 @@ export class HsmImportValidator {
     /**
      * The C++ type names in the types of the C++ class sections must be declared in the imported headers
      * (see cpp-unknown-types.ts): a warning on the unknown part of the name, with the header to import
-     * (quick fix) if a header of the model directory or the include paths declares it.
+     * (quick fix) if a header of the model directory or the include paths declares it. Names that are only
+     * forward-declared get a warning with the header that defines them.
      */
     checkCppTypeNames(reference: ast.TypeReference, accept: ValidationAcceptor): void {
         for (const unknown of unknownCppTypes(reference)) {
             const { message, data } = unknownCppTypeDiagnostic(unknown, this.resolver.headerStore, AstUtils.getDocument(reference).uri);
             accept('warning', message, { node: reference, range: unknown.range, code: UNKNOWN_CPP_TYPE, data });
+        }
+        // names that are only forward-declared (`class Driver;`): the header defining them is not imported
+        for (const forward of forwardDeclaredCppTypes(reference)) {
+            const { message, data } = forwardDeclaredCppTypeDiagnostic(forward, this.resolver.headerStore, AstUtils.getDocument(reference).uri);
+            accept('warning', message, { node: reference, range: forward.range, code: INCOMPLETE_CPP_TYPE, data });
         }
     }
 

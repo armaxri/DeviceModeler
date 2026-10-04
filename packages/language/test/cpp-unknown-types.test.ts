@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import type { Diagnostic } from 'vscode-languageserver-types';
+import type { CodeAction, Diagnostic } from 'vscode-languageserver-types';
 import { parse } from './helpers.js';
-import { UNKNOWN_CPP_TYPE } from '../src/cpp-unknown-types.js';
+import { INCOMPLETE_CPP_TYPE, UNKNOWN_CPP_TYPE } from '../src/cpp-unknown-types.js';
 import { HsmCodeActionProvider } from '../src/lsp/cpp-code-actions.js';
+import { cppHover } from '../src/lsp/cpp-lsp.js';
+import { cppLocations, type CppNavigationKind } from '../src/lsp/cpp-navigation.js';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 const CONFIG_H = 'namespace app {\nstruct Config { unsigned int retries = 2; };\n}';
@@ -167,5 +169,93 @@ describe('quick fix of unknown C++ types', () => {
 
     test('no quick fix if no header declares the type', async () => {
         expect(await quickFixes(model(['config.h'], ['var x : hal::Pin']), { 'config.h': CONFIG_H })).toEqual([]);
+    });
+});
+
+describe('C++ types that are only forward-declared', () => {
+
+    /** Forward declares the driver (with a documentation comment), defined in driver.h. */
+    const FWD_H = '#pragma once\nnamespace app {\n/// The hardware driver.\nclass Driver;\n}';
+    const FILES = { 'fwd.h': FWD_H, 'driver.h': DRIVER_H, 'config.h': CONFIG_H };
+
+    async function incomplete(imports: string[], members: string[], files: Record<string, string> = FILES, namespace?: string) {
+        const text = model(imports, members, namespace);
+        const parsed = await parse(text, files);
+        const lines = text.split('\n');
+        return parsed.diagnostics.filter(d => d.code === INCOMPLETE_CPP_TYPE).map((d: Diagnostic) => ({
+            severity: d.severity,
+            text: lines[d.range.start.line].substring(d.range.start.character, d.range.end.character),
+            message: d.message,
+            data: d.data
+        }));
+    }
+
+    test('a warning on the name with the location of the forward declaration and the header defining the type', async () => {
+        const found = await incomplete(['fwd.h'], ['var driver : app::Driver&', 'operation attach(d : const app::Driver*) : bool', 'var all : std::array<app::Driver*, 2>']);
+        expect(found).toHaveLength(3);
+        expect(found[0]).toEqual({
+            severity: 2, text: 'Driver', data: { name: 'app::Driver', importPath: 'driver.h' },
+            message: '\'app::Driver\' is only forward-declared (fwd.h:4). Import the header that defines it (import "driver.h") for hover, completion and navigation.'
+        });
+        expect(found.map(f => f.text)).toEqual(['Driver', 'Driver', 'Driver']);
+        // no unknown type and no error: validation and generation succeed
+        const parsed = await parse(model(['fwd.h'], ['var driver : app::Driver&']), FILES);
+        expect(parsed.diagnostics.filter(d => d.code === UNKNOWN_CPP_TYPE || d.severity === 1)).toEqual([]);
+    });
+
+    test('names relative to the namespace of the model; no header defines the type: no import in the message', async () => {
+        const found = await incomplete(['dev.h'], ['var sensor : Sensor*'], { 'dev.h': 'namespace dev {\nstruct Sensor;\n}' }, 'dev.io');
+        expect(found).toEqual([{
+            severity: 2, text: 'Sensor', data: { name: 'dev::Sensor' },
+            message: '\'dev::Sensor\' is only forward-declared (dev.h:2). Import the header that defines it for hover, completion and navigation.'
+        }]);
+    });
+
+    test('no warning if a header defining the type is imported, directly or through an include', async () => {
+        expect(await incomplete(['fwd.h', 'driver.h'], ['var driver : app::Driver&'])).toEqual([]);
+        const all = { ...FILES, 'all.h': '#include "fwd.h"\n#include "driver.h"\n' };
+        expect(await incomplete(['all.h'], ['var driver : app::Driver&'], all)).toEqual([]);
+        // templates are not reported, nor names that cannot be verified
+        expect(await incomplete(['t.h'], ['var b : app::Buffer<int>*'], { 't.h': 'namespace app { template <typename T> class Buffer; }' })).toEqual([]);
+        expect(await incomplete(['fwd.h', '<QString>'], ['var driver : app::Driver&'])).toEqual([]);
+    });
+
+    test('quick fix: imports the header defining the type, not the one forward declaring it', async () => {
+        const members = ['var driver : app::Driver&'];
+        const text = model(['fwd.h'], members);
+        const parsed = await parse(text, { ...FILES, 'other.h': '#include "fwd.h"\nnamespace x { struct Y {}; }' });
+        const diagnostics = parsed.diagnostics.filter(d => d.code === INCOMPLETE_CPP_TYPE);
+        const actions = await new HsmCodeActionProvider().getCodeActions(parsed.document, {
+            textDocument: { uri: parsed.document.uri.toString() }, range: diagnostics[0].range, context: { diagnostics }
+        }) ?? [];
+        expect(actions.map(a => a.title)).toEqual(['Import "driver.h"']);
+        const action = actions[0] as CodeAction;
+        const edit = Object.values(action.edit?.changes ?? {})[0] ?? [];
+        expect(TextDocument.applyEdits(TextDocument.create('memory:///m.hsm', 'hsm', 1, text), edit)).toBe(model(['fwd.h', 'driver.h'], members));
+    });
+
+    test('hover: the forward declaration, its location and documentation', async () => {
+        const text = model(['fwd.h'], ['var driver : app::Driver&', 'var d2 : Driver*'], 'app');
+        const parsed = await parse(text, FILES);
+        expect(cppHover(parsed.document, text.indexOf('app::Driver') + 6)).toBe(
+            '```cpp\nclass app::Driver\n```\n\nforward declaration in fwd.h:4 — the definition is not imported\n\nThe hardware driver.');
+        expect(cppHover(parsed.document, text.indexOf('Driver*') + 1)).toContain('class app::Driver');
+        // with the definition: the definition
+        const defined = model(['fwd.h', 'driver.h'], ['var driver : app::Driver&']);
+        expect(cppHover((await parse(defined, FILES)).document, defined.indexOf('app::Driver') + 6)).toContain('struct app::Driver');
+    });
+
+    test('navigation: the forward declaration; with the definition imported the definition first', async () => {
+        const text = model(['fwd.h'], ['var driver : app::Driver&']);
+        const document = (await parse(text, FILES)).document;
+        const at = (doc: typeof document, offset: number, kind: CppNavigationKind) =>
+            cppLocations(doc, offset, kind).map(l => `${l.uri.replace(/^.*\//, '')}:${l.selection.start.line + 1}:${l.selection.start.character}`);
+        for (const kind of ['definition', 'declaration', 'typeDefinition'] as const) {
+            expect(at(document, text.indexOf('app::Driver') + 6, kind)).toEqual(['fwd.h:4:6']);
+        }
+        const defined = model(['fwd.h', 'driver.h'], ['var driver : app::Driver&']);
+        const definedDocument = (await parse(defined, FILES)).document;
+        expect(at(definedDocument, defined.indexOf('app::Driver') + 6, 'definition')).toEqual(['driver.h:3:6']);
+        expect(at(definedDocument, defined.indexOf('app::Driver') + 6, 'declaration')).toEqual(['driver.h:3:6', 'fwd.h:4:6']);
     });
 });

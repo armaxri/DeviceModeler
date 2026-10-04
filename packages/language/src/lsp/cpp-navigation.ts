@@ -5,6 +5,7 @@ import type { CppDeclaration, CppRange, CppResolvedType, CppTypeRef } from '../c
 import type { CppTypeIndex } from '../cpp-header/type-index.js';
 import { cppTypeOfReference, isCppType, referenceMembers } from '../cpp-types.js';
 import { resolvedImports } from '../imports.js';
+import { cppForwardDeclarations, type CppForwardDeclaration } from '../cpp-unknown-types.js';
 import { typeOfDeclaration, typeOfTypeReference, type HsmType } from '../hsm-typesystem.js';
 import { cppElementAt, type CppElementAt, type CppLocation } from './cpp-lsp.js';
 
@@ -28,9 +29,15 @@ export function cppDeclarationLocation(declaration: CppDeclaration, origin: Rang
     return { uri: declaration.fileName, range: toRange(declaration.range), selection: toRange(declaration.nameRange), origin };
 }
 
+/** The location of a forward declaration (`class Driver;`) in its header. */
+function forwardDeclarationLocation(forward: CppForwardDeclaration, origin: Range): CppLocation {
+    return { uri: forward.fileName, range: toRange(forward.range), selection: toRange(forward.range), origin };
+}
+
 /**
  * The header locations for a position of a model or test document (empty if the position is not on a
- * C++ name, struct member or header import):
+ * C++ name, struct member or header import). A class that is only forward-declared (`class Driver;`)
+ * leads to its forward declarations for all kinds; the declarations of a defined class end with them.
  * - `definition`: the definition of the name: the enum definition rather than an opaque declaration, the
  *   target of a using-declaration (`using hw::Channel;`) rather than the using-declaration, the first
  *   block of a namespace; for a header import the header itself,
@@ -45,7 +52,15 @@ export function cppLocations(document: LangiumDocument, offset: number, kind: Cp
         const declarations = kind === 'definition' ? [cppDefinitionOf(element.declaration, element.index)]
             : kind === 'declaration' ? cppDeclarationsOf(element.declaration, element.index)
                 : typeDeclarationsOf(element);
-        return unique(declarations).map(d => cppDeclarationLocation(d, element.origin));
+        const locations = unique(declarations).map(d => cppDeclarationLocation(d, element.origin));
+        // the forward declarations of a class (`class Driver;`) after its definition
+        const definition = kind === 'declaration' ? declarations[0] : undefined;
+        const forward = definition?.kind === 'record' ? cppForwardDeclarations(element.index, definition.qualifiedName) : [];
+        return [...locations, ...forward.map(f => forwardDeclarationLocation(f, element.origin))];
+    }
+    if (element?.forward) {
+        // a class that is only forward-declared: the forward declarations
+        return cppForwardDeclarations(element.index, element.forward.qualifiedName).map(f => forwardDeclarationLocation(f, element.origin));
     }
     if (kind === 'typeDefinition') {
         return [];

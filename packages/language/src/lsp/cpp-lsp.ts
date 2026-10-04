@@ -13,6 +13,8 @@ import { contextMachine, cppIndexAt, cppTypeOfReference, hsmTypeOfCpp, isEnumTyp
 import { enumeratorListItem, enumeratorSpelling, enumeratorValueMarkdown, enumeratorValueText } from '../cpp-enums.js';
 import { cppLocations } from './cpp-navigation.js';
 import { cppImports, resolvedImports } from '../imports.js';
+import { isClassMember } from '../class-members.js';
+import { forwardDeclarationLocation, incompleteCppType, namespaceScopes, type CppForwardDeclaration } from '../cpp-unknown-types.js';
 import {
     inferType, returnTypeOf, typeAliases, typeName, typeOfAlias, typeOfDeclaration, typeOfEvent, typeOfParameter, type HsmType
 } from '../hsm-typesystem.js';
@@ -41,6 +43,8 @@ export interface CppElementAt {
     readonly declaration?: CppDeclaration;
     /** The resolved struct member (for member accesses). */
     readonly field?: CppResolvedField;
+    /** The forward declaration of a class that is only forward-declared in the headers (no `declaration`). */
+    readonly forward?: CppForwardDeclaration;
     readonly index: CppTypeIndex;
     /** The text range of the name at the position. */
     readonly origin: Range;
@@ -84,12 +88,17 @@ function qualifiedNameAt(node: ast.TypeReference | ast.CppReference, leaf: CstNo
         return undefined;
     }
     const index = cppIndexAt(node);
+    // a name that is only forward-declared (`class Driver;`), also relative to the namespace of the model
+    const forwardDeclared = (): CppElementAt | undefined => {
+        const forward = incompleteCppType(index, prefix, namespaceScopes(contextMachine(node)?.namespace))[0];
+        return forward ? { forward, index, origin: leaf.range } : undefined;
+    };
     // an unqualified type name: only a C++ type (not an HSM type or alias)
     if (ast.isTypeReference(node) && !prefix.includes('::') && prefix === node.name && !cppTypeOfReference(node)) {
-        return undefined;
+        return isClassMember(node) ? forwardDeclared() : undefined;
     }
     const declaration = index.lookup(prefix);
-    return declaration ? { declaration, index, origin: leaf.range } : undefined;
+    return declaration ? { declaration, index, origin: leaf.range } : forwardDeclared();
 }
 
 /** A struct member in the name of an element reference (`pos.x`). */
@@ -165,6 +174,12 @@ function parentOf(uri: LangiumDocument['uri']): LangiumDocument['uri'] {
 /** Markdown description of a C++ declaration: signature, resolved type / value and documentation. */
 export function describeCppElement(element: CppElementAt, document?: LangiumDocument): string {
     const { declaration, index } = element;
+    if (element.forward && !declaration) {
+        const forward = element.forward;
+        return ['```cpp\n' + `${forward.keyword} ${forward.qualifiedName}` + '\n```',
+            `forward declaration in ${forwardDeclarationLocation(forward, document?.uri)} — the definition is not imported`,
+            forward.doc ? cppDocMarkdown(forward.doc) : undefined].filter(part => part).join('\n\n');
+    }
     const lines: string[] = [];
     let signature: string;
     if (element.field) {

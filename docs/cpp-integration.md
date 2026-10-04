@@ -408,8 +408,9 @@ Event payloads, operation parameters and return values may use all these types.
   - Document links on header (and model) import paths.
   - Name ranges: the name of a using-declaration is its last segment, an anonymous enum / struct named by
     `typedef` (`typedef enum { … } color_t;`) has the range of the typedef name. Declarations produced by
-    macro expansions have the range of the macro invocation. Forward declarations of classes are not
-    navigation targets (the definition is the only target).
+    macro expansions have the range of the macro invocation. Forward declarations of classes (`class Driver;`)
+    are targets of *Go to Declaration* after the definition, and the only target of all three requests if the
+    class is not defined in the imported headers (see below).
 - Completion (`HsmCompletionProvider`, both languages, the VS Code language server and the web app): after
   `ns::` the members of the namespace / class / enum (in type positions – `var x : `, `in event e : `,
   parameters, return types, `alias`, `x as ` – only namespaces and types, in expressions values and scopes;
@@ -436,7 +437,21 @@ Event payloads, operation parameters and return values may use all these types.
   the texts of its store) declares the name, the message names it and the quick fix (`HsmCodeActionProvider` in
   `lsp/cpp-code-actions.ts`, VS Code language server) inserts the import after the last import; `std::` names of the
   built-in map (`STD_HEADER_OF`) get the system import (`import "<vector>"`). Forward declarations of classes
-  (`class Driver;`) and class / alias templates are recorded in `CppHeader.otherTypes` for this check only.
+  (`class Driver;`, with class key and documentation comment) and class / alias templates are recorded in
+  `CppHeader.otherTypes` (not part of the index).
+- C++ types of the class sections that are **only forward-declared** (`forwardDeclaredCppTypes`, code
+  `incomplete-cpp-type`): a name declared by a forward declaration in the imported headers (or headers they include)
+  but not defined there (no class, enum, alias or template of that name) gets a warning on its last segment, also for
+  references and pointers (`'EpicProject::Driver' is only forward-declared (config.h:16). Import the header that
+  defines it (import "driver.h") for hover, completion and navigation.`). The header is searched like for unknown
+  types (`headersDefining`: headers that only forward declare the name are left out); without one the message
+  ends `Import the header that defines it for hover, completion and navigation.` The same quick fix inserts the
+  import. Not reported when a header that cannot be analysed is imported or included. It stays a warning:
+  validation and generation succeed. Hover of such a name shows `class EpicProject::Driver`, `forward declaration
+  in config.h:16 — the definition is not imported` and the documentation comment of the forward declaration;
+  definition, declaration and type definition lead to the forward declaration(s). When the definition is imported,
+  hover and *Go to Definition* show the definition and *Go to Declaration* lists the definition followed by the
+  forward declarations. The location is relative to the model directory, the file name for headers elsewhere.
 - The definitions box of the diagram lists the imports.
 
 ### 4.7 Hosts and settings

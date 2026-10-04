@@ -1,8 +1,9 @@
 import { AstUtils, CstUtils, isLeafCstNode, type LeafCstNode, type URI } from 'langium';
 import type { Range } from 'vscode-languageserver-types';
 import * as ast from './generated/ast.js';
+import type { CppRange } from './cpp-header/model.js';
 import type { CppTypeIndex } from './cpp-header/type-index.js';
-import { availableHeaders, loadHeaderClosure, type CppHeaderStore } from './cpp-headers.js';
+import { availableHeaders, displayPath, loadHeaderClosure, type CppHeaderStore } from './cpp-headers.js';
 import { isClassMember, isHsmTypeReference } from './class-members.js';
 import { cppImports, machineType, resolvedImports } from './imports.js';
 
@@ -25,6 +26,11 @@ import { cppImports, machineType, resolvedImports } from './imports.js';
  * - any name if a header that cannot be analysed is imported or included: a system header that is not a
  *   standard header (`import "<QString>"`) or a header that was not found; unqualified names also if a
  *   header of the C library declaring types is included (`<cstdio>`: `FILE`; not `<cstdint>`).
+ *
+ * A name that is only forward-declared (`class Driver;`) and not defined in the imported headers is valid
+ * C++ for references and pointers, but nothing more is known about it: the validator warns about it too
+ * ({@link forwardDeclaredCppTypes}, code {@link INCOMPLETE_CPP_TYPE}) and the quick fix imports the header
+ * that defines it ({@link headersDefining}). Hover and navigation show the forward declaration ({@link incompleteCppType}).
  */
 
 /** The standard header declaring a `std::` name (the name after `std::`). */
@@ -174,11 +180,100 @@ function nameContext(machine: ast.StateMachine): NameContext {
             otherTypes.add(other.qualifiedName);
         }
     }
-    const parts = (machine.namespace ?? '').split(/::|\./).filter(p => p);
-    const namespaces = parts.map((_, i) => parts.slice(0, parts.length - i).join('::'));
+    const namespaces = namespaceScopes(machine.namespace);
     const context = { index: info.index, namespaces, standardHeaders, unverifiable, otherTypes };
     contexts.set(machine, { index: info.index, context });
     return context;
+}
+
+/** A forward declaration of a class in a header (`class Driver;`). */
+export interface CppForwardDeclaration {
+    /** Qualified name, e.g. `EpicProject::Driver`. */
+    readonly qualifiedName: string;
+    /** URI of the header. */
+    readonly fileName: string;
+    /** Range of the name in the header. */
+    readonly range: CppRange;
+    /** The class key (`class`, `struct`, `union`). */
+    readonly keyword: string;
+    readonly doc?: string;
+}
+
+interface OtherTypes {
+    readonly forward: Map<string, CppForwardDeclaration[]>;
+    readonly templates: Set<string>;
+}
+
+const otherTypesCache = new WeakMap<CppTypeIndex, OtherTypes>();
+
+/** The forward declarations and the templates of the headers of an index, by qualified name. */
+function otherTypesOf(index: CppTypeIndex): OtherTypes {
+    let cached = otherTypesCache.get(index);
+    if (!cached) {
+        cached = { forward: new Map(), templates: new Set() };
+        for (const header of index.headers) {
+            for (const other of header.otherTypes ?? []) {
+                if (other.kind === 'template') {
+                    cached.templates.add(other.qualifiedName);
+                    continue;
+                }
+                const list = cached.forward.get(other.qualifiedName) ?? [];
+                list.push({
+                    qualifiedName: other.qualifiedName, fileName: header.fileName, range: other.range, keyword: other.keyword ?? 'class',
+                    ...(other.doc ? { doc: other.doc } : {})
+                });
+                cached.forward.set(other.qualifiedName, list);
+            }
+        }
+        otherTypesCache.set(index, cached);
+    }
+    return cached;
+}
+
+/**
+ * `config.h:16` for a forward declaration: the path relative to the directory of the document if the
+ * header is below it, else the file name (headers of the include paths).
+ */
+export function forwardDeclarationLocation(declaration: CppForwardDeclaration, documentUri: URI | undefined): string {
+    const directory = documentUri?.with({ path: documentUri.path.replace(/\/[^/]*$/, '') || '/' });
+    const prefix = directory?.toString().replace(/\/?$/, '/');
+    const path = prefix && declaration.fileName.startsWith(prefix) ? displayPath(declaration.fileName, directory)
+        : decodeURIComponent(declaration.fileName.replace(/^.*[/\\]/, ''));
+    return `${path}:${declaration.range.start.line + 1}`;
+}
+
+/** The forward declarations of a qualified name (without leading `::`) in the headers of an index. */
+export function cppForwardDeclarations(index: CppTypeIndex, qualifiedName: string): readonly CppForwardDeclaration[] {
+    return otherTypesOf(index).forward.get(qualifiedName) ?? [];
+}
+
+/** The namespace scopes of the namespace of a model, innermost first (`a::b` → `a::b`, `a`). */
+export function namespaceScopes(namespace: string | undefined): string[] {
+    const parts = (namespace ?? '').split(/::|\./).filter(p => p);
+    return parts.map((_, i) => parts.slice(0, parts.length - i).join('::'));
+}
+
+/**
+ * The forward declarations of a (qualified) name, also relative to the namespaces of the model (innermost
+ * first), if the name is only forward-declared in the headers of the index; empty if it is defined (a
+ * class, enum or alias of the index, a template) or not declared at all.
+ */
+export function incompleteCppType(index: CppTypeIndex, text: string, namespaces: readonly string[] = []): readonly CppForwardDeclaration[] {
+    const global = text.startsWith('::');
+    const bare = global ? text.substring(2) : text;
+    const others = otherTypesOf(index);
+    for (const scope of global ? [''] : [...namespaces, '']) {
+        const declaration = index.lookup(bare, scope || undefined);
+        const qualified = scope ? `${scope}::${bare}` : bare;
+        if ((declaration && declaration.kind !== 'namespace') || others.templates.has(qualified)) {
+            return [];
+        }
+        const forward = others.forward.get(qualified);
+        if (forward) {
+            return forward;
+        }
+    }
+    return [];
 }
 
 /** Whether a (qualified) name without leading `::` is declared in the headers, also relative to the namespaces of the model. */
@@ -203,22 +298,34 @@ function isScopeName(context: NameContext, text: string, global: boolean): boole
 }
 
 /**
+ * The C++ type names of a type of a class member that are checked and their context: none for other type
+ * references, HSM types and if a header import of the model was not found (that is reported at the import).
+ */
+function checkedNames(reference: ast.TypeReference): { names: CppTypeNameOccurrence[], context: NameContext } | undefined {
+    const machine = AstUtils.getContainerOfType(reference, ast.isStateMachine);
+    if (!machine || !isClassMember(reference)) {
+        return undefined;
+    }
+    if (resolvedImports(machine).some(i => i.kind === 'header' && !i.header?.found)) {
+        return undefined;
+    }
+    const names = cppTypeNames(reference);
+    if (names.length === 0 || (isHsmTypeReference(reference) || machineType(reference))) {
+        return undefined;
+    }
+    return { names, context: nameContext(machine) };
+}
+
+/**
  * The unknown C++ type names of a type of a class member (empty for other type references and if a
  * header import of the model was not found: that is reported at the import).
  */
 export function unknownCppTypes(reference: ast.TypeReference): UnknownCppTypeName[] {
-    const machine = AstUtils.getContainerOfType(reference, ast.isStateMachine);
-    if (!machine || !isClassMember(reference)) {
+    const checked = checkedNames(reference);
+    if (!checked) {
         return [];
     }
-    if (resolvedImports(machine).some(i => i.kind === 'header' && !i.header?.found)) {
-        return [];
-    }
-    const names = cppTypeNames(reference);
-    if (names.length === 0 || (isHsmTypeReference(reference) || machineType(reference))) {
-        return [];
-    }
-    const context = nameContext(machine);
+    const { names, context } = checked;
     const result: UnknownCppTypeName[] = [];
     for (const name of names) {
         if (name.dotted) {
@@ -257,6 +364,39 @@ export function unknownCppTypes(reference: ast.TypeReference): UnknownCppTypeNam
     return result;
 }
 
+/** A C++ type name in a type of a class member that is only forward-declared in the imported headers. */
+export interface ForwardDeclaredCppTypeName {
+    readonly name: CppTypeNameOccurrence;
+    /** The range of the last segment of the name (`Driver` in `EpicProject::Driver`). */
+    readonly range: Range;
+    /** The forward declarations of the name (at least one). */
+    readonly declarations: readonly CppForwardDeclaration[];
+}
+
+/**
+ * The C++ type names of a type of a class member that are only forward-declared in the imported headers
+ * and the headers they include (no definition, alias or template of the name). Not reported if a header
+ * that cannot be analysed is imported or included (it may define the name).
+ */
+export function forwardDeclaredCppTypes(reference: ast.TypeReference): ForwardDeclaredCppTypeName[] {
+    const checked = checkedNames(reference);
+    if (!checked || checked.context.unverifiable) {
+        return [];
+    }
+    const { names, context } = checked;
+    const result: ForwardDeclaredCppTypeName[] = [];
+    for (const name of names) {
+        if (name.dotted) {
+            continue;
+        }
+        const declarations = incompleteCppType(context.index, name.text, context.namespaces);
+        if (declarations.length > 0) {
+            result.push({ name, range: name.segments[name.segments.length - 1].range, declarations });
+        }
+    }
+    return result;
+}
+
 /** Escapes a string for a regular expression. */
 function escape(text: string): string {
     return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -269,12 +409,24 @@ function escape(text: string): string {
  * forward declare it.
  */
 export function headersDeclaring(store: CppHeaderStore, documentUri: URI, name: string, namespace?: string): string[] {
+    return rankedHeaders(store, documentUri, name, namespace).map(f => f.importPath);
+}
+
+/**
+ * The import paths of the headers that define a (qualified) C++ type name, themselves or in a header they
+ * include (see {@link headersDeclaring}): headers that only forward declare it are left out.
+ */
+export function headersDefining(store: CppHeaderStore, documentUri: URI, name: string, namespace?: string): string[] {
+    return rankedHeaders(store, documentUri, name, namespace).filter(f => f.rank < 2).map(f => f.importPath);
+}
+
+/** The headers declaring a name, ranked: 0 defines it, 1 includes a header that defines it, 2 only forward declares it. */
+function rankedHeaders(store: CppHeaderStore, documentUri: URI, name: string, namespace?: string): Array<{ importPath: string, rank: number }> {
     const bare = name.replace(/^::/, '');
     const simple = bare.substring(bare.lastIndexOf(':') + 1);
     const word = new RegExp(`\\b${escape(simple)}\\b`);
     const settings = store.settingsFor(documentUri);
-    const parts = (namespace ?? '').split(/::|\./).filter(p => p);
-    const scopes = name.startsWith('::') ? [''] : [...parts.map((_, i) => parts.slice(0, parts.length - i).join('::')), ''];
+    const scopes = name.startsWith('::') ? [''] : [...namespaceScopes(namespace), ''];
     const found: Array<{ importPath: string, rank: number }> = [];
     for (const candidate of availableHeaders(store, documentUri, settings)) {
         const text = store.get(candidate.uri)?.text;
@@ -304,8 +456,7 @@ export function headersDeclaring(store: CppHeaderStore, documentUri: URI, name: 
             found.push({ importPath: candidate.importPath, rank });
         }
     }
-    return found.sort((a, b) => a.rank - b.rank || a.importPath.split('/').length - b.importPath.split('/').length || a.importPath.localeCompare(b.importPath))
-        .map(f => f.importPath);
+    return found.sort((a, b) => a.rank - b.rank || a.importPath.split('/').length - b.importPath.split('/').length || a.importPath.localeCompare(b.importPath));
 }
 
 /** The code of the diagnostic of an unknown C++ type (its `data` is {@link UnknownCppTypeData}). */
@@ -336,6 +487,26 @@ export function unknownCppTypeDiagnostic(unknown: UnknownCppTypeName, store: Cpp
         message: importPath
             ? `Unknown type '${name}': it is not declared in the imported headers. Import its header (import "${importPath}") for highlighting, hover, completion and navigation; ${consequence}`
             : `Unknown type '${name}': it is not declared in the imported headers. Import its header for highlighting, hover, completion and navigation; ${consequence}`,
+        data: { name, ...(importPath ? { importPath } : {}) }
+    };
+}
+
+/** The code of the diagnostic of a C++ type that is only forward-declared (its `data` is an {@link UnknownCppTypeData}). */
+export const INCOMPLETE_CPP_TYPE = 'incomplete-cpp-type';
+
+/**
+ * The message and data of the diagnostic of a C++ type that is only forward-declared: the location of the
+ * forward declaration and the header that defines the type (quick fix), if one was found.
+ */
+export function forwardDeclaredCppTypeDiagnostic(forward: ForwardDeclaredCppTypeName, store: CppHeaderStore | undefined, documentUri: URI | undefined): { message: string, data: UnknownCppTypeData } {
+    const declaration = forward.declarations[0];
+    const name = declaration.qualifiedName;
+    const location = forwardDeclarationLocation(declaration, documentUri);
+    const machine = AstUtils.getContainerOfType(forward.name.segments[0].astNode, ast.isStateMachine);
+    const importPath = store && documentUri ? headersDefining(store, documentUri, forward.name.text, machine?.namespace)[0] : undefined;
+    return {
+        message: `'${name}' is only forward-declared (${location}). Import the header that defines it${importPath ? ` (import "${importPath}")` : ''}`
+            + ' for hover, completion and navigation.',
         data: { name, ...(importPath ? { importPath } : {}) }
     };
 }
