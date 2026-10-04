@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>hsm.eclipse</groupId>
+        <artifactId>hsm.eclipse.parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <!-- the hsm executable of packages/cli for Linux x86_64 (bin/hsm), see the parent pom -->
+    <artifactId>hsm.eclipse.cli.linux.x86_64</artifactId>
+    <packaging>eclipse-plugin</packaging>
+
+    <properties>
+        <hsm.cli.dir>${project.basedir}/../../packages/cli/dist/bin</hsm.cli.dir>
+        <hsm.cli.target>linux-x64</hsm.cli.target>
+        <hsm.cli.file>hsm</hsm.cli.file>
+    </properties>
+
+    <build>
+        <plugins>
+            <plugin>
+                <!-- bin/ = the executable built by packages/cli (npm run build:exe, or the CI artifacts) -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-cli</id>
+                        <phase>generate-resources</phase>
+                        <goals><goal>copy-resources</goal></goals>
+                        <configuration>
+                            <outputDirectory>${project.basedir}/bin</outputDirectory>
+                            <overwrite>true</overwrite>
+                            <resources>
+                                <resource>
+                                    <directory>${hsm.cli.dir}/${hsm.cli.target}</directory>
+                                    <includes><include>${hsm.cli.file}</include></includes>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <!-- META-INF/p2.inf (chmod of bin/hsm when installed; p2 does not keep the executable bit) only if the
+                     executable is in the fragment: an empty fragment with the chmod instruction cannot be installed
+                     ("The action chmod failed - ... bin/hsm does not exist"). META-INF/p2.inf is generated (git-ignored). -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <!-- -Dhsm.cli.optional=false (CI, releases): fail if the executable is missing (not with the
+                             enforcer's requireFilesExist: it rejects paths with "..") -->
+                        <id>cli-built</id>
+                        <phase>validate</phase>
+                        <goals><goal>run</goal></goals>
+                        <configuration>
+                            <skip>${hsm.cli.optional}</skip>
+                            <target>
+                                <fail message="The hsm executable for ${hsm.cli.target} is missing in ${hsm.cli.dir}: build it (npm run build:exe) or omit -Dhsm.cli.optional=false.">
+                                    <condition><not><available file="${hsm.cli.dir}/${hsm.cli.target}/${hsm.cli.file}"/></not></condition>
+                                </fail>
+                            </target>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>p2-advice</id>
+                        <phase>generate-resources</phase>
+                        <goals><goal>run</goal></goals>
+                        <configuration>
+                            <target xmlns:if="ant:if">
+                                <available file="${project.basedir}/bin/${hsm.cli.file}" property="hsm.cli.present"/>
+                                <delete file="${project.basedir}/META-INF/p2.inf" quiet="true"/>
+                                <copy if:set="hsm.cli.present" file="${project.basedir}/p2-chmod.inf" tofile="${project.basedir}/META-INF/p2.inf"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <!-- without the executable (local builds for other platforms) the fragment is empty -->
+                <groupId>org.eclipse.tycho</groupId>
+                <artifactId>tycho-packaging-plugin</artifactId>
+                <version>${tycho.version}</version>
+                <configuration>
+                    <strictBinIncludes>false</strictBinIncludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

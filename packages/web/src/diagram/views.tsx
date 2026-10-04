@@ -2,7 +2,7 @@
 import { injectable } from 'inversify';
 import { ShapeView, svg, type IView, type RenderingContext } from 'sprotty';
 import type { VNode } from 'snabbdom';
-import { DiagramMetrics, submachinePointPositions, type DiagramNode, type Point } from 'hsm-language';
+import { DiagramMetrics, arrowDirection, displayRoute, submachinePointPositions, type DiagramNode, type Point } from 'hsm-language';
 import type { Issue, TransitionEdge, VertexNode } from './model.js';
 
 const m = DiagramMetrics;
@@ -319,13 +319,11 @@ export class TransitionView implements IView {
         if (points.length < 2) {
             return undefined;
         }
-        const path = routePath(points, edge.routing === 'spline');
+        const route = displayRoute(edge);
+        const path = routePath(route.points, route.spline);
         const end = points[points.length - 1];
-        // direction of the last segment: for splines the last control point
-        let previous = points[points.length - 2];
-        for (let i = points.length - 2; i >= 0 && distance(points[i], end) < 0.5; i--) {
-            previous = points[i];
-        }
+        // direction of the last segment: for curves the last control point
+        const arrow = arrowDirection(route.points);
         const label = edge.label;
         const middle = points[Math.floor(points.length / 2)];
         return <g class-transition={true} class-selected={edge.selected} class-mouseover={edge.hoverFeedback}
@@ -333,7 +331,7 @@ export class TransitionView implements IView {
             class-has-error={edge.issue?.severity === 'error'} class-has-warning={edge.issue?.severity === 'warning'}>
             <path class-transition-hit={true} d={path} />
             <path class-transition-line={true} d={path} />
-            <path class-transition-arrow={true} d={arrowHead(previous, end)} />
+            <path class-transition-arrow={true} d={arrowHead(arrow.from, arrow.to)} />
             {label
                 ? <g class-transition-label={true}>
                     <rect class-transition-label-hit={true} x={label.x} y={label.y} width={label.width} height={label.height} />
@@ -349,14 +347,30 @@ export class TransitionView implements IView {
                     </circle>)}
                 </g>
                 : undefined}
+            {edge.editable && edge.selected && (edge.anchorable[0] || edge.anchorable[1])
+                ? <g class-anchor-handles={true}>
+                    {...([0, 1] as const).filter(i => edge.anchorable[i]).map(i => anchorHandle(i === 0 ? points[0] : end, i, edge.anchored[i]))}
+                </g>
+                : undefined}
             {breakpointMarker(edge.breakpoint, label ? label.x - 7 : middle.x, label ? label.y + label.height / 2 : middle.y)}
             {issueMarker(edge.issue, label ? label.x + label.width + 8 : (points[0].x + end.x) / 2, label ? label.y + label.height / 2 : (points[0].y + end.y) / 2)}
         </g>;
     }
 }
 
-function distance(a: Point, b: Point): number {
-    return Math.hypot(a.x - b.x, a.y - b.y);
+/** Size of the square handles at the ends of a selected transition. */
+export const ANCHOR_HANDLE_SIZE = 8;
+
+/** The handle of the start (`end` 0) or end (1) of a selected transition: drag it along the border of the state. */
+function anchorHandle(p: Point, end: 0 | 1, anchored: boolean): VNode {
+    const s = ANCHOR_HANDLE_SIZE;
+    const what = end === 0 ? 'start' : 'end';
+    return <rect class-anchor-handle={true} class-anchored={anchored} class-anchor-source={end === 0} class-anchor-target={end === 1}
+        x={p.x - s / 2} y={p.y - s / 2} width={s} height={s}>
+        <title>{anchored
+            ? `Drag to move the ${what} of the transition along the border of the state, double-click to place it automatically again`
+            : `Drag to anchor the ${what} of the transition at a point on the border of the state`}</title>
+    </rect>;
 }
 
 export function routePath(points: Point[], spline: boolean): string {

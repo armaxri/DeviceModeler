@@ -32,7 +32,9 @@ statemachine MotorControl {
 }
 ```
 
-Operations stay callbacks: functions and classes with methods in the headers are **not** used.
+Operations stay callbacks: functions and classes with methods in the headers are **not** used. (Member
+functions and data members of the generated class itself are declared in the model, in the
+[C++ class sections](language.md#c-class-sections) `public:` / `protected:` / `private:`.)
 The simulator understands the imported types and constants; the C++ generator `#include`s the
 headers and uses the types directly.
 
@@ -135,7 +137,7 @@ diagnostics; parsing continues after the skipped construct.
 | preprocessor | `#if`, `#ifdef`, `#ifndef`, `#elif`, `#elifdef`, `#elifndef`, `#else`, `#endif` are evaluated (see 3.1); `#define`/`#undef` (object-like and function-like, `#`, `##`, `__VA_ARGS__`, `__VA_OPT__`) are expanded; `#include` is recorded; `#pragma`, `#error` (warning), `#line` |
 | namespaces | `namespace a { }`, `namespace a::b { }`, `inline namespace`, anonymous namespaces, `namespace x = a::b;`, `using namespace a;` |
 | `extern "C" { }` | contents belong to the enclosing namespace |
-| enums | `enum`, `enum class`, `enum struct`, anonymous, `typedef enum { } Name;`, fixed underlying type (`: std::uint8_t`), explicit values as constant expressions, attributes on enumerators |
+| enums | `enum`, `enum class`, `enum struct`, anonymous, `typedef enum { } Name;`, `typedef enum Tag { } Name;`, fixed underlying type (`: std::uint8_t`), explicit values as constant expressions, attributes on enums and enumerators, enums in namespaces and classes, opaque declarations `enum class E : int;` (merged with the definition), out-of-line definitions of nested enums `enum class Outer::E : int { };`, C++20 `using enum E;` (see §3.4) |
 | classes | `struct`, `class` (and `union`, classified as unsupported) with data members (all access levels recorded, public ones used), bit-fields, arrays, default member initializers (`= x`, `{x}`), nested classes / enums / aliases, `static constexpr` / `static const` members, base classes, anonymous `struct { } member;`, C idiom `typedef struct { } Name;` |
 | aliases | `typedef` (also several declarators, pointer / array / function pointer declarators), `using X = T;`, using-declarations `using ns::X;` |
 | constants | `constexpr`, `const`, `static const(expr)`, `inline constexpr`, `extern const` (no value), initializers `= x`, `{x}`, `(x)`; `auto`; aggregate initialization of structs and arrays (positional and designated `.x = 1`), `constexpr char k[] = "…"` |
@@ -165,11 +167,13 @@ literals concatenated), `true`/`false` literals; unary `+ - ! ~`; binary `* / % 
 constants of other headers); macros.
 
 The semantics are those of C++: integers carry their type (width, signedness), the integral
-promotions and usual arithmetic conversions apply and results wrap around (`0u - 1` is
-`4294967295`, `(0u - 1) / 2` is `2147483647`, `1 << 31` is `-2147483648`); integer literal types
-follow the suffix and value rules; division truncates toward zero. Division by zero, shift counts
-out of range, function calls, `nullptr`, member access and arithmetic on scoped enums without a
-cast are errors (they are not constant expressions or not supported). Implicit conversions of
+promotions and usual arithmetic conversions apply and unsigned results wrap around (`0u - 1` is
+`4294967295`, `(0u - 1) / 2` is `2147483647`); shifts follow C++20 (`1 << 31` is `-2147483648`,
+`-16 >> 2` is `-4`); integer literal types follow the suffix and value rules; division truncates
+toward zero (`-7 / 2` is `-3`, `-7 % 2` is `-1`). Division by zero, signed overflow
+(`2147483647 + 1`), shift counts out of range, function calls, `nullptr`, member access and
+arithmetic on scoped enums without a cast are errors (they are not constant expressions or not
+supported). Implicit conversions of
 constants and default member initializers wrap with a warning if the value changes. Default member
 initializers may use the preceding members (`int b = a * 2;`).
 
@@ -192,6 +196,77 @@ The widths of `long`, `size_t` etc. depend on the target: `CppTypeIndex` uses LP
 - Header-local macros that expand to declarations across several lines are expanded, but macros
   producing unbalanced braces may confuse the parser (it recovers at the next declaration).
 - `sizeof` of classes is unknown (layout and padding are not computed).
+
+### 3.4 Enums
+
+| form | example | type in models | enumerators in models |
+| --- | --- | --- | --- |
+| unscoped | `enum Color { Red, Green = 2, Blue };` | `Color` | `::Red`, `::Color::Red` (`ns::Red`, `ns::Color::Red` in a namespace) |
+| scoped | `enum class Mode { Off, On };`, `enum struct …` | `Mode` | `Mode::Off` |
+| fixed underlying type | `enum class Key : std::uint8_t { … };`, `enum Flags : int { … };` | `Key` | as above |
+| C style | `typedef enum { LED_OFF, LED_ON } led_t;`, `typedef enum tag { … } name_t;` | `led_t`, `name_t` (also `tag`) | `::LED_OFF` (`led_t::LED_OFF` is accepted too) |
+| in a namespace | `namespace app::io { enum class Level { Low }; }` | `app::io::Level` | `app::io::Level::Low` |
+| in a class | `struct Sensor { enum State { Idle }; enum class Kind { T }; };` | `Sensor::State`, `Sensor::Kind` | `Sensor::Idle`, `Sensor::Kind::T` |
+| opaque | `enum class Handle : std::uint32_t;` | `Handle` | no enumerators (values by cast: `7 as Handle`); a later definition (also in another header, also `enum class Outer::E : int { … }` out of line) provides them |
+| anonymous | `enum { kSize = 8 };` | – | `::kSize` (an `integer`-like value) |
+| `using enum` (C++20) | `namespace app { using enum ::Color; }` | – | also `app::Red` |
+
+Values: explicit values are constant expressions (negative, hex, character literals `'a'`, earlier
+enumerators `kExpr = kHex << 1 | 1`, enumerators of other enums with casts, macros); without value
+the previous value + 1 (see §3.5). The values must fit into the fixed underlying type (error otherwise); without
+fixed type the underlying type is deduced from the values (`int`, `unsigned int`, `long long`, …).
+Comments and doc comments (`///`, `/** */` before, `///<` after an enumerator), `#if` branches, attributes
+(`[[deprecated]]`, `__attribute__`) and a trailing comma inside the enumerator list are handled.
+
+### 3.5 Enumerator values
+
+The analyzer computes the value of every enumerator like a C++ compiler (`resolveEnum` in
+`cpp-header/type-index.ts` with the constant expressions of §3.2). The tests check the values against
+g++ and clang++ with `static_assert`s generated from the analyzer's values (`test/cpp-enum-values.test.ts`).
+Example: [`examples/cpp-enum-values`](../examples/cpp-enum-values) (`sensor_codes.h`, a model and its
+unit tests).
+
+| rule | example | values |
+| --- | --- | --- |
+| implicit numbering: the first enumerator is 0, every other one the previous value + 1 (also after explicit and negative values) | `enum E { A, B, C = 10, D, X = -2, Y };` | 0, 1, 10, 11, -2, -1 |
+| integer literals: decimal, hex, **octal** (leading `0`), binary, digit separators, suffixes | `010`, `0x1F`, `0b101`, `1'000`, `7u`, `8ull` | 8, 31, 5, 1000, 7, 8 |
+| character literals (escapes, prefixes), `true` / `false` | `'A'`, `'\n'`, `'\x41'`, `'\0'`, `u8'a'`, `L'z'` | 65, 10, 65, 0, 97, 122 |
+| operators with C++ precedence; `/` and `%` truncate toward zero | `1 << 2 + 1`, `1 \| 2 ^ 3 & 4`, `-7 / 2`, `-7 % 3`, `~0` | 8, 3, -3, -1, -1 |
+| earlier enumerators, enumerators of other enums (qualified, with casts), constants, macros, `sizeof` of types | `C = A \| B`, `static_cast<int>(Other::V)`, `(int)x`, `kBase + 1`, `BIT(3)`, `sizeof(std::uint32_t)` | |
+| unsigned arithmetic wraps around, signed overflow is an error | `enum class F : std::uint32_t { M = ~0u };` | 4294967295 |
+| before the closing brace an enumerator has the type of its initializer | `enum { A = 0u - 1, B = A + 1 };` | 4294967295, 0 (`A` is an `unsigned int`) |
+| 64-bit values are exact (`bigint`) | `enum class W : std::uint64_t { Big = ~0ull };` | 18446744073709551615 |
+
+**Errors** as in C++ (the header would not compile): a value that does not fit into the fixed underlying
+type (`enum class E : std::uint8_t { A = 255, B };` – `B` is 256; narrowing is ill-formed, also for `bool`),
+signed overflow, division by zero, a floating point value, a value of a scoped enum without cast. Such an
+enumerator keeps the computed value and is shown with the error (`CppResolvedEnumerator.error`).
+
+**Unknown values**: a value that cannot be computed (an unknown macro `FOO(3)`, a function call, a
+`constexpr` function, `sizeof` of an expression or a class, …) is **not guessed**: the enumerator is
+marked as unknown (`valid: false`, `unknown: { expression, offset, reason }` of `CppResolvedEnumerator`),
+the header import shows the error, and the implicit successors are unknown **relative** to it
+(`FOO(3) + 1`, `FOO(3) + 2`); values computed from unknown ones (`B = A + 1`, constants) are unknown too.
+In the simulation such enumerators get distinct placeholder values (which are never displayed).
+
+**Display** (`enumeratorValueText`, `enumeratorValueMarkdown`, `enumeratorListItem` in `cpp-enums.ts`):
+the value in decimal; in hexadecimal too for values greater than 9 and for flag-like initializers (bit
+operators, hex or binary literals; negative ones in the two's complement of the underlying type); the
+initializer if the value is derived from it; whether the value is implicit.
+
+- Hover of an enumerator: the signature `sensor::Status::kReady = 3`, then ``value `3` (`0x3`) = `kPowered | kCalibrated` ``,
+  ``value `11` (`0xB`) (implicit: `Measuring` + 1)`` or ``value unknown: `FOO(3) + 1` (implicit: `X` + 1)``.
+- Hover of an enum: one line per enumerator, e.g. ``- `kReady = 3` (`0x3`, from `kPowered | kCalibrated`)``,
+  ``- `kOctal = 8` (from `010`)``, ``- `Calibrating = 11` (`0xB`, implicit)``, ``- `Y`: value unknown (`FOO(3) + 1`)``.
+- Completion: the detail `sensor::State = 11 (0xB, implicit)`, the label description `= 11 (0xB, implicit)`
+  and, as documentation, the value sentence of the hover followed by the doc comment.
+- The value editor of the web simulator (tooltip of the enumerators) and `hsm cpp-header` (`implicit`,
+  `expression`, `unknown`, `error` of the enumerators).
+
+Not supported (the value is unknown): `constexpr` functions and other function calls, macros that are not
+defined in the header itself (or passed in `defines`, §3.1), `sizeof` of classes and expressions, templates
+(`std::underlying_type_t<E>`), `std::numeric_limits` of enums. The data model decides the width of `long`
+and `size_t` (§3.2); `char` is signed.
 
 ## 4. Language integration (implemented)
 
@@ -260,7 +335,7 @@ compare with `sameType`). Mapping of `CppResolvedType` (`hsmTypeOfCpp`):
 | `real` | `real` | `float` places round to single precision |
 | `boolean` | `boolean` | |
 | `string` | `string` | only `std::string` can be the type of a place; `const char*` / `std::string_view` constants are readable (a type reference to them is an error) |
-| `enum` | `CppHsmType` enum | `==` / `!=` between values of the same enum; **unscoped** enums are promoted to `integer` in arithmetic, bitwise and relational operators and assignable to `integer` / `real`; `enum class` values are not; `as` converts integer ↔ enum (and enum → other enum) |
+| `enum` | `CppHsmType` enum | `==` / `!=` and `<` `<=` `>` `>=` between values of the same enum (also of an `enum class`, ordered by value as in C++); **unscoped** enums are promoted to `integer` in arithmetic, bitwise and relational operators with other types and assignable to `integer` / `real`; `enum class` values are not; nothing converts implicitly to an enum (`integer`, another enum: error, as in C++); `as` converts integer ↔ enum (and enum → other enum) |
 | `struct` | `CppHsmType` struct | members by name (public data members, inherited ones included); assignable as a whole (same type); **no `==`** (C++ aggregates have none before C++20; user-defined operators are not analyzed) |
 | `array` | `CppHsmType` array | element access `a[i]` (index: integer or unscoped enum; constant indices out of bounds are errors); `std::array` values are assignable as a whole, C arrays are not; no `==`; arrays of unknown length are unsupported |
 | `unsupported` | error where used | `The C++ type 'Foo' cannot be used: 'Foo' is not supported (union)` |
@@ -279,7 +354,8 @@ Event payloads, operation parameters and return values may use all these types.
   `CppTypeIndex.constant`.
 - Host values (API, callbacks, scenarios, simulation panels): enum → qualified enumerator name (a number if
   the value has no enumerator); input also the simple name or a number. Struct → object (missing members get
-  their default, unknown members are errors), array → array. `getValue(name)` / `getVariableType(name)` give
+  their default, unknown members are errors), array → array. Enumerators of unscoped enums are also accepted
+  in the spelling of models (`"motor::kJam"`, `"::RED"`). `getValue(name)` / `getVariableType(name)` give
   the runtime values and types (for UIs). Canonical text (`formatValue`): `motor::Mode::Fast`,
   `motor::Mode(7)`, `{x: 1, y: 2}`, `[1, 2]`.
 - Element access outside the bounds is a runtime error (`Index 3 is out of bounds 0..2`).
@@ -300,7 +376,7 @@ Event payloads, operation parameters and return values may use all these types.
   interpreter implements.
 - Scenario harness: `format` overloads for the enums, structs and arrays of the model (canonical text without
   white space), literals of enum values and structs (`[] { motor::Position v{}; v.x = 1; return v; }()`),
-  member-wise comparison of struct expectations. The 14 `s10-cpp-*` scenarios are compiled with g++ (and
+  member-wise comparison of struct expectations. The 17 `s10-cpp-*` scenarios are compiled with g++ (and
   checked with clang++) one by one (their headers may declare the same names).
 - The **C generator** reports `C++ header types are not supported by the C generator` for any header import or
   C++ type (also `uint8_t`); its conformance test skips exactly `CPP_TYPE_SCENARIOS` (`test/helpers.ts`).
@@ -310,15 +386,82 @@ Event payloads, operation parameters and return values may use all these types.
 
 - Hover (`cppHover` in `lsp/cpp-lsp.ts`, used by the language server and the web editor): the declaration
   (`enum class motor::Mode` with its enumerators, `constexpr std::int32_t motor::kMaxSpeed = 6000`, struct
-  members with types), the documentation comment and the location in the header; also for each segment of a
+  members with types), the documentation comment (as written, Doxygen commands rendered like the doc comments
+  of models, see [rendering.md](rendering.md#model-documentation)) and the location in the header; also for each segment of a
   qualified name (`motor` → namespace), for struct members in names and member accesses and for header import
   paths.
-- Go to definition (`cppDefinition`): into the header (`fileName` + `nameRange` of the declaration); the
-  import path opens the header.
-- Completion (`HsmCompletionProvider`, both languages): after `ns::` the members of the namespace / class /
-  enum, after `::` the global names, after `var.` the members of a struct variable; otherwise Langium's
-  completion.
-- Semantic highlighting (VS Code): C++ types, enumerators and constants.
+- Navigation (`cppLocations` in `lsp/cpp-navigation.ts`; the VS Code language server registers definition,
+  declaration, type definition and document link providers): into the header (`fileName` – the URI of the
+  header, also of headers found through `#include`s and include paths – plus `nameRange` of the
+  declaration). The origin of a link is the segment of the qualified name at the position, so `app`,
+  `Mode` and `Fast` of `app::Mode::Fast` lead to the namespace, the enum and the enumerator (and VS Code
+  underlines only that segment on `Ctrl`/`Cmd`+hover); struct members in names and member accesses lead
+  to the fields, the variable name of `cfg.limits.low` to the variable.
+  - *Go to Definition* (`F12`, `Ctrl`/`Cmd`+Click, Peek): the definition – the enum definition rather than
+    an opaque declaration, the target of a using-declaration (`using hw::Channel;`), the first block of a
+    namespace; the import path opens the header.
+  - *Go to Declaration*: all declarations, the definition first (opaque enum declarations, all blocks of a
+    namespace, using-declarations and their target).
+  - *Go to Type Definition*: from a constant, enumerator or struct member to its enum or struct (for aliases
+    of built-in types: the alias); from a variable, event, parameter, operation or type alias of the model
+    (declaration or reference) to its C++ type.
+  - Document links on header (and model) import paths.
+  - The web app's Monaco editor (also embedded in Eclipse, CLion / JetBrains IDEs and the desktop app) has the
+    same navigation (`definitionLinks`, `declarationLinks`, `typeDefinitionLinks`, `importLinks` in
+    `lsp/model-navigation.ts`): Monaco models of the targets make Peek and the `Ctrl`/`Cmd`+hover preview
+    work; opening a target in another file sends `api/open` with the selected range to the host (see
+    `packages/web/src/host.ts`): Eclipse opens it in the default editor of the file (CDT's C/C++ editor if
+    installed, otherwise the text editor; models in the HSM editor), JetBrains IDEs in the editor of its type
+    (CLion's C/C++ editor), the desktop app shows headers in a read-only viewer window and models in their
+    window. The web app without host shows headers in a read-only viewer over the app.
+  - Name ranges: the name of a using-declaration is its last segment, an anonymous enum / struct named by
+    `typedef` (`typedef enum { … } color_t;`) has the range of the typedef name. Declarations produced by
+    macro expansions have the range of the macro invocation. Forward declarations of classes (`class Driver;`)
+    are targets of *Go to Declaration* after the definition, and the only target of all three requests if the
+    class is not defined in the imported headers (see below).
+- Completion (`HsmCompletionProvider`, both languages, the VS Code language server and the web app): after
+  `ns::` the members of the namespace / class / enum (in type positions – `var x : `, `in event e : `,
+  parameters, return types, `alias`, `x as ` – only namespaces and types, in expressions values and scopes;
+  enumerators in declaration order with their values), after `::` the global names, after `var.` the members of
+  a struct variable. Where a value of an enum is expected, the enumerators of that enum are proposed first,
+  written as in models (`motor::Mode::Fast`, `::LED_ON`): after `x == ` / `x != ` / `x = ` (also `<` …, `x`
+  a variable or `valueof(e)`), `var m : motor::Mode = `, `raise e : `, in arguments of operation calls and
+  after `mock op returns (`; they are added to Langium's completion (typing `Fa` finds `motor::Mode::Fast`).
+  Completion items show the documentation comments of the header like the hover (Doxygen commands rendered).
+  In type positions without qualifier the global C++ types and namespaces and the `<cstdint>` typedefs are
+  proposed.
+- Messages: an unknown enumerator lists the enumerators of the enum (`'motor::Mode' has no enumerator 'Fsat'
+  (enumerators: Off, Slow, Fast)`); an unqualified enumerator name suggests the qualified one (`Could not
+  resolve reference to Declaration named 'Fast'. (Did you mean 'motor::Mode::Fast'? …)`).
+- Hover of enumerators shows the computed value (also hexadecimal, its derivation, implicit or unknown, see
+  §3.5), the enum and its underlying type; hover of enums the enumerators with their values, the underlying
+  type, whether the enum is unscoped or an opaque declaration.
+- Semantic highlighting (VS Code and the web app's Monaco editor, `lsp/semantic-tokens.ts`; colors of the
+  Light+ / Dark+ themes): C++ types (enum types as enums), enumerators and constants, and the names and
+  references of states, events, variables, operations by their kind; the names in the types of the C++ class
+  sections are types even if the headers do not declare them (they get a warning, see below).
+- Unknown C++ types of the C++ class sections (`cpp-unknown-types.ts`, a check of `HsmImportValidator`): a warning on
+  the part of the name that the imported headers do not declare (`Driver` of `EpicProject::Driver`), see
+  [language.md](language.md#c-class-sections) for the rules. If a header in the directory of the model or in the include
+  paths (two subdirectory levels deep; `CppHeaderStore.lister` lists directories in Node hosts, the web app searches
+  the texts of its store) declares the name, the message names it and the quick fix (`HsmCodeActionProvider` in
+  `lsp/cpp-code-actions.ts`, VS Code language server) inserts the import after the last import; `std::` names of the
+  built-in map (`STD_HEADER_OF`) get the system import (`import "<vector>"`). Forward declarations of classes
+  (`class Driver;`, with class key and documentation comment) and class / alias templates are recorded in
+  `CppHeader.otherTypes` (not part of the index).
+- C++ types of the class sections that are **only forward-declared** (`forwardDeclaredCppTypes`, code
+  `incomplete-cpp-type`): a name declared by a forward declaration in the imported headers (or headers they include)
+  but not defined there (no class, enum, alias or template of that name) gets a warning on its last segment, also for
+  references and pointers (`'EpicProject::Driver' is only forward-declared (config.h:16). Import the header that
+  defines it (import "driver.h") for hover, completion and navigation.`). The header is searched like for unknown
+  types (`headersDefining`: headers that only forward declare the name are left out); without one the message
+  ends `Import the header that defines it for hover, completion and navigation.` The same quick fix inserts the
+  import. Not reported when a header that cannot be analysed is imported or included. It stays a warning:
+  validation and generation succeed. Hover of such a name shows `class EpicProject::Driver`, `forward declaration
+  in config.h:16 — the definition is not imported` and the documentation comment of the forward declaration;
+  definition, declaration and type definition lead to the forward declaration(s). When the definition is imported,
+  hover and *Go to Definition* show the definition and *Go to Declaration* lists the definition followed by the
+  forward declarations. The location is relative to the model directory, the file name for headers elsewhere.
 - The definitions box of the diagram lists the imports.
 
 ### 4.7 Hosts and settings
@@ -356,9 +499,18 @@ Unsaved changes of a header open in VS Code are not seen (headers are read from 
 - No struct literals, no `==` of structs (also with a user-defined `operator==`), no whole-array assignment
   of C arrays, no pointers / references / unions / templates other than `std::array` / functions / methods.
 - Enum values without enumerator are shown as `motor::Mode(7)`; an enum with several enumerators of the same
-  value shows the first one.
+  value shows the first one. Values of unscoped enums are shown with the enum name (`Color::Red`,
+  `led_t::LED_ON`), which is also valid C++11.
+- The C generator does not support C enums of headers yet (it rejects all header imports): it would need the
+  C spelling of the types (`enum tag` without typedef) and enumerators, C casts instead of `static_cast` and
+  formatting in its scenario harness.
+- `using enum` and opaque enums in headers require a compiler that supports them for the generated code
+  (`using enum`: C++20; the analyzer accepts them regardless of `__cplusplus`).
 - `uint64_t` values above `INT64_MAX` are stored correctly but converted to `sc::integer` (wrapping) in
   arithmetic, like in the generated code; host values are JS numbers (exact up to 2^53).
 - The C generator does not support header types; the C++ generator does not support submachine instances
   (independent of headers).
-- The web editor cannot open or navigate into headers (hover works).
+- Navigation into headers works everywhere, but opens the header differently: VS Code and the text editors
+  of Eclipse and the JetBrains IDEs (`hsm lsp`) use the language server
+  (`packages/language/src/node/hsm-lsp.ts`); the embedded web editor asks its host to open the header
+  (Eclipse, JetBrains, desktop app) or, as a standalone web app, shows it in a read-only viewer.

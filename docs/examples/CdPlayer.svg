@@ -457,12 +457,27 @@
     cursor: move;
 }
 
+.anchor-handle {
+    fill: #fff;
+    stroke: var(--hsm-select);
+    stroke-width: 1.5px;
+    cursor: crosshair;
+}
+
+/* the end of a transition is anchored at the border (@from / @to) */
+.anchor-handle.anchored {
+    fill: var(--hsm-select);
+    stroke: #fff;
+    stroke-width: 1px;
+}
+
 .manual-layout .transition.selected .transition-label {
     cursor: move;
 }
 
 .hsm-export .resize-handle,
-.hsm-export .bend-handle {
+.hsm-export .bend-handle,
+.hsm-export .anchor-handle {
     display: none;
 }
 
@@ -671,7 +686,7 @@
 </g>
 <g class="transition">
 <path class="transition-line" d="M 418,856 L 373,838 L 373,829 L 373,819 L 373,809 L 373,798 L 373,733.25 L 373,668.5 L 373,550 L 373,431.5 L 373,313 L 373,194.5 L 373,132.25 L 373,70 L 373,64 L 393,61 L 413,58 L 453,58 L 473,62.5 L 493,67 L 493,76 L 493,122 L 493,122 L 493,122"/>
-<path class="transition-arrow" d="M 493,122 L 483,117.5 L 486,122 L 483,126.5 Z"/>
+<path class="transition-arrow" d="M 493,122 L 497.5,112 L 493,115 L 488.5,112 Z"/>
 <g class="transition-label">
 <text x="328" y="426.7">1: eject</text>
 </g>

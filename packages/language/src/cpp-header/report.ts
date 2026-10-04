@@ -61,14 +61,19 @@ export function cppHeaderReport(index: CppTypeIndex): unknown {
             case 'namespaceAlias':
                 return { kind: 'namespaceAlias', ...common, target: declaration.target.parts.map(p => p.name).join('::') };
             case 'usingDirective':
-                return { kind: 'usingDirective', line: common.line, target: declaration.target.parts.map(p => p.name).join('::') };
+                return {
+                    kind: declaration.enum ? 'usingEnum' : 'usingDirective', line: common.line, target: declaration.target.parts.map(p => p.name).join('::')
+                };
             case 'enum': {
                 const type = index.typeOf(declaration);
                 return {
-                    kind: declaration.scoped ? 'enum class' : 'enum', ...common,
+                    kind: declaration.scoped ? 'enum class' : 'enum', ...common, ...(declaration.opaque ? { opaque: true } : {}),
                     underlying: type.kind === 'enum' ? type.underlying.cppName : undefined,
                     enumerators: type.kind === 'enum' ? type.enumerators.map(e => ({
-                        name: e.name, value: cppValueToJson(e.value), ...(e.valid ? {} : { valid: false }),
+                        name: e.name, ...(e.valid ? { value: cppValueToJson(e.value) } : { valid: false }),
+                        ...(e.expression === undefined ? { implicit: true } : e.expression.replace(/\s+/g, '') !== e.value.toString() ? { expression: e.expression } : {}),
+                        ...(e.unknown ? { unknown: e.unknown.offset === 0n ? e.unknown.reason : `${e.unknown.expression} + ${e.unknown.offset}` } : {}),
+                        ...(e.error ? { error: e.error } : {}),
                         ...(e.declaration.doc ? { doc: e.declaration.doc } : {})
                     })) : []
                 };

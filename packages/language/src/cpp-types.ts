@@ -3,6 +3,7 @@ import * as ast from './generated/ast.js';
 import type { CppDeclaration, CppArrayType, CppEnumType, CppResolvedField, CppResolvedType, CppStructType } from './cpp-header/model.js';
 import type { CppConstantInfo, CppTypeIndex } from './cpp-header/type-index.js';
 import { cppImports } from './imports.js';
+import { unknownEnumeratorDetail } from './cpp-enums.js';
 import type { HsmType } from './hsm-typesystem.js';
 
 /**
@@ -158,9 +159,15 @@ const referenceCache = new WeakMap<ast.TypeReference, { index: CppTypeIndex, res
  * not a C++ type (names with `.` never are).
  */
 export function cppTypeOfReference(reference: ast.TypeReference): CppTypeResolution | undefined {
-    const name = reference.name;
-    if (!name || name.includes('.') || FUNDAMENTAL_TYPE_NAMES.has(name)) {
+    let name = reference.name;
+    // the C++ class sections use C++ types: fundamental types, pointers (`const` before a pointer type
+    // belongs to the pointee: `const char*`), template arguments (see class-members.ts)
+    const classMember = AstUtils.getContainerOfType(reference, ast.isClassScope) !== undefined;
+    if (!name || name.includes('.') || (!classMember && FUNDAMENTAL_TYPE_NAMES.has(name.split(' ')[0]))) {
         return undefined;
+    }
+    if (reference.const && name.includes('*')) {
+        name = `const ${name}`;
     }
     const index = cppIndexAt(reference);
     const cached = referenceCache.get(reference);
@@ -271,7 +278,7 @@ function computeCppValue(name: string, index: CppTypeIndex): CppValueResolution 
     if (!declaration) {
         return { error: index.headers.length === 0
             ? `Unknown C++ name '${name}': no C/C++ header is imported ('import "file.h"').`
-            : `Unknown C++ name '${name}': it is not declared in the imported headers.` };
+            : unknownEnumeratorDetail(name, index) ?? `Unknown C++ name '${name}': it is not declared in the imported headers.` };
     }
     const info = index.constant(name);
     if (!info) {

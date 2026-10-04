@@ -1,0 +1,47 @@
+// A temperature sensor that uses the enums of a C++ header (sensor_codes.h). The enumerator values
+// follow the C++ rules (implicit numbering, explicit values, flags computed from macros, character
+// and octal literals, negative values); hover an enumerator to see its value, e.g. sensor::kReady
+// (value 3 = kPowered | kCalibrated) or sensor::State::Calibrating (value 11, implicit: Measuring + 1).
+statemachine Sensor "Temperature sensor using the enum values of a C++ header" {
+    namespace example
+    import "sensor_codes.h"
+
+    @EventDriven
+
+    interface:
+        /** A command received over the serial line. */
+        in event command : sensor::Command
+        /** A measured temperature in °C. */
+        in event measured : integer
+        in event timeout
+        out event stateChanged : sensor::State
+        var current : sensor::State = sensor::State::Off
+        /** Status flags (sensor::Status). */
+        var status : integer = sensor::kNone
+        var level : sensor::Level = sensor::kZero
+        var result : sensor_result_t = ::SENSOR_OK
+
+    [*] -> Off
+
+    state Off {
+        entry / current = sensor::State::Off; status = sensor::kNone; raise stateChanged : current
+    }
+
+    state On {
+        entry / status = sensor::kReady
+        [*] -> Ready
+        state Ready {
+            entry / current = sensor::State::Ready; raise stateChanged : current
+        }
+        state Measuring {
+            entry / current = sensor::State::Measuring; raise stateChanged : current
+        }
+        Ready -> Measuring : command [valueof(command) == sensor::Command::Query]
+        Measuring -> Ready : measured [valueof(measured) <= 80] / level = sensor::kNormal; result = ::SENSOR_OK
+        Measuring -> Ready : measured [valueof(measured) > 80] / status = status | sensor::kOverTemperature; level = sensor::kMaxLevel
+        Measuring -> Ready : timeout / result = ::SENSOR_TIMEOUT
+    }
+
+    Off -> On : command [valueof(command) == sensor::Command::Start]
+    On -> Off : command [valueof(command) == sensor::Command::Stop]
+}

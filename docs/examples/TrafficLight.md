@@ -2,7 +2,7 @@
 
 # TrafficLight
 
-Traffic light with a pedestrian request button. The lights are switched
+Traffic light with a pedestrian request button. The lights are switched  
 by the host through the internal operation `switchOn`.
 
 Source: [`examples/traffic-light.hsm`](../../examples/traffic-light.hsm)

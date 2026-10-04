@@ -6,16 +6,25 @@
   "workspaces": [
     "packages/language",
     "packages/web",
-    "packages/vscode"
+    "packages/vscode",
+    "packages/cli",
+    "packages/desktop"
   ],
   "scripts": {
     "langium:generate": "npm run langium:generate -w packages/language",
     "build": "npm run build -w packages/language && npm run build -w packages/web && npm run build -w packages/vscode",
     "dev": "npm run langium:generate && npm run dev -w packages/web",
-    "test": "npm run test -w packages/language && npm run test -w packages/vscode",
-    "typecheck": "npm run typecheck -w packages/language && npm run typecheck -w packages/web && npm run typecheck -w packages/vscode",
+    "test": "npm run test -w packages/language && npm run test -w packages/vscode && npm run test -w packages/desktop && npm run test:ide-scripts",
+    "typecheck": "npm run typecheck -w packages/language && npm run typecheck -w packages/web && npm run typecheck -w packages/vscode && npm run typecheck -w packages/cli && npm run typecheck -w packages/desktop",
     "docs:examples": "npm run build -w packages/language && node packages/language/bin/cli.js doc examples -o docs/examples --title \"Example state machines\"",
-    "package:vscode": "npm run package -w packages/vscode"
+    "package:vscode": "npm run package -w packages/vscode",
+    "build:exe": "npm run build:exe -w packages/cli",
+    "package:desktop": "npm run package -w packages/desktop",
+    "test:ide-scripts": "node --test scripts/ide/ide-scripts.test.mjs",
+    "ide:vscode": "node scripts/ide/vscode.mjs",
+    "ide:eclipse": "node scripts/ide/eclipse.mjs",
+    "ide:clion": "node scripts/ide/clion.mjs",
+    "ide:desktop": "node scripts/ide/desktop.mjs"
   },
   "devDependencies": {
     "typescript": "~5.9.3"

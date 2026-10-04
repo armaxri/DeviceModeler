@@ -38,11 +38,6 @@ body.simulating #editor-pane .pane-title::after {
     font-weight: 500;
 }
 
-#properties.simulation {
-    width: 360px;
-    padding: 10px 12px;
-}
-
 #properties .sim-header {
     display: flex;
     align-items: center;
@@ -189,21 +184,6 @@ body.ui-dark #properties .sim-break {
     width: auto;
     height: auto;
     margin: 0;
-}
-
-#properties .sim-section {
-    border-bottom: 1px solid var(--ui-border);
-    padding: 6px 0;
-}
-
-#properties .sim-section > summary {
-    cursor: pointer;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--ui-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    margin-bottom: 4px;
 }
 
 #properties .sim-active {

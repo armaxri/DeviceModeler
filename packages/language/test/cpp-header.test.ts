@@ -244,8 +244,11 @@ describe('parser', () => {
             ['C', false, undefined, 'C1,C2,C3'],
             ['(anonymous)', false, 'long', 'Anonymous'],
             ['TypedefEnum', false, undefined, 'T1,T2'],
+            // opaque declaration: the type without enumerators (see test/cpp-enums.test.ts)
+            ['Forward', true, 'int', ''],
             ['WithAttribute', true, undefined, 'W']
         ]);
+        expect(enums[5].opaque).toBe(true);
         // enumerators of anonymous enums belong to the enclosing scope
         expect(enums[3].enumerators[0].qualifiedName).toBe('Anonymous');
         expect(header.diagnostics).toEqual([]);
@@ -446,7 +449,8 @@ describe('constant expression evaluation', () => {
         expect(evaluate('1 << 31')).toBe(-2147483648n);
         expect(evaluate('1u << 31')).toBe(2147483648n);
         expect(evaluate('1ULL << 63')).toBe(9223372036854775808n);
-        expect(evaluate('0x7fffffff + 1')).toBe(-2147483648n);
+        expect(() => evaluate('0x7fffffff + 1')).toThrow('signed integer overflow: 2147483648 does not fit into a 32 bit signed type');
+        expect(evaluate('0x7fffffffu + 1')).toBe(2147483648n);
         expect(evaluate('2147483648')).toBe(2147483648n);
         expect(evaluate('0xFF & 0x0F | 0x30 ^ 0x01')).toBe(0x3fn);
         expect(evaluate('-16 >> 2')).toBe(-4n);
@@ -567,8 +571,11 @@ describe('enum values', () => {
         `, { allowDiagnostics: true });
         const type = enumType(idx, 'A');
         expect(type.enumerators.map(e => [e.name, e.value, e.valid])).toEqual([
-            ['Ok', 1n, true], ['TooLarge', 0n, true], ['Unknown', 1n, false], ['AfterUnknown', 2n, true], ['Call', 3n, false]
+            ['Ok', 1n, true], ['TooLarge', 256n, true], ['Unknown', 257n, false], ['AfterUnknown', 258n, false], ['Call', 259n, false]
         ]);
+        // the value of an implicit successor of an unknown value is unknown too (relative to the unknown one)
+        expect(type.enumerators[3].unknown).toEqual({ expression: 'UNDEFINED_CONSTANT', offset: 1n, reason: "unknown name 'UNDEFINED_CONSTANT'" });
+        expect(type.enumerators[1].error).toBe("the value 256 does not fit into the underlying type 'std::uint8_t'");
         expect(idx.diagnostics.map(d => `${d.severity} ${d.range.start.line + 1}:${d.range.start.character + 1} ${d.message}`)).toEqual([
             'error 4:28 the value 256 of enumerator \'A::TooLarge\' does not fit into the underlying type \'std::uint8_t\'',
             'error 5:27 cannot evaluate the value of enumerator \'A::Unknown\': unknown name \'UNDEFINED_CONSTANT\'',

@@ -29,6 +29,14 @@ export interface OrthogonalRouteRequest {
      * route does not turn back where the previous part arrived).
      */
     sourceExclude?: number;
+    /**
+     * Anchored ends: the route starts / ends exactly at this point on the border of the source / target and
+     * leaves / enters it in the direction `dir` (away from the vertex: east, south, west, north).
+     */
+    sourcePort?: FixedPort;
+    targetPort?: FixedPort;
+    /** Run closer to the vertices (half the distance) if that saves bends (in narrow spaces, e.g. inside a composite state). */
+    compact?: boolean;
     /** Vertices the route must not cross (without the source and the target). */
     obstacles: RouterRect[];
     /** The area the route must stay in. */
@@ -40,6 +48,12 @@ export interface OrthogonalRouteRequest {
      * is penalized.
      */
     containers?: RouterRect[];
+}
+
+/** A fixed end of a route: a point on the border and the direction away from the vertex (east 0, south 1, west 2, north 3). */
+export interface FixedPort {
+    point: Point;
+    dir: number;
 }
 
 /** Distance of the routes from the vertices. */
@@ -62,6 +76,41 @@ interface Port {
     stub: Point;
     /** Direction away from the vertex. */
     dir: number;
+    /** Additional cost of starting / ending here (the end of another route is there). */
+    penalty?: number;
+}
+
+/** Cost of a port at the end of another route. */
+const OCCUPIED_COST = 2 * BEND_COST;
+
+/**
+ * Ports at the end of a route placed before get a penalty, and two more ports on the same side (a quarter
+ * of the side to the left and right) are offered instead, so that routes do not end on top of each other.
+ */
+function avoidOccupied(candidates: Port[], rect: RouterRect, margin: number, placed: Point[][] | undefined): Port[] {
+    const ends = (placed ?? []).flatMap(points => points.length > 0 ? [points[0], points[points.length - 1]] : []);
+    if (ends.length === 0) {
+        return candidates;
+    }
+    const occupied = (p: Point) => ends.some(e => Math.abs(e.x - p.x) < 6 && Math.abs(e.y - p.y) < 6);
+    const result: Port[] = [];
+    for (const port of candidates) {
+        if (!occupied(port.border)) {
+            result.push(port);
+            continue;
+        }
+        result.push({ ...port, penalty: OCCUPIED_COST });
+        const horizontalSide = port.dir === 1 || port.dir === 3;
+        const step = (horizontalSide ? rect.width : rect.height) / 4;
+        for (const delta of [-step, step]) {
+            const border = horizontalSide ? { x: port.border.x + delta, y: port.border.y } : { x: port.border.x, y: port.border.y + delta };
+            const inside = horizontalSide ? border.x > rect.x + 4 && border.x < rect.x + rect.width - 4 : border.y > rect.y + 4 && border.y < rect.y + rect.height - 4;
+            if (inside && !occupied(border)) {
+                result.push({ border, stub: { x: border.x + DX[port.dir] * margin, y: border.y + DY[port.dir] * margin }, dir: port.dir });
+            }
+        }
+    }
+    return result;
 }
 
 function ports(rect: RouterRect, margin: number, other: RouterRect, fixed: boolean): Port[] {
@@ -96,6 +145,12 @@ function ports(rect: RouterRect, margin: number, other: RouterRect, fixed: boole
  * obstacles (undefined if there is none, e.g. if the vertices are too close to each other).
  */
 export function routeOrthogonal(request: OrthogonalRouteRequest): Point[] | undefined {
+    if (request.compact) {
+        // the route with fewer bends (with the smaller distance where it needs fewer bends)
+        const normal = route(request, MARGIN);
+        const close = route(request, MARGIN / 2);
+        return normal && (!close || normal.length <= close.length) ? normal : close;
+    }
     return route(request, MARGIN) ?? route(request, MARGIN / 2);
 }
 
@@ -106,8 +161,13 @@ function route(request: OrthogonalRouteRequest, margin: number): Point[] | undef
     }));
     const inside = (p: Point) => p.x >= bounds.minX - 0.01 && p.x <= bounds.maxX + 0.01 && p.y >= bounds.minY - 0.01 && p.y <= bounds.maxY + 0.01;
     const blockedPoint = (p: Point) => blockers.some(b => p.x > b.x1 && p.x < b.x2 && p.y > b.y1 && p.y < b.y2);
-    const sourcePorts = ports(source, margin, target, request.sourceFixed ?? false).filter(p => p.dir !== request.sourceExclude && inside(p.stub) && !blockedPoint(p.stub));
-    const targetPorts = ports(target, margin, source, request.targetFixed ?? false).filter(p => inside(p.stub) && !blockedPoint(p.stub));
+    const fixedPort = (port: FixedPort): Port => ({
+        border: port.point, stub: { x: port.point.x + DX[port.dir] * margin, y: port.point.y + DY[port.dir] * margin }, dir: port.dir
+    });
+    const sourcePorts = (request.sourcePort ? [fixedPort(request.sourcePort)]
+        : request.sourceFixed ? ports(source, margin, target, true) : avoidOccupied(ports(source, margin, target, false), source, margin, request.placed)).filter(p => p.dir !== request.sourceExclude && inside(p.stub) && !blockedPoint(p.stub));
+    const targetPorts = (request.targetPort ? [fixedPort(request.targetPort)]
+        : request.targetFixed ? ports(target, margin, source, true) : avoidOccupied(ports(target, margin, source, false), target, margin, request.placed)).filter(p => inside(p.stub) && !blockedPoint(p.stub));
     if (sourcePorts.length === 0 || targetPorts.length === 0) {
         return undefined;
     }
@@ -171,8 +231,11 @@ function route(request: OrthogonalRouteRequest, margin: number): Point[] | undef
             continue;
         }
         const state = index(xi, yi) * 4 + port.dir;
-        cost[state] = 0;
-        heap.push(state, 0);
+        const penalty = port.penalty ?? 0;
+        if (penalty < cost[state]) {
+            cost[state] = penalty;
+            heap.push(state, penalty);
+        }
     }
     const goals = new Map<number, Port>();
     for (const port of targetPorts) {
@@ -198,7 +261,7 @@ function route(request: OrthogonalRouteRequest, margin: number): Point[] | undef
             // the route must enter the target against the direction of the port
             const inward = (goal.dir + 2) % 4;
             if (dir !== goal.dir) {
-                const total = priority + (dir === inward ? 0 : BEND_COST);
+                const total = priority + (dir === inward ? 0 : BEND_COST) + (goal.penalty ?? 0);
                 if (!best || total < best.cost) {
                     best = { state, cost: total, port: goal };
                 }
@@ -295,6 +358,8 @@ export interface RoutedEnd {
     vertex: string;
     rect: RouterRect;
     kind: DiagramNodeKind;
+    /** The end is anchored (`@from` / `@to`): it is not moved. */
+    fixed?: boolean;
 }
 
 export interface OrthogonalRoute {
@@ -315,7 +380,7 @@ export function distributePorts(routes: OrthogonalRoute[]): void {
     for (const route of routes) {
         for (const atStart of [true, false]) {
             const end = atStart ? route.source : route.target;
-            if (POINT_PORT_KINDS.has(end.kind) || route.points.length < 2) {
+            if (POINT_PORT_KINDS.has(end.kind) || end.fixed || route.points.length < 2) {
                 continue;
             }
             const side = sideOf(end.rect, atStart ? route.points[0] : route.points[route.points.length - 1]);

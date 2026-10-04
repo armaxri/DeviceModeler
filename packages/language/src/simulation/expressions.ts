@@ -265,7 +265,7 @@ export class ExpressionEvaluator {
             case '!=':
                 return !valuesEqual(left, right);
             case '<': case '<=': case '>': case '>=': {
-                const [a, b] = this.numericPair(left, right, operator, node);
+                const [a, b] = left instanceof EnumValue && right instanceof EnumValue ? [left.value, right.value] : this.numericPair(left, right, operator, node);
                 switch (operator) {
                     case '<': return a < b;
                     case '<=': return a <= b;

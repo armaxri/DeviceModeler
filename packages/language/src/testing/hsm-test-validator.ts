@@ -141,6 +141,9 @@ export class HsmTestValidator extends HsmExpressionValidator {
 
     checkAssertCalled(statement: ast.AssertCalledStatement, accept: ValidationAcceptor): void {
         const operation = statement.operation.ref;
+        if (!this.checkUsable(operation, statement, 'operation', accept)) {
+            return;
+        }
         if (operation && statement.arguments.length > 0) {
             this.checkPositionalArguments(statement.arguments, operation.parameters, `'${operation.name}'`, statement, accept);
         }
@@ -157,7 +160,7 @@ export class HsmTestValidator extends HsmExpressionValidator {
 
     checkMock(statement: ast.MockStatement, accept: ValidationAcceptor): void {
         const operation = statement.operation.ref;
-        if (!operation) {
+        if (!operation || !this.checkUsable(operation, statement, 'operation', accept)) {
             return;
         }
         const returnType = returnTypeOf(operation);
@@ -221,6 +224,9 @@ export class HsmTestValidator extends HsmExpressionValidator {
     checkTestElementReference(reference: ast.ElementReference, accept: ValidationAcceptor): void {
         const element = reference.element.ref;
         const name = reference.element.$refText;
+        if (!this.checkUsable(element, reference, 'element', accept)) {
+            return;
+        }
         if (ast.isOperationDeclaration(element)) {
             accept('error', `The operation '${name}' of the state machine cannot be called in a test; use 'mock ${name} returns (...)' and 'assert called ${name}'.`,
                 { node: reference, property: 'element' });

@@ -46,6 +46,60 @@ export interface TestRunOptions {
     onResult?: (result: TestResult) => void;
     /** Collects the model coverage of the tests (states, transitions, reactions, guards); see `coverage.ts`. */
     coverage?: CoverageCollector;
+    /** Hooks of a debugger (called synchronously during the execution, see {@link TestDebugHooks}). */
+    debug?: TestDebugHooks;
+}
+
+/**
+ * Hooks for a debugger: they are called synchronously while a test executes, so a debugger can inspect
+ * the execution ({@link TestExecutionState}) and pause it by blocking inside the hook (e.g. a worker
+ * thread waiting for the next command of the debug adapter).
+ */
+export interface TestDebugHooks {
+    /** A test starts (before its `@SetUp` operation). */
+    testStarted?(execution: TestExecutionState): void;
+    /** Before every statement of a test, its `@SetUp` and the helper operations it calls. */
+    beforeStatement?(statement: ast.TestStatement, execution: TestExecutionState): void;
+    /**
+     * Every trace entry of the interpreter while the state machine executes (a statement like `raise` or
+     * `proceed`): states entered and exited, transitions taken, reactions executed, events, calls. The
+     * state of the interpreter is consistent: `enter` is reported after the state became active, `exit`
+     * after it became inactive, `transition` and `reaction` before their effect is executed.
+     */
+    traceEntry?(entry: TraceEntry, execution: TestExecutionState): void;
+    /**
+     * An assertion failed ({@link AssertionFailure}) or an error occurred (e.g. {@link SimulationError});
+     * called before the stack unwinds (once per error, at the innermost statement).
+     */
+    failure?(error: unknown, node: AstNode | undefined, execution: TestExecutionState): void;
+    /** A test ended (the result is reported to `onResult` as well). */
+    testFinished?(result: TestResult, execution: TestExecutionState): void;
+}
+
+/** A frame of the call stack of a test: the test operation, `@SetUp` or a called helper operation. */
+export interface TestStackFrame {
+    readonly operation: ast.TestOperation;
+    /** The statement being executed (undefined before the first one). */
+    readonly statement?: ast.TestStatement;
+    /** Values of the parameters and local variables. */
+    readonly locals: ReadonlyMap<ast.VariableDeclaration, Value>;
+}
+
+/** The state of a test execution, for debuggers ({@link TestDebugHooks}). */
+export interface TestExecutionState {
+    readonly testClass: ast.TestClass;
+    readonly test: ast.TestOperation;
+    readonly machine: ast.StateMachine;
+    /** The interpreter of the test (undefined only before it was created). */
+    readonly sim: StatechartInterpreter | undefined;
+    /** The call stack, outermost (the test or `@SetUp`) first. */
+    readonly stack: readonly TestStackFrame[];
+    /** The operation calls of the state machine since the start of the test. */
+    readonly calls: ReadonlyArray<{ readonly operation: string, readonly args: readonly HostValue[] }>;
+    /** The mocks (`mock op returns (x)`) by operation name, in the order they were defined. */
+    readonly mocks: ReadonlyMap<string, ReadonlyArray<{ readonly args?: readonly Value[], readonly value: Value }>>;
+    /** Evaluates an expression of the test document in the current frame (locals, state machine members). */
+    evaluate(expression: ast.Expression): Value;
 }
 
 /** A failed assertion. */
@@ -99,32 +153,61 @@ interface Mock {
     readonly value: Value;
 }
 
-/** Execution of the tests of one test class. */
-class TestExecution {
+interface Frame {
+    readonly operation: ast.TestOperation;
+    statement?: ast.TestStatement;
+    readonly locals: Map<ast.VariableDeclaration, Value>;
+}
 
-    private sim!: StatechartInterpreter;
+/** Execution of the tests of one test class. */
+class TestExecution implements TestExecutionState {
+
+    sim!: StatechartInterpreter;
     private evaluator!: ExpressionEvaluator;
-    private frames: Array<Map<ast.VariableDeclaration, Value>> = [];
-    private calls: RecordedCall[] = [];
-    private mocks = new Map<string, Mock[]>();
+    private frames: Frame[] = [];
+    calls: RecordedCall[] = [];
+    private mockTable = new Map<string, Mock[]>();
     private trace: string[] = [];
     /** Out events of submachine instances raised during the last call of the interpreter (`motor.stopped`). */
     private instanceOutEvents = new Set<string>();
     private budget = 0;
     private current?: AstNode;
+    /** The error last reported to the `failure` hook (reported once, at the innermost statement). */
+    private reported?: unknown;
+    test!: ast.TestOperation;
 
     constructor(
-        private readonly testClass: ast.TestClass,
-        private readonly machine: ast.StateMachine,
+        readonly testClass: ast.TestClass,
+        readonly machine: ast.StateMachine,
         private readonly options: TestRunOptions
     ) { }
 
+    get stack(): readonly TestStackFrame[] {
+        return this.frames;
+    }
+
+    get mocks(): ReadonlyMap<string, ReadonlyArray<{ readonly args?: readonly Value[], readonly value: Value }>> {
+        return this.mockTable;
+    }
+
+    evaluate(expression: ast.Expression): Value {
+        return this.evaluator.evaluate(expression);
+    }
+
     run(operation: ast.TestOperation): TestResult {
+        const result = this.execute(operation);
+        this.options.debug?.testFinished?.(result, this);
+        return result;
+    }
+
+    private execute(operation: ast.TestOperation): TestResult {
         const start = Date.now();
+        this.test = operation;
+        this.reported = undefined;
         const base = { testClass: this.testClass.name, name: operation.name, uri: uriOf(operation) };
         this.frames = [];
         this.calls = [];
-        this.mocks = new Map();
+        this.mockTable = new Map();
         this.trace = [];
         this.budget = this.options.maxIterations ?? 100000;
         this.current = undefined;
@@ -135,6 +218,7 @@ class TestExecution {
             const simulationOptions = { onTrace: (entry: TraceEntry) => this.onTrace(entry) };
             this.sim = new StatechartInterpreter(this.machine, coverage ? coverage.attach(simulationOptions) : simulationOptions);
             this.evaluator = new ExpressionEvaluator(this.createContext());
+            this.options.debug?.testStarted?.(this);
             const setUp = this.testClass.operations.find(op => hasAnnotation(op, 'SetUp'));
             if (setUp) {
                 this.invoke(setUp, []);
@@ -165,7 +249,7 @@ class TestExecution {
         operation.parameters.forEach((parameter, index) => {
             frame.set(parameter, convert(args[index], declaredType(parameter.type), `Argument '${parameter.name}' of '${operation.name}'`, operation)!);
         });
-        this.frames.push(frame);
+        this.frames.push({ operation, locals: frame });
         try {
             this.block(operation.body);
         } finally {
@@ -191,6 +275,25 @@ class TestExecution {
 
     private statement(statement: ast.TestStatement): void {
         this.current = statement;
+        const debug = this.options.debug;
+        if (!debug) {
+            this.executeStatement(statement);
+            return;
+        }
+        this.frames[this.frames.length - 1].statement = statement;
+        debug.beforeStatement?.(statement, this);
+        try {
+            this.executeStatement(statement);
+        } catch (error) {
+            if (error !== this.reported) {
+                this.reported = error;
+                debug.failure?.(error, error instanceof AssertionFailure ? error.node : this.current, this);
+            }
+            throw error;
+        }
+    }
+
+    private executeStatement(statement: ast.TestStatement): void {
         switch (statement.$type) {
             case 'EnterStatement':
                 this.instanceOutEvents.clear();
@@ -351,14 +454,14 @@ class TestExecution {
         const value = this.evaluator.evaluate(statement.value);
         const args = statement.withArguments ? statement.arguments.map(a => this.evaluator.evaluate(a)) : undefined;
         this.log(`> ${sourceText(statement)}`);
-        let mocks = this.mocks.get(name);
+        let mocks = this.mockTable.get(name);
         if (!mocks) {
             mocks = [];
-            this.mocks.set(name, mocks);
+            this.mockTable.set(name, mocks);
             const returnType = declaredType(operation.returnType);
             this.sim.setOperation(name, (...actual: HostValue[]) => {
                 // the most recent matching mock wins; mocks with arguments take precedence over the general one
-                const all = this.mocks.get(name) ?? [];
+                const all = this.mockTable.get(name) ?? [];
                 const match = [...all].reverse().find(m => m.args && sameValues(m.args.map(v => toHost(v)!), actual))
                     ?? [...all].reverse().find(m => !m.args);
                 return match ? convert(match.value, returnType, `Mocked result of '${name}'`, statement) : defaultValueOf(returnType);
@@ -394,7 +497,7 @@ class TestExecution {
     }
 
     private frame(): Map<ast.VariableDeclaration, Value> {
-        return this.frames[this.frames.length - 1];
+        return this.frames[this.frames.length - 1].locals;
     }
 
     private createContext(): EvaluationContext {
@@ -461,6 +564,7 @@ class TestExecution {
             this.instanceOutEvents.add(entry.event);
         }
         this.log(formatTraceEntry(entry));
+        this.options.debug?.traceEntry?.(entry, this);
     }
 
     private log(line: string): void {

@@ -34,15 +34,21 @@ describe.skipIf(!HAS_CMAKE)(`CMake integration (${GENERATOR})`, () => {
         const result = spawnSync(command, args, { cwd, encoding: 'utf-8' });
         return { status: result.status, output: `${result.stdout}${result.stderr}` };
     };
-    const cmakeBuild = () => run('cmake', ['--build', build]);
+    let lastBuild = 0;
+    const cmakeBuild = () => {
+        const result = run('cmake', ['--build', build]);
+        lastBuild = Date.now();
+        return result;
+    };
     const editModel = (file: string, from: string | RegExp, to: string) => {
         const model = path.join(dir, 'examples', file);
         const text = fs.readFileSync(model, 'utf-8');
         expect(text).toMatch(from);
-        // on file systems with coarse timestamps the change must be in a later second than the last build
-        const waitUntil = Date.now() + (fs.statSync(model).mtimeMs % 1000 === 0 ? 1100 : 20);
+        // the change must be in a later second than the outputs of the last build: GNU Make 3.81 (macOS) and
+        // file systems with coarse timestamps compare whole seconds, so a change in the same second is missed
+        const waitUntil = Math.max(Date.now() + 20, (Math.floor(lastBuild / 1000) + 1) * 1000 + 50);
         while (Date.now() < waitUntil) {
-            // busy wait (rare)
+            // busy wait (at most about a second)
         }
         fs.writeFileSync(model, text.replace(from, to));
     };

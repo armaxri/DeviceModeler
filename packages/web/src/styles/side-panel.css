@@ -1,0 +1,267 @@
+/*
+ * The side panel right of the diagram (ui/side-panel.ts): collapsible as a whole, resizable at its left
+ * edge, its content in collapsible sections like the views of VS Code's side bar. Shared by the web app and
+ * the diagram webview of the VS Code extension (which maps the --ui-* colors to the VS Code theme).
+ */
+
+#side-panel {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: var(--side-panel-width, 280px);
+    min-width: 0;
+    min-height: 0;
+    background: var(--ui-panel);
+    border-left: 1px solid var(--ui-border);
+}
+
+/* the simulation needs more room (unless the user has chosen a width) */
+#side-panel.simulation {
+    width: var(--side-panel-width, 360px);
+}
+
+#side-panel.collapsed {
+    width: 30px;
+}
+
+#side-panel.collapsed > .side-panel-header,
+#side-panel.collapsed > .side-panel-sash {
+    display: none;
+}
+
+/* ---- title row ---- */
+
+.side-panel-header {
+    display: flex;
+    align-items: center;
+    flex: none;
+    height: 30px;
+    padding: 0 4px 0 14px;
+    border-bottom: 1px solid var(--ui-border);
+}
+
+.side-panel-title {
+    flex: 1;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ui-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#side-panel button.side-panel-action {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--ui-muted);
+}
+
+#side-panel button.side-panel-action:hover {
+    background: var(--ui-hover);
+    color: var(--ui-text);
+}
+
+/* ---- the strip shown when the panel is collapsed ---- */
+
+#side-panel button.side-panel-strip {
+    display: none;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    width: 100%;
+    height: auto;
+    padding: 6px 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--ui-muted);
+}
+
+#side-panel.collapsed button.side-panel-strip {
+    display: flex;
+}
+
+#side-panel button.side-panel-strip:hover {
+    background: var(--ui-hover);
+    color: var(--ui-text);
+}
+
+.side-panel-strip-icon {
+    display: grid;
+    place-items: center;
+}
+
+.side-panel-strip-label {
+    writing-mode: vertical-rl;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+/* ---- resize edge (sash) ---- */
+
+.side-panel-sash {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -3px;
+    z-index: 5;
+    width: 6px;
+    cursor: col-resize;
+    touch-action: none;
+}
+
+.side-panel-sash::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 2px;
+    width: 2px;
+    background: transparent;
+    transition: background-color 0.1s 0.2s;
+}
+
+.side-panel-sash:hover::after,
+.side-panel-sash.dragging::after,
+.side-panel-sash:focus-visible::after {
+    background: var(--ui-select);
+}
+
+.side-panel-sash:focus-visible {
+    outline: none;
+}
+
+#side-panel.resizing {
+    user-select: none;
+}
+
+/* ---- toolbar button ---- */
+
+button.side-panel-toggle {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    padding: 0;
+}
+
+button.side-panel-toggle[aria-pressed="false"] .panel-icon-fill {
+    opacity: 0;
+}
+
+/* room for the toggle in the toolbar (the other labels are hidden at this width as well) */
+@media (max-width: 1600px) {
+    .toolbar .layout-label {
+        display: none;
+    }
+}
+
+/* ---- sections ---- */
+
+.side-section {
+    border-bottom: 1px solid var(--ui-border);
+}
+
+.side-section-heading {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin: 0;
+    font-size: inherit;
+    background: var(--ui-panel);
+}
+
+#side-panel button.side-section-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    height: 24px;
+    padding: 0 8px 0 4px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--ui-text);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+#side-panel button.side-section-header:hover {
+    background: var(--ui-hover);
+}
+
+#side-panel button:focus-visible {
+    outline: 1px solid var(--ui-select);
+    outline-offset: -1px;
+}
+
+.side-section-title {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.side-section-chevron {
+    display: inline-block;
+    flex: none;
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+    /* a chevron pointing down (expanded); rotated when collapsed */
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E") center / 16px no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E") center / 16px no-repeat;
+    transition: transform 0.1s;
+}
+
+.side-section.collapsed .side-section-chevron {
+    transform: rotate(-90deg);
+}
+
+.side-section-body {
+    padding: 6px 14px 12px;
+}
+
+.side-section-body[hidden] {
+    display: none;
+}
+
+.side-section-body > .actions:first-child {
+    margin-top: 2px !important;
+}
+
+.side-section-body > :last-child {
+    margin-bottom: 0;
+}
+
+.side-panel-note {
+    margin: 10px 14px;
+}
+
+#properties .help-list {
+    margin: 0;
+    padding-left: 18px;
+}
+
+#properties .help-list li + li {
+    margin-top: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .side-section-chevron, .side-panel-sash::after {
+        transition: none;
+    }
+}

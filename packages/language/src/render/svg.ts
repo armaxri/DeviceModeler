@@ -1,4 +1,5 @@
 import type { DiagramEdge, DiagramGraph, DiagramNode, Point } from '../diagram/diagram-model.js';
+import { arrowDirection, displayRoute } from '../diagram/edge-routes.js';
 import { DiagramMetrics, submachinePointPositions } from '../diagram/layout.js';
 import { helveticaTextWidth } from '../diagram/text-metrics.js';
 import { DIAGRAM_CSS } from './diagram-styles.js';
@@ -293,13 +294,10 @@ class SvgWriter {
         if (points.length < 2) {
             return;
         }
-        const path = routePath(points, edge.routing === 'spline');
-        const end = points[points.length - 1];
-        // direction of the last segment: for splines the last control point
-        let previous = points[points.length - 2];
-        for (let i = points.length - 2; i >= 0 && distance(points[i], end) < 0.5; i--) {
-            previous = points[i];
-        }
+        const route = displayRoute({ routing: edge.routing, curve: edge.curve, points });
+        const path = routePath(route.points, route.spline);
+        // direction of the last segment: for curves the last control point
+        const { from: previous, to: end } = arrowDirection(route.points);
         out.push(`<g class="${this.classes(['transition'], edge.id)}">`);
         out.push(`<path class="transition-line" d="${path}"/>`);
         out.push(`<path class="transition-arrow" d="${arrowHead(previous, end)}"/>`);
@@ -349,10 +347,6 @@ function baseline(top: number, height: number, fontSize: number): number {
 /** SVG collapses white space: leading blanks (indentation of wrapped lines) become non-breaking spaces. */
 function preserveIndent(line: string): string {
     return line.replace(/^ +/, match => ' '.repeat(match.length));
-}
-
-function distance(a: Point, b: Point): number {
-    return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 /** SVG path of a route: cubic bezier segments for splines, a polyline otherwise. */

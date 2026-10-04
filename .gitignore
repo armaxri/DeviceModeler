@@ -5,3 +5,10 @@ dist/
 .vite/
 .claude/worktrees/
 coverage/
+.cache/
+packages/desktop/release/
+# sandboxes of the IDE launch scripts (scripts/ide)
+.ide/
+# the .project of `npm run ide:eclipse -- --in-place`
+/examples/.project
+/examples/.settings/

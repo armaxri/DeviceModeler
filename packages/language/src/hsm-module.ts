@@ -7,11 +7,13 @@ import { HsmGeneratedModule, HsmGeneratedSharedModule, HsmTestGeneratedModule } 
 import { HsmDocumentValidator, HsmExpressionValidator } from './hsm-expression-validator.js';
 import { HsmFormatter } from './hsm-formatter.js';
 import { HsmCompletionProvider } from './lsp/cpp-lsp.js';
+import { HsmCodeActionProvider } from './lsp/cpp-code-actions.js';
 import { HsmDocumentationProvider } from './doc/hsm-documentation-provider.js';
 import { HsmDocumentBuilder, HsmLinker } from './hsm-linker.js';
 import { HsmImportResolver } from './imports.js';
 import { HsmImportValidator, registerImportValidationChecks } from './hsm-import-validator.js';
 import { HsmScopeProvider } from './hsm-scope.js';
+import { HsmValueConverter } from './hsm-value-converter.js';
 import { HsmValidator, registerValidationChecks } from './hsm-validator.js';
 import { HsmTestModule, type HsmTestServices } from './testing/hsm-test-module.js';
 import { registerTestValidationChecks } from './testing/hsm-test-validator.js';
@@ -30,6 +32,9 @@ export type HsmAddedServices = {
 export type HsmServices = LangiumServices & HsmAddedServices;
 
 export const HsmModule: Module<HsmServices, PartialLangiumServices & HsmAddedServices> = {
+    parser: {
+        ValueConverter: () => new HsmValueConverter()
+    },
     references: {
         ScopeProvider: (services) => new HsmScopeProvider(services),
         Linker: (services) => new HsmLinker(services),
@@ -43,7 +48,8 @@ export const HsmModule: Module<HsmServices, PartialLangiumServices & HsmAddedSer
     },
     lsp: {
         Formatter: () => new HsmFormatter(),
-        CompletionProvider: (services) => new HsmCompletionProvider(services)
+        CompletionProvider: (services) => new HsmCompletionProvider(services),
+        CodeActionProvider: () => new HsmCodeActionProvider()
     },
     documentation: {
         DocumentationProvider: (services) => new HsmDocumentationProvider(services)
@@ -61,6 +67,7 @@ export const HsmSharedModule: Module<LangiumSharedServices, PartialLangiumShared
 export interface HsmServiceExtensions {
     hsm?: Module<HsmServices, PartialLangiumServices>;
     hsmTest?: Module<HsmTestServices, PartialLangiumServices>;
+    shared?: Module<LangiumSharedServices, PartialLangiumSharedServices>;
 }
 
 /**
@@ -77,7 +84,8 @@ export function createHsmServices(context: DefaultSharedModuleContext = EmptyFil
     const shared = inject(
         createDefaultSharedModule(context),
         HsmGeneratedSharedModule,
-        HsmSharedModule
+        HsmSharedModule,
+        extensions.shared ?? {}
     );
     const Hsm = inject(
         createDefaultModule({ shared }),

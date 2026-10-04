@@ -33,7 +33,9 @@
     "onLanguage:hsm",
     "onLanguage:hsmtest",
     "onWebviewPanel:hsm.diagram",
-    "onCommand:hsm.importSct"
+    "onCommand:hsm.importSct",
+    "onDebugResolve:hsm-test",
+    "onDebugInitialConfigurations"
   ],
   "contributes": {
     "languages": [
@@ -70,6 +72,84 @@
         "language": "hsmtest",
         "scopeName": "source.hsmtest",
         "path": "./syntaxes/hsmtest.tmLanguage.json"
+      },
+      {
+        "scopeName": "documentation.injection.hsm",
+        "path": "./syntaxes/hsm-doc-comments.tmLanguage.json",
+        "injectTo": [
+          "source.hsm",
+          "source.hsmtest"
+        ]
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "hsmtest"
+      },
+      {
+        "language": "hsm"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "hsm-test",
+        "label": "HSM Tests",
+        "languages": [
+          "hsmtest"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "The .hsmtest file whose tests are debugged (absolute path; ${file}: the file of the active editor).",
+                "default": "${file}"
+              },
+              "test": {
+                "type": "string",
+                "description": "Only this test class or test: TestClass, TestClass.test or test. Default: all tests of the file."
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Pause before the first statement of the first test.",
+                "default": false
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "hsm-test",
+            "request": "launch",
+            "name": "Debug HSM tests of the current file",
+            "program": "${file}"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "HSM: Debug tests",
+            "description": "Debug the tests of an .hsmtest file",
+            "body": {
+              "type": "hsm-test",
+              "request": "launch",
+              "name": "Debug HSM tests",
+              "program": "^\"\\${file}\""
+            }
+          },
+          {
+            "label": "HSM: Debug one test",
+            "description": "Debug one test (or test class) of an .hsmtest file",
+            "body": {
+              "type": "hsm-test",
+              "request": "launch",
+              "name": "Debug HSM test",
+              "program": "^\"\\${workspaceFolder}/${1:tests/example.hsmtest}\"",
+              "test": "${2:TestClass.test}",
+              "stopOnEntry": true
+            }
+          }
+        ]
       }
     ],
     "commands": [
@@ -91,6 +171,12 @@
         "icon": "$(run-all)"
       },
       {
+        "command": "hsm.debugTests",
+        "title": "Debug Tests",
+        "category": "HSM",
+        "icon": "$(debug-alt)"
+      },
+      {
         "command": "hsm.importSct",
         "title": "Import itemis CREATE Model (.sct)",
         "category": "HSM"
@@ -102,13 +188,13 @@
       },
       {
         "command": "hsm.autoArrange",
-        "title": "Auto-arrange Diagram",
+        "title": "Re-arrange Diagram and Store Positions in Model",
         "category": "HSM",
         "icon": "$(layout)"
       },
       {
         "command": "hsm.resetLayout",
-        "title": "Use Automatic Diagram Layout",
+        "title": "Clear Stored Diagram Positions (Remove Layout Annotations)",
         "category": "HSM",
         "icon": "$(discard)"
       },
@@ -127,6 +213,11 @@
         },
         {
           "command": "hsm.runTests",
+          "when": "editorLangId == hsmtest",
+          "group": "navigation"
+        },
+        {
+          "command": "hsm.debugTests",
           "when": "editorLangId == hsmtest",
           "group": "navigation"
         }
@@ -170,6 +261,11 @@
           "group": "hsm@1"
         },
         {
+          "command": "hsm.debugTests",
+          "when": "resourceExtname == .hsmtest",
+          "group": "hsm@2"
+        },
+        {
           "command": "hsm.importSct",
           "when": "resourceExtname == .sct",
           "group": "hsm@1"
@@ -199,6 +295,10 @@
         {
           "command": "hsm.convertLayoutFile",
           "when": "editorLangId == hsm || activeWebviewPanelId == hsm.diagram"
+        },
+        {
+          "command": "hsm.debugTests",
+          "when": "editorLangId == hsmtest"
         }
       ],
       "webview/title": [
@@ -267,7 +367,16 @@
           "enum": [
             "SPLINES",
             "ORTHOGONAL",
-            "POLYLINE"
+            "ROUNDED",
+            "POLYLINE",
+            "SMOOTH"
+          ],
+          "enumDescriptions": [
+            "Curves computed by the layout",
+            "Horizontal and vertical segments",
+            "Orthogonal segments with rounded corners",
+            "Straight segments in any direction",
+            "A smooth curve through the bend points of the polyline"
           ],
           "default": "SPLINES",
           "description": "Routing of the transitions in the diagram."
@@ -280,7 +389,7 @@
         "hsm.diagram.showProperties": {
           "type": "boolean",
           "default": true,
-          "description": "Show the properties panel next to the diagram."
+          "description": "Show the side panel (properties of the selection, simulation) next to the diagram. Also toggled by the panel button in the toolbar of the diagram."
         },
         "hsm.cpp.outputDirectory": {
           "type": "string",

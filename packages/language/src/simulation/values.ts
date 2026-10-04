@@ -1,3 +1,4 @@
+import { findEnumerator } from '../cpp-enums.js';
 import type { AstNode } from 'langium';
 import type { TypeReference } from '../generated/ast.js';
 import { typeOfTypeReference } from '../hsm-typesystem.js';
@@ -330,8 +331,7 @@ function cppFromHost(value: unknown, type: CppHsmType, what: string, node?: AstN
         case 'enum': {
             if (typeof value === 'string') {
                 const name = value.trim();
-                const simple = name.startsWith(`${type.cppName}::`) ? name.slice(type.cppName.length + 2) : name;
-                const enumerator = resolved.enumerators.find(e => e.name === simple || e.qualifiedName === name.replace(/^::/, ''));
+                const enumerator = findEnumerator(resolved, name);
                 if (enumerator) {
                     return new EnumValue(type, enumerator.value);
                 }

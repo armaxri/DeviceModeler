@@ -1,8 +1,10 @@
 import type { Command } from 'commander';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { URI } from 'langium';
 import { NodeFileSystem } from 'langium/node';
 import type { EdgeRouting, LayoutDirection } from '../diagram/diagram-model.js';
+import { EDGE_ROUTINGS, parseEdgeRouting } from '../diagram/edge-routes.js';
 import { layoutStateMachineWithLayout } from '../diagram/manual-layout.js';
 import { describeStateMachine, generateDocIndex, generateModelDoc, type DocFormat, type DocIndexEntry } from '../doc/model-doc.js';
 import type { StateMachine } from '../generated/ast.js';
@@ -76,7 +78,7 @@ async function loadModels(files: string[], logger: Logger): Promise<{ models: Lo
             failures++;
             continue;
         }
-        const parsed = await loader.load(text, `file://${path.resolve(file)}`);
+        const parsed = await loader.load(text, URI.file(path.resolve(file)).toString());
         for (const d of parsed.diagnostics.filter(d => d.severity === 1)) {
             logger.error(`${file}:${d.range.start.line + 1}:${d.range.start.character + 1}: ${severities[d.severity ?? 1]}: ${d.message}`);
         }
@@ -99,9 +101,9 @@ function diagramOptions(options: DiagramCommandOptions): { theme: DiagramTheme, 
     if (direction !== 'DOWN' && direction !== 'RIGHT') {
         throw new Error(`Unknown direction '${options.direction}' (supported: DOWN, RIGHT)`);
     }
-    const routing = (options.routing ?? 'SPLINES').toUpperCase();
-    if (routing !== 'SPLINES' && routing !== 'ORTHOGONAL' && routing !== 'POLYLINE') {
-        throw new Error(`Unknown routing '${options.routing}' (supported: SPLINES, ORTHOGONAL, POLYLINE)`);
+    const routing = parseEdgeRouting(options.routing ?? 'SPLINES');
+    if (!routing) {
+        throw new Error(`Unknown routing '${options.routing}' (supported: ${EDGE_ROUTINGS.map(r => r.value).join(', ')})`);
     }
     return { theme: theme as DiagramTheme, direction, routing, priorities: options.priorities ?? true, auto: options.auto ?? false };
 }
@@ -281,6 +283,8 @@ function globToRegExp(pattern: string): RegExp {
     return new RegExp(`^${source}$`);
 }
 
+const ROUTING_HELP = `edge routing: ${EDGE_ROUTINGS.map(r => `${r.value} (${r.description})`).join(', ')}`;
+
 /** Registers `render` and `doc` at the command line program. */
 export function registerRenderCommands(program: Command): void {
     program.command('render')
@@ -288,7 +292,7 @@ export function registerRenderCommands(program: Command): void {
         .option('-o, --out <path>', 'output file (one model, *.svg) or directory (default: next to the model)')
         .option('-t, --theme <theme>', `diagram theme: ${DIAGRAM_THEMES.join(', ')}`, 'classic')
         .option('-d, --direction <direction>', 'layout direction: DOWN or RIGHT', 'DOWN')
-        .option('-r, --routing <routing>', 'edge routing: SPLINES, ORTHOGONAL or POLYLINE', 'SPLINES')
+        .option('-r, --routing <routing>', ROUTING_HELP, 'SPLINES')
         .option('--no-priorities', 'do not prefix transition labels with their priority')
         .option('--auto', 'lay out automatically, ignoring the layout annotations (@at, ...) of the models')
         .option('-f, --format <format>', 'output format (svg)', 'svg')
@@ -303,7 +307,7 @@ export function registerRenderCommands(program: Command): void {
         .option('-f, --format <format>', 'md (Markdown + SVG files) or html (self-contained pages)', 'md')
         .option('-t, --theme <theme>', `diagram theme: ${DIAGRAM_THEMES.join(', ')}`, 'classic')
         .option('-d, --direction <direction>', 'layout direction: DOWN or RIGHT', 'DOWN')
-        .option('-r, --routing <routing>', 'edge routing: SPLINES, ORTHOGONAL or POLYLINE', 'SPLINES')
+        .option('-r, --routing <routing>', ROUTING_HELP, 'SPLINES')
         .option('--no-priorities', 'do not prefix transition labels with their priority')
         .option('--auto', 'lay out automatically, ignoring the layout annotations (@at, ...) of the models')
         .option('--title <title>', 'title of the index page', 'State machines')

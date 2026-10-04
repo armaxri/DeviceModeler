@@ -1,0 +1,41 @@
+/*
+ * The tooltips of ui/tooltips.ts. The colors are tokens: the app theme here, the hover widget of the
+ * VS Code theme in the webview (webview.css).
+ */
+:root {
+    --tooltip-bg: #ffffff;
+    --tooltip-fg: var(--ui-text, #1f2328);
+    --tooltip-border: var(--ui-border, #d9dde3);
+    --tooltip-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+    --tooltip-font: 12px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+body.ui-dark {
+    --tooltip-bg: #2a3038;
+    --tooltip-fg: #e6edf3;
+    --tooltip-border: #444c56;
+    --tooltip-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.hsm-tooltip {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 100000;
+    max-width: min(420px, calc(100vw - 8px));
+    padding: 4px 8px;
+    border: 1px solid var(--tooltip-border);
+    border-radius: 4px;
+    background: var(--tooltip-bg);
+    color: var(--tooltip-fg);
+    box-shadow: var(--tooltip-shadow);
+    font: var(--tooltip-font);
+    white-space: pre-line;
+    overflow-wrap: break-word;
+    pointer-events: none;
+    user-select: none;
+}
+
+.hsm-tooltip[hidden] {
+    display: none;
+}

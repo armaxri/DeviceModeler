@@ -1,12 +1,13 @@
 import type { AstNode } from 'langium';
 import {
-    allTransitions, allVertices, definitionLines, getStateMachine, isInterfaceScope, isPseudoState, isRegion, isState, isStateMachine, isTransition,
+    allTransitions, allVertices, definitionLines, elementAnnotations, getStateMachine, isInterfaceScope, isPseudoState, isRegion, isState, isStateMachine, isTransition,
     nodeText, outgoingTransitions, qualifiedName, scopeOf, stateAction, containerName, transitionPriority, DECLARATION_KINDS,
     type DeclarationKind, type DiagramNodeKind, type EditResult, type ModelEditor, type NewDeclaration, type ScopeContainer, type StateMachine,
     type Vertex
 } from 'hsm-language';
 import type { Issue } from '../diagram/model.js';
 import { h } from './dom.js';
+import { panelSection } from './side-panel.js';
 
 export interface SelectionInfo {
     id?: string;
@@ -29,6 +30,8 @@ export interface PropertiesHost {
     checkEdit(producer: (editor: ModelEditor) => EditResult | undefined): string | undefined;
     /** Moves the cursor of the text editor to the given diagram element. */
     editInText(id: string): void;
+    /** Removes the anchors (`@from` / `@to`) of the ends of a transition: they are placed automatically again. */
+    anchorReset(edgeId: string): void;
 }
 
 const PSEUDO_LABELS: Record<string, string> = {
@@ -66,12 +69,12 @@ export function renderProperties(panel: HTMLElement, info: SelectionInfo, host: 
     const content: HTMLElement[] = [];
     const node = info.node;
     if (info.syntaxErrors) {
-        content.push(h('p', { class: 'hint' }, 'The text contains syntax errors. Fix them to continue editing in the diagram.'));
+        content.push(h('p', { class: 'hint side-panel-note' }, 'The text contains syntax errors. Fix them to continue editing in the diagram.'));
     }
     if (info.count > 1) {
         content.push(
-            h('h2', {}, `${info.count} elements selected`),
-            h('div', { class: 'actions' }, h('button', { class: 'danger', onClick: () => host.deleteSelection() }, 'Delete'))
+            panelSection('selection', 'Selection', [h('h2', {}, `${info.count} elements selected`)]),
+            actionsSection(h('button', { class: 'danger', onClick: () => host.deleteSelection() }, 'Delete'))
         );
     } else if (info.kind === 'definition' && isStateMachine(node)) {
         content.push(...definitionPanel(node, info, host));
@@ -83,28 +86,31 @@ export function renderProperties(panel: HTMLElement, info: SelectionInfo, host: 
         content.push(...statePanel(node, info, host));
     } else if (isPseudoState(node)) {
         const hint = pseudoHint(node);
-        content.push(...[
-            h('h2', {}, node.name),
-            h('div', { class: 'kind' }, `${PSEUDO_LABELS[node.kind] ?? node.kind} in ${containerName(scopeOf(node))}`),
-            ...problems(info.issue),
-            nameField(node, host),
-            hint ? h('p', { class: 'hint' }, hint) : undefined,
-            h('div', { class: 'actions' },
+        content.push(
+            panelSection('pseudo', 'Pseudo state', [
+                h('h2', {}, node.name),
+                h('div', { class: 'kind' }, `${PSEUDO_LABELS[node.kind] ?? node.kind} in ${containerName(scopeOf(node))}`),
+                ...problems(info.issue),
+                nameField(node, host),
+                hint ? h('p', { class: 'hint' }, hint) : undefined
+            ]),
+            actionsSection(
                 h('button', { onClick: () => host.setTool('transition') }, 'Add transition…'),
-                h('button', { class: 'danger', onClick: () => host.deleteSelection() }, 'Delete'))
-        ].filter((e): e is HTMLElement => !!e));
+                h('button', { class: 'danger', onClick: () => host.deleteSelection() }, 'Delete')));
     } else if (isRegion(node)) {
         const index = node.$container.regions.indexOf(node) + 1;
         content.push(
-            h('h2', {}, node.name ?? `Region ${index}`),
-            h('div', { class: 'kind' }, `Orthogonal region of ${node.$container.name}`),
-            ...problems(info.issue),
-            field('Name (optional)', h('input', {
-                value: node.name ?? '',
-                placeholder: 'unnamed',
-                onChange: (e: Event) => host.applyEdit(editor => editor.renameRegion(node, (e.target as HTMLInputElement).value))
-            })),
-            h('div', { class: 'actions' },
+            panelSection('region', 'Region', [
+                h('h2', {}, node.name ?? `Region ${index}`),
+                h('div', { class: 'kind' }, `Orthogonal region of ${node.$container.name}`),
+                ...problems(info.issue),
+                field('Name (optional)', h('input', {
+                    value: node.name ?? '',
+                    placeholder: 'unnamed',
+                    onChange: (e: Event) => host.applyEdit(editor => editor.renameRegion(node, (e.target as HTMLInputElement).value))
+                }))
+            ]),
+            actionsSection(
                 h('button', { onClick: () => host.applyEdit(editor => editor.addVertex(node, 'state')) }, 'Add state'),
                 h('button', { class: 'danger', onClick: () => host.deleteSelection() }, 'Delete'))
         );
@@ -112,6 +118,11 @@ export function renderProperties(panel: HTMLElement, info: SelectionInfo, host: 
         content.push(...transitionPanel(node, info, host));
     }
     panel.replaceChildren(...content);
+}
+
+/** The section with the buttons of the selected element (one state for all kinds of elements). */
+function actionsSection(...buttons: Array<HTMLElement | undefined>): HTMLElement {
+    return panelSection('actions', 'Actions', [h('div', { class: 'actions' }, ...buttons)]);
 }
 
 function field(label: string, input: HTMLElement): HTMLElement {
@@ -178,27 +189,32 @@ function machinePanel(model: StateMachine | undefined, host: PropertiesHost): HT
     const states = vertices.filter(isState);
     const transitions = allTransitions(model);
     return [
-        h('h2', {}, model.name),
-        h('div', { class: 'kind' }, 'State machine'),
-        h('dl', {},
-            h('dt', {}, 'States'), h('dd', {}, String(states.length)),
-            h('dt', {}, 'Composite'), h('dd', {}, String(states.filter(s => s.vertices.length > 0 || s.regions.length > 0).length)),
-            h('dt', {}, 'Pseudo states'), h('dd', {}, String(vertices.length - states.length)),
-            h('dt', {}, 'Transitions'), h('dd', {}, String(transitions.length))),
-        h('div', { class: 'actions' },
+        panelSection('machine', 'State machine', [
+            h('h2', {}, model.name),
+            h('div', { class: 'kind' }, 'State machine'),
+            h('dl', {},
+                h('dt', {}, 'States'), h('dd', {}, String(states.length)),
+                h('dt', {}, 'Composite'), h('dd', {}, String(states.filter(s => s.vertices.length > 0 || s.regions.length > 0).length)),
+                h('dt', {}, 'Pseudo states'), h('dd', {}, String(vertices.length - states.length)),
+                h('dt', {}, 'Transitions'), h('dd', {}, String(transitions.length)))
+        ]),
+        actionsSection(
             h('button', { onClick: () => host.setTool('state') }, 'Add state'),
             h('button', { onClick: () => host.setTool('transition') }, 'Add transition')),
-        h('h2', { style: 'margin-top:18px' }, 'How to edit'),
-        h('ul', { class: 'hint', style: 'padding-left:18px;margin:6px 0' },
-            h('li', {}, 'Pick a tool in the palette, then click into the diagram. Hold ', h('kbd', {}, 'Shift'), ' to keep the tool.'),
-            h('li', {}, 'Double-click a state or transition to rename it or to edit its label (', h('code', {}, 'trigger [guard] / effect'), ').'),
-            h('li', {}, 'Double-click the canvas to add a state.'),
-            h('li', {}, 'Click the definitions box to see the interfaces and to add events, variables or operations.'),
-            h('li', {}, 'Drag a state to move it (the positions are stored as layout annotations in the model; ', h('i', {}, 'Automatic layout'),
-                ' removes them). Hold ', h('kbd', {}, 'Shift'), ' while dropping to move it into the state below the mouse.'),
-            h('li', {}, 'Drag the corner of a selected state to resize it; double-click a transition to add a waypoint, double-click a waypoint to remove it.'),
-            h('li', {}, h('kbd', {}, 'Del'), ' deletes, ', h('kbd', {}, 'F2'), ' renames, ', h('kbd', {}, 'Ctrl'), '+', h('kbd', {}, 'Z'), ' undoes.'),
-            h('li', {}, 'Text and diagram are always in sync – edit whichever you prefer.'))
+        panelSection('help', 'How to edit', [
+            h('ul', { class: 'hint help-list' },
+                h('li', {}, 'Pick a tool in the palette, then click into the diagram. Hold ', h('kbd', {}, 'Shift'), ' to keep the tool.'),
+                h('li', {}, 'Double-click a state or transition to rename it or to edit its label (', h('code', {}, 'trigger [guard] / effect'), ').'),
+                h('li', {}, 'Double-click the canvas to add a state.'),
+                h('li', {}, 'Click the definitions box to see the interfaces and to add events, variables or operations.'),
+                h('li', {}, 'Drag a state to move it: this stores the positions in the model as layout annotations (',
+                    h('i', {}, 'Positions: stored in model'), '). ', h('i', {}, 'Re-arrange'), ' arranges everything anew, ',
+                    h('i', {}, 'Clear positions'), ' removes the annotations (automatic arrangement again). Hold ', h('kbd', {}, 'Shift'),
+                    ' while dropping to move it into the state below the mouse.'),
+                h('li', {}, 'Drag the corner of a selected state to resize it; double-click a transition to add a waypoint, double-click a waypoint to remove it.'),
+                h('li', {}, 'Drag the square at the start or end of a selected transition along the border of its state to anchor it there; double-click the square to place it automatically again.'),
+                h('li', {}, h('kbd', {}, 'Del'), ' deletes, ', h('kbd', {}, 'F2'), ' renames, ', h('kbd', {}, 'Ctrl'), '+', h('kbd', {}, 'Z'), ' undoes.'),
+                h('li', {}, 'Text and diagram are always in sync – edit whichever you prefer.'))])
     ];
 }
 
@@ -219,28 +235,30 @@ function statePanel(state: import('hsm-language').State, info: SelectionInfo, ho
     // a submachine state (`state Moving : motor`) has no sub states: they are the states of the instance
     const submachine = state.submachine;
     return [
-        h('h2', {}, state.name),
-        h('div', { class: 'kind' }, `${composite ? 'Composite state' : submachine ? 'Submachine state' : 'State'} in ${containerName(container)}${isInitial ? ' · initial' : ''}`),
-        submachine ? field('Submachine instance', h('div', { class: 'hint' }, h('code', {}, submachine.$refText), ' – double-click the state to open its state machine')) : undefined,
-        ...problems(info.issue),
-        nameField(state, host),
-        field('Description', h('input', {
-            value: state.description ?? '',
-            placeholder: 'optional text shown in the state',
-            onChange: (e: Event) => host.applyEdit(editor => editor.setStateDescription(state, (e.target as HTMLInputElement).value))
-        })),
-        ...actionField('entry', 'Entry action'),
-        ...actionField('exit', 'Exit action'),
-        internal.length > 0
-            ? field('Local reactions', h('div', { class: 'hint' }, ...internal.map(r => h('div', {}, h('code', {}, nodeText(r))))))
-            : undefined,
-        h('div', { class: 'actions' },
+        panelSection('state', 'State', [
+            h('h2', {}, state.name),
+            h('div', { class: 'kind' }, `${composite ? 'Composite state' : submachine ? 'Submachine state' : 'State'} in ${containerName(container)}${isInitial ? ' · initial' : ''}`),
+            submachine ? field('Submachine instance', h('div', { class: 'hint' }, h('code', {}, submachine.$refText), ' – double-click the state to open its state machine')) : undefined,
+            ...problems(info.issue),
+            nameField(state, host),
+            field('Description', h('input', {
+                value: state.description ?? '',
+                placeholder: 'optional text shown in the state',
+                onChange: (e: Event) => host.applyEdit(editor => editor.setStateDescription(state, (e.target as HTMLInputElement).value))
+            })),
+            ...actionField('entry', 'Entry action'),
+            ...actionField('exit', 'Exit action'),
+            internal.length > 0
+                ? field('Local reactions', h('div', { class: 'hint' }, ...internal.map(r => h('div', {}, h('code', {}, nodeText(r))))))
+                : undefined
+        ]),
+        actionsSection(
             submachine ? undefined : h('button', { onClick: () => host.applyEdit(editor => editor.addVertex(state, 'state')) }, 'Add sub state'),
             submachine ? undefined : h('button', { onClick: () => host.applyEdit(editor => editor.addRegion(state)) }, 'Add region'),
             isInitial ? undefined : h('button', { onClick: () => host.applyEdit(editor => editor.setInitial(state)) }, 'Make initial'),
             h('button', { onClick: () => host.applyEdit(editor => editor.addTransition(state, { finalOf: container })) }, 'Add final'),
             h('button', { class: 'danger', onClick: () => host.deleteSelection() }, 'Delete'))
-    ].filter((e): e is HTMLElement => !!e);
+    ];
 }
 
 function transitionPanel(transition: import('hsm-language').Transition, info: SelectionInfo, host: PropertiesHost): HTMLElement[] {
@@ -276,18 +294,26 @@ function transitionPanel(transition: import('hsm-language').Transition, info: Se
     const entryExit = transition.entryPoints.length > 0 ? ` · via entry point ${transition.entryPoints[0]}`
         : transition.exitPoints.length > 0 ? ` · taken at exit node ${transition.exitPoints.join(' / ')}` : '';
     return [
-        h('h2', {}, `${sourceName} → ${targetName}`),
-        h('div', { class: 'kind' }, `${kind}${priority !== undefined ? ` · priority ${priority} of ${outgoing.length}` : ''}${entryExit}`),
-        ...problems(info.issue),
-        field('Source', endSelect('source')),
-        field('Target', endSelect('target')),
-        ...spec,
-        priority !== undefined
-            ? h('p', { class: 'hint' }, `The outgoing transitions of '${sourceName}' are checked in the order of the text; reorder the lines to change the priority.`)
-            : undefined,
-        h('div', { class: 'actions' },
+        panelSection('transition', 'Transition', [
+            h('h2', {}, `${sourceName} → ${targetName}`),
+            h('div', { class: 'kind' }, `${kind}${priority !== undefined ? ` · priority ${priority} of ${outgoing.length}` : ''}${entryExit}`),
+            ...problems(info.issue),
+            field('Source', endSelect('source')),
+            field('Target', endSelect('target')),
+            ...spec,
+            priority !== undefined
+                ? h('p', { class: 'hint' }, `The outgoing transitions of '${sourceName}' are checked in the order of the text; reorder the lines to change the priority.`)
+                : undefined
+        ]),
+        actionsSection(
+            elementAnnotations(transition).some(a => a.name === 'from' || a.name === 'to') && info.id
+                ? h('button', {
+                    title: 'Remove the anchors of the start and end of the transition (@from / @to): they are placed automatically again',
+                    onClick: () => host.anchorReset(info.id!)
+                }, 'Reset endpoints')
+                : undefined,
             h('button', { class: 'danger', onClick: () => host.deleteSelection() }, 'Delete'))
-    ].filter((e): e is HTMLElement => !!e);
+    ];
 }
 
 const DECLARATION_PLACEHOLDERS: Record<DeclarationKind, { name: string, type: string }> = {
@@ -360,22 +386,23 @@ function definitionPanel(machine: StateMachine, info: SelectionInfo, host: Prope
         });
     }
     return [
-        h('h2', {}, machine.name),
-        h('div', { class: 'kind' }, `Definition section · ${declarations} declaration${declarations === 1 ? '' : 's'}`
-            + ` in ${scopes.length} scope${scopes.length === 1 ? '' : 's'}`),
-        ...problems(info.issue),
-        h('div', { class: 'definition-lines' }, lines.join('\n')),
-        h('p', { class: 'hint' }, 'Edit the declarations in the text editor (double-click the box in the diagram), or add new ones here.'),
-        h('div', { class: 'actions' },
-            h('button', { onClick: () => info.id && host.editInText(info.id) }, 'Edit in text')),
-        h('fieldset', {},
-            h('legend', {}, 'Add declaration'),
+        panelSection('definition', 'Definition section', [
+            h('h2', {}, machine.name),
+            h('div', { class: 'kind' }, `Definition section · ${declarations} declaration${declarations === 1 ? '' : 's'}`
+                + ` in ${scopes.length} scope${scopes.length === 1 ? '' : 's'}`),
+            ...problems(info.issue),
+            h('div', { class: 'definition-lines' }, lines.join('\n')),
+            h('p', { class: 'hint' }, 'Edit the declarations in the text editor (double-click the box in the diagram), or add new ones here.'),
+            h('div', { class: 'actions' },
+                h('button', { onClick: () => info.id && host.editInText(info.id) }, 'Edit in text'))
+        ]),
+        panelSection('declaration', 'Add declaration', [
             h('div', { class: 'row' }, field('Kind', kind), field('Scope', scope)),
             field('Name', name),
             h('div', { class: 'row' }, field('Type', type), valueField),
             typeList,
             error,
-            h('div', { class: 'actions' }, h('button', { class: 'primary', onClick: add }, 'Add declaration')))
+            h('div', { class: 'actions' }, h('button', { class: 'primary', onClick: add }, 'Add declaration'))])
     ];
 }
 
@@ -383,12 +410,14 @@ function pseudoEndPanel(info: SelectionInfo, container: ScopeContainer, host: Pr
     const initial = info.kind === 'initial';
     const transitions = container.transitions.filter(t => initial ? t.initial : t.final);
     return [
-        h('h2', {}, initial ? 'Initial state' : 'Final state'),
-        h('div', { class: 'kind' }, `of ${containerName(container)}`),
-        h('p', { class: 'hint' }, initial
-            ? 'Defined by the initial transition ([*] -> …). Use the “Initial state” tool or “Make initial” to change the target.'
-            : 'Defined by transitions to [*]. Deleting it removes these transitions.'),
-        h('div', { class: 'hint' }, ...transitions.map(t => h('div', {}, h('code', {}, `${t.initial ? '[*]' : t.source?.ref?.name} -> ${t.final ? '[*]' : t.target?.ref?.name}`)))),
-        h('div', { class: 'actions' }, h('button', { class: 'danger', onClick: () => host.deleteSelection() }, 'Delete'))
+        panelSection(initial ? 'initial' : 'final', initial ? 'Initial state' : 'Final state', [
+            h('h2', {}, initial ? 'Initial state' : 'Final state'),
+            h('div', { class: 'kind' }, `of ${containerName(container)}`),
+            h('p', { class: 'hint' }, initial
+                ? 'Defined by the initial transition ([*] -> …). Use the “Initial state” tool or “Make initial” to change the target.'
+                : 'Defined by transitions to [*]. Deleting it removes these transitions.'),
+            h('div', { class: 'hint' }, ...transitions.map(t => h('div', {}, h('code', {}, `${t.initial ? '[*]' : t.source?.ref?.name} -> ${t.final ? '[*]' : t.target?.ref?.name}`))))
+        ]),
+        actionsSection(h('button', { class: 'danger', onClick: () => host.deleteSelection() }, 'Delete'))
     ];
 }

@@ -5,6 +5,7 @@ import { qualifiedName } from '../hsm-scope.js';
 import { eventDirection, typeName, typeOfAlias, typeOfEvent, typeOfParameter, typeOfVariable, returnTypeOf } from '../hsm-typesystem.js';
 import { nodeText, outgoingTransitions, scopeOf, transitionPriority, type ScopeContainer } from '../model-utils.js';
 import { docComment } from './doc-comments.js';
+import { isHsmTypeReference, writtenCppType } from '../class-members.js';
 
 /*
  * Documentation of state machines: a structured description of a model (`describeStateMachine`) and
@@ -42,7 +43,8 @@ export interface OperationDoc {
 }
 
 export interface ScopeDoc {
-    kind: 'interface' | 'internal';
+    /** `public`, `protected`, `private`: a C++ class section (its types are the C++ types as written). */
+    kind: 'interface' | 'internal' | 'public' | 'protected' | 'private';
     /** Name of a named interface. */
     name?: string;
     documentation?: string;
@@ -158,7 +160,7 @@ export function describeStateMachine(machine: ast.StateMachine): StateMachineDoc
 
 function describeScope(scope: ast.Scope): ScopeDoc {
     const result: ScopeDoc = {
-        kind: ast.isInternalScope(scope) ? 'internal' : 'interface',
+        kind: ast.isInternalScope(scope) ? 'internal' : ast.isClassScope(scope) ? scope.access : 'interface',
         name: ast.isInterfaceScope(scope) ? scope.name : undefined,
         documentation: docComment(scope),
         events: [],
@@ -166,6 +168,9 @@ function describeScope(scope: ast.Scope): ScopeDoc {
         operations: [],
         typeAliases: []
     };
+    // the C++ class sections show the C++ types as written (`unsigned int`, `const app::Config&`)
+    const typeText = (reference: ast.TypeReference | undefined, type: () => string) =>
+        ast.isClassScope(scope) && reference && !isHsmTypeReference(reference) ? writtenCppType(reference) : type();
     for (const declaration of scope.declarations) {
         const documentation = docComment(declaration);
         if (ast.isEventDeclaration(declaration)) {
@@ -173,7 +178,7 @@ function describeScope(scope: ast.Scope): ScopeDoc {
         } else if (ast.isVariableDeclaration(declaration)) {
             result.variables.push({
                 name: declaration.name,
-                type: typeName(typeOfVariable(declaration)),
+                type: typeText(declaration.type, () => typeName(typeOfVariable(declaration))),
                 constant: declaration.const,
                 readonly: declaration.readonly,
                 initialValue: declaration.initialValue ? nodeText(declaration.initialValue) : undefined,
@@ -182,9 +187,9 @@ function describeScope(scope: ast.Scope): ScopeDoc {
         } else if (ast.isTypeAliasDeclaration(declaration)) {
             result.typeAliases.push({ name: declaration.name, type: declaration.type?.name ?? '', baseType: typeName(typeOfAlias(declaration)), documentation });
         } else {
-            const parameters = declaration.parameters.map(p => ({ name: p.name, type: typeName(typeOfParameter(p)), varArgs: p.varArgs }));
-            const returnType = typeName(returnTypeOf(declaration));
-            const signature = `${declaration.name}(${parameters.map(p => `${p.name}${p.varArgs ? '...' : ''} : ${p.type}`).join(', ')}) : ${returnType}`;
+            const parameters = declaration.parameters.map(p => ({ name: p.name, type: typeText(p.type, () => typeName(typeOfParameter(p))), varArgs: p.varArgs }));
+            const returnType = typeText(declaration.returnType, () => typeName(returnTypeOf(declaration)));
+            const signature = `${declaration.const ? 'const ' : ''}${declaration.name}(${parameters.map(p => `${p.name}${p.varArgs ? '...' : ''} : ${p.type}`).join(', ')}) : ${returnType}`;
             result.operations.push({ name: declaration.name, signature, parameters, returnType, documentation });
         }
     }
@@ -377,6 +382,7 @@ function writeDoc(doc: StateMachineDoc, w: DocWriter, options: ModelDocOptions):
         w.heading(2, w.text('Interfaces'));
         for (const scope of doc.scopes) {
             const heading = scope.kind === 'internal' ? w.text('Internal scope')
+                : scope.kind !== 'interface' ? `${w.text('C++ class section ')}${w.code(`${scope.kind}:`)}`
                 : scope.name ? `${w.text('Interface ')}${w.code(scope.name)}` : w.text('Interface');
             w.heading(3, heading);
             if (scope.documentation) {
@@ -505,7 +511,8 @@ class MarkdownWriter extends DocWriter {
     }
 
     markdownInline(markdown: string): string {
-        return markdown.replace(/\|/g, '\\|').replace(/\s*\n\s*\n\s*/g, '<br><br>').replace(/\s*\n\s*/g, ' ');
+        // line breaks as written (the documentation comments keep them)
+        return markdown.replace(/\|/g, '\\|').replace(/[ \t]*\n[ \t]*\n\s*/g, '<br><br>').replace(/[ \t]*\n[ \t]*/g, '<br>');
     }
 
     markdownBlock(markdown: string): void {
@@ -568,7 +575,7 @@ class HtmlWriter extends DocWriter {
     }
 
     markdownInline(markdown: string): string {
-        return markdown.split(/\n\s*\n/).map(p => inlineMarkdownToHtml(p)).join('<br><br>');
+        return markdown.split(/\n\s*\n/).map(p => p.split('\n').map(line => inlineMarkdownToHtml(trimSpaces(line))).join('<br>')).join('<br><br>');
     }
 
     markdownBlock(markdown: string): void {
@@ -635,6 +642,8 @@ blockquote { margin: 0 0 16px; padding: 0 12px; color: #59636e; border-left: 4px
 table { border-collapse: collapse; margin: 8px 0 16px; font-size: 14px; }
 th, td { border: 1px solid #d0d7de; padding: 4px 10px; text-align: left; vertical-align: top; }
 th { background: #f6f8fa; }
+pre { background: #f6f8fa; padding: 8px 12px; border-radius: 6px; overflow-x: auto; }
+pre code { background: none; padding: 0; }
 figure.diagram { margin: 16px 0; overflow-x: auto; }
 figure.diagram svg, figure.diagram img { max-width: none; }
 a { color: #0969da; }
@@ -644,16 +653,54 @@ function escapeHtml(value: string): string {
     return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-/** Converts the Markdown subset of doc comments (paragraphs, lists, code, emphasis, links) to HTML. */
+/**
+ * Converts the Markdown subset of doc comments (paragraphs with their line breaks, lists, fenced code
+ * blocks, code, emphasis, links) to HTML.
+ */
 export function markdownToHtml(markdown: string): string {
-    const blocks = markdown.split(/\n\s*\n/).map(b => b.trim()).filter(b => b);
-    return blocks.map(block => {
-        const lines = block.split('\n');
-        if (lines.every(l => /^[-*] /.test(l))) {
-            return `<ul>${lines.map(l => `<li>${inlineMarkdownToHtml(l.substring(2))}</li>`).join('')}</ul>`;
+    const html: string[] = [];
+    const lines = markdown.split(/\r?\n/);
+    let paragraph: string[] = [];
+    let items: string[][] = [];
+    const flushParagraph = () => {
+        if (paragraph.length > 0) {
+            html.push(`<p>${paragraph.map(line => inlineMarkdownToHtml(trimSpaces(line))).join('<br>')}</p>`);
         }
-        return `<p>${lines.map(l => inlineMarkdownToHtml(l)).join('<br>')}</p>`;
-    }).join('\n');
+        paragraph = [];
+    };
+    const flushList = () => {
+        if (items.length > 0) {
+            html.push(`<ul>${items.map(item => `<li>${item.map(line => inlineMarkdownToHtml(trimSpaces(line))).join('<br>')}</li>`).join('')}</ul>`);
+        }
+        items = [];
+    };
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const fence = /^\s*(`{3,}|~{3,})/.exec(line);
+        if (fence) {
+            flushParagraph();
+            flushList();
+            const code: string[] = [];
+            while (++i < lines.length && !lines[i].trim().startsWith(fence[1])) {
+                code.push(lines[i]);
+            }
+            html.push(`<pre><code>${escapeHtml(code.join('\n'))}</code></pre>`);
+        } else if (line.trim() === '') {
+            flushParagraph();
+            flushList();
+        } else if (/^\s*([-*+]|\d+[.)]) /.test(line)) {
+            flushParagraph();
+            items.push([line.trim().replace(/^([-*+]|\d+[.)]) /, '')]);
+        } else if (items.length > 0 && /^\s/.test(line)) {
+            items[items.length - 1].push(line);
+        } else {
+            flushList();
+            paragraph.push(line);
+        }
+    }
+    flushParagraph();
+    flushList();
+    return html.join('\n');
 }
 
 function inlineMarkdownToHtml(text: string): string {
@@ -662,11 +709,17 @@ function inlineMarkdownToHtml(text: string): string {
         if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
             return `<code>${escapeHtml(part.slice(1, -1))}</code>`;
         }
-        return escapeHtml(part)
+        // backslash escapes of Markdown (`\<`)
+        return escapeHtml(part.replace(/\\([!-/:-@[-`{-~])/g, '$1'))
             .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
             .replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>')
             .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, label: string, href: string) =>
                 /^(https?:|#|\.{0,2}\/|[\w-]+\.\w+)/.test(href) ? `<a href="${href}">${label}</a>` : label)
             .replace(/\n/g, ' ');
     }).join('');
+}
+
+/** A line without leading and trailing spaces and tabs (non-breaking spaces indent lines of doc comments). */
+function trimSpaces(line: string): string {
+    return line.replace(/^[ \t]+|[ \t]+$/g, '');
 }

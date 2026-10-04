@@ -1,0 +1,2 @@
+# p2 does not keep the executable bit of files of bundles
+instructions.install = chmod(targetDir:@artifact,targetFile:bin/hsm,permissions:755);
