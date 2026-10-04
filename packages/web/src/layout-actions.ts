@@ -37,7 +37,7 @@ export const LAYOUT_TEXT = {
     automatic: {
         label: 'automatic',
         title: 'Positions: automatic – the diagram is arranged automatically and follows every change of the model. '
-            + 'Dragging a state stores the positions in the model as layout annotations (@at, @via, …).'
+            + 'Dragging an element stores the positions in the model as layout annotations (@at, @via, …).'
     },
     /** Indicator of the current state: positions stored in the model. */
     stored: {
@@ -49,7 +49,7 @@ export const LAYOUT_TEXT = {
     store: {
         label: 'Store positions',
         title: 'Store the current automatic arrangement in the model as layout annotations (@at …), so that it can be '
-            + 'adjusted by hand (dragging a state does this as well). Undo: Ctrl+Z'
+            + 'adjusted by hand (dragging an element does this as well). Undo: Ctrl+Z'
     },
     /** `arrange` with stored positions. */
     rearrange: {
@@ -70,7 +70,7 @@ export const POSITIONS_LABEL = 'Positions:';
 
 /** The status messages after an action which changed the model. */
 export const LAYOUT_STATUS = {
-    store: 'Positions stored in the model (layout annotations) – drag states to adjust them; Ctrl+Z undoes.',
+    store: 'Positions stored in the model (layout annotations) – drag elements to adjust them; Ctrl+Z undoes.',
     rearrange: 'Re-arranged – the new positions are stored in the model; Ctrl+Z restores the previous ones.',
     clear: 'Stored positions removed from the model – the diagram is arranged automatically; Ctrl+Z restores them.'
 } as const;
