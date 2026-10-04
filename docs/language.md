@@ -373,7 +373,7 @@ statemachine Controller {
 
 ## Diagram layout annotations
 
-On the main branch since PR #4 (from the branch `claude/layout-annotations`). A hand-arranged diagram is stored in the model as
+A hand-arranged diagram is stored in the model as
 layout annotations; a model without them is laid out automatically. They have no influence on the
 semantics or the generated code, and are normally written by the diagram editor (see
 [Manual layout](manual-layout.md)).

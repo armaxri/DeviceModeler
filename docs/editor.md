@@ -1,6 +1,10 @@
 # Web editor
 
-The web app (`npm run dev`, `packages/web`) edits the text and the diagram side by side; the VS Code extension embeds the same diagram editor ([VS Code extension](vscode.md)).
+The web app (`npm run dev`, `packages/web`; online at [armaxri.github.io/DeviceModeler/main/](https://armaxri.github.io/DeviceModeler/main/))
+edits the text and the diagram side by side – of state machines and of structure files. The VS Code extension
+embeds the same diagram editor ([VS Code extension](vscode.md)); the desktop app and the Eclipse and JetBrains
+plugins embed the whole web app in its embedded mode ([Installation and usage](installation.md)), so everything
+described here works there as well, with the files of the host instead of the virtual file list.
 Drag the bar between text and diagram to change their sizes. In windows narrower than 900 px (e.g. an editor tab of an IDE) the text is shown above the diagram and the bar changes its height; width and height are kept separately.
 
 ## Editing in the diagram
@@ -19,7 +23,7 @@ Drag the bar between text and diagram to change their sizes. In windows narrower
 | Final state | *Final* tool (`F`), click on the state that should get a transition to the final state |
 | Add a transition | *Transition* tool (`T`), click the source, then the target, then type the label (`Tab` completes names) |
 | Rename / edit label | double-click or `F2` |
-| Move into another state | hold `Shift` while dropping it (a plain drop only moves it, see [Manual layout](#manual-layout-experimental)) |
+| Move into another state | hold `Shift` while dropping it (a plain drop only moves it, see [Manual layout](#manual-layout)) |
 | Delete | `Del` / `Backspace` or the trash button |
 | Fit the diagram to the view | *Fit to screen* button at the bottom of the palette (the tooltips of the palette name each tool and its key) |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Y` (shared with the text editor) |
@@ -50,7 +54,7 @@ is shown instead of the state machine diagram when the edited `.devm` file conta
 
 ### Layout of structure diagrams
 
-Structure diagrams are arranged by hand like the state machines (see [Manual layout](#manual-layout-experimental)
+Structure diagrams are arranged by hand like the state machines (see [Manual layout](#manual-layout)
 and [Manual layout: structure diagrams](manual-layout.md#structure-diagrams)): the first drag stores
 the positions of all nodes as layout annotations in the `.devm` text (`@at`, `@size`, `@port`, `@via`),
 *Store positions* / *Re-arrange* and *Clear positions* in the toolbar apply to the shown diagram, `Ctrl+Z` undoes layout
@@ -89,13 +93,15 @@ it is reached by navigation from a containing system or subsystem – double-cli
 shows the path of the navigation (*Part of GarageDoor › drive : DriveUnit*), the routes continue into the
 containing structures (the source of the in port `motor.up` of the drive unit is found in the system) and
 *Follow out* returns to it. The target of a navigation is selected in the diagram and its text
-highlighted.
+highlighted. A target in another file is opened by the host: in the web app the file of the virtual file list,
+in VS Code the document and its diagram panel, in the desktop app its window, in Eclipse and the JetBrains
+IDEs its editor.
 
 ## Side panel
 
 The panel right of the diagram shows the properties of the selection (and the simulation while
 simulating). It behaves like the side bars of VS Code; the same panel is used by the standalone app,
-the Eclipse plugin and the diagram of the VS Code extension.
+the desktop app, the Eclipse and JetBrains plugins and the diagram of the VS Code extension.
 
 | Action | How |
 | --- | --- |
@@ -129,9 +135,9 @@ its waypoints, a *Rounded* one rounds the corner at a waypoint (the handle stays
 from the line). The setting is a preference of the viewer (stored in the browser / the VS Code settings), not
 part of the model.
 
-## Manual layout (experimental)
+## Manual layout
 
-🧪 By default the diagram is laid out automatically (ELK). As soon as a state is dragged, the diagram
+By default the diagram is laid out automatically (ELK). As soon as a state is dragged, the diagram
 is arranged by hand: the positions are stored as **layout annotations** in the model text (`@at(x, y)`
 before a state, `@via(…)` before a transition, …, see [the language](language.md#diagram-layout-annotations)).
 A model with layout annotations has a manual layout, one without the automatic layout – there is no

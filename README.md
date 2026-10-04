@@ -1,7 +1,7 @@
 # Device Modeler
 
 A [Langium](https://langium.org) based modeling environment for devices: the **structure of a product**
-(components with their ports, subsystems, threads, instances and connections – 🧪 structure files) and
+(components with their ports, subsystems, threads, instances and connections – structure files) and
 the **hierarchical state machines** that implement the behavior of its components. Both are model files
 with the extension **`.devm`** – a file contains either a state machine or structure elements (structs,
 components, subsystems, systems), never both – and unit tests of state machines are `.devmtest`
@@ -12,12 +12,23 @@ can edit them directly: add states, draw transitions, nest states by drag and dr
 connect ports, rename in place, … Text and diagram always stay in sync, and the structure links to the
 state machines: double-click an instance to open its state machine.
 
+**Try it online:** [armaxri.github.io/DeviceModeler/main/](https://armaxri.github.io/DeviceModeler/main/) – the
+web editor with the example models, running completely in the browser (every branch is published, see the
+[overview](https://armaxri.github.io/DeviceModeler/)). The same editor runs in the desktop app, in VS Code,
+Eclipse and the JetBrains IDEs, next to the command line tool `devm` with its language server `devm lsp`
+(see [Installation and usage](docs/installation.md)).
+
+The Device Modeler started as a fork of [HSM](https://github.com/armaxri/HSM) (the hierarchical state machine
+modeler): the state machine language, its tools and the IDE integrations come from there; the structure
+language and the internal block diagrams were added here, and every name was changed to *Device Modeler* /
+`devm`.
+
 ![Device Modeler: the subsystem GarageDoor as text and internal block diagram, opened as the part door of the closed system GarageInstallation (breadcrumb), the route of the port door.up highlighted](docs/screenshot.png)
 
 ## Structure of a product (structure files)
 
-🧪 Experimental (branch `claude/device-modeling`): the structure elements of `.devm` files
-([docs/structure-language.md](docs/structure-language.md), example [`examples/device`](examples/device)).
+The structure elements of `.devm` files ([docs/structure-language.md](docs/structure-language.md), example
+[`examples/device`](examples/device)).
 The kind of a `.devm` file is decided by its first word: a file starting with `statemachine` is a state
 machine, every other file is a structure file.
 
@@ -53,9 +64,11 @@ machine, every other file is a structure file.
   ports and connectors with compatibility feedback – written out → in whichever way they are drawn –, rename,
   drag into threads, properties panel) – every action is a text edit; **navigation** between systems,
   subsystems, component types, data types and state machines with a back / forward history.
-- **Tools**: the web editor, the VS Code extension (language server, diagram, navigation, edits across
-  files) and `devm render` (SVG) support structure files. Not (yet) supported: simulation and code
-  generation of structure files.
+- **Tools**: every host supports structure files – the web editor, the desktop app, the VS Code extension
+  (language server, diagram, navigation, edits across files), the Eclipse and JetBrains plugins (structure
+  diagram and navigation in the embedded editor, language server in the text editor), the language server
+  `devm lsp` for other editors and the command line tool (`devm validate`, `devm render` as SVG). Not (yet)
+  supported: simulation, code generation and `devm doc` of structure files.
 
 ## State machines (state machine files)
 
@@ -121,7 +134,8 @@ machine, every other file is a structure file.
   text selects the element in the diagram.
 - **Export** of the diagram as standalone SVG or PNG (*Export…* in the toolbar; the PNG has twice the
   screen resolution).
-- **CLI** (`devm`) for validation, layout computation, rendering and code generation.
+- **CLI** (`devm`) for validation, layout computation, rendering, code generation, tests and the language
+  server (`devm lsp`), also as a self-contained executable without Node.js.
 - **Rendering and documentation without a browser**: `devm render` writes the diagrams as SVG files that look
   like the editor's export, `devm doc` generates Markdown or HTML documentation of models (diagram,
   interfaces, states, transitions and `/** … */` doc comments) – see [Rendering diagrams](docs/rendering.md#rendering-diagrams)
@@ -132,17 +146,23 @@ machine, every other file is a structure file.
   [Code generation (C++)](docs/cpp-generator.md)) and C99, both verified against the conformance suite of the
   interpreter by compiling and running every scenario.
 - **VS Code extension** (`packages/vscode`): language server for `.devm` and `.devmtest` files, the diagram
-  editors of the web app next to the text editor, C++ generation, tests in the Test Explorer (with model
-  coverage) and the itemis CREATE import – see [VS Code extension](docs/vscode.md).
-- 🧪 **Eclipse plugin** (prototype, `eclipse-plugin/`): the web app as editor of `.devm` files in the Eclipse
-  IDE (embedded browser): workspace files with dirty state, Save As and rename, problems in the Problems
-  view, Outline, Eclipse's edit commands, imports within the project, C++ generation, and the language server in
-  Eclipse's Generic Editor (LSP4E / TM4E) – see [eclipse-plugin/README.md](eclipse-plugin/README.md).
-- 🧪 **JetBrains plugin** (prototype, `jetbrains-plugin/`): the web app as editor of `.devm` files in CLion,
-  IntelliJ IDEA and the other JetBrains IDEs (JCEF): views *Text* / *Text and Diagram* / *Diagram* on the IDE's
-  document, problems in the editor and the Problems tool window (closed files with `devm validate`), Structure
-  view, edit shortcuts in the page, C++ generation, and the language server in the text editor with LSP4IJ – see
-  [jetbrains-plugin/README.md](jetbrains-plugin/README.md).
+  editors of the web app (state machines and structures) next to the text editor, C++ generation, tests in
+  the Test Explorer (with model coverage), **debugging of tests** (breakpoints in tests and models, stepping
+  through the microsteps, the live diagram) and the itemis CREATE import – see [VS Code extension](docs/vscode.md).
+- **Desktop app** *Device Modeler* (`packages/desktop`, Electron): the web editor in a native window on the
+  files on disk, for state machines and structure files – see [Installation and usage](docs/installation.md#desktop-app).
+- **Eclipse plugin** (prototype, `eclipse-plugin/`): the web app as editor of `.devm` files in the Eclipse
+  IDE (embedded browser), for state machines and structure files: workspace files with dirty state, Save As and
+  rename, problems in the Problems view, Outline, Eclipse's edit commands, imports and navigation within the
+  project, C++ generation, and the language server in Eclipse's Generic Editor (LSP4E / TM4E) – see
+  [eclipse-plugin/README.md](eclipse-plugin/README.md).
+- **JetBrains plugin** (prototype, `jetbrains-plugin/`): the web app as editor of `.devm` files in CLion,
+  IntelliJ IDEA and the other JetBrains IDEs (JCEF), for state machines and structure files: views *Text* /
+  *Text and Diagram* / *Diagram* on the IDE's document, problems in the editor and the Problems tool window
+  (closed files with `devm validate`), Structure view, edit shortcuts in the page, C++ generation, and the
+  language server in the text editor with LSP4IJ – see [jetbrains-plugin/README.md](jetbrains-plugin/README.md).
+- **Other editors**: `devm lsp --stdio` is the language server for any LSP client (Neovim, Helix, Emacs, …,
+  see [Language server](docs/installation.md#language-server-devm-lsp)).
 - **Build integration**: a generator configuration file (`devm.gen.json`, like the `.sgen` files of itemis
   CREATE), `devm generate --check` for CI and CMake functions (`devm_generate`, `devm_add_tests`) that
   regenerate the code when a model changes (see [Build integration (CMake)](docs/build-integration.md)).
@@ -156,7 +176,8 @@ Download from the [releases](https://github.com/armaxri/DeviceModeler/releases) 
 
 - **Desktop app *Device Modeler*** (Windows installer / zip, macOS `.dmg`, Linux AppImage / `.deb`): the
   graphical editor in a native window, opening and saving `.devm` files on disk.
-- **Command line tool `devm`** (one executable per platform): all commands below, e.g. for builds and CI.
+- **Command line tool `devm`** (one executable per platform): all commands below, e.g. for builds and CI,
+  and the language server `devm lsp`.
 - **VS Code extension** (`.vsix`), **Eclipse plugin** (update site archive) and **JetBrains plugin** (`.zip`).
 
 ```bash
@@ -164,6 +185,7 @@ devm validate examples/cd-player.devm
 devm generate cpp examples/traffic-light.devm -o gen
 ```
 
+Or use the [online sample](https://armaxri.github.io/DeviceModeler/main/) without installing anything.
 Nothing is signed with a certificate: see [Installation and usage](docs/installation.md) for the macOS and
 Windows warnings, the features of the desktop app and how everything is built.
 
@@ -221,12 +243,12 @@ node packages/language/bin/cli.js lsp --stdio               # language server fo
 | Document | Content |
 | --- | --- |
 | [The language](docs/language.md) | syntax of the models: definition section, reactions, expressions, states, regions, pseudo states; imports and submachines; C/C++ header imports; C++ class sections |
-| [Structure language](docs/structure-language.md) | 🧪 structure files: components, ports, subsystems, threads, instances, connections; port ↔ state machine rules; route analysis |
+| [Structure language](docs/structure-language.md) | structure files: components, ports, subsystems, threads, instances, connections; port ↔ state machine rules; route analysis |
 | [Execution semantics](docs/semantics.md) | how a state machine executes – the specification implemented by the interpreter and the code generators |
-| [Web editor](docs/editor.md) | editing in the diagram, 🧪 structure diagrams and navigation, 🧪 manual layout, simulation |
-| [Manual layout](docs/manual-layout.md) | on the main branch since PR #4 (from the branch `claude/layout-annotations`): layout annotations in the model (state machines and structure diagrams), layout computation, routing, editor integration, migration |
-| [Installation and usage](docs/installation.md) | downloads, desktop app, command line executable `devm`, VS Code, Eclipse, JetBrains IDEs; unsigned downloads; how they are built; trying the plugins locally (`npm run ide:*`) |
-| [VS Code extension](docs/vscode.md) | language server, diagrams, 🧪 structure files, generation, Test Explorer (details in [packages/vscode/README.md](packages/vscode/README.md)) |
+| [Web editor](docs/editor.md) | editing in the diagram, structure diagrams and navigation, manual layout, simulation |
+| [Manual layout](docs/manual-layout.md) | layout annotations in the model (state machines and structure diagrams), layout computation, routing, editor integration, migration |
+| [Installation and usage](docs/installation.md) | online sample, downloads, desktop app, command line executable `devm` and language server `devm lsp`, VS Code, Eclipse, JetBrains IDEs; unsigned downloads; how they are built; trying the plugins locally (`npm run ide:*`) |
+| [VS Code extension](docs/vscode.md) | language server, diagrams, structure files, generation, Test Explorer, debugging tests (details in [packages/vscode/README.md](packages/vscode/README.md)) |
 | [Rendering and model documentation](docs/rendering.md) | `devm render` (SVG diagrams), `devm doc` (Markdown / HTML documentation), doc comments |
 | [Unit tests and coverage](docs/testing.md) | the `.devmtest` language, `devm test`, model coverage, CI examples |
 | [Code generation (C++)](docs/cpp-generator.md) | generated API, runtime errors, a complete host example |

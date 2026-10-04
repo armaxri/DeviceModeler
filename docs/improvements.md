@@ -43,7 +43,7 @@ Code generation is planned "much later"; these items are the known gaps of the e
 | Expand submachine states | See the states of the referenced machine inside the submachine state (read-only), especially while simulating | Lay out the referenced machine inside the state, mark it read-only | M |
 | Refactorings | Restructuring bigger machines by hand is tedious | "Group states into composite state", "extract submachine" (creates a new file + instance), "inline submachine" as `ModelEditor` operations | M |
 | Real workspaces in the web editor | The web editor keeps a flat virtual file list | Folder structure, saving several files (File System Access API or a small local server `devm serve`) | M–L |
-| Hand-arranged layouts | Keep diagrams arranged by hand, e.g. migrated itemis diagrams | Done: layout annotations `@at`, `@via`, … in the model, also in VS Code, merged into main from the branch `claude/layout-annotations` (PR #4; the earlier branch `claude/manual-layout` used sidecar `.layout` files) | – |
+| Hand-arranged layouts | Keep diagrams arranged by hand, e.g. migrated itemis diagrams | Done: layout annotations `@at`, `@via`, … in the model, in all hosts, for state machine and structure diagrams (from HSM PR #4; the earlier sidecar `.layout` files can be migrated) | – |
 
 ## Simulation and testing
 

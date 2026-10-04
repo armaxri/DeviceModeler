@@ -93,9 +93,11 @@ packages/
     scripts/                              build.mjs (esbuild bundle), sea.mjs (executable), smoke-test.mjs
 eclipse-plugin/ Eclipse plugin (prototype, Maven / Tycho): the web app (packages/web/dist, embedded mode of src/host.ts)
                 in an SWT browser, served by a small HTTP server of the plugin; workspace files, problem markers,
-                outline, edit commands, C++ generation; tools bundle: interfaces for the bundled executable
+                outline, edit commands, C++ generation, state machine and structure diagrams; LSP4E client of
+                `devm lsp`; tools bundle: interfaces for the bundled executable
 jetbrains-plugin/ JetBrains plugin (prototype, Gradle / Kotlin): the same web app and protocol in a JCEF browser,
-                on the IntelliJ document (TextEditorWithPreview), Problems / Structure tool windows, devm validate
+                on the IntelliJ document (TextEditorWithPreview), Problems / Structure tool windows, devm validate,
+                state machine and structure diagrams; LSP4IJ client of `devm lsp`
 examples/       sample state machines; tests: their unit tests; door-with-motor: imports and submachines;
                 cpp-types: C++ header types; cpp-class-sections: members of the generated C++ class; cmake: CMake example;
                 device: structure files and state machines of a garage door
@@ -122,7 +124,11 @@ with a back / forward history) and apply edits of several files (`DiagramHost.ap
 
 The VS Code extension runs the same pipeline in its diagram webview; instead of the Monaco model its
 host is the VS Code document, navigation opens the target document and its diagram panel, and edits of
-several files are one `WorkspaceEdit` (see [VS Code extension](vscode.md)). The CLI, the language server
+several files are one `WorkspaceEdit` (see [VS Code extension](vscode.md)). The desktop app and the Eclipse
+and JetBrains plugins run the unchanged web app in its embedded mode (`?host=http`, `src/host.ts`): the host
+serves the page and a small file API (`api/document` with the text and the other `.devm` files of the folder or
+project in `files`, saving, `api/open` to open another file), and the page reports problems and the outline of
+both kinds of files back to the host (`src/host-model.ts`). The CLI, the language server
 and the test runner use the same `packages/language` code in Node.js; the simulator, unit tests,
 coverage and the conformance scenarios all execute on the one interpreter in `src/simulation`.
 
@@ -161,7 +167,9 @@ elements, never both.
   `.devm` files and use the root of each.
 - **Hosts:** the diagram controller shows the structure diagram when the text is a structure file
   (`isStructureText`: the first token, without parsing); the VS Code extension sets the context key
-  `devm.structureEditorActive` the same way (menus of code generation), the CLI decides by the parsed root.
+  `devm.structureEditorActive` the same way (menus of code generation), the embedded web app in the desktop
+  app, Eclipse and the JetBrains IDEs the same as the web app, the CLI and the language server (`devm lsp`)
+  decide by the parsed root.
 
 ## Manual layout: shared core
 

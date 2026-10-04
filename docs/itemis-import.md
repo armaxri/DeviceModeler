@@ -15,8 +15,8 @@ submachine instance – `import "B.devm"`, `var b : B` in the internal scope and
 
 The definition section and all reactions are copied as they are (both languages use the same
 syntax); the diagram of the `.sct` file becomes a manual layout – layout annotations (`@at`, `@size`,
-`@via`, …) in the generated model (🧪 experimental, `--no-layout` to skip them, see
-[Manual layout](editor.md#manual-layout-experimental)). The structure is mapped as follows:
+`@via`, …) in the generated model (`--no-layout` to skip them, see
+[Manual layout](editor.md#manual-layout)). The structure is mapped as follows:
 
 | itemis CREATE                                   | Device Modeler                                                                 |
 |-------------------------------------------------|---------------------------------------------------------------------|

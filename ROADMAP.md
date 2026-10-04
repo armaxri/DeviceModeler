@@ -1,11 +1,15 @@
 # Roadmap
 
-Goal: the Device Modeler (formerly *HSM Modeler*) becomes a replacement for **itemis CREATE** (formerly
-YAKINDU Statechart Tools): the same statechart language and semantics, plus a web-based graphical editor
-with a PlantUML-like look. 🧪 The device modeling experiment (branch `claude/device-modeling`,
-[Phase 7](#phase-7--device-modeler-)) adds the structure of a product around the state machines.
+Goal: the Device Modeler becomes a replacement for **itemis CREATE** (formerly YAKINDU Statechart Tools):
+the same statechart language and semantics, plus a web-based graphical editor with a PlantUML-like look –
+and models the structure of a product (components, ports, subsystems, threads,
+[Phase 7](#phase-7--device-modeler-)) around its state machines.
 
-Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be decided · ⛔ not planned · 🧪 experimental (separate branch)
+The Device Modeler is a hard fork of [HSM](https://github.com/armaxri/HSM) (*HSM Modeler*): phases 0 – 6 were
+done in HSM and carried over with the names changed to *Device Modeler* / `devm`; phase 7 and the support of
+structure files in every host were added here.
+
+Status legend: ✅ done · 🚧 in progress · 📋 planned · 💭 idea / to be decided · ⛔ not planned · 🧪 prototype
 
 Possible next steps are described in more detail in [docs/improvements.md](docs/improvements.md).
 
@@ -102,8 +106,7 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
 - 📋 Import test suite based on real-world models from users
 - ✅ Keep manual layout from `.sct` notation models (saved positions): positions, sizes, region orientation
   and bend points are imported as layout annotations into the model
-  ([docs/manual-layout.md](docs/manual-layout.md); merged into main from the branch
-  `claude/layout-annotations`, PR #4)
+  ([docs/manual-layout.md](docs/manual-layout.md))
 
 ## Phase 4 – Execution ✅
 
@@ -166,16 +169,18 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
   the web app as webview with selection sync and diagram edits applied as `WorkspaceEdit`s, theme
   following VS Code, Generate C++ (`devm.gen.json` or settings), tests and model coverage in the Test
   Explorer, `.sct` import, SVG / PNG export, `.vsix` packaging
-  - 🧪 structure files (`.devm`) of the Device Modeler on the branch `claude/device-modeling`, see
-    [Phase 7](#phase-7--device-modeler-)
+  - ✅ structure files (`.devm`), see [Phase 7](#phase-7--device-modeler-)
+  - ✅ debugging of `.devmtest` tests (debug adapter `devm-test`, *Device Modeler: Debug Tests*, *Debug Test* in
+    the Test Explorer): breakpoints in tests and on states / transitions / reactions of the model, stepping
+    through the microsteps of the interpreter, variables of the state machine, the live diagram
+    ([docs/vscode.md](docs/vscode.md#debugging-tests))
   - limitations: the extension generates only the `cpp` target; no end-to-end
     tests in a real VS Code instance (`@vscode/test-electron` could not download VS Code) – the language
     server is tested over stdio, the webview bundle in Chromium with a mocked VS Code API
 - 🚧 Multi-file projects in the web editor: a virtual file list (examples, opened and edited files) against
   which imports are resolved; several files can be opened at once; 💭 real workspaces (folders, saving
   several files)
-- ✅ Manual layout adjustments, merged into main from the branch `claude/layout-annotations` (PR #4; the
-  sidecar layout files of the earlier branch `claude/manual-layout` were dropped) – stored as layout
+- ✅ Manual layout adjustments (the sidecar layout files of an earlier experiment were dropped) – stored as layout
   annotations in the model (`@at`, `@size`, `@via`, …; a model with annotations has a manual layout, no
   mode switch, a model without them keeps the automatic layout); move / resize states, waypoints, label
   offsets, auto-arrange / automatic layout; layout changes are text edits (one undo history, saved with the
@@ -183,9 +188,10 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
   - ✅ transitions of moved states are rerouted around the other states in the shape of the edge routing
     setting (orthogonal router, polyline shortcuts, splines); bend points are waypoints the route passes
     through
+  - ✅ draggable anchors of transition ends (`@from` / `@to`), waypoints inserted on the line
   - ✅ web app and VS Code extension share the diagram controller; the `.sct` import writes annotations,
     the SVG / PNG export, `devm layout|render|doc` and test coverage diagrams apply them;
-    `devm migrate-layout` converts the `.devm.layout` files of the earlier sidecar experiment
+    `devm migrate-layout` converts the `.hsm.layout` / `.devm.layout` files of the earlier sidecar experiment
   - ✅ resolved by the annotations: renames typed in the text (or via *Rename Symbol*) keep the layout;
     no second file and no separate layout undo history
   - 📋 open: the formatter puts container annotations on lines of their own while the layout writer
@@ -197,25 +203,53 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
   - ✅ the HTML report shows the diagram with covered / uncovered elements (`renderSvg` highlights)
   - ✅ coverage view in the VS Code extension (Test Explorer coverage profile)
   - 📋 still missing: coverage view in the web simulation
+- ✅ Self-contained command line executable `devm` (`packages/cli`, Node.js single executable application) for
+  Linux, macOS and Windows, with the language server `devm lsp --stdio` (also `--socket` / `--pipe`) for any LSP
+  client: diagnostics, completion, hover, definition into C/C++ headers and other models, references, document
+  links, formatting, symbols, folding, rename, semantic tokens – for state machine files, structure files and
+  `.devmtest` ([docs/installation.md](docs/installation.md#command-line-tool-devm))
+- ✅ Desktop app *Device Modeler* (`packages/desktop`, Electron): the web app in native windows on the files on
+  disk, file menu, recent files, dirty state, file watching, imports below the root folder, installers for
+  Windows / macOS / Linux ([docs/installation.md](docs/installation.md#desktop-app))
+- 🧪 Eclipse plugin (prototype, `eclipse-plugin/`, Maven / Tycho): the web app in an SWT browser on workspace
+  files, problem markers, outline, edit commands, C++ generation, builder with the bundled `devm` executable,
+  the language server in the Generic Editor (LSP4E, TM4E)
+- 🧪 JetBrains plugin (prototype, `jetbrains-plugin/`, Gradle / Kotlin): the web app in JCEF on the IntelliJ
+  document (*Text* / *Text and Diagram* / *Diagram*), Problems and Structure tool windows, `devm validate` of
+  closed files, C++ generation, the language server with LSP4IJ
+- ✅ Structure files in every host: the desktop app and the plugins show the structure diagram, pass the
+  `.devm` files of the folder / project to the page and open the targets of the navigation
+  ([docs/structure-language.md](docs/structure-language.md#editor-support))
+- ✅ C/C++ in the editors: go to definition into headers from the embedded web app (the host opens the
+  header), warnings for forward-declared and unknown C++ types with a quick fix importing the header
+- ✅ Distribution and CI: the *Distribution* workflow builds the desktop app and the executables for five
+  platforms, the `.vsix`, the Eclipse update site and the JetBrains plugin, and creates the GitHub release for
+  version tags; the *CI* workflow runs the tests; the *Pages* workflow publishes the web app of every branch
+  to GitHub Pages ([online sample](https://armaxri.github.io/DeviceModeler/main/), overview of the branches at
+  [armaxri.github.io/DeviceModeler](https://armaxri.github.io/DeviceModeler/))
+- ✅ Trying the IDE integrations locally in sandboxes (`npm run ide:vscode|ide:eclipse|ide:clion|ide:desktop`)
 
-## Phase 7 – Device Modeler 🧪
+## Phase 7 – Device Modeler 🚧
 
-Experimental on the branch `claude/device-modeling`: the structure of a product modeled alongside its state
-machines ([docs/structure-language.md](docs/structure-language.md), example [`examples/device`](examples/device)).
+The structure of a product modeled alongside its state machines
+([docs/structure-language.md](docs/structure-language.md), example [`examples/device`](examples/device)).
 
-- 🧪 Renamed to **Device Modeler** (formerly *Device Modeling Framework* / *HSM Modeler*) with one file
-  extension for all models: `.devm` (formerly `.devm` for state machines and `.dmf` for structure files),
-  unit tests `.devmtest` (formerly `.devmtest`), the CLI `devm` (formerly `devm`) and the generator
-  configuration `devm.gen.json` (formerly `devm.gen.json`). A `.devm` file contains either a state machine
+- ✅ Renamed to **Device Modeler** (formerly *Device Modeling Framework* / *HSM Modeler*) with one file
+  extension for all models: `.devm` (formerly `.hsm` for state machines and `.dmf` for structure files),
+  unit tests `.devmtest` (formerly `.hsmtest`), the CLI `devm` (formerly `hsm`) and the generator
+  configuration `devm.gen.json` (formerly `hsm.gen.json`). A `.devm` file contains either a state machine
   or structure elements: one Langium language whose entry rule is the alternative of both kinds
   (`src/devm.langium`, [Architecture](docs/architecture.md#one-language-for-two-kinds-of-model-files))
-- 🧪 The remaining old names are gone (no compatibility aliases): npm packages `devm-language`,
-  `devm-web`, `devm-vscode`; VS Code commands, settings and context keys `devm.*` (formerly `devm.*`);
-  CMake `find_package(Devm)`, `devm_generate`, `devm_add_tests`, `DEVM_EXECUTABLE` (formerly
-  `find_package(Devm)`, `devm_generate`, `devm_add_tests`, `DEVM_EXECUTABLE`); CSS classes `devm-*`; in the
+- ✅ The old names are gone (no compatibility aliases): npm packages `devm-language`,
+  `devm-web`, `devm-vscode`, `devm-cli`, `devm-desktop`; VS Code extension `device-modeler.devm-vscode` with
+  commands, settings and context keys `devm.*` (formerly `hsm.*`); CMake `find_package(Devm)`, `devm_generate`,
+  `devm_add_tests`, `DEVM_EXECUTABLE` (formerly `find_package(Hsm)`, `hsm_generate`, `hsm_add_tests`,
+  `HSM_EXECUTABLE`); CSS classes `devm-*`; the desktop app *Device Modeler*, the Eclipse and JetBrains
+  plugins, the environment variables of the scripts (`DEVM_*`) and the repository
+  ([armaxri/DeviceModeler](https://github.com/armaxri/DeviceModeler)); in the
   language package `createDevmServices` / `DevmServices`, `StateMachine*` and `Structure*` services and
   the AST type `CompositeType` of subsystems and systems
-- 🧪 Structure elements (`src/structure.langium` in the language package, one language with the state machines): component types with ports as **directed data flow** –
+- ✅ Structure elements (`src/structure.langium` in the language package, one language with the state machines): component types with ports as **directed data flow** –
   `in` / `out` / `inout sync name : Type` (data values: simple types, structs, C/C++ header types) and
   `in` / `out async name [: Type]` (exactly one event, named like the port, with an optional payload); no
   operations, no provided / required services, no interface types –, `behavior "door.devm"` (ports mapped onto
@@ -228,11 +262,11 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
   (`connect out -> in`, `delegate in -> part.in`, `delegate part.out -> out`, inout with inout in any order),
   imports of structure files, state machines and headers. The earlier `provides` / `requires` ports with
   `interface` event groups were replaced by this model (the parser points to the new syntax)
-- 🧪 Validation (directions, kinds, types and payloads, one source per sync in port, one sender per async in
+- ✅ Validation (directions, kinds, types and payloads, one source per sync in port, one sender per async in
   port, unconnected in ports, connections crossing threads, the port ↔ state
   machine mapping) and route analysis through all levels along the data flow (`routeOf`, `findSources`,
   `findTargets`, go to source)
-- 🧪 Internal block diagram (SysML style, PlantUML themes, ELK with orthogonal routing): `devm render`, the
+- ✅ Internal block diagram (SysML style, PlantUML themes, ELK with orthogonal routing): `devm render`, the
   web editor and VS Code; graphical editing as text edits (threads, instances, ports, connectors with
   compatibility feedback – incompatible ports are refused with the explanation of the validator –, rename across files, delete with the connections in other files, properties),
   route highlighting, navigation between systems, subsystems, component types and state machines
@@ -243,15 +277,18 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
   notation of the data flow: hollow squares = sync data, filled squares = async events, an arrow in every
   port for the direction (in / out / inout), arrowheads at the receiving end of the connectors; palette
   with five port tools (sync in / out / inout, async in / out)
-- 🧪 VS Code: structure files in the language server (references, renames and go to source across files), the
+- ✅ VS Code: structure files in the language server (references, renames and go to source across files), the
   structure diagram in the diagram webview, navigation through the extension (shared history), edits of
   several files as one `WorkspaceEdit`, all workspace `.devm` files sent to the diagrams
-- 🧪 Manual layout of structure diagrams with the concept and syntax of the state machines (`@at`,
+- ✅ The other hosts: the language server `devm lsp` (semantic highlighting, go to definition and document links
+  of import paths in structure files), the desktop app and the Eclipse / JetBrains plugins (structure diagram,
+  problems and outline of structure files, navigation to other files through the host)
+- ✅ Manual layout of structure diagrams with the concept and syntax of the state machines (`@at`,
   `@size`, `@via`, `@port` for the side and offset of ports), on a layout core shared with the state machine
   diagrams (`src/diagram/layout-core`: annotation edits, placement, orthogonal routing; web: mouse
   interaction and `LayoutEditor`); connectors follow dragged instances; `devm render`, export and VS Code
   ([docs/manual-layout.md](docs/manual-layout.md#structure-diagrams))
-- 📋 open follow-ups of the experiment:
+- 📋 open follow-ups:
   - simulation of the composed system (several state machines connected through the ports, threads and
     their periods / priorities) and code generation of the composition (instances, wiring of the generated
     state machine classes, thread setup)
@@ -273,20 +310,25 @@ machines ([docs/structure-language.md](docs/structure-language.md), example [`ex
   primary target and verified against the complete conformance suite; the C generator stays available.
 - **Hand-arranged layouts are layout annotations in the model.** Of the two experiments
   (`claude/manual-layout`: sidecar layout files; `claude/layout-annotations`: layout annotations in the
-  model) the annotations were merged into main (PR #4): dragging / resizing in the diagram and positions
+  model) the annotations were kept (HSM PR #4): dragging / resizing in the diagram and positions
   imported from `.sct` notation models are written into the model text; a model without annotations keeps
   the automatic layout (ELK), which stays the default.
 - **No exchange with itemis is planned.** The Device Modeler replaces itemis CREATE for our own models; remaining
   differences to the itemis language are only closed if our models need them.
-- **The structure language is evaluated on a separate branch** (`claude/device-modeling`); it is merged
-  only if modeling the structure alongside the state machines proves worthwhile.
+- **The Device Modeler is a hard fork of HSM.** The structure language, evaluated on the HSM branch
+  `claude/device-modeling`, became the main line of this repository; everything was renamed to *Device
+  Modeler* / `devm`, without compatibility aliases for the HSM names. Changes of HSM are no longer taken over
+  automatically.
+- **Every host supports both kinds of `.devm` files.** The web app, the desktop app, VS Code, the
+  command line tool / language server and the Eclipse and JetBrains plugins handle structure files like state
+  machine files, with the structure diagram wherever a host shows diagrams.
 - **Code generation improvements come later.** Submachines and C++ header types are supported by the
   language, simulation and tests first; the C++ generator catches up when needed.
 
 ## Open questions
 
 - Is simulation or SCTUnit-style testing used in current projects?
-- Are the layout annotations in the model (merged into main) acceptable in daily use, reviews and merges?
-- Is the structure language (branch `claude/device-modeling`) the right level of detail for our products
+- Are the layout annotations in the model acceptable in daily use, reviews and merges?
+- Is the structure language the right level of detail for our products
   (threads, ports as directed data flow: sync data and async events), and should the composed system be
   simulated and generated?
