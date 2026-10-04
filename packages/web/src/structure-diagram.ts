@@ -194,6 +194,15 @@ export class StructureDiagram {
         byId('diagram-area').classList.remove('route-highlight', 'structure-diagram');
     }
 
+    /**
+     * The file is opened (not navigated to): the structure is shown on its own from the next update on,
+     * also if it is the file already shown (a navigation after this sets a new context, see {@link reveal}).
+     */
+    clearNavigationContext(): void {
+        this.navigationContext = undefined;
+        this.shownContext = undefined;
+    }
+
     /** Shows a location after the next update (navigation; the host loads the file). */
     reveal(location: DiagramLocation): void {
         this.pendingLocation = location;

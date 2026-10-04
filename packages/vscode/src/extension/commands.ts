@@ -75,7 +75,7 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
             vscode.window.showWarningMessage('Device Modeler: Open a .devm file to show its diagram.');
             return;
         }
-        await commands.diagrams.open(uri);
+        await commands.diagrams.openStandalone(uri);
     });
 
     register('devm.generateCpp', async (arg?: unknown) => {

@@ -172,6 +172,21 @@ export class DiagramManager implements vscode.Disposable {
         return this.register(new DiagramPanel(this, panel, document));
     }
 
+    /**
+     * Opens the diagram of the document explicitly (Open Diagram, a file opened from the diagram): an
+     * already open diagram shows its structure on its own again (only a navigation gives a structure the
+     * context of a containing subsystem or system, see {@link openLocation}).
+     */
+    async openStandalone(uri: vscode.Uri, preserveFocus = false): Promise<DiagramPanel> {
+        const existing = this.panels.get(uri.toString());
+        const panel = await this.open(uri, preserveFocus);
+        if (existing) {
+            // (a location without element and context: the shown element stays, its context is cleared)
+            existing.post({ type: 'reveal', location: { uri: existing.uri.toString() } });
+        }
+        return panel;
+    }
+
     private register(panel: DiagramPanel): DiagramPanel {
         this.panels.set(panel.key, panel);
         this.lastActive = panel;
@@ -496,7 +511,7 @@ export class DiagramPanel {
                 // double-click on a submachine state: the file of its state machine and its diagram
                 const uri = vscode.Uri.parse(message.uri);
                 await vscode.window.showTextDocument(uri, { viewColumn: this.textColumn(), preserveFocus: true });
-                await this.manager.open(uri);
+                await this.manager.openStandalone(uri);
                 break;
             }
             case 'openLocation': {

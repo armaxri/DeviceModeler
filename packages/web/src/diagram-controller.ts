@@ -473,14 +473,16 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     }
 
     /**
-     * Prepares the diagram for a different model: clears the selection and fits the diagram to the
-     * screen after the next update.
+     * Prepares the diagram for a different model (a file is opened, also the file already shown): clears
+     * the selection and fits the diagram to the screen after the next update. A structure is shown on its
+     * own (only a navigation gives it a context: {@link revealLocation}, called after the reset).
      */
     reset(): void {
         this.stopSimulation();
         this.selection.clear();
         this.pendingSource = undefined;
         this.structure.cancelConnector();
+        this.structure.clearNavigationContext();
         closeInlineEditor();
         this.fitOnNextRender = true;
     }
