@@ -20,6 +20,7 @@ import type { Issue } from './diagram/model.js';
 import { canvasTextMeasure } from './diagram/text-measure.js';
 import { renderBreadcrumb } from './ui/breadcrumb.js';
 import { byId, h } from './ui/dom.js';
+import { panelSection } from './ui/side-panel.js';
 import { closeInlineEditor, showChooser, showInlineEditor } from './ui/inline-editor.js';
 import { checkedField, field, problems } from './ui/properties.js';
 import { describeSyntaxProblem } from './model-service.js';
@@ -1476,7 +1477,8 @@ export class StructureDiagram {
 
     renderProperties(): void {
         const panel = byId('properties');
-        if (panel.contains(document.activeElement) && document.activeElement !== panel) {
+        // (not while a field of the panel is edited; the header of a collapsible section may keep the focus)
+        if (panel.contains(document.activeElement) && document.activeElement !== panel && !document.activeElement?.closest('.side-section-header')) {
             return;
         }
         const state = this.state;
@@ -1564,8 +1566,7 @@ export class StructureDiagram {
                 h('button', { onClick: () => this.context.setTool('connector') }, 'Connector')));
         }
         result.push(...this.addTypeButtons(),
-            h('h2', { style: 'margin-top:18px' }, 'How to edit'),
-            h('ul', { class: 'hint', style: 'padding-left:18px;margin:6px 0' },
+            panelSection('help', 'How to edit', [h('ul', { class: 'hint help-list' },
                 h('li', {}, 'Pick a tool in the palette (thread, instance, ports, connector), then click into the diagram. Hold ', h('kbd', {}, 'Shift'), ' to keep the tool.'),
                 h('li', {}, 'Connector: press on a port and drag to the other port – compatible ports turn green. A connection is written in the direction of the data (from the out port to the in port, whichever you start at), a boundary port is delegated; inout ports connect with inout ports.'),
                 h('li', {}, 'Instances of components run in threads: click into a thread with the instance tool (on the frame: choose the thread next). Instances of subsystems are placed on the frame, outside of the threads.'),
@@ -1575,13 +1576,12 @@ export class StructureDiagram {
                     + 'Clear positions removes them.'),
                 h('li', {}, 'Double-click an instance to open its state machine or subsystem, its type name (or the type of a port) to open the type, its name (or ', h('kbd', {}, 'F2'), ') to rename it.'),
                 h('li', {}, 'Select a port, connector or instance to highlight the route of its data (also through composites); the properties list the sources and targets.'),
-                h('li', {}, h('kbd', {}, 'Del'), ' deletes, ', h('kbd', {}, 'Ctrl'), '+', h('kbd', {}, 'Z'), ' undoes; ', h('kbd', {}, 'Alt'), '+', h('kbd', {}, '←'), ' goes back.')),
-            h('h2', { style: 'margin-top:18px' }, 'Notation'),
-            h('ul', { class: 'hint', style: 'padding-left:18px;margin:6px 0' },
+                h('li', {}, h('kbd', {}, 'Del'), ' deletes, ', h('kbd', {}, 'Ctrl'), '+', h('kbd', {}, 'Z'), ' undoes; ', h('kbd', {}, 'Alt'), '+', h('kbd', {}, '←'), ' goes back.'))]),
+            panelSection('notation', 'Notation', [h('ul', { class: 'hint help-list' },
                 h('li', {}, 'Ports: hollow square = sync (data), filled square = async (an event).'),
                 h('li', {}, 'The arrow in the port shows the direction of the data: into the box = in, out of the box = out, both ways = inout (shared data).'),
                 h('li', {}, 'Connectors have an arrowhead at the receiving end (both ends between inout ports); dashed connectors cross threads.'),
-                h('li', {}, 'Boxes «struct» below the diagram: the data types declared in the file (not connected; ports show their type after the name).')));
+                h('li', {}, 'Boxes «struct» below the diagram: the data types declared in the file (not connected; ports show their type after the name).'))]));
         return result;
     }
 
