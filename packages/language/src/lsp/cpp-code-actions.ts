@@ -3,14 +3,15 @@ import type { CodeActionProvider } from 'langium/lsp';
 import { CodeActionKind, type CodeAction, type Command, type Diagnostic, type TextEdit } from 'vscode-languageserver-types';
 import * as ast from '../generated/ast.js';
 import { importPaths } from '../imports.js';
-import { UNKNOWN_CPP_TYPE, type UnknownCppTypeData } from '../cpp-unknown-types.js';
+import { INCOMPLETE_CPP_TYPE, UNKNOWN_CPP_TYPE, type UnknownCppTypeData } from '../cpp-unknown-types.js';
 
 type CodeActionParams = Parameters<CodeActionProvider['getCodeActions']>[1];
 
 /**
  * Quick fixes of the HSM language, shared by the VS Code language server and the web app: an unknown
  * C++ type of a class section (see cpp-unknown-types.ts) is fixed by importing the header that declares
- * it (`import "driver.h"`, `import "<vector>"`).
+ * it (`import "driver.h"`, `import "<vector>"`), a type that is only forward-declared by importing the
+ * header that defines it.
  */
 export class HsmCodeActionProvider implements CodeActionProvider {
 
@@ -28,10 +29,10 @@ export class HsmCodeActionProvider implements CodeActionProvider {
     }
 }
 
-/** The quick fix of a diagnostic of an unknown C++ type: import the header that declares it. */
+/** The quick fix of a diagnostic of an unknown or only forward-declared C++ type: import the header that declares (defines) it. */
 export function importCodeAction(document: LangiumDocument, diagnostic: Diagnostic): CodeAction | undefined {
     const data = diagnostic.data as UnknownCppTypeData | undefined;
-    if (diagnostic.code !== UNKNOWN_CPP_TYPE || !data?.importPath) {
+    if ((diagnostic.code !== UNKNOWN_CPP_TYPE && diagnostic.code !== INCOMPLETE_CPP_TYPE) || !data?.importPath) {
         return undefined;
     }
     const offset = document.textDocument.offsetAt(diagnostic.range.start);

@@ -336,6 +336,12 @@ statemachine Controller {
   quick fix adds that import. `std::` names the tool does not map to a header are accepted if any system header is
   imported or included. Names cannot be verified – and are accepted – if the model imports a system header that is
   not a standard header (`import "<QString>"`) or an imported header includes a header that is not found.
+  A name that the imported headers only **forward-declare** (`class Driver;` in `config.h`) is valid C++ for
+  references and pointers, but its definition is unknown, so it gets a warning as well, also for `Driver&` and
+  `Driver*` (`'EpicProject::Driver' is only forward-declared (config.h:16). Import the header that defines it
+  (import "driver.h") for hover, completion and navigation.`); the quick fix imports the header that defines it.
+  Once a header with the definition is imported (directly or through an `#include`), the warning disappears. Hover
+  on such a name shows the forward declaration and its location, go to definition jumps to it.
 - **Use in the model**: a member can be used in the model if the model knows its types – the types of
   [C/C++ header imports](#cc-header-imports) (integers, reals, `bool`, `std::string`, enums, structs, `std::array`),
   where `const T&` and `T&` are values of type `T`. Members with other types (pointers, other templates, types of
