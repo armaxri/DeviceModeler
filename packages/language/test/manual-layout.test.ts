@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import type { DiagramGraph, DiagramNode } from '../src/diagram/diagram-model.js';
 import { DEFINITION_ID, layoutStateMachine } from '../src/diagram/layout.js';
+import { routeOutline } from '../src/diagram/edge-routes.js';
 import {
     applyManualLayout, captureLayout, createManualLayout, edgeEndpoints, layoutStateMachineWithLayout, parseManualLayout, removeLayoutElements,
     renameLayoutElement, serializeManualLayout, type ManualLayout
@@ -47,6 +48,15 @@ function expectOrthogonal(points: Array<{ x: number, y: number }>): void {
         const vertical = Math.abs(points[i].x - points[i - 1].x) < 0.01;
         expect(horizontal || vertical, JSON.stringify(points)).toBe(true);
     }
+}
+
+/** Distance of a point from the line segment a-b. */
+function segmentDistance(p: { x: number, y: number }, a: { x: number, y: number }, b: { x: number, y: number }): number {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const length = dx * dx + dy * dy;
+    const t = length > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / length)) : 0;
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
 /** The route passes through the point (a corner of the route / an end point of a Bezier segment). */
@@ -392,7 +402,8 @@ describe('manual layout: computation', () => {
         });
     }
 
-    for (const [routing, shape] of [['SPLINES', 'spline'], ['POLYLINE', 'polyline'], ['ORTHOGONAL', 'orthogonal']] as const) {
+    for (const [routing, shape, curve] of [['SPLINES', 'spline', undefined], ['POLYLINE', 'polyline', undefined], ['ORTHOGONAL', 'orthogonal', undefined],
+        ['ROUNDED', 'orthogonal', 'rounded'], ['SMOOTH', 'polyline', 'smooth']] as const) {
         test(`transitions are routed through their waypoints: ${routing}`, async () => {
             const parsed = await parse(example('cd-player.devm'));
             const auto = await layoutStateMachine(parsed.model, { routing });
@@ -405,6 +416,7 @@ describe('manual layout: computation', () => {
             for (const id of ['Open->#machine#final', 'Open->Closed.H']) {
                 const edge = result.graph.edges.find(e => e.id === id)!;
                 expect(edge.routing, id).toBe(shape);
+                expect(edge.curve, id).toBe(curve);
                 expect(edge.waypoints, id).toEqual(layout.edges[id].bends);
                 // through all waypoints, in their order
                 const indices = edge.waypoints!.map(w => edge.points.findIndex(q => Math.hypot(q.x - w.x, q.y - w.y) < 0.5));
@@ -413,8 +425,12 @@ describe('manual layout: computation', () => {
                 if (shape === 'orthogonal') {
                     expectOrthogonal(edge.points);
                 }
-                // around the other states
-                const line = shape === 'spline' ? sampleSpline(edge.points) : edge.points;
+                // the drawn route passes through the waypoints (a rounded corner within 4.2 = r (√2 - 1) of it), around the other states
+                const line = routeOutline(edge);
+                for (const w of edge.waypoints!) {
+                    expect(Math.min(...line.slice(1).map((q, i) => segmentDistance(w, line[i], q))), `${id} through ${JSON.stringify(w)}`)
+                        .toBeLessThan(curve === 'rounded' ? 4.5 : 0.5);
+                }
                 for (const node of nodes.values()) {
                     const containsEnd = [edge.source, edge.target].some(e => e === node.id || e.startsWith(node.id + '.') || e.startsWith(node.id + '#'));
                     if (node.kind !== 'region' && !containsEnd) {

@@ -69,6 +69,8 @@ statemachine CdPlayer "optional description" {
   the simple name works if it is unambiguous). An alias has exactly the semantics of its base type;
   the code generators use the base type. It may start with `namespace a.b` and
   annotations: `@CycleBased(period)`, `@EventDriven`, `@ParentFirstExecution`, `@ChildFirstExecution`.
+  The **C++ class sections** `public:`, `protected:` and `private:` declare members of the generated C++
+  class (see [C++ class sections](#c-class-sections)).
 - **Reactions** (transition labels and local reactions of states) have the form
   `trigger, trigger [guard] / effect`; every part is optional (a local reaction needs the effect).
   Triggers: events, `after n unit` / `every n unit` (units `s`, `ms`, `us`, `ns`), `always`,
@@ -103,7 +105,8 @@ statemachine CdPlayer "optional description" {
   [`examples/`](../examples) for more: `door.devm` shows entry points, exit nodes and fork / join,
   `traffic-light.devm` time events and named interfaces, `keyboard.devm` orthogonal regions,
   [`door-with-motor/`](../examples/door-with-motor) imports and submachines, [`cpp-types/`](../examples/cpp-types)
-  the types and constants of a C++ header.
+  the types and constants of a C++ header, [`cpp-class-sections/`](../examples/cpp-class-sections) the C++ class
+  sections.
 
 ## Imports and submachines
 
@@ -206,8 +209,17 @@ constexpr Position kHome{10, 20};                          operation drive(p : m
   out of range are warnings); arithmetic uses 64-bit integers like all integers of the models. `float` / `double` are
   `real` (`float` rounds to single precision), `bool` is `boolean`, `std::string` is `string`
   (`const char*` / `std::string_view` constants can be read). **Enums** are types of their own: values are
-  compared with `==` / `!=`; unscoped enum values convert to `integer` (flags: `faults | motor::kJam`);
-  `x as motor::Mode` / `mode as integer` convert. **Structs**: members are read and assigned (`pos.x`,
+  compared with `==` / `!=` and ordered (`<`, `>=`, … between values of the same enum); unscoped enum values
+  convert to `integer` (flags: `faults | motor::kJam`), but nothing converts implicitly to an enum (an `integer`
+  or a value of another enum is a type error, like in C++); `x as motor::Mode` / `mode as integer` convert. All
+  common forms of enum declarations are supported: `enum`, `enum class` / `enum struct` with or without
+  underlying type, C style `typedef enum { LED_OFF, LED_ON } led_t;` (type `led_t`, enumerators `::LED_OFF`),
+  enums in namespaces (`app::io::Level::Low`) and classes (`app::Sensor::State`, unscoped enumerators
+  `app::Sensor::Idle`), opaque declarations (`enum class Handle : std::uint32_t;`, values by cast) and
+  C++20 `using enum` (table in [docs/cpp-integration.md §3.4](cpp-integration.md#34-enums)). The values of the
+  enumerators are computed like a C++ compiler does (implicit numbering, literals, expressions, macros; see
+  [§3.5](cpp-integration.md#35-enumerator-values) and the example
+  [`examples/cpp-enum-values`](../examples/cpp-enum-values)). **Structs**: members are read and assigned (`pos.x`,
   `cfg.timing.periodMs = 5`, `valueof(e).x`, `measure().y`), structs are assigned as a whole, not compared
   (no `==`). **Arrays** (`std::array<T, N>`, `T[N]` members): elements `a[i]` (checked: an index out of bounds is
   a runtime error). Unions, pointers, templates (other than `std::array`) and the like are errors where used.
@@ -218,6 +230,9 @@ constexpr Position kHome{10, 20};                          operation drive(p : m
   `{x: 1, y: 2}`. The simulation panel of the web app and of VS Code edits enum values with a drop-down and the
   members of structs in expandable editors; the unit test language uses the same names and values
   (`assert mode == motor::Mode::Fast`, `mock measure returns (motor::kHome)`, `p.x = 3` for a local struct).
+- **Headers in angle brackets** (`import "<vector>"`) are not analyzed: the generated C++ code `#include`s them
+  (`#include <vector>`), their types can only be used by the [C++ class sections](#c-class-sections) for members that
+  the model does not use.
 - **Headers** are searched relative to the importing model, then in the **include paths**; the headers they
   include (`#include "…"` / `<…>` found in the include paths) are analyzed too and their declarations are
   visible. The settings of the analysis are configured in the `headers` block of `devm.gen.json` (include
@@ -236,14 +251,125 @@ constexpr Position kHome{10, 20};                          operation drive(p : m
   the import, errors in the header are reported there with their location (`motor_types.h:12:5: …`);
   `devm cpp-header <files>` prints what the analyzer extracts. The supported C++ subset is described in
   [docs/cpp-integration.md](cpp-integration.md).
-- **Tools**: hover shows the declaration, value and documentation comment of the header, go to definition
-  opens the header (VS Code), completion after `motor::` lists the names of the namespace / enum and after
-  `pos.` the members. The language server re-reads a header when it changes on disk and revalidates the models
+- **Tools**: hover shows the declaration, value and documentation comment of the header (for enumerators the
+  computed value with its derivation, e.g. ``value `3` (`0x3`) = `kPowered | kCalibrated` ``), go to definition
+  opens the header (VS Code), completion after `motor::` lists the names of the namespace / enum (only types
+  in type positions) and after `pos.` the members; where an enum value is expected (`mode == `, `mode = `,
+  `raise setMode : `, operation arguments) the enumerators of the enum are proposed (`motor::Mode::Fast`, with their values), in
+  type positions the C++ types. An unqualified enumerator (`Fast`) is an error that suggests the qualified name. The language server re-reads a header when it changes on disk and revalidates the models
   importing it; the web app accepts headers in *Open…* (they are added to its virtual file list).
 - **Generated C++** `#include`s the headers and uses the types by their names (`motor::Mode mode`,
   `void raise_moveTo(const motor::Position& value)`, `std::uint8_t get_small() const`), enumerators and
   constants by name, stores with `static_cast` to the declared type. The **C generator** reports
   "C++ header types are not supported by the C generator".
+
+## C++ class sections
+
+The definition section may contain the sections `public:`, `protected:` and `private:`. Their variables,
+constants and operations are **members of the generated C++ class** with that access: variables and constants
+are data members, operations are member functions that the application implements (in its own `.cpp` file,
+see [Code generation (C++)](cpp-generator.md#c-class-sections)). They are used in guards, effects and the unit
+tests by their simple names, like the members of the internal scope. The types are **C++ types**, written as in
+C++. The types of the application are imported with `import "header.h"` (see
+[C/C++ header imports](#cc-header-imports)): the generated header `#include`s them. Headers that are only
+needed by the generated code (standard library, system headers) are imported in angle brackets: `import "<vector>"`
+becomes `#include <vector>`; such a header is not analyzed (its types can only be used by members that the model
+does not use, see below).
+
+```
+statemachine Controller {
+    import "path/to/header.h"                 // EpicProject::Config, EpicProject::Driver
+    import "<vector>"                         // only #include <vector>
+
+    interface:
+        in event start
+        in event failure
+
+    public:
+        /**
+         * @brief Config setter.
+         */
+        operation setConfig(config : const EpicProject::Config&)
+        /** @brief Whether the device may be restarted. */
+        const operation retryAllowed() : bool
+    protected:
+        /**
+         * @brief Setup function.
+         */
+        operation setup()
+        var shutdowns : std::vector<unsigned int>   // only used by the C++ code
+    private:
+        var errorCnt : unsigned int = 0
+        const maxErrors : unsigned int = 3
+        var config : EpicProject::Config
+        var driver : EpicProject::Driver&     // bound by the constructor, only used by the C++ code
+
+    [*] -> Off
+    state Off
+    state Running {
+        entry / setup()
+    }
+    Off -> Running : start [retryAllowed() && errorCnt < maxErrors]
+    Running -> Off : failure / errorCnt++
+}
+```
+
+- **Declarations**: `var name : type = value`, `const name : type = value` (a `const` data member), `var readonly`
+  (the model cannot assign it, the C++ code can), `operation name(parameters) : returnType` (default `void`) and
+  `const operation name(...)`, a **const member function** (`bool retryAllowed() const;`). Events and type aliases
+  belong to the interfaces and the internal scope; `static` members are not supported (an error). Several sections,
+  also of the same access, may follow each other; the members keep their order in the generated class. `/** … */`
+  documentation comments (with Doxygen commands such as `@brief`) are copied into the generated header. The member
+  functions are `virtual` in the generated class (so that subclasses can override them; the generator option
+  `virtualMethods: false` turns this off), the model has no syntax for it.
+- **Types** are C++ types: fundamental types (`unsigned int`, `long long`, `double`, `bool`, `char`), the types of
+  the imported headers (`EpicProject::Config`), `<cstdint>` typedefs, `const`, references (`const T&`, `T&`),
+  pointers (`Driver*`, `const char*`) and template arguments (`std::array<int, 4>`, `std::map<int, std::string>`,
+  `std::vector<std::vector<int>>`). The model types (`integer`, `string`, aliases) can be used as well. Elsewhere in the
+  model these C++ forms are reported as errors.
+- **Unknown types** are allowed (the type is passed to the generated code as written), but a name that the imported
+  headers do not declare gets a **warning** on that name, since it has no highlighting, hover, completion and
+  navigation and the generated code only compiles if other includes declare it (`Unknown type 'EpicProject::Driver':
+  it is not declared in the imported headers. Import its header (import "driver.h") …`). If a header in the directory
+  of the model or in the include paths declares the name, the message names it and the quick fix adds the import.
+  Known are the fundamental types, the `<cstdint>` / `<cstddef>` typedefs (`uint8_t`, `std::size_t`), `std::string`,
+  `std::string_view`, `std::array` and the names declared by the imported headers and the headers they include
+  (definitions, aliases, forward declarations like `class Driver;`, templates; also relative to the `namespace` of the
+  model). A `std::` name is known if its standard header is imported (`import "<vector>"` for `std::vector`,
+  `"<map>"` for `std::map`, `"<memory>"` for `std::unique_ptr`, …) or included by an imported header; otherwise the
+  quick fix adds that import. `std::` names the tool does not map to a header are accepted if any system header is
+  imported or included. Names cannot be verified – and are accepted – if the model imports a system header that is
+  not a standard header (`import "<QString>"`) or an imported header includes a header that is not found.
+  A name that the imported headers only **forward-declare** (`class Driver;` in `config.h`) is valid C++ for
+  references and pointers, but its definition is unknown, so it gets a warning as well, also for `Driver&` and
+  `Driver*` (`'EpicProject::Driver' is only forward-declared (config.h:16). Import the header that defines it
+  (import "driver.h") for hover, completion and navigation.`); the quick fix imports the header that defines it.
+  Once a header with the definition is imported (directly or through an `#include`), the warning disappears. Hover
+  on such a name shows the forward declaration and its location, go to definition jumps to it.
+- **Use in the model**: a member can be used in the model if the model knows its types – the types of
+  [C/C++ header imports](#cc-header-imports) (integers, reals, `bool`, `std::string`, enums, structs, `std::array`),
+  where `const T&` and `T&` are values of type `T`. Members with other types (pointers, other templates, types of
+  headers in angle brackets, classes the header analyzer cannot use, non-const reference parameters) are declared in
+  the generated class for the C++ code of the application; using them in the model is an error (`The member
+  'shutdowns' cannot be used in the model: its type 'std::vector<unsigned int>' is not a type of the model: … It can
+  only be used by the C++ code of the application.`).
+- **Initialization**: data members are initialized **once, when the object is constructed** (default member
+  initializers); unlike the variables of the interfaces, `enter()` does not reset them, so values set by the
+  application before `enter()` (`setConfig(...)`) are kept. Their initial values may use literals, C++ constants and
+  the members declared before; without initial value the member is value-initialized (`T{}`: `0`, `nullptr`, the
+  default constructor). Declare constants with `const name : type` instead of `const` in the type.
+- **Reference members** (`var driver : EpicProject::Driver&`, `var settings : const app::Config&`) are bound by the
+  **constructor** of the generated class, which takes them as parameters in declaration order
+  (`Controller(EpicProject::Driver& driver_)`; without reference members the class has a default constructor). They
+  have no initial value; the model reads them like variables and assigns them if they are not references to
+  constants. In the simulator and the unit tests they are variables whose value is the referenced object (set by the
+  host, also before `enter`).
+- **Simulation and unit tests**: member functions are called like operations (the simulator lets the host provide
+  their results, unit tests use `mock setup returns (…)` and `assert called setup`); data members are shown and
+  edited like variables (`config.maxErrors = 2` in a unit test, also before `enter`). Members the model cannot use
+  are not simulated.
+- **Names** are the C++ names: they must not be C++ keywords nor names of the generated class (`enter`, `running`,
+  …; the generator reports a clash). The C generator does not support the class sections.
 
 ## Diagram layout annotations
 
@@ -268,7 +394,7 @@ statemachine Door {
         @at(14, 40)
         state Idle
     }
-    @via(420, 160) @label(8, 0)
+    @via(420, 160) @label(8, 0) @from("bottom", 50) @to("top", 25)
     Closed -> Opened : open
 }
 ```
@@ -276,9 +402,12 @@ statemachine Door {
 - Before a state, pseudo state or region: `@at(x, y)` (position relative to the content area of the
   parent), `@size(width, height)` (states and regions), `@regions("vertical" | "horizontal")` (states).
 - Before a transition: `@via(x1, y1, x2, y2, …)` (waypoints, relative to the innermost state containing
-  both end points) and `@label(dx, dy)` (label offset).
+  both end points), `@label(dx, dy)` (label offset) and `@from(side, position)` / `@to(side, position)`
+  (where the transition starts / ends on the border of its source / target state: side `"top"`,
+  `"right"`, `"bottom"` or `"left"`, position along the side in percent, 0 to 100).
 - In the body of the state machine, a state or a region: `@initial(x, y)` / `@final(x, y)` (its `[*]`
   states); in the body of the state machine also `@definitions(x, y[, width, height])`.
-- Arguments are numbers (written as integers, `-` allowed), `@regions` takes a string. Other annotations
+- Arguments are numbers (written as integers, `-` allowed), `@regions` takes a string, `@from` / `@to` a
+  string and a number. Other annotations
   of the state machine (`@CycleBased`, …) and the definition section must come before the states and
   transitions.

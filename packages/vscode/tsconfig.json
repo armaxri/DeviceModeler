@@ -9,7 +9,11 @@
     "declaration": false,
     "paths": {
       "devm-language": ["../language/src/index.ts"],
-      "@devm-web/diagram/manual-layout-support.js": ["../web/src/diagram/manual-layout-support.ts"]
+      "@devm-web/diagram/manual-layout-support.js": ["../web/src/diagram/manual-layout-support.ts"],
+      "@devm-web/ui/side-panel-state.js": ["../web/src/ui/side-panel-state.ts"],
+      "@devm-web/ui/tooltip-position.js": ["../web/src/ui/tooltip-position.ts"],
+      "@devm-web/ui/drag-geometry.js": ["../web/src/ui/drag-geometry.ts"],
+      "@devm-web/layout-actions.js": ["../web/src/layout-actions.ts"]
     }
   },
   "include": ["src/extension/**/*.ts", "src/server/**/*.ts", "src/common/**/*.ts", "test/**/*.ts", "vitest.config.ts"]

@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { generateCpp, generateCppScenarioHarness, type CppGeneratorResult } from '../src/generator/cpp/index.js';
 import { scenarioFiles as filesOfScenario, scenarioText, validateScenario } from '../src/simulation/index.js';
-import { CPP_TYPE_SCENARIOS, errors, parse, SUBMACHINE_SCENARIOS } from './helpers.js';
+import { CPP_TYPE_SCENARIOS, errors, parse, warnings, SUBMACHINE_SCENARIOS } from './helpers.js';
 import { SUBMACHINES_NOT_SUPPORTED } from '../src/generator/common/statechart-generator.js';
 
 /**
@@ -290,6 +290,36 @@ describe.skipIf(!GXX && !CLANGXX)('C++ code generator: examples', () => {
             await run(compilers[0], [...FLAGS, '-o', 'example', 'main.cpp', 'TrafficLight.cpp'], { cwd: directory });
             const { stdout } = await run(path.join(directory, 'example'), [], { cwd: directory, timeout: 20000 });
             expect(stdout).toContain('lights changed: 1');
+        } finally {
+            fs.rmSync(directory, { recursive: true, force: true });
+        }
+    }, 60000);
+
+    test('the example examples/cpp-class-sections compiles with the member functions of the application and runs', async () => {
+        const source = path.join(exampleDirectory, 'cpp-class-sections');
+        const read = (name: string) => fs.readFileSync(path.join(source, name), 'utf-8');
+        const parsed = await parse(read('restart-controller.devm'), { 'config.h': read('config.h'), 'driver.h': read('driver.h') });
+        expect(errors(parsed)).toEqual([]);
+        expect(warnings(parsed)).toEqual([]);
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-cpp-class-sections-'));
+        try {
+            for (const variant of [{ standard: 17 as const, flags: FLAGS }, { standard: 11 as const, flags: [...FLAGS.filter(f => !f.startsWith('-std=')), '-std=c++11'] }]) {
+                const result = generateCpp(parsed.model, { standard: variant.standard });
+                expect(result.diagnostics).toEqual([]);
+                writeFiles(directory, result);
+                for (const name of ['config.h', 'driver.h', 'ControllerMethods.cpp', 'main.cpp']) {
+                    fs.writeFileSync(path.join(directory, name), read(name));
+                }
+                const sources = ['main.cpp', 'ControllerMethods.cpp', 'Controller.cpp'];
+                for (const compiler of compilers.slice(1)) {
+                    for (const file of sources) {
+                        await run(compiler, [...variant.flags, '-fsyntax-only', file], { cwd: directory });
+                    }
+                }
+                await run(compilers[0], [...variant.flags, '-o', 'controller', ...sources], { cwd: directory });
+                const { stdout } = await run(path.join(directory, 'controller'), [], { cwd: directory });
+                expect(stdout).toBe('setup\npower on\npower off\nsetup\npower on\npower off\ngave up: yes, shutdowns: 2\n');
+            }
         } finally {
             fs.rmSync(directory, { recursive: true, force: true });
         }

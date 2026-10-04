@@ -14,14 +14,25 @@ import {
     type AnnotatedElement, type AnnotationContainer
 } from '../model-annotations.js';
 import { diagramElementIds } from './diagram-ids.js';
+import { isAnchorSide, type EdgeAnchor } from './edge-anchors.js';
 import { DEFINITION_ID } from './layout.js';
-import { createManualLayout, type EdgeLayout, type ManualLayout, type NodeLayout } from './manual-layout.js';
+import { createManualLayout, hasEdgeLayout, type EdgeLayout, type ManualLayout, type NodeLayout } from './manual-layout.js';
 import {
     annotationSlotEdits, insertAnnotations, type LayoutArgument, type AnnotationSlot, type WantedAnnotation, type WrittenAnnotation
 } from './layout-core/annotation-edits.js';
 
-/** A layout annotation value: numbers, or the orientation of `@regions`. */
-type Value = number[] | string;
+/** A layout annotation value: numbers, the orientation of `@regions` or an anchor (`@from`, `@to`). */
+type Value = number[] | string | EdgeAnchor;
+
+/** The anchor of `@from(side, position)` / `@to(side, position)`; undefined if the arguments are not a side and a number. */
+export function annotationAnchor(annotation: ast.Annotation): EdgeAnchor | undefined {
+    const [side, position] = annotation.arguments;
+    if (annotation.arguments.length !== 2 || !ast.isStringLiteral(side) || !isAnchorSide(side.value)) {
+        return undefined;
+    }
+    const value = numberValue(position);
+    return value === undefined ? undefined : { side: side.value, position: value };
+}
 
 /** The numbers of a layout annotation (number literals, optionally negated); undefined if an argument is not a number. */
 export function annotationNumbers(annotation: ast.Annotation): number[] | undefined {
@@ -137,7 +148,14 @@ export function layoutFromModel(machine: ast.StateMachine): ManualLayout | undef
             if (label) {
                 entry.label = { x: label[0], y: label[1] };
             }
-            if (entry.bends || entry.label) {
+            for (const [name, end] of [['from', 'source'], ['to', 'target']] as const) {
+                const annotation = annotations.get(name);
+                const anchor = annotation ? annotationAnchor(annotation) : undefined;
+                if (anchor && anchor.position >= 0 && anchor.position <= 100) {
+                    entry[end] = anchor;
+                }
+            }
+            if (hasEdgeLayout(entry)) {
                 layout.edges[id] = entry;
             }
             continue;
@@ -218,6 +236,12 @@ function desiredAnnotations(element: LayoutNode, layout: ManualLayout | undefine
         if (edge?.label) {
             result.set('label', [edge.label.x, edge.label.y]);
         }
+        if (edge?.source) {
+            result.set('from', edge.source);
+        }
+        if (edge?.target) {
+            result.set('to', edge.target);
+        }
         return result;
     }
     const node = id ? layout.nodes[id] : undefined;
@@ -249,6 +273,23 @@ function desiredAnnotations(element: LayoutNode, layout: ManualLayout | undefine
         }
     }
     return result;
+}
+
+/** Anchor positions are written as integers between 0 and 100. */
+function roundPosition(position: number): number {
+    const rounded = Math.min(100, Math.max(0, Math.round(position)));
+    return Object.is(rounded, -0) ? 0 : rounded;
+}
+
+/** The annotation of a value: `@at(10, 20)`, `@regions("vertical")`, `@from("left", 40)`; a new `@from` is written before an existing `@to`. */
+function wantedAnnotation(name: string, value: Value): WantedAnnotation {
+    if (typeof value === 'string') {
+        return { name, args: [value] };
+    }
+    if (!Array.isArray(value)) {
+        return { name, args: [value.side, roundPosition(value.position)], before: name === 'from' ? 'to' : undefined };
+    }
+    return { name, args: value };
 }
 
 /** The arguments of an annotation as read by the annotation writer (numbers and strings), undefined if one cannot be read. */
@@ -286,7 +327,7 @@ export function layoutTextEdits(machine: ast.StateMachine, text: string, layout:
         const desired = desiredAnnotations(element, layout, ids);
         const wanted = (names: readonly string[]): WantedAnnotation[] => [...desired]
             .filter(([name]) => names.includes(name))
-            .map(([name, value]) => ({ name, args: typeof value === 'string' ? [value] : value }));
+            .map(([name, value]) => wantedAnnotation(name, value));
         // element annotations before the element, container annotations in its body
         if (isAnnotatedElement(element)) {
             slots.push({

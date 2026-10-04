@@ -7,7 +7,8 @@ import * as ast from './generated/ast.js';
 import type { DevmServices } from './devm-module.js';
 import { referenceName, vertexCandidates } from './statemachine-scope.js';
 import { resolvedImports } from './imports.js';
-import { setReferenceMembers } from './cpp-types.js';
+import { cppIndexAt, setReferenceMembers } from './cpp-types.js';
+import { cppValueSuggestions } from './cpp-enums.js';
 
 /**
  * Linker of state machine files. Improves the error message of vertex references that cannot be
@@ -35,7 +36,7 @@ export class StateMachineLinker extends DefaultLinker {
     protected override createLinkingError(refInfo: ReferenceInfo, targetDescription?: AstNodeDescription): LinkingError {
         const error = super.createLinkingError(refInfo, targetDescription);
         if (!targetDescription && ast.isElementReference(refInfo.container) && refInfo.property === 'element') {
-            const hint = cppNameHint(refInfo.reference.$refText);
+            const hint = cppNameHint(refInfo.reference.$refText, refInfo.container);
             return hint ? { ...error, message: `${error.message} ${hint}` } : error;
         }
         if (targetDescription || !isVertexReference(refInfo)) {
@@ -96,8 +97,18 @@ function isLinkingError(value: AstNodeDescription | LinkingError): value is Link
     return 'info' in value && 'message' in value && !('path' in value);
 }
 
-/** A hint for an unresolved name that is written like a C++ name of the global namespace (`HAL_OK` -> `::HAL_OK`). */
-function cppNameHint(name: string): string | undefined {
+/**
+ * A hint for an unresolved name that is the simple name of an enumerator or constant of an imported
+ * header (`Fast` -> `motor::Mode::Fast`, `RED` -> `::RED`) or written like a C++ name of the global
+ * namespace (`HAL_OK` -> `::HAL_OK`).
+ */
+function cppNameHint(name: string, context: ast.ElementReference): string | undefined {
+    if (/^[A-Za-z_]\w*$/.test(name)) {
+        const suggestions = cppValueSuggestions(name, cppIndexAt(context));
+        if (suggestions.length > 0) {
+            return `(Did you mean ${suggestions.map(s => `'${s}'`).join(' or ')}? Enumerators and constants of imported C++ headers are written qualified with '::'.)`;
+        }
+    }
     return /^[A-Za-z_]\w*$/.test(name) && /^(k[A-Z]|[A-Z][A-Z0-9_]+$)/.test(name)
         ? `(A constant of the global namespace of an imported C++ header is written '::${name}'.)`
         : undefined;

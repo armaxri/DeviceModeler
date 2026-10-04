@@ -1,0 +1,9 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: HSM Modeler command line executable (macOS aarch64)
+Bundle-SymbolicName: hsm.eclipse.cli.macosx.aarch64
+Bundle-Version: 0.1.0.qualifier
+Bundle-Vendor: HSM Modeler
+Fragment-Host: hsm.eclipse
+Eclipse-PlatformFilter: (& (osgi.os=macosx) (osgi.arch=aarch64))
+Eclipse-BundleShape: dir

@@ -120,6 +120,11 @@
                     "enum": [17, 11, "17", "11"],
                     "default": 17
                 },
+                "virtualMethods": {
+                    "description": "Whether the member functions declared in the C++ class sections (public:, protected:, private:) are virtual, so that subclasses can override them (default: true).",
+                    "type": "boolean",
+                    "default": true
+                },
                 "headerExtension": { "$ref": "#/definitions/headerExtension" },
                 "sourceExtension": {
                     "description": "Extension of the generated sources, including the dot (default: .cpp).",

@@ -1,4 +1,5 @@
 import { DIAGRAM_CSS } from 'devm-language';
+import { restoreNativeTitles } from './tooltips.js';
 
 /**
  * Creates a standalone SVG document of the rendered diagram: the viewport transformation is
@@ -26,6 +27,7 @@ export function exportSvg(container: HTMLElement, width: number, height: number,
     for (const element of svg.querySelectorAll('[id]')) {
         element.removeAttribute('id');
     }
+    restoreNativeTitles(svg);
     const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
     style.textContent = DIAGRAM_CSS;
     svg.insertBefore(style, svg.firstChild);

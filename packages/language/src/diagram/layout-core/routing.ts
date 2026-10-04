@@ -4,7 +4,7 @@
  */
 import type { Point } from '../diagram-model.js';
 import { insideRect, type Rect } from './model.js';
-import { routeOrthogonal } from './orthogonal-router.js';
+import { routeOrthogonal, type FixedPort } from './orthogonal-router.js';
 
 export interface WaypointRouteRequest {
     source: Rect;
@@ -22,6 +22,9 @@ export interface WaypointRouteRequest {
     targetFixed?: boolean;
     /** Direction (east, south, west, north) in which the route must not leave the source. */
     sourceExclude?: number;
+    /** Anchored ends: the route starts / ends exactly at this point of the border of the source / target. */
+    sourcePort?: FixedPort;
+    targetPort?: FixedPort;
     bounds: { minX: number, minY: number, maxX: number, maxY: number };
 }
 
@@ -45,6 +48,8 @@ export function routeThroughWaypoints(request: WaypointRouteRequest): { points: 
             sourceFixed: i > 0 || (request.sourceFixed ?? false),
             targetFixed: i + 2 < stops.length || (request.targetFixed ?? false),
             sourceExclude: exclude,
+            sourcePort: i === 0 ? request.sourcePort : undefined,
+            targetPort: i + 2 === stops.length ? request.targetPort : undefined,
             bounds: request.bounds
         });
         if (!leg) {

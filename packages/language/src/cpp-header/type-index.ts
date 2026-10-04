@@ -47,12 +47,18 @@ interface Scope {
     readonly inlineNamespaces: Scope[];
     /** `using namespace` directives of this scope. */
     readonly usingDirectives: CppQualifiedName[];
+    /** `using enum` declarations of this scope (C++20): the enumerators are members of the scope. */
+    readonly usingEnums: CppQualifiedName[];
     readonly declaration?: CppRecord | CppEnum;
 }
 
 interface EnumState {
     readonly type: CppEnumType;
     readonly values: Map<CppEnumerator, bigint>;
+    /** The types (bits, signed) of the enumerators before the closing brace of the enum. */
+    readonly types: Map<CppEnumerator, readonly [number, boolean]>;
+    /** Enumerators whose value cannot be computed, with the reason. */
+    readonly unknown: Map<CppEnumerator, string>;
     done: boolean;
 }
 
@@ -142,7 +148,7 @@ export class CppTypeIndex {
     }
 
     private static scope(qualifiedName: string, kind: Scope['kind'], parent?: Scope, declaration?: CppRecord | CppEnum): Scope {
-        return { qualifiedName, kind, parent, symbols: new Map(), inlineNamespaces: [], usingDirectives: [], declaration };
+        return { qualifiedName, kind, parent, symbols: new Map(), inlineNamespaces: [], usingDirectives: [], usingEnums: [], declaration };
     }
 
     // -----------------------------------------------------------------------------------------
@@ -159,6 +165,17 @@ export class CppTypeIndex {
             scope.symbols.set(name, list);
         }
         if (!list.includes(declaration)) {
+            if (declaration.kind === 'enum') {
+                // opaque declarations (`enum class E : int;`) and the definition denote the same enum: the definition is used
+                const other = list.findIndex(d => d.kind === 'enum');
+                if (other >= 0 && declaration.opaque) {
+                    return;
+                }
+                if (other >= 0 && (list[other] as CppEnum).opaque) {
+                    list[other] = declaration;
+                    return;
+                }
+            }
             const duplicate = list.find(other => other.kind === declaration.kind && other.kind !== 'namespace' && other.fileName !== declaration.fileName);
             if (duplicate) {
                 this.report('warning', `'${declaration.qualifiedName}' is also declared in ${duplicate.fileName}; the first declaration is used`, declaration.fileName, declaration.nameRange);
@@ -190,13 +207,17 @@ export class CppTypeIndex {
                     break;
                 }
                 case 'usingDirective':
-                    scope.usingDirectives.push(declaration.target);
+                    (declaration.enum ? scope.usingEnums : scope.usingDirectives).push(declaration.target);
                     break;
                 case 'enum': {
-                    this.addSymbol(scope, declaration.anonymous ? '' : declaration.name, declaration);
-                    const own = CppTypeIndex.scope(declaration.qualifiedName, 'enum', scope, declaration);
+                    // out-of-line definition of a nested enum (`enum class Outer::E : int { … };`): member of `Outer`
+                    const enclosing = this.enclosingScopeOf(declaration, scope);
+                    this.declarationScopes.set(declaration, enclosing);
+                    this.addSymbol(enclosing, declaration.anonymous ? '' : declaration.name, declaration);
+                    const own = CppTypeIndex.scope(declaration.qualifiedName, 'enum', enclosing, declaration);
                     this.ownScopes.set(declaration, own);
-                    if (!declaration.anonymous && !this.scopesByName.has(declaration.qualifiedName)) {
+                    const known = this.scopesByName.get(declaration.qualifiedName);
+                    if (!declaration.anonymous && (!known || (known.declaration?.kind === 'enum' && known.declaration.opaque && !declaration.opaque))) {
                         this.scopesByName.set(declaration.qualifiedName, own);
                     }
                     for (const enumerator of declaration.enumerators) {
@@ -204,7 +225,7 @@ export class CppTypeIndex {
                         this.enumOf.set(enumerator, declaration);
                         this.addSymbol(own, enumerator.name, enumerator);
                         if (!declaration.scoped) {
-                            this.addSymbol(scope, enumerator.name, enumerator);
+                            this.addSymbol(enclosing, enumerator.name, enumerator);
                         }
                     }
                     break;
@@ -228,6 +249,16 @@ export class CppTypeIndex {
                     this.addSymbol(scope, declaration.name, declaration);
             }
         }
+    }
+
+    /**
+     * The scope a declaration with a qualified name belongs to: for `enum class Outer::E {…}` the
+     * scope of `Outer` (if it is known), otherwise the scope it is written in.
+     */
+    private enclosingScopeOf(declaration: CppDeclaration, scope: Scope): Scope {
+        const separator = declaration.qualifiedName.lastIndexOf('::');
+        const prefix = separator >= 0 ? declaration.qualifiedName.slice(0, separator) : '';
+        return prefix === scope.qualifiedName || declaration.name === '' ? scope : this.scopesByName.get(prefix) ?? scope;
     }
 
     private report(severity: CppDiagnosticSeverity, message: string, fileName: string, range: CppRange): void {
@@ -317,6 +348,9 @@ export class CppTypeIndex {
             return own;
         }
         const found: CppDeclaration[] = [];
+        for (const enumScope of this.usingEnumScopes(scope)) {
+            found.push(...(enumScope.symbols.get(name) ?? []));
+        }
         for (const inline of scope.inlineNamespaces) {
             found.push(...this.findIn(inline, name, visited));
         }
@@ -348,6 +382,26 @@ export class CppTypeIndex {
             }
         }
         return found;
+    }
+
+    /** The scopes of the enums named by the `using enum` declarations of a scope. */
+    private usingEnumScopes(scope: Scope): Scope[] {
+        const result: Scope[] = [];
+        for (const target of scope.usingEnums) {
+            if (this.directivesInProgress.has(target)) {
+                continue;
+            }
+            this.directivesInProgress.add(target);
+            try {
+                const enumScope = this.lookupIn(target, scope).map(d => this.memberScope(d)).find(s => s?.kind === 'enum');
+                if (enumScope) {
+                    result.push(enumScope);
+                }
+            } finally {
+                this.directivesInProgress.delete(target);
+            }
+        }
+        return result;
     }
 
     /** The scope of the members of a namespace, class, enum or of the type an alias denotes. */
@@ -388,6 +442,9 @@ export class CppTypeIndex {
         const collect = (s: Scope) => {
             for (const list of s.symbols.values()) {
                 list.forEach(d => result.add(d));
+            }
+            for (const enumScope of this.usingEnumScopes(s)) {
+                enumScope.symbols.forEach(list => list.forEach(d => result.add(d)));
             }
             s.inlineNamespaces.forEach(collect);
         };
@@ -640,6 +697,15 @@ export class CppTypeIndex {
         if (known) {
             return known;
         }
+        if (declaration.opaque) {
+            // an opaque declaration denotes the enum of the definition (if there is one)
+            const definition = this.lookupAll(`::${declaration.qualifiedName}`).find(d => d.kind === 'enum' && !d.opaque);
+            if (definition) {
+                const state = this.resolveEnum(definition as CppEnum);
+                this.enums.set(declaration, state);
+                return state;
+            }
+        }
         const scope = this.ownScopes.get(declaration) ?? this.global;
         const outer = this.declarationScopes.get(declaration) ?? this.global;
         let underlying: CppIntegerType = integer('int', 32, true);
@@ -663,44 +729,76 @@ export class CppTypeIndex {
         const type: CppEnumType = {
             kind: 'enum', cppName: declaration.qualifiedName, declaration, scoped: declaration.scoped, underlying, enumerators
         };
-        const state: EnumState = { type, values: new Map(), done: false };
+        const state: EnumState = { type, values: new Map(), types: new Map(), unknown: new Map(), done: false };
         this.enums.set(declaration, state);
-        let next = 0n;
+        // C++ [dcl.enum]: an enumerator without initializer has the value of the previous one + 1
+        // (0 for the first); before the closing brace each enumerator has the type of its
+        // initializer (the fixed underlying type if there is one), an implicit one the type of the
+        // previous enumerator or a larger type if the incremented value does not fit.
+        let previous: { value: bigint, bits: number, signed: boolean, unknown?: CppResolvedEnumerator['unknown'] } | undefined;
+        const boolUnderlying = fixed && underlying.cppName === 'bool';
+        const fitsUnderlying = (value: bigint) => boolUnderlying ? value === 0n || value === 1n : integerFits(value, underlying.bits, underlying.signed);
         for (const enumerator of declaration.enumerators) {
-            let value = next;
-            let valid = true;
-            if (enumerator.initializer) {
+            let value: bigint;
+            let bits: number = fixed ? underlying.bits : 32;
+            let signed = fixed ? underlying.signed : true;
+            let unknown: CppResolvedEnumerator['unknown'];
+            let error: string | undefined;
+            const initializer = enumerator.initializer;
+            if (initializer) {
+                value = previous ? previous.value + 1n : 0n;
                 try {
-                    const evaluated = this.evaluateNode(enumerator.initializer.node, scope);
+                    const evaluated = this.evaluateNode(initializer.node, scope);
                     if (evaluated.kind !== 'integer' && evaluated.kind !== 'boolean') {
-                        throw new EvaluationError(`the value must be an integer, not a ${evaluated.kind}`, enumerator.initializer.range);
+                        throw new EvaluationError(`the value must be an integer, not a ${evaluated.kind === 'real' ? 'floating point' : evaluated.kind} value`, initializer.range);
+                    }
+                    if (evaluated.kind === 'integer' && evaluated.enumType?.scoped && evaluated.enumType.declaration !== declaration) {
+                        throw new EvaluationError(`a value of the scoped enum '${evaluated.enumType.cppName}' needs a cast (e.g. 'static_cast<int>(…)')`, initializer.range);
                     }
                     value = evaluated.kind === 'boolean' ? (evaluated.value ? 1n : 0n) : evaluated.value;
-                    if (fixed && !integerFits(value, underlying.bits, underlying.signed)) {
-                        this.report('error', `the value ${value} of enumerator '${enumerator.qualifiedName}' does not fit into the underlying type '${underlying.cppName}'`,
-                            enumerator.fileName, enumerator.initializer.range);
+                    if (!fixed && evaluated.kind === 'integer') {
+                        bits = evaluated.bits;
+                        signed = evaluated.signed;
                     }
-                } catch (error) {
-                    if (!(error instanceof EvaluationError)) {
-                        throw error;
+                } catch (caught) {
+                    if (!(caught instanceof EvaluationError)) {
+                        throw caught;
                     }
-                    valid = false;
-                    this.report('error', `cannot evaluate the value of enumerator '${enumerator.qualifiedName}': ${error.message}`,
-                        enumerator.fileName, error.range ?? enumerator.initializer.range);
+                    unknown = { expression: initializer.text, offset: 0n, reason: caught.message };
+                    this.report('error', `cannot evaluate the value of enumerator '${enumerator.qualifiedName}': ${caught.message}`,
+                        enumerator.fileName, caught.range ?? initializer.range);
                 }
-            } else if (fixed && !integerFits(value, underlying.bits, underlying.signed)) {
-                this.report('error', `the value ${value} of enumerator '${enumerator.qualifiedName}' does not fit into the underlying type '${underlying.cppName}'`,
-                    enumerator.fileName, enumerator.nameRange);
+            } else {
+                value = previous ? previous.value + 1n : 0n;
+                if (previous?.unknown) {
+                    unknown = { ...previous.unknown, offset: previous.unknown.offset + 1n };
+                } else if (previous && !fixed) {
+                    [bits, signed] = integerFits(value, previous.bits, previous.signed) ? [previous.bits, previous.signed]
+                        : ([[32, true], [32, false], [64, true], [64, false]] as const).find(([b, s]) => integerFits(value, b, s)) ?? [128, true];
+                }
             }
-            if (fixed) {
-                value = underlying.signed ? BigInt.asIntN(underlying.bits, value) : BigInt.asUintN(underlying.bits, value);
+            if (!unknown && fixed && !fitsUnderlying(value)) {
+                // narrowing to the fixed underlying type is an error (also for the incremented value)
+                error = `the value ${value} does not fit into the underlying type '${underlying.cppName}'`;
+                this.report('error', `the value ${value} of enumerator '${enumerator.qualifiedName}' does not fit into the underlying type '${underlying.cppName}'`,
+                    enumerator.fileName, initializer ? initializer.range : enumerator.nameRange);
             }
             state.values.set(enumerator, value);
-            enumerators.push({ name: enumerator.name, qualifiedName: enumerator.qualifiedName, value, valid, declaration: enumerator });
-            next = value + 1n;
+            state.types.set(enumerator, [bits, signed]);
+            if (unknown) {
+                state.unknown.set(enumerator, unknown.offset === 0n ? unknown.reason : `it follows '${unknown.expression}', whose value is unknown`);
+            }
+            enumerators.push({
+                name: enumerator.name, qualifiedName: enumerator.qualifiedName, value, valid: !unknown,
+                origin: initializer ? 'explicit' : 'implicit',
+                ...(initializer ? { expression: initializer.text } : {}),
+                ...(unknown ? { unknown } : {}), ...(error ? { error } : {}),
+                declaration: enumerator
+            });
+            previous = { value, bits, signed, unknown };
         }
         if (!fixed) {
-            const values = enumerators.map(e => e.value);
+            const values = enumerators.filter(e => e.valid).map(e => e.value);
             const fits = (bits: number, signed: boolean) => values.every(v => integerFits(v, bits, signed));
             const deduced = fits(32, true) ? integer('int', 32, true) : fits(32, false) ? integer('unsigned int', 32, false)
                 : fits(64, true) ? integer('long long', 64, true) : integer('unsigned long long', 64, false);
@@ -807,7 +905,7 @@ export class CppTypeIndex {
             const resolved = state.type.enumerators.find(e => e.declaration === declaration);
             return {
                 declaration, type: state.type, value: resolved?.value,
-                ...(resolved && !resolved.valid ? { error: 'the value cannot be evaluated' } : {})
+                ...(resolved && !resolved.valid ? { error: resolved.unknown?.offset === 0n ? resolved.unknown.reason : 'the value cannot be evaluated' } : {})
             };
         }
         return undefined;
@@ -1071,13 +1169,13 @@ export class CppTypeIndex {
                     if (value === undefined) {
                         throw new EvaluationError(`'${text}' is used before its definition`, range);
                     }
+                    const unknown = state.unknown.get(declaration);
+                    if (unknown !== undefined) {
+                        throw new EvaluationError(`the value of '${text}' is unknown (${unknown})`, range);
+                    }
                     if (!state.done) {
-                        // inside the enum body: the enumerator has the fixed underlying type or `int` (a
-                        // larger type if the value does not fit)
-                        if (enumDeclaration.underlyingType || enumDeclaration.scoped) {
-                            return { kind: 'integer', value, bits: state.type.underlying.bits, signed: state.type.underlying.signed };
-                        }
-                        const [bits, signed] = integerFits(value, 32, true) ? [32, true] : integerFits(value, 64, true) ? [64, true] : [64, false];
+                        // inside the enum body: the enumerator has the type of its initializer (see resolveEnum)
+                        const [bits, signed] = state.types.get(declaration) ?? [32, true];
                         return { kind: 'integer', value, bits, signed };
                     }
                     const underlying = state.type.underlying;

@@ -274,6 +274,10 @@ export function isCastable(source: DevmType, target: DevmType): boolean {
  */
 export function binaryResultType(operator: BinaryOperator, left: DevmType, right: DevmType): DevmType | undefined {
     const unknown = isError(left) || isError(right);
+    if (['<', '<=', '>', '>='].includes(operator) && isEnumType(left) && sameType(left, right)) {
+        // values of the same enum (also of an enum class) are ordered by their values, like in C++
+        return 'boolean';
+    }
     if (operator !== '==' && operator !== '!=') {
         left = promoted(left);
         right = promoted(right);

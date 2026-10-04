@@ -1,0 +1,71 @@
+<idea-plugin>
+    <id>hsm.jetbrains</id>
+    <name>HSM Modeler</name>
+    <vendor url="https://github.com/armaxri/HSM">HSM</vendor>
+
+    <description><![CDATA[
+    Hierarchical state machines (<code>.hsm</code>) in CLion and the other JetBrains IDEs: the HSM web app
+    (text editor, PlantUML-style diagram editor, properties, simulation, export, C++ generation) in an editor tab,
+    working on the IDE's document of the file, next to the IDE's text editor.
+    <ul>
+      <li>Editor with the views <b>Text</b>, <b>Text and Diagram</b> and <b>Diagram</b> (JCEF)</li>
+      <li>Problems of the model in the text editor and in the Problems tool window (also of closed files, with the
+          <code>hsm</code> command line tool)</li>
+      <li>Structure view, navigation from problems and structure into the diagram</li>
+      <li><i>Generate C++</i> (configured by <code>hsm.gen.json</code> or the settings)</li>
+      <li>Undo, redo, copy, paste, find and save shortcuts in the diagram editor; dark theme of the IDE</li>
+      <li>Highlighting, comments and braces of <code>.hsm</code> and <code>.hsmtest</code> files</li>
+      <li>With the plugin <a href="https://plugins.jetbrains.com/plugin/23257-lsp4ij">LSP4IJ</a>: the HSM language
+          server (<code>hsm lsp</code>) in the text editor – diagnostics, completion, hover, go to definition /
+          declaration / type definition into C/C++ headers and other models, document links, formatting, structure,
+          folding, rename and semantic highlighting</li>
+    </ul>
+    ]]></description>
+
+    <!-- only the platform: runs in CLion, IntelliJ IDEA and the other IDEs of the IntelliJ Platform -->
+    <depends>com.intellij.modules.platform</depends>
+    <!-- optional: the language server in the text editor (LSP4IJ, works in all JetBrains IDEs incl. the free ones) -->
+    <depends optional="true" config-file="hsm-lsp4ij.xml">com.redhat.devtools.lsp4ij</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <fileType name="HSM" implementationClass="hsm.jetbrains.lang.HsmFileType" fieldName="INSTANCE"
+                  language="HSM" extensions="hsm"/>
+        <fileType name="HSM Test" implementationClass="hsm.jetbrains.lang.HsmTestFileType" fieldName="INSTANCE"
+                  language="HSMTest" extensions="hsmtest"/>
+
+        <lang.parserDefinition language="HSM" implementationClass="hsm.jetbrains.lang.HsmParserDefinition"/>
+        <lang.syntaxHighlighterFactory language="HSM" implementationClass="hsm.jetbrains.lang.HsmSyntaxHighlighterFactory"/>
+        <lang.commenter language="HSM" implementationClass="hsm.jetbrains.lang.HsmCommenter"/>
+        <lang.braceMatcher language="HSM" implementationClass="hsm.jetbrains.lang.HsmBraceMatcher"/>
+        <externalAnnotator language="HSM" implementationClass="hsm.jetbrains.problems.HsmExternalAnnotator"/>
+
+        <lang.parserDefinition language="HSMTest" implementationClass="hsm.jetbrains.lang.HsmTestParserDefinition"/>
+        <lang.syntaxHighlighterFactory language="HSMTest" implementationClass="hsm.jetbrains.lang.HsmTestSyntaxHighlighterFactory"/>
+        <lang.commenter language="HSMTest" implementationClass="hsm.jetbrains.lang.HsmTestCommenter"/>
+        <lang.braceMatcher language="HSMTest" implementationClass="hsm.jetbrains.lang.HsmTestBraceMatcher"/>
+
+        <fileEditorProvider implementation="hsm.jetbrains.editor.HsmEditorProvider"/>
+
+        <applicationConfigurable parentId="tools" instance="hsm.jetbrains.settings.HsmConfigurable"
+                                 id="hsm.settings" displayName="HSM Modeler"/>
+        <notificationGroup id="HSM Modeler" displayType="BALLOON"/>
+    </extensions>
+
+    <projectListeners>
+        <listener class="hsm.jetbrains.problems.HsmValidationListener"
+                  topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+    </projectListeners>
+
+    <actions>
+        <action id="hsm.GenerateCpp" class="hsm.jetbrains.actions.GenerateCppAction" text="Generate C++"
+                description="Generate the C++ code of the state machine (configured by hsm.gen.json or the HSM settings)">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="EditorTabPopupMenu" anchor="last"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+        <action id="hsm.ValidateModels" class="hsm.jetbrains.actions.ValidateModelsAction" text="Validate HSM Models"
+                description="Validate all state machines of the project with the hsm command line tool">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>

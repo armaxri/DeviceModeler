@@ -1,4 +1,4 @@
-import { UriUtils, type ValidationAcceptor, type ValidationChecks } from 'langium';
+import { AstUtils, UriUtils, type ValidationAcceptor, type ValidationChecks } from 'langium';
 import { displayPath, headerDiagnosticMessage } from './cpp-headers.js';
 import * as ast from './generated/ast.js';
 import type { DevmServices } from './devm-module.js';
@@ -9,12 +9,16 @@ import {
 } from './imports.js';
 import { isKnownType } from './expression-validator.js';
 import { isComposite } from './model-utils.js';
+import {
+    forwardDeclaredCppTypeDiagnostic, forwardDeclaredCppTypes, INCOMPLETE_CPP_TYPE, UNKNOWN_CPP_TYPE, unknownCppTypeDiagnostic, unknownCppTypes
+} from './cpp-unknown-types.js';
 
 export function registerImportValidationChecks(services: DevmServices): void {
     const validator = services.validation.StateMachineImportValidator;
     const checks: ValidationChecks<ast.DevmAstType> = {
         StateMachine: [validator.checkImports, validator.checkInstances],
-        State: validator.checkSubmachineState
+        State: validator.checkSubmachineState,
+        TypeReference: validator.checkCppTypeNames
     };
     services.validation.ValidationRegistry.register(checks, validator);
 }
@@ -40,6 +44,24 @@ export class StateMachineImportValidator {
         this.resolver = services.references.ImportResolver;
     }
 
+    /**
+     * The C++ type names in the types of the C++ class sections must be declared in the imported headers
+     * (see cpp-unknown-types.ts): a warning on the unknown part of the name, with the header to import
+     * (quick fix) if a header of the model directory or the include paths declares it. Names that are only
+     * forward-declared get a warning with the header that defines them.
+     */
+    checkCppTypeNames(reference: ast.TypeReference, accept: ValidationAcceptor): void {
+        for (const unknown of unknownCppTypes(reference)) {
+            const { message, data } = unknownCppTypeDiagnostic(unknown, this.resolver.headerStore, AstUtils.getDocument(reference).uri);
+            accept('warning', message, { node: reference, range: unknown.range, code: UNKNOWN_CPP_TYPE, data });
+        }
+        // names that are only forward-declared (`class Driver;`): the header defining them is not imported
+        for (const forward of forwardDeclaredCppTypes(reference)) {
+            const { message, data } = forwardDeclaredCppTypeDiagnostic(forward, this.resolver.headerStore, AstUtils.getDocument(reference).uri);
+            accept('warning', message, { node: reference, range: forward.range, code: INCOMPLETE_CPP_TYPE, data });
+        }
+    }
+
     checkImports(machine: ast.StateMachine, accept: ValidationAcceptor): void {
         const byUri = new Set<string>();
         const byName = new Map<string, string>();
@@ -60,8 +82,16 @@ export class StateMachineImportValidator {
                 this.checkHeader(machine, resolved, accept);
                 continue;
             }
+            if (resolved.kind === 'system') {
+                // `#include <...>` in the generated C++ code, not analyzed: its types can only be used by C++-only members
+                if (byUri.has(resolved.path)) {
+                    accept('warning', `'${resolved.path}' is imported more than once.`, target);
+                }
+                byUri.add(resolved.path);
+                continue;
+            }
             if (resolved.kind === 'unsupported') {
-                accept('error', `Cannot import '${resolved.path}': only state machine files ('.devm') and C/C++ headers ('.h', '.hpp') can be imported.`, target);
+                accept('error', `Cannot import '${resolved.path}': only state machine files ('.devm') and C/C++ headers ('.h', '.hpp'; '<vector>' for headers that are only included) can be imported.`, target);
                 continue;
             }
             const key = resolved.uri?.toString() ?? resolved.path;

@@ -3,7 +3,7 @@ import { preprocess } from './preprocessor.js';
 import { KEYWORDS, makeTypeRef, SyntaxError, TokenCursor } from './syntax.js';
 import type {
     CppAccess, CppAlias, CppBaseSpecifier, CppConstant, CppDeclaration, CppDiagnostic, CppDiagnosticSeverity, CppEnum,
-    CppEnumerator, CppExpression, CppField, CppHeader, CppNamespace, CppNamespaceAlias, CppUsingDirective, CppParseOptions, CppQualifiedName, CppRange,
+    CppEnumerator, CppExpression, CppField, CppHeader, CppNamespace, CppNamespaceAlias, CppOtherTypeName, CppUsingDirective, CppParseOptions, CppQualifiedName, CppRange,
     CppRecord, CppTypeName, CppTypeRef
 } from './model.js';
 
@@ -35,7 +35,7 @@ export function parseCppHeader(text: string, fileName: string, options: CppParse
     const declarations = parser.parseTranslationUnit();
     diagnostics.push(...parser.diagnostics);
     diagnostics.sort((a, b) => a.range.start.line - b.range.start.line || a.range.start.character - b.range.start.character);
-    return { fileName, declarations, includes: preprocessed.includes, macros: preprocessed.macros, diagnostics };
+    return { fileName, declarations, otherTypes: parser.otherTypes, includes: preprocessed.includes, macros: preprocessed.macros, diagnostics };
 }
 
 /** Calls `action` for every declaration of the tree (depth first, in declaration order). */
@@ -78,6 +78,8 @@ function anonymousName(scope: string): string {
 
 class DeclarationParser extends TokenCursor {
     readonly diagnostics: CppDiagnostic[] = [];
+    /** Forward declared classes and templates (see {@link CppOtherTypeName}). */
+    readonly otherTypes: CppOtherTypeName[] = [];
     private scope = '';
     private output: CppDeclaration[] = [];
     private recordContext: RecordContext | undefined;
@@ -410,6 +412,13 @@ class DeclarationParser extends TokenCursor {
             this.skipTemplate();
             return;
         }
+        // `template <…> class Buffer` / `template <…> using Ptr = …`: the name is a type
+        const keyword = this.peek().text;
+        if (['class', 'struct', 'union', 'using'].includes(keyword) && this.atIdentifier(1)
+            && (keyword !== 'using' || this.at('=', 2))) {
+            const name = this.peek(1);
+            this.otherTypes.push({ kind: 'template', qualifiedName: this.qualify(name.text), range: this.range(name, name) });
+        }
         this.skipDeclaration(false);
     }
 
@@ -492,8 +501,16 @@ class DeclarationParser extends TokenCursor {
             this.output.push(this.base<CppUsingDirective>({ kind: 'usingDirective', name: '', qualifiedName: this.scope, target }, keyword, keyword, doc));
             return;
         }
-        if (this.at('enum')) {
-            this.skipDeclaration(false);
+        if (this.accept('enum')) {
+            // C++20 using-enum-declaration: the enumerators become members of this scope
+            const start = this.peek();
+            const target = this.parseQualifiedName('always');
+            if (!this.accept(';')) {
+                this.skipDeclaration(false);
+                return;
+            }
+            this.relevant = true;
+            this.output.push(this.base<CppUsingDirective>({ kind: 'usingDirective', name: '', qualifiedName: this.scope, target, enum: true }, keyword, start, doc));
             return;
         }
         if (this.atIdentifier() && (this.at('=', 1) || (this.at('[', 1) && this.at('[', 2)))) {
@@ -514,6 +531,7 @@ class DeclarationParser extends TokenCursor {
         // using-declaration
         const start = this.peek();
         const target = this.parseQualifiedName('always');
+        const nameToken = this.previous();
         if (!this.accept(';')) {
             this.skipDeclaration(false);
             return;
@@ -526,7 +544,7 @@ class DeclarationParser extends TokenCursor {
         const type = makeTypeRef({ name: { kind: 'named', name: target }, const: false, volatile: false }, 0, undefined, [], false, range);
         this.output.push(this.base<CppAlias>({
             kind: 'alias', name, qualifiedName: this.qualify(name), type, syntax: 'usingDeclaration'
-        }, keyword, this.previous(), doc));
+        }, keyword, nameToken, doc));
     }
 
     // -----------------------------------------------------------------------------------------
@@ -656,6 +674,8 @@ class DeclarationParser extends TokenCursor {
             : value.startsWith(oldName + '::') ? alias.qualifiedName + value.slice(oldName.length) : value;
         const renamed = declared as Mutable<CppEnum | CppRecord>;
         renamed.name = alias.name;
+        // go to definition of the typedef name leads to the name (not to the keyword of the anonymous type)
+        renamed.nameRange = alias.nameRange;
         const type = alias.type as Mutable<CppTypeRef>;
         type.spelling = type.spelling.replace(oldName, alias.qualifiedName);
         forEach(declared, declaration => {
@@ -663,6 +683,12 @@ class DeclarationParser extends TokenCursor {
             d.qualifiedName = rename(d.qualifiedName);
             d.scope = rename(d.scope);
         });
+        if (declared.kind === 'enum') {
+            // the enumerators of the named enum: `typedef enum { RED } color_t;` -> `color_t::RED` (also visible as `RED`)
+            for (const enumerator of declared.enumerators as Array<Mutable<CppEnumerator>>) {
+                enumerator.qualifiedName = `${alias.qualifiedName}::${enumerator.name}`;
+            }
+        }
 
         function forEach(declaration: CppDeclaration, action: (d: CppDeclaration) => void): void {
             action(declaration);
@@ -890,6 +916,16 @@ class DeclarationParser extends TokenCursor {
                 if (!name) {
                     throw new SyntaxError('expected an enum name or \'{\'', this.peek());
                 }
+                if (this.at(';') && (scoped || underlyingType)) {
+                    // opaque enum declaration `enum class E : int;`: the type is known, its enumerators are not
+                    const names = this.declarationName(name);
+                    return {
+                        kind: 'declared', declaration: this.base<CppEnum>({
+                            kind: 'enum', name: names.simple, qualifiedName: names.qualified, scoped, anonymous: false, opaque: true,
+                            ...(underlyingType ? { underlyingType } : {}), enumerators: []
+                        }, keyword, nameToken ?? keyword, doc, this.output)
+                    };
+                }
                 return { kind: 'named', name };
             }
             return { kind: 'declared', declaration: this.parseEnumBody(keyword, name, nameToken, scoped, underlyingType, doc) };
@@ -920,6 +956,13 @@ class DeclarationParser extends TokenCursor {
         if (!this.at('{')) {
             if (!name) {
                 throw new SyntaxError('expected a class name or \'{\'', this.peek());
+            }
+            if (this.at(';') && bases.length === 0 && !name.global && name.parts.length === 1 && nameToken) {
+                // forward declaration `class Driver;`
+                this.otherTypes.push({
+                    kind: 'forward', qualifiedName: this.qualify(name.parts[0].name), range: this.range(nameToken, nameToken), keyword: keyword.text,
+                    ...(doc ? { doc } : {})
+                });
             }
             return { kind: 'named', name };
         }

@@ -371,7 +371,7 @@ machine diagrams ([Manual layout](manual-layout.md#structure-diagrams)): layout 
 place the frame, threads, instances, component blocks and type boxes (`@at(x, y)`, `@size(w, h)`), the
 ports of an instance or the boundary ports (`@port(name, left | right | top | bottom, offset)`) and the
 waypoints of connections and delegations (`@via(x1, y1, …)`); a diagram without them is laid out
-automatically. They are written by dragging in the diagram and removed by *Automatic layout*:
+automatically. They are written by dragging in the diagram and removed by *Clear positions*:
 
 ```
 @at(112, 16)

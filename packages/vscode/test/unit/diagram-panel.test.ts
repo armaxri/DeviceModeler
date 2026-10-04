@@ -117,6 +117,24 @@ describe('DiagramPanel and its commands', () => {
         h.panel.disposeResources();
     });
 
+    it('shows the state of a debug session (also after a reload of the webview) and refuses edits meanwhile', async () => {
+        const h = createPanel(Uri.file(modelPath));
+        const state = { title: 'Paused on step', activeOffsets: [MODEL.indexOf('state Off')], transitionOffsets: [], instances: [], activeStates: ['Off'], running: true };
+        // not ready yet: sent with the ready message
+        h.panel.setDebugState(state);
+        expect(h.posted).toHaveLength(0);
+        await h.receive({ type: 'ready' });
+        await vi.waitFor(() => expect(h.posted.map(m => m.type)).toEqual(['settings', 'history', 'debugState', 'text']));
+        expect(h.posted[2]).toEqual({ type: 'debugState', state });
+        await h.receive({ type: 'edit', requestId: 1, version: 1, edits: [{ offset: 0, length: 0, text: '// x\n' }] });
+        expect(h.posted.at(-1)).toMatchObject({ type: 'editResult', requestId: 1, ok: false, message: expect.stringContaining('debugged') });
+        // the session ended: back to editing
+        h.panel.setDebugState(undefined);
+        expect(h.posted.at(-1)).toEqual({ type: 'debugState', state: undefined });
+        expect(h.panel.debugState).toBeUndefined();
+        h.panel.disposeResources();
+    });
+
     it('Device Modeler: Import itemis CREATE model writes the itemis arrangement as layout annotations, SVG export applies them', async () => {
         const sct = path.join(dir, 'Choice.sct');
         await fs.copyFile(path.resolve(__dirname, '../../../language/test/importer/fixtures/Choice.sct'), sct);

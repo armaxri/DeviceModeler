@@ -1,4 +1,4 @@
-import type { CppHeaderSettings, StructureContext } from 'devm-language';
+import type { CppHeaderSettings, EdgeRouting, StructureContext } from 'devm-language';
 
 /**
  * Messages between the extension and the diagram webview. The webview holds a copy of the document
@@ -11,7 +11,7 @@ export type DiagramTheme = 'classic' | 'modern' | 'dark';
 
 export interface WebviewSettings {
     direction: 'DOWN' | 'RIGHT';
-    routing: 'SPLINES' | 'ORTHOGONAL' | 'POLYLINE';
+    routing: EdgeRouting;
     priorities: boolean;
     /** The effective theme (`auto` is resolved by the extension). */
     theme: DiagramTheme;
@@ -52,10 +52,24 @@ export interface NavigationState {
 }
 
 /**
- * Commands of the manual layout (experimental): `arrange` writes the automatic layout as layout
- * annotations into the model, `reset` removes all layout annotations.
+ * Commands of the manual layout (experimental, see layout-actions.ts of the web app): `arrange`
+ * ("Store positions" / "Re-arrange") writes the automatic layout as layout annotations into the model,
+ * `reset` ("Clear positions") removes all layout annotations.
  */
 export type LayoutCommand = 'arrange' | 'reset';
+
+/**
+ * The state of a debug session of a test shown in the diagram (read-only while set): active states and
+ * the transitions taken last, identified by the offsets of their text in the model.
+ */
+export interface DebugViewState {
+    title: string;
+    activeOffsets: number[];
+    transitionOffsets: number[];
+    instances: Array<{ offset: number, text: string }>;
+    activeStates: string[];
+    running: boolean;
+}
 
 /** Messages from the extension to the webview. */
 export type ToWebview =
@@ -83,7 +97,9 @@ export type ToWebview =
     | { type: 'history', state: NavigationState }
     /** Go back / forward in the navigation history (commands): answered with a `navigate` message. */
     | { type: 'navigateRequest', direction: 'back' | 'forward' }
-    | { type: 'fit' };
+    | { type: 'fit' }
+    /** A debug session of a test drives the diagram (undefined: the session ended, back to editing). */
+    | { type: 'debugState', state?: DebugViewState };
 
 /** Messages from the webview to the extension. */
 export type FromWebview =

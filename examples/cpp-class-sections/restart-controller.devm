@@ -1,0 +1,53 @@
+// A controller that restarts a device after failures. The C++ class sections (public:, protected:,
+// private:) declare members of the generated C++ class: the member functions are implemented by the
+// application (ControllerMethods.cpp, they are virtual: main.cpp overrides one in a subclass), the data
+// members are used by the model and by that code; the reference member is bound by the constructor.
+statemachine Controller "Restarts a device after failures" {
+    namespace example
+    import "config.h"
+    import "driver.h"
+    import "<vector>"
+
+    interface:
+        in event start
+        in event failure
+        in event stop
+        out event gaveUp
+
+    public:
+        /**
+         * @brief Config setter.
+         */
+        operation setConfig(config : const EpicProject::Config&)
+        /** @brief Whether the device may be restarted after a failure. */
+        const operation retryAllowed() : bool
+
+    protected:
+        /**
+         * @brief Setup function: switches the device on.
+         */
+        operation setup()
+        /** @brief Switches the device off. */
+        operation shutdown()
+        /** The number of failures at each shutdown (only used by the C++ code). */
+        var shutdownErrors : std::vector<unsigned int>
+
+    private:
+        /** Number of failures since the last start. */
+        var errorCnt : unsigned int = 0
+        /** The configuration (setConfig). */
+        var config : EpicProject::Config
+        /** The hardware driver (bound by the constructor), only used by the C++ code. */
+        var driver : EpicProject::Driver&
+
+    [*] -> Off
+    state Off
+    state Running {
+        entry / setup()
+        exit / shutdown()
+    }
+    Off -> Running : start / errorCnt = 0
+    Running -> Running : failure [retryAllowed()] / errorCnt++
+    Running -> Off : failure / errorCnt++; raise gaveUp
+    Running -> Off : stop
+}

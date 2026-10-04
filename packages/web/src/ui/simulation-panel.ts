@@ -1,6 +1,7 @@
 import type { AstNode } from 'langium';
 import { declaredType, runtimeTypeOfValue, type HostValue } from 'devm-language';
 import { h } from './dom.js';
+import { panelSection } from './side-panel.js';
 import { type LogEntry, type OperationMock, type SimulationSession } from '../simulation/session.js';
 import { defaultHostValue, formatHostValue, typeLabel, valueEditor, type EditorType, type ValueEditor } from './value-editor.js';
 
@@ -106,15 +107,16 @@ export class SimulationPanel {
                 : undefined);
 
         const content: Array<HTMLElement | undefined> = [
-            h('div', { class: 'sim-header' },
-                h('h2', {}, `Simulation of ${session.machine.name}`),
-                h('button', { class: 'sim-stop', title: 'Stop the simulation and return to editing', onClick: () => this.host.stopSimulation() }, '■ Stop')),
-            h('div', { class: 'kind' }, cycleBased ? `Cycle based, period ${sim.cyclePeriod} ms` : 'Event driven',
-                sim.executionOrder === 'child-first' ? ', child first' : ''),
-            this.status,
-            this.errorBox,
-            this.breakBox,
-            controls,
+            panelSection('sim.controls', 'Controls', [
+                h('div', { class: 'sim-header' },
+                    h('h2', {}, `Simulation of ${session.machine.name}`),
+                    h('button', { class: 'sim-stop', title: 'Stop the simulation and return to editing', onClick: () => this.host.stopSimulation() }, '■ Stop')),
+                h('div', { class: 'kind' }, cycleBased ? `Cycle based, period ${sim.cyclePeriod} ms` : 'Event driven',
+                    sim.executionOrder === 'child-first' ? ', child first' : ''),
+                this.status,
+                this.errorBox,
+                this.breakBox,
+                controls]),
             section('Active states', this.activeList),
             this.eventsSection(),
             this.variablesSection(),
@@ -122,7 +124,7 @@ export class SimulationPanel {
             section('Out events', this.outList),
             this.session.operations.length > 0 ? section('Operation calls', this.callList) : undefined,
             section('Trace', this.traceList, 'Click an entry to show the element in the text'),
-            h('div', { class: 'actions' },
+            panelSection('sim.tools', 'Breakpoints and logs', [h('div', { class: 'actions' },
                 h('button', { title: 'Toggle the breakpoint of the state or transition selected in the diagram (or right-click it)', onClick: () => this.host.toggleBreakpointOfSelection() }, '● Toggle breakpoint'),
                 h('button', {
                     title: 'Clear the logs',
@@ -133,7 +135,7 @@ export class SimulationPanel {
                         this.update();
                     }
                 }, 'Clear logs')),
-            h('p', { class: 'hint' }, 'Space: run cycle / step · Esc: pause real time · right-click a state or transition: breakpoint')
+            h('p', { class: 'hint' }, 'Space: run cycle / step · Esc: pause real time · right-click a state or transition: breakpoint')])
         ];
         this.root.replaceChildren(...content.filter((e): e is HTMLElement => !!e));
     }
@@ -352,8 +354,9 @@ export class SimulationPanel {
     }
 }
 
+/** A collapsible section of the side panel (its state is kept by the key `sim.<title>`). */
 function section(title: string, content: HTMLElement | HTMLElement[], hint?: string): HTMLElement {
-    return h('details', { class: 'sim-section', open: true }, h('summary', { title: hint }, title), content);
+    return panelSection(`sim.${title.toLowerCase().replace(/\s+/g, '-')}`, title, [content].flat(), { hint, class: 'sim-section' });
 }
 
 /** `850 ms`, `12.35 s`. */

@@ -23,6 +23,7 @@ import { byId, h } from './ui/dom.js';
 import { closeInlineEditor, showChooser, showInlineEditor } from './ui/inline-editor.js';
 import { checkedField, field, problems } from './ui/properties.js';
 import { describeSyntaxProblem } from './model-service.js';
+import { LAYOUT_STATUS, layoutControls } from './layout-actions.js';
 
 /**
  * A place to navigate to (from the diagram to another file or element): a file, and in a structure file
@@ -1173,9 +1174,10 @@ export class StructureDiagram {
         if (!this.state || !this.context.canEditLayout()) {
             return;
         }
+        const status = layoutControls(this.isManualLayout()).arrangeStatus;
         this.layoutEditor.arrange().then(changed => {
             if (changed) {
-                this.context.setStatus('Arranged automatically – the positions can be adjusted by hand (Ctrl+Z restores the previous layout).');
+                this.context.setStatus(status);
             }
         });
     }
@@ -1187,7 +1189,7 @@ export class StructureDiagram {
         }
         this.layoutEditor.reset().then(changed => {
             if (changed) {
-                this.context.setStatus('Automatic layout – the layout annotations were removed (Ctrl+Z restores them).');
+                this.context.setStatus(LAYOUT_STATUS.clear);
             }
         });
     }
@@ -1570,7 +1572,7 @@ export class StructureDiagram {
                 h('li', {}, 'Drag an instance of a component into another thread to change its thread. Deleting a thread deletes its instances and their connections.'),
                 h('li', {}, 'Layout: drag the frame, threads, instances and type boxes to arrange them, the corner handle of a selected node to resize it, a port along the border of its instance (to another side). '
                     + 'Double-click a selected connector to add a waypoint (drag it; double-click it to remove it). The positions are written as layout annotations (@at, @size, @port, @via); '
-                    + 'Automatic layout removes them.'),
+                    + 'Clear positions removes them.'),
                 h('li', {}, 'Double-click an instance to open its state machine or subsystem, its type name (or the type of a port) to open the type, its name (or ', h('kbd', {}, 'F2'), ') to rename it.'),
                 h('li', {}, 'Select a port, connector or instance to highlight the route of its data (also through composites); the properties list the sources and targets.'),
                 h('li', {}, h('kbd', {}, 'Del'), ' deletes, ', h('kbd', {}, 'Ctrl'), '+', h('kbd', {}, 'Z'), ' undoes; ', h('kbd', {}, 'Alt'), '+', h('kbd', {}, '←'), ' goes back.')),

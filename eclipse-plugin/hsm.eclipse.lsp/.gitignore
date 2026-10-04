@@ -1,0 +1,5 @@
+# copies of packages/language/syntaxes and packages/vscode/language-configuration.json (made by the Maven build)
+/syntaxes/
+/language-configuration.json
+/bin/
+/target/

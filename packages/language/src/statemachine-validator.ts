@@ -27,6 +27,7 @@ export function registerValidationChecks(services: DevmServices): void {
         Annotation: expressions.checkAnnotation,
         InterfaceScope: expressions.checkInterfaceScope,
         InternalScope: expressions.checkInternalScope,
+        ClassScope: expressions.checkClassScope,
         TypeReference: expressions.checkTypeReference,
         TypeAliasDeclaration: expressions.checkTypeAlias,
         VariableDeclaration: expressions.checkVariable,

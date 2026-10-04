@@ -74,6 +74,8 @@ export namespace Devm {
         | "as"
         | "async"
         | "behavior"
+        | "bool"
+        | "char"
         | "choice"
         | "component"
         | "connect"
@@ -81,38 +83,50 @@ export namespace Devm {
         | "deephistory"
         | "default"
         | "delegate"
+        | "double"
         | "else"
         | "entry"
         | "event"
         | "every"
         | "exit"
         | "false"
+        | "float"
         | "history"
         | "import"
         | "in"
         | "inout"
+        | "int"
         | "interface"
         | "internal"
         | "junction"
+        | "long"
         | "namespace"
         | "null"
         | "oncycle"
         | "operation"
         | "out"
         | "package"
+        | "private"
+        | "protected"
+        | "public"
         | "raise"
         | "readonly"
         | "region"
+        | "short"
+        | "signed"
         | "state"
         | "statemachine"
+        | "static"
         | "struct"
         | "subsystem"
         | "sync"
         | "system"
         | "thread"
         | "true"
+        | "unsigned"
         | "valueof"
         | "var"
+        | "void"
         | "{"
         | "|"
         | "|="
@@ -133,6 +147,7 @@ export namespace Devm {
         BoolLiteral: BoolLiteral
         BuiltinTrigger: BuiltinTrigger
         CastExpression: CastExpression
+        ClassScope: ClassScope
         Component: Component
         ComponentInstance: ComponentInstance
         ComponentType: ComponentType
@@ -261,18 +276,24 @@ export namespace DevmTest {
         | "assert"
         | "async"
         | "behavior"
+        | "bool"
         | "called"
+        | "char"
         | "component"
         | "connect"
         | "const"
         | "delegate"
+        | "double"
         | "else"
         | "enter"
         | "exit"
         | "false"
+        | "float"
         | "for"
         | "if"
         | "inout"
+        | "int"
+        | "long"
         | "message"
         | "mock"
         | "null"
@@ -282,7 +303,10 @@ export namespace DevmTest {
         | "raise"
         | "readonly"
         | "returns"
+        | "short"
+        | "signed"
         | "statemachine"
+        | "static"
         | "struct"
         | "subsystem"
         | "system"
@@ -290,8 +314,10 @@ export namespace DevmTest {
         | "thread"
         | "times"
         | "true"
+        | "unsigned"
         | "valueof"
         | "var"
+        | "void"
         | "while"
         | "with"
         | "{"
@@ -316,6 +342,7 @@ export namespace DevmTest {
         BoolLiteral: BoolLiteral
         BuiltinTrigger: BuiltinTrigger
         CastExpression: CastExpression
+        ClassScope: ClassScope
         ConditionalExpression: ConditionalExpression
         CppReference: CppReference
         Declaration: Declaration
@@ -544,6 +571,12 @@ export function isAssignmentStatement(item: unknown): item is AssignmentStatemen
     return reflection.isInstance(item, AssignmentStatement.$type);
 }
 
+export type BaseTypeName = string;
+
+export function isBaseTypeName(item: unknown): item is BaseTypeName {
+    return typeof item === 'string';
+}
+
 export interface Behavior extends langium.AstNode {
     readonly $container: Component;
     readonly $type: 'Behavior';
@@ -640,6 +673,23 @@ export const CastExpression = {
 
 export function isCastExpression(item: unknown): item is CastExpression {
     return reflection.isInstance(item, CastExpression.$type);
+}
+
+export interface ClassScope extends langium.AstNode {
+    readonly $container: StateMachine;
+    readonly $type: 'ClassScope';
+    access: 'private' | 'protected' | 'public';
+    declarations: Array<Declaration>;
+}
+
+export const ClassScope = {
+    $type: 'ClassScope',
+    access: 'access',
+    declarations: 'declarations'
+} as const;
+
+export function isClassScope(item: unknown): item is ClassScope {
+    return reflection.isInstance(item, ClassScope.$type);
 }
 
 export interface Component extends langium.AstNode {
@@ -888,7 +938,7 @@ export function isEnterStatement(item: unknown): item is EnterStatement {
 }
 
 export interface EventDeclaration extends langium.AstNode {
-    readonly $container: InterfaceScope | InternalScope;
+    readonly $container: ClassScope | InterfaceScope | InternalScope;
     readonly $type: 'EventDeclaration';
     direction?: 'in' | 'out';
     name: StateMachineId;
@@ -957,6 +1007,12 @@ export const ExpressionStatement = {
 
 export function isExpressionStatement(item: unknown): item is ExpressionStatement {
     return reflection.isInstance(item, ExpressionStatement.$type);
+}
+
+export type FundamentalTypeName = string;
+
+export function isFundamentalTypeName(item: unknown): item is FundamentalTypeName {
+    return typeof item === 'string';
 }
 
 export interface HexLiteral extends langium.AstNode {
@@ -1204,18 +1260,22 @@ export function isOperationCallStatement(item: unknown): item is OperationCallSt
 }
 
 export interface OperationDeclaration extends langium.AstNode {
-    readonly $container: InterfaceScope | InternalScope;
+    readonly $container: ClassScope | InterfaceScope | InternalScope;
     readonly $type: 'OperationDeclaration';
+    const: boolean;
     name: StateMachineId;
     parameters: Array<Parameter>;
     returnType?: TypeReference;
+    static: boolean;
 }
 
 export const OperationDeclaration = {
     $type: 'OperationDeclaration',
+    const: 'const',
     name: 'name',
     parameters: 'parameters',
-    returnType: 'returnType'
+    returnType: 'returnType',
+    static: 'static'
 } as const;
 
 export function isOperationDeclaration(item: unknown): item is OperationDeclaration {
@@ -1431,7 +1491,7 @@ export function isRegion(item: unknown): item is Region {
     return reflection.isInstance(item, Region.$type);
 }
 
-export type Scope = InterfaceScope | InternalScope;
+export type Scope = ClassScope | InterfaceScope | InternalScope;
 
 export const Scope = {
     $type: 'Scope'
@@ -1602,10 +1662,10 @@ export function isStructureElement(item: unknown): item is StructureElement {
     return reflection.isInstance(item, StructureElement.$type);
 }
 
-export type StructureId = 'active' | 'after' | 'alias' | 'always' | 'as' | 'choice' | 'const' | 'deephistory' | 'default' | 'else' | 'entry' | 'event' | 'every' | 'exit' | 'false' | 'history' | 'in' | 'inout' | 'interface' | 'internal' | 'junction' | 'namespace' | 'null' | 'oncycle' | 'operation' | 'out' | 'raise' | 'readonly' | 'region' | 'state' | 'statemachine' | 'true' | 'valueof' | 'var' | string;
+export type StructureId = 'active' | 'after' | 'alias' | 'always' | 'as' | 'bool' | 'char' | 'choice' | 'const' | 'deephistory' | 'default' | 'double' | 'else' | 'entry' | 'event' | 'every' | 'exit' | 'false' | 'float' | 'history' | 'in' | 'inout' | 'int' | 'interface' | 'internal' | 'junction' | 'long' | 'namespace' | 'null' | 'oncycle' | 'operation' | 'out' | 'private' | 'protected' | 'public' | 'raise' | 'readonly' | 'region' | 'short' | 'signed' | 'state' | 'statemachine' | 'static' | 'true' | 'unsigned' | 'valueof' | 'var' | 'void' | string;
 
 export function isStructureId(item: unknown): item is StructureId {
-    return item === 'statemachine' || item === 'namespace' || item === 'internal' || item === 'in' || item === 'out' || item === 'inout' || item === 'interface' || item === 'event' || item === 'const' || item === 'var' || item === 'readonly' || item === 'operation' || item === 'alias' || item === 'state' || item === 'region' || item === 'choice' || item === 'junction' || item === 'history' || item === 'deephistory' || item === 'entry' || item === 'exit' || item === 'after' || item === 'every' || item === 'always' || item === 'oncycle' || item === 'else' || item === 'default' || item === 'raise' || item === 'as' || item === 'valueof' || item === 'active' || item === 'true' || item === 'false' || item === 'null' || (typeof item === 'string' && (/[_a-zA-Z][\w]*/.test(item)));
+    return item === 'statemachine' || item === 'namespace' || item === 'internal' || item === 'in' || item === 'out' || item === 'inout' || item === 'interface' || item === 'event' || item === 'const' || item === 'var' || item === 'readonly' || item === 'operation' || item === 'alias' || item === 'state' || item === 'region' || item === 'choice' || item === 'junction' || item === 'history' || item === 'deephistory' || item === 'entry' || item === 'exit' || item === 'after' || item === 'every' || item === 'always' || item === 'oncycle' || item === 'else' || item === 'default' || item === 'raise' || item === 'as' || item === 'valueof' || item === 'active' || item === 'true' || item === 'false' || item === 'null' || item === 'static' || item === 'public' || item === 'protected' || item === 'private' || item === 'void' || item === 'bool' || item === 'char' || item === 'short' || item === 'int' || item === 'long' || item === 'signed' || item === 'unsigned' || item === 'float' || item === 'double' || (typeof item === 'string' && (/[_a-zA-Z][\w]*/.test(item)));
 }
 
 export interface StructureImport extends langium.AstNode {
@@ -1665,6 +1725,12 @@ export function isStructureQualifiedName(item: unknown): item is StructureQualif
 export type StructureTypeReferenceName = string;
 
 export function isStructureTypeReferenceName(item: unknown): item is StructureTypeReferenceName {
+    return typeof item === 'string';
+}
+
+export type TemplateArgument = string;
+
+export function isTemplateArgument(item: unknown): item is TemplateArgument {
     return typeof item === 'string';
 }
 
@@ -1827,7 +1893,7 @@ export function isTrigger(item: unknown): item is Trigger {
 }
 
 export interface TypeAliasDeclaration extends langium.AstNode {
-    readonly $container: InterfaceScope | InternalScope;
+    readonly $container: ClassScope | InterfaceScope | InternalScope;
     readonly $type: 'TypeAliasDeclaration';
     name: StateMachineId;
     type: TypeReference;
@@ -1846,12 +1912,16 @@ export function isTypeAliasDeclaration(item: unknown): item is TypeAliasDeclarat
 export interface TypeReference extends langium.AstNode {
     readonly $container: CastExpression | EventDeclaration | OperationDeclaration | Parameter | TypeAliasDeclaration | VariableDeclaration;
     readonly $type: 'TypeReference';
-    name: TypeReferenceName;
+    const: boolean;
+    name: BaseTypeName | TypeReferenceName;
+    reference?: '&&' | '&';
 }
 
 export const TypeReference = {
     $type: 'TypeReference',
-    name: 'name'
+    const: 'const',
+    name: 'name',
+    reference: 'reference'
 } as const;
 
 export function isTypeReference(item: unknown): item is TypeReference {
@@ -1897,12 +1967,13 @@ export function isValueOfExpression(item: unknown): item is ValueOfExpression {
 }
 
 export interface VariableDeclaration extends langium.AstNode {
-    readonly $container: InterfaceScope | InternalScope | LocalVariableStatement | TestOperation;
+    readonly $container: ClassScope | InterfaceScope | InternalScope | LocalVariableStatement | TestOperation;
     readonly $type: 'VariableDeclaration';
     const: boolean;
     initialValue?: Expression;
     name: StateMachineId;
     readonly: boolean;
+    static: boolean;
     type?: TypeReference;
 }
 
@@ -1912,6 +1983,7 @@ export const VariableDeclaration = {
     initialValue: 'initialValue',
     name: 'name',
     readonly: 'readonly',
+    static: 'static',
     type: 'type'
 } as const;
 
@@ -2142,6 +2214,20 @@ export class DevmAstReflection extends langium.AbstractAstReflection {
                 }
             },
             superTypes: [Expression.$type]
+        },
+        ClassScope: {
+            name: ClassScope.$type,
+            properties: {
+                access: {
+                    name: ClassScope.access
+                },
+                declarations: {
+                    name: ClassScope.declarations,
+                    defaultValue: [],
+                    optional: true
+                }
+            },
+            superTypes: [Scope.$type]
         },
         Component: {
             name: Component.$type,
@@ -2599,6 +2685,11 @@ export class DevmAstReflection extends langium.AbstractAstReflection {
         OperationDeclaration: {
             name: OperationDeclaration.$type,
             properties: {
+                const: {
+                    name: OperationDeclaration.const,
+                    defaultValue: false,
+                    optional: true
+                },
                 name: {
                     name: OperationDeclaration.name
                 },
@@ -2609,6 +2700,11 @@ export class DevmAstReflection extends langium.AbstractAstReflection {
                 },
                 returnType: {
                     name: OperationDeclaration.returnType,
+                    optional: true
+                },
+                static: {
+                    name: OperationDeclaration.static,
+                    defaultValue: false,
                     optional: true
                 }
             },
@@ -3158,8 +3254,17 @@ export class DevmAstReflection extends langium.AbstractAstReflection {
         TypeReference: {
             name: TypeReference.$type,
             properties: {
+                const: {
+                    name: TypeReference.const,
+                    defaultValue: false,
+                    optional: true
+                },
                 name: {
                     name: TypeReference.name
+                },
+                reference: {
+                    name: TypeReference.reference,
+                    optional: true
                 }
             },
             superTypes: []
@@ -3203,6 +3308,11 @@ export class DevmAstReflection extends langium.AbstractAstReflection {
                 },
                 readonly: {
                     name: VariableDeclaration.readonly,
+                    defaultValue: false,
+                    optional: true
+                },
+                static: {
+                    name: VariableDeclaration.static,
                     defaultValue: false,
                     optional: true
                 },

@@ -14,6 +14,8 @@ import { DevmDocumentValidator, ExpressionValidator } from './expression-validat
 import { StructureCompletionProvider, StructureDefinitionProvider, StructureDocumentationProvider, StructureImplementationProvider } from './lsp/structure-lsp.js';
 import { DevmDocumentBuilder } from './statemachine-linker.js';
 import { StateMachineImportResolver } from './imports.js';
+import { DevmCodeActionProvider } from './lsp/cpp-code-actions.js';
+import { DevmValueConverter } from './devm-value-converter.js';
 import { StateMachineImportValidator, registerImportValidationChecks } from './statemachine-import-validator.js';
 import { StateMachineValidator, registerValidationChecks } from './statemachine-validator.js';
 import { DevmTestModule, type DevmTestServices } from './testing/devm-test-module.js';
@@ -43,7 +45,8 @@ export type DevmServices = LangiumServices & StateMachineAddedServices & Structu
 export const DevmModule: Module<DevmServices, PartialLangiumServices & StateMachineAddedServices & StructureAddedServices> = {
     parser: {
         LangiumParser: (services) => createDevmParser(services),
-        ParserErrorMessageProvider: (services) => new DevmParserErrorMessageProvider(services.Grammar)
+        ParserErrorMessageProvider: (services) => new DevmParserErrorMessageProvider(services.Grammar),
+        ValueConverter: () => new DevmValueConverter()
     },
     references: {
         ScopeProvider: (services) => new StructureScopeProvider(services),
@@ -62,7 +65,8 @@ export const DevmModule: Module<DevmServices, PartialLangiumServices & StateMach
         Formatter: () => new StructureFormatter(),
         CompletionProvider: (services) => new StructureCompletionProvider(services),
         DefinitionProvider: (services) => new StructureDefinitionProvider(services),
-        ImplementationProvider: () => new StructureImplementationProvider()
+        ImplementationProvider: () => new StructureImplementationProvider(),
+        CodeActionProvider: () => new DevmCodeActionProvider()
     },
     documentation: {
         DocumentationProvider: (services) => new StructureDocumentationProvider(services)
@@ -81,6 +85,7 @@ export interface DevmServiceExtensions {
     /** Added to the `.devm` language (state machines and structure files). */
     devm?: Module<DevmServices, PartialLangiumServices>;
     devmTest?: Module<DevmTestServices, PartialLangiumServices>;
+    shared?: Module<LangiumSharedServices, PartialLangiumSharedServices>;
 }
 
 /**
@@ -98,7 +103,8 @@ export function createDevmServices(context: DefaultSharedModuleContext = EmptyFi
     const shared = inject(
         createDefaultSharedModule(context),
         DevmGeneratedSharedModule,
-        DevmSharedModule
+        DevmSharedModule,
+        extensions.shared ?? {}
     );
     const Devm = inject(
         createDefaultModule({ shared }),

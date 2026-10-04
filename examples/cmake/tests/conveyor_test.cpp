@@ -33,10 +33,12 @@ int main() {
     belt.setOperationCallback(&drive);
     belt.enter();
     CHECK(belt.get_mode() == conveyor::Mode::Stopped);
+    CHECK(belt.get_led() == LED_OFF);
 
     belt.raise_start();
     belt.runCycle();
     CHECK(belt.get_mode() == conveyor::Mode::Normal);
+    CHECK(belt.get_led() == LED_GREEN);
     CHECK(!drive.speeds.empty() && drive.speeds.back() == conveyor::kDefaultSettings.normalSpeed);
 
     conveyor::Package fragile;
@@ -59,6 +61,7 @@ int main() {
     belt.runCycle();
     CHECK(belt.get_mode() == conveyor::Mode::Stopped);
     CHECK((belt.get_faults() & conveyor::kEmergencyStop) != 0);
+    CHECK(belt.get_led() == LED_RED);
 
     if (failures > 0) {
         std::fprintf(stderr, "%d check(s) failed\n", failures);

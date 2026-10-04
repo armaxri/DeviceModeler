@@ -16,7 +16,9 @@ import { StatechartInterpreter } from '../simulation/interpreter.js';
 import { formatTraceEntry, runScenario, validateScenario, type ScenarioStep } from '../simulation/scenario.js';
 import { runTestCommand, type TestCommandOptions } from '../testing/test-command.js';
 import { registerRenderCommands } from './render-commands.js';
+import { validateJson } from './validate-json.js';
 import { CppTypeIndex, cppHeaderReport } from '../cpp-header/index.js';
+import type { LanguageServerOptions } from '../node/language-server.js';
 import { cliHeaderSettings, dataModelNamed, installNodeHeaderSupport, parseDefines, type NodeHeaderOptions } from '../node/cpp-headers-node.js';
 
 const severities = ['', 'error', 'warning', 'info', 'hint'];
@@ -46,7 +48,7 @@ async function load(file: string, options: HeaderCommandOptions = {}) {
     installNodeHeaderSupport(services.shared, nodeHeaderOptions(options));
     const loader = new StateMachineModelLoader(services);
     const text = await fs.readFile(file, 'utf-8');
-    const parsed = await loader.load(text, `file://${path.resolve(file)}`);
+    const parsed = await loader.load(text, URI.file(path.resolve(file)).toString());
     let errors = 0;
     for (const d of parsed.diagnostics) {
         const severity = severities[d.severity ?? 1];
@@ -80,14 +82,25 @@ export function createProgram(): Command {
     const program = new Command('devm').description('Device Modeler: tools for state machines and structure models (.devm files)');
 
     headerOptions(program.command('validate'))
-        .argument('<file>', '.devm file to validate (state machine or structure file)')
-        .description('parses and validates a model')
-        .action(async (file: string, options: HeaderCommandOptions) => {
-            const { errors } = await load(file, options);
-            if (errors > 0) {
-                process.exitCode = 1;
-            } else {
-                console.log(`${file}: OK`);
+        .argument('<files...>', '.devm files to validate (state machine or structure files)')
+        .option('--json', 'machine readable output on stdout (for IDE integrations): {"files":[{"file","path","problems":[…]}]}')
+        .description('parses and validates models')
+        .action(async (files: string[], options: HeaderCommandOptions & { json?: boolean }) => {
+            if (options.json) {
+                const result = await validateJson(files, options);
+                process.stdout.write(`${JSON.stringify(result)}\n`);
+                if (result.files.some(file => file.problems.some(problem => problem.severity === 'error'))) {
+                    process.exitCode = 1;
+                }
+                return;
+            }
+            for (const file of files) {
+                const { errors } = await load(file, options);
+                if (errors > 0) {
+                    process.exitCode = 1;
+                } else {
+                    console.log(`${file}: OK`);
+                }
             }
         });
 
@@ -99,6 +112,7 @@ export function createProgram(): Command {
         .option('-n, --namespace <namespace>', 'cpp: namespace of the generated class, e.g. a::b (default: the namespace of the model, "" for none)')
         .option('--class-name <name>', 'cpp: name of the generated class and files (default: the state machine name)')
         .option('--std <standard>', 'cpp: C++ standard of the generated code, 17 or 11 (default: 17)')
+        .option('--non-virtual-methods', 'cpp: the member functions of the class sections (public:, protected:, private:) are not virtual')
         .option('-p, --prefix <prefix>', 'c: prefix of the generated functions and files (default: the state machine name in snake case)')
         .option('--check', 'writes nothing; exits with 1 if a generated file is missing or out of date (for CI)')
         .option('--list-outputs', 'writes nothing; prints the absolute paths of the generated files (for build systems)')
@@ -228,6 +242,22 @@ export function createProgram(): Command {
         });
 
     registerRenderCommands(program);
+
+    program.command('lsp')
+        .option('--stdio', 'communicate over stdin / stdout (default)')
+        .option('--socket <port>', 'connect to the TCP port on localhost on which the client listens')
+        .option('--pipe <name>', 'connect to the named pipe / Unix domain socket of the client')
+        .option('--node-ipc', 'Node.js IPC channel (only when started by a Node.js client)')
+        .option('--clientProcessId <pid>', 'exit when the client process ends')
+        .allowUnknownOption()
+        .summary('runs the language server for IDEs (Language Server Protocol, usually with --stdio)')
+        .description('runs the language server (Language Server Protocol) for .devm and .devmtest files: diagnostics, completion, '
+            + 'hover, go to definition into C/C++ headers and other models, formatting, … for any LSP client (Eclipse, JetBrains IDEs, Neovim, …)')
+        .action(async (options: LanguageServerOptions) => {
+            // loaded on demand: the command line tool does not need the language server otherwise
+            const { runLanguageServer } = await import('../node/language-server.js');
+            runLanguageServer(options);
+        });
 
     return program;
 }

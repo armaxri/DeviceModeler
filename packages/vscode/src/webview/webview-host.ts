@@ -1,12 +1,20 @@
-import { isStructureText, normalizeUri, type DiagramSubmachine, type TextEdit } from 'devm-language';
+import { EDGE_ROUTINGS, isStructureText, normalizeUri, type DiagramSubmachine, type TextEdit } from 'devm-language';
 import type { DiagramController, DiagramHost, DiagramLocation, StatusSeverity, TextRange } from '@devm-web/diagram-controller.js';
 import { byId, h } from '@devm-web/ui/dom.js';
 import { svgToPng } from '@devm-web/ui/export-svg.js';
-import type { FromWebview, LayoutCommand, NavigationState, OffsetEdit, ToWebview, WebviewSettings } from '../common/protocol.js';
+import { SidePanel, type SidePanelState } from '@devm-web/ui/side-panel.js';
+import { LAYOUT_TEXT, POSITIONS_LABEL, layoutControls } from '@devm-web/layout-actions.js';
+import type { DebugViewState, FromWebview, LayoutCommand, NavigationState, OffsetEdit, ToWebview, WebviewSettings } from '../common/protocol.js';
 import { textHash } from '../common/text-hash.js';
 
 /** Controls of the toolbar that do not apply to structure files. */
 const STATE_MACHINE_CONTROLS = ['direction-select', 'routing-select', 'priorities-toggle', 'btn-simulate', 'btn-cpp'];
+
+/** The persisted state of the webview (the URI is used to restore the diagram when VS Code is restarted). */
+interface WebviewState {
+    uri?: string;
+    sidePanel?: SidePanelState;
+}
 
 export interface VsCodeApi {
     postMessage(message: unknown): void;
@@ -38,6 +46,7 @@ export class WebviewHost implements DiagramHost {
     private files: Record<string, string> = {};
     private uri = '';
     private readonly locationRequests = new Map<number, (ok: boolean) => void>();
+    private sidePanel!: SidePanel;
 
     constructor(private readonly vscode: VsCodeApi) {
         this.buildLayout();
@@ -68,16 +77,15 @@ export class WebviewHost implements DiagramHost {
     // Layout and toolbar
 
     private buildLayout(): void {
-        const direction = h('select', { id: 'direction-select', title: 'Layout direction' },
+        const direction = h('select', { id: 'direction-select', title: LAYOUT_TEXT.direction.title },
             h('option', { value: 'DOWN' }, 'Top → bottom'), h('option', { value: 'RIGHT' }, 'Left → right'));
         const routing = h('select', { id: 'routing-select', title: 'Edge routing' },
-            h('option', { value: 'SPLINES' }, 'Splines'), h('option', { value: 'ORTHOGONAL' }, 'Orthogonal'), h('option', { value: 'POLYLINE' }, 'Polyline'));
+            ...EDGE_ROUTINGS.map(r => h('option', { value: r.value, title: r.description }, r.label)));
         const priorities = h('input', { type: 'checkbox', id: 'priorities-toggle' });
-        const properties = h('input', { type: 'checkbox', id: 'properties-toggle' });
         direction.addEventListener('change', () => this.post({ type: 'updateSetting', key: 'direction', value: direction.value }));
         routing.addEventListener('change', () => this.post({ type: 'updateSetting', key: 'routing', value: routing.value }));
         priorities.addEventListener('change', () => this.post({ type: 'updateSetting', key: 'priorities', value: priorities.checked }));
-        properties.addEventListener('change', () => this.post({ type: 'updateSetting', key: 'showProperties', value: properties.checked }));
+        const layout = layoutControls(false);
         const toolbar = h('header', { class: 'toolbar' },
             h('div', { class: 'group' },
                 h('button', { id: 'btn-back', title: 'Back (Alt+←)', 'aria-label': 'Back', disabled: true, onClick: () => this.navigate('back') }, '◀'),
@@ -88,11 +96,13 @@ export class WebviewHost implements DiagramHost {
             h('div', { class: 'group' },
                 direction,
                 routing,
-                h('label', { class: 'toggle', title: 'Show the priorities of transitions leaving a state with several outgoing transitions' }, priorities, h('span', {}, 'Priorities')),
-                h('label', { class: 'toggle', title: 'Show the properties panel' }, properties, h('span', {}, 'Properties'))),
+                h('label', { class: 'toggle', title: 'Show the priorities of transitions leaving a state with several outgoing transitions' }, priorities, h('span', {}, 'Priorities'))),
+            // labels, tooltips and visibility are updated by the controller (layout-actions.ts)
             h('div', { class: 'group', id: 'layout-group' },
-                h('button', { id: 'btn-arrange', title: 'Arrange all elements automatically and write the positions into the model (layout annotations)' }, 'Auto-arrange'),
-                h('button', { id: 'btn-reset-layout', title: 'Remove all layout annotations from the model and return to the automatic layout (an earlier arrangement is restored with undo)' }, 'Automatic layout')),
+                h('span', { id: 'layout-mode', class: 'label-text layout-mode', title: layout.mode.title },
+                    `${POSITIONS_LABEL} `, h('span', { class: 'layout-mode-value' }, layout.mode.label)),
+                h('button', { id: 'btn-arrange', title: layout.arrange.title }, layout.arrange.label),
+                h('button', { id: 'btn-reset-layout', title: layout.clear.title, hidden: layout.clear.hidden }, layout.clear.label)),
             h('div', { class: 'spacer' }),
             h('div', { class: 'group' },
                 h('button', { id: 'btn-export', title: 'Export the diagram as SVG or PNG', onClick: () => this.exportDiagram() }, 'Export…'),
@@ -108,6 +118,20 @@ export class WebviewHost implements DiagramHost {
                 h('aside', { id: 'properties' })));
         const status = h('footer', { id: 'statusbar' }, h('span', { id: 'status-message' }), h('span', { class: 'spacer' }), h('span', { id: 'status-problems' }));
         document.body.replaceChildren(toolbar, main, status);
+        // the side panel: shown or hidden by the setting devm.diagram.showProperties (the same for all diagrams),
+        // its width and collapsed sections are kept in the state of the webview
+        this.sidePanel = new SidePanel(byId('properties'), {
+            store: {
+                load: () => (this.vscode.getState() as WebviewState | undefined)?.sidePanel,
+                save: sidePanel => this.updateState({ sidePanel })
+            },
+            collapsedChanged: collapsed => this.post({ type: 'updateSetting', key: 'showProperties', value: !collapsed })
+        });
+        toolbar.append(h('div', { class: 'group' }, this.sidePanel.toggleButton));
+    }
+
+    private updateState(state: Partial<WebviewState>): void {
+        this.vscode.setState({ ...(this.vscode.getState() as WebviewState | undefined), ...state });
     }
 
     private exportDiagram(): void {
@@ -134,8 +158,8 @@ export class WebviewHost implements DiagramHost {
     }
 
     /**
-     * Structure files have no layout direction / edge routing settings, simulation and code generation (Auto-arrange
-     * and Automatic layout apply to both); called when the document of the diagram is set (the layout buttons are
+     * Structure files have no layout direction / edge routing settings, simulation and code generation (Store positions / Re-arrange
+     * and Clear positions apply to both); called when the document of the diagram is set (the layout buttons are
      * also updated by the controller).
      */
     private updateFileControls(): void {
@@ -169,8 +193,7 @@ export class WebviewHost implements DiagramHost {
         byId<HTMLSelectElement>('direction-select').value = settings.direction;
         byId<HTMLSelectElement>('routing-select').value = settings.routing;
         byId<HTMLInputElement>('priorities-toggle').checked = settings.priorities;
-        byId<HTMLInputElement>('properties-toggle').checked = settings.showProperties;
-        byId('diagram-pane').classList.toggle('hide-properties', !settings.showProperties);
+        this.sidePanel.setCollapsed(!settings.showProperties);
         document.body.classList.toggle('ui-dark', document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast'));
         this.controller.applyTheme();
         if (previous && this.received && (previous.direction !== settings.direction || previous.routing !== settings.routing || previous.priorities !== settings.priorities)) {
@@ -187,7 +210,7 @@ export class WebviewHost implements DiagramHost {
                 this.applySettings(message.settings);
                 break;
             case 'text': {
-                this.vscode.setState({ uri: message.uri });
+                this.updateState({ uri: message.uri });
                 // imports are resolved against the files sent by the extension
                 const files = message.files ?? {};
                 const key = JSON.stringify([message.uri, files, message.headers ?? {}]);
@@ -248,6 +271,20 @@ export class WebviewHost implements DiagramHost {
             case 'fit':
                 this.controller.fit();
                 break;
+            case 'debugState':
+                this.debugStateChanged(message.state);
+                break;
+        }
+    }
+
+    /** A debug session of a test drives the diagram: read-only, the simulation and layout controls are disabled. */
+    private debugStateChanged(state: DebugViewState | undefined): void {
+        this.controller.showExternalSimulation(state);
+        const button = byId<HTMLButtonElement>('btn-simulate');
+        button.disabled = state !== undefined;
+        button.title = state ? 'A test is being debugged – the diagram shows its state' : 'Simulate the state machine (the model must not contain errors)';
+        for (const id of ['direction-select', 'routing-select', 'priorities-toggle']) {
+            byId<HTMLInputElement>(id).disabled = state !== undefined;
         }
     }
 

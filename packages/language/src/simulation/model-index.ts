@@ -1,6 +1,7 @@
 import { AstUtils, type AstNode } from 'langium';
 import * as ast from '../generated/ast.js';
 import { qualifiedName } from '../statemachine-scope.js';
+import { isUsableInModel } from '../class-members.js';
 import { isInstance, referencedInstance, type MemberReferenceNode } from '../imports.js';
 import type { EventDirection } from '../typesystem.js';
 import { commonContainer, scopeOf, type ScopeContainer } from '../model-utils.js';
@@ -287,9 +288,13 @@ export class ModelIndex {
         return event.direction === 'out' ? 'out' : 'in';
     }
 
-    /** All variables and constants in declaration order (without submachine instances). */
+    /**
+     * All variables and constants in declaration order (without submachine instances and without the members
+     * of C++ class sections whose type the model cannot use, see class-members.ts).
+     */
     variables(): ast.VariableDeclaration[] {
-        return this.machine.scopes.flatMap(s => s.declarations).filter(ast.isVariableDeclaration).filter(v => !this.instanceSet.has(v));
+        return this.machine.scopes.flatMap(s => s.declarations).filter(ast.isVariableDeclaration)
+            .filter(v => !this.instanceSet.has(v) && isUsableInModel(v));
     }
 
     /** All declarations in declaration order. */

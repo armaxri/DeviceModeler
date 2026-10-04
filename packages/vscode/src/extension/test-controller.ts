@@ -1,10 +1,15 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
-import { CoverageCollector, type MachineCoverage, type WorkspaceFile } from 'devm-language';
+import { CoverageCollector, type MachineCoverage, type TestResult, type WorkspaceFile } from 'devm-language';
 import { vscodeHeaderSettings } from './diagram-panel.js';
-import { discoverTests, failureMessage, lineCoverage, runDevmTests, type TextRange } from './logic/tests.js';
+import { discoverTests, failureMessage, lineCoverage, runDevmTests, type TestFileProblem, type TextRange } from './logic/tests.js';
+import { CustomEvents } from '../debug/adapter.js';
+import type { TestSelector } from '../debug/protocol.js';
+import { DEBUG_TYPE } from './debug.js';
 
 const EXCLUDE = '**/{node_modules,out,dist,build}/**';
+
+let debugRuns = 0;
 
 type ItemKind = 'file' | 'class' | 'test';
 
@@ -26,6 +31,7 @@ export class DevmTestController implements vscode.Disposable {
     private readonly data = new WeakMap<vscode.TestItem, ItemData>();
     private readonly disposables: vscode.Disposable[] = [];
     private readonly runProfile: vscode.TestRunProfile;
+    private readonly debugProfile: vscode.TestRunProfile;
 
     constructor(private readonly output: vscode.LogOutputChannel) {
         this.controller.resolveHandler = async item => {
@@ -39,6 +45,8 @@ export class DevmTestController implements vscode.Disposable {
         const coverageProfile = this.controller.createRunProfile('Run with Model Coverage', vscode.TestRunProfileKind.Coverage,
             (request, token) => this.run(request, token, true), true);
         coverageProfile.loadDetailedCoverage = async (_run, file) => (file as ModelFileCoverage).details;
+        // debugging: a debug session (debug adapter of type devm-test) runs the tests and reports the results
+        this.debugProfile = this.controller.createRunProfile('Debug', vscode.TestRunProfileKind.Debug, (request, token) => this.debug(request, token), true);
         const watcher = vscode.workspace.createFileSystemWatcher('**/*.devmtest');
         this.disposables.push(
             this.controller,
@@ -111,6 +119,18 @@ export class DevmTestController implements vscode.Disposable {
         return file;
     }
 
+    /** `Device Modeler: Debug Tests`: debugs the tests of a test file (results in the Test Explorer). */
+    async debugFile(uri: vscode.Uri): Promise<void> {
+        const open = vscode.workspace.textDocuments.find(document => document.uri.toString() === uri.toString());
+        const item = this.updateItems(uri, open ? open.getText() : new TextDecoder().decode(await vscode.workspace.fs.readFile(uri)));
+        const source = new vscode.CancellationTokenSource();
+        try {
+            await this.debug(new vscode.TestRunRequest([item], undefined, this.debugProfile), source.token);
+        } finally {
+            source.dispose();
+        }
+    }
+
     /** `Device Modeler: Run Tests`: runs the tests of a test file (all tests of the workspace without a file). */
     async runFile(uri: vscode.Uri | undefined): Promise<void> {
         let include: vscode.TestItem[] | undefined;
@@ -129,28 +149,154 @@ export class DevmTestController implements vscode.Disposable {
         vscode.commands.executeCommand('workbench.view.testing.focus').then(undefined, () => undefined);
     }
 
+    /** The test items of a request (tests, not files and classes) by id. */
+    private collectTests(request: vscode.TestRunRequest): Map<string, vscode.TestItem> {
+        const roots = request.include ?? [...collection(this.controller.items)];
+        const excluded = new Set(request.exclude ?? []);
+        const tests = new Map<string, vscode.TestItem>();
+        const collect = (item: vscode.TestItem) => {
+            if (excluded.has(item)) {
+                return;
+            }
+            if (this.data.get(item)?.kind === 'test') {
+                tests.set(item.id, item);
+            }
+            collection(item.children).forEach(collect);
+        };
+        roots.forEach(collect);
+        return tests;
+    }
+
+    /**
+     * The Debug profile: starts a debug session for the tests; the adapter reports the results as custom
+     * events, which are mapped to the test items.
+     */
+    private async debug(request: vscode.TestRunRequest, token: vscode.CancellationToken): Promise<void> {
+        const tests = this.collectTests(request);
+        if (tests.size === 0) {
+            return;
+        }
+        const run = this.controller.createTestRun(request);
+        const selectors: TestSelector[] = [];
+        for (const item of tests.values()) {
+            const data = this.data.get(item)!;
+            selectors.push({ uri: data.uri.toString(), testClass: data.testClass!, test: data.test });
+            run.enqueued(item);
+        }
+        const runId = `devm-test-run-${++debugRuns}`;
+        const pending = new Map(tests);
+        const itemOf = (uri: string | undefined, testClass: string, test: string) => tests.get(`${uri}#${testClass}.${test}`);
+        const disposables: vscode.Disposable[] = [];
+        let session: vscode.DebugSession | undefined;
+        const finished = new Promise<void>(resolve => {
+            disposables.push(
+                vscode.debug.onDidStartDebugSession(started => {
+                    if (started.configuration.devmTestRun === runId) {
+                        session = started;
+                    }
+                }),
+                vscode.debug.onDidReceiveDebugSessionCustomEvent(event => {
+                    if (event.session.configuration.devmTestRun !== runId) {
+                        return;
+                    }
+                    const body = event.body as Record<string, unknown>;
+                    if (event.event === CustomEvents.testStarted) {
+                        const item = itemOf(body.uri as string, body.testClass as string, body.test as string);
+                        if (item) {
+                            run.started(item);
+                        }
+                    } else if (event.event === CustomEvents.testResult) {
+                        const result = body as unknown as TestResult;
+                        const item = itemOf(result.uri, result.testClass, result.name);
+                        if (item) {
+                            pending.delete(item.id);
+                            this.report(run, item, result);
+                        }
+                    } else if (event.event === CustomEvents.testsDone) {
+                        this.reportProblems(run, pending, (body.problems ?? []) as TestFileProblem[]);
+                    }
+                }),
+                vscode.debug.onDidTerminateDebugSession(ended => {
+                    if (ended.configuration.devmTestRun === runId) {
+                        resolve();
+                    }
+                }),
+                token.onCancellationRequested(() => {
+                    if (session) {
+                        vscode.debug.stopDebugging(session);
+                    }
+                })
+            );
+        });
+        try {
+            const first = tests.values().next().value as vscode.TestItem;
+            const folder = first.uri ? vscode.workspace.getWorkspaceFolder(first.uri) : undefined;
+            const name = tests.size === 1 ? `Debug ${first.parent?.label ?? ''}.${first.label}` : `Debug ${tests.size} Device Modeler tests`;
+            const started = await vscode.debug.startDebugging(folder, {
+                type: DEBUG_TYPE, request: 'launch', name, tests: selectors, devmTestRun: runId
+            }, { testRun: run });
+            if (started) {
+                await finished;
+            }
+            for (const item of pending.values()) {
+                run.skipped(item);
+            }
+        } finally {
+            disposables.forEach(d => d.dispose());
+            run.end();
+        }
+    }
+
+    /** Reports the result of a test to a test run (with the failure message, location and trace). */
+    private report(run: vscode.TestRun, item: vscode.TestItem, result: TestResult): void {
+        if (result.status === 'passed') {
+            run.passed(item, result.durationMs);
+            return;
+        }
+        const message = new vscode.TestMessage(failureMessage(result));
+        const uri = result.uri ? vscode.Uri.parse(result.uri) : item.uri;
+        if (uri && result.line) {
+            message.location = new vscode.Location(uri, new vscode.Position(result.line - 1, 0));
+        }
+        run.appendOutput(`${result.status.toUpperCase()} ${result.testClass}.${result.name}: ${result.message ?? ''}\r\n`
+            + result.trace.map(line => `    | ${line}`).join('\r\n') + '\r\n', message.location, item);
+        if (result.status === 'failed') {
+            run.failed(item, message, result.durationMs);
+        } else {
+            run.errored(item, message, result.durationMs);
+        }
+    }
+
+    /** Tests of files with errors were not executed: errored with the diagnostics. */
+    private reportProblems(run: vscode.TestRun, tests: Map<string, vscode.TestItem>, problems: readonly TestFileProblem[]): void {
+        for (const problem of problems) {
+            const uri = vscode.Uri.parse(problem.uri);
+            const messages = problem.diagnostics.map(d => {
+                const message = new vscode.TestMessage(`${path.basename(uri.path)}:${d.range.start.line + 1}: ${d.message}`);
+                message.location = new vscode.Location(uri, new vscode.Range(d.range.start.line, d.range.start.character, d.range.end.line, d.range.end.character));
+                return message;
+            });
+            for (const [id, item] of [...tests]) {
+                if (item.uri?.toString() === problem.uri) {
+                    run.errored(item, messages.length > 0 ? messages : new vscode.TestMessage('The test file contains errors.'));
+                    tests.delete(id);
+                }
+            }
+        }
+    }
+
     private async run(request: vscode.TestRunRequest, token: vscode.CancellationToken, withCoverage: boolean): Promise<void> {
         const run = this.controller.createTestRun(request);
         const coverage = withCoverage ? new CoverageCollector() : undefined;
         try {
             // the tests to run, grouped by test file
-            const roots = request.include ?? [...collection(this.controller.items)];
-            const excluded = new Set(request.exclude ?? []);
-            const tests = new Map<string, vscode.TestItem>();
+            const tests = this.collectTests(request);
             const files = new Map<string, vscode.Uri>();
-            const collect = (item: vscode.TestItem) => {
-                if (excluded.has(item)) {
-                    return;
-                }
-                const data = this.data.get(item);
-                if (data?.kind === 'test') {
-                    tests.set(item.id, item);
-                    files.set(data.uri.toString(), data.uri);
-                    run.enqueued(item);
-                }
-                collection(item.children).forEach(collect);
-            };
-            roots.forEach(collect);
+            for (const item of tests.values()) {
+                const uri = this.data.get(item)!.uri;
+                files.set(uri.toString(), uri);
+                run.enqueued(item);
+            }
             if (tests.size === 0) {
                 return;
             }
@@ -173,39 +319,11 @@ export class DevmTestController implements vscode.Disposable {
                         return;
                     }
                     tests.delete(item.id);
-                    if (result.status === 'passed') {
-                        run.passed(item, result.durationMs);
-                        return;
-                    }
-                    const message = new vscode.TestMessage(failureMessage(result));
-                    const uri = result.uri ? vscode.Uri.parse(result.uri) : item.uri;
-                    if (uri && result.line) {
-                        message.location = new vscode.Location(uri, new vscode.Position(result.line - 1, 0));
-                    }
-                    run.appendOutput(`${result.status.toUpperCase()} ${result.testClass}.${result.name}: ${result.message ?? ''}\r\n`
-                        + result.trace.map(line => `    | ${line}`).join('\r\n') + '\r\n', message.location, item);
-                    if (result.status === 'failed') {
-                        run.failed(item, message, result.durationMs);
-                    } else {
-                        run.errored(item, message, result.durationMs);
-                    }
+                    this.report(run, item, result);
                 }
             });
             // tests of files with errors were not executed
-            for (const problem of problems) {
-                const uri = vscode.Uri.parse(problem.uri);
-                const messages = problem.diagnostics.map(d => {
-                    const message = new vscode.TestMessage(`${path.basename(uri.path)}:${d.range.start.line + 1}: ${d.message}`);
-                    message.location = new vscode.Location(uri, new vscode.Range(d.range.start.line, d.range.start.character, d.range.end.line, d.range.end.character));
-                    return message;
-                });
-                for (const [id, item] of [...tests]) {
-                    if (item.uri?.toString() === problem.uri) {
-                        run.errored(item, messages.length > 0 ? messages : new vscode.TestMessage('The test file contains errors.'));
-                        tests.delete(id);
-                    }
-                }
-            }
+            this.reportProblems(run, tests, problems);
             for (const item of tests.values()) {
                 if (token.isCancellationRequested) {
                     run.skipped(item);

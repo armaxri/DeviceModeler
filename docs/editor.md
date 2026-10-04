@@ -1,6 +1,7 @@
 # Web editor
 
 The web app (`npm run dev`, `packages/web`) edits the text and the diagram side by side; the VS Code extension embeds the same diagram editor ([VS Code extension](vscode.md)).
+Drag the bar between text and diagram to change their sizes. In windows narrower than 900 px (e.g. an editor tab of an IDE) the text is shown above the diagram and the bar changes its height; width and height are kept separately.
 
 ## Editing in the diagram
 
@@ -20,6 +21,7 @@ The web app (`npm run dev`, `packages/web`) edits the text and the diagram side 
 | Rename / edit label | double-click or `F2` |
 | Move into another state | hold `Shift` while dropping it (a plain drop only moves it, see [Manual layout](#manual-layout-experimental)) |
 | Delete | `Del` / `Backspace` or the trash button |
+| Fit the diagram to the view | *Fit to screen* button at the bottom of the palette (the tooltips of the palette name each tool and its key) |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Y` (shared with the text editor) |
 | Keep a tool active | hold `Shift` while choosing it, `Esc` to go back to selection |
 | Hide / show the properties panel | panel button at the right end of the toolbar or `Ctrl+Alt+B` (`Cmd+Alt+B` on macOS); the diagram gets the width, the choice is remembered in the browser |
@@ -51,7 +53,7 @@ is shown instead of the state machine diagram when the edited `.devm` file conta
 Structure diagrams are arranged by hand like the state machines (see [Manual layout](#manual-layout-experimental)
 and [Manual layout: structure diagrams](manual-layout.md#structure-diagrams)): the first drag stores
 the positions of all nodes as layout annotations in the `.devm` text (`@at`, `@size`, `@port`, `@via`),
-*Auto-arrange* and *Automatic layout* in the toolbar apply to the shown diagram, `Ctrl+Z` undoes layout
+*Store positions* / *Re-arrange* and *Clear positions* in the toolbar apply to the shown diagram, `Ctrl+Z` undoes layout
 changes. The *Layout* direction and *Edges* settings do not apply (structure diagrams are always laid out
 from left to right with orthogonal connectors).
 
@@ -61,7 +63,7 @@ from left to right with orthogonal connectors).
 | Resize a node | select it, drag the handle at its bottom right corner |
 | Move a port to another place or side | drag the port along the border of its instance (or of the frame) |
 | Add / move / remove a waypoint of a connector | select the connector; double-click its line / drag the point / double-click the point |
-| Arrange automatically / back to the automatic layout | *Auto-arrange* / *Automatic layout* in the toolbar |
+| Arrange automatically / back to the automatic layout | *Store positions* / *Re-arrange* / *Clear positions* in the toolbar |
 
 ### Navigation
 
@@ -89,6 +91,44 @@ containing structures (the source of the in port `motor.up` of the drive unit is
 *Follow out* returns to it. The target of a navigation is selected in the diagram and its text
 highlighted.
 
+## Side panel
+
+The panel right of the diagram shows the properties of the selection (and the simulation while
+simulating). It behaves like the side bars of VS Code; the same panel is used by the standalone app,
+the Eclipse plugin and the diagram of the VS Code extension.
+
+| Action | How |
+| --- | --- |
+| Hide / show the panel | panel button at the right end of the toolbar, the `›` button in the panel's title row or the strip of the hidden panel, `Ctrl+Alt+B` (`⌥⌘B` on macOS; not in VS Code, where this shortcut toggles VS Code's own secondary side bar, and not in the Eclipse plugin and the desktop app, where the host owns its shortcuts – in Eclipse it is *Skip All Breakpoints*) |
+| Change its width | drag its left edge; with the edge focused (`Tab`) `←` / `→` (`Shift`: larger steps); double-click or `Home` restores the default width |
+| Collapse / expand a section | click its header (*State*, *Actions*, *How to edit*, *Variables*, …) or press `Enter` / `Space` on it |
+
+All sections are expanded at first. Collapsed sections stay collapsed for every element of the same
+kind (e.g. *Actions* for all elements, *State* for all states) and across sessions: the web app keeps
+the state in its settings (browser storage, in Eclipse the settings of the host), the VS Code
+extension in the state of the diagram view; whether the panel is shown there is the setting
+`devm.diagram.showProperties`.
+
+## Edge routing
+
+The *Edges* setting of the toolbar (`devm.diagram.edgeRouting` in VS Code, `--routing` of `devm render` /
+`devm doc`) chooses how transitions are drawn, from angular to curved:
+
+| Setting | Routes | Drawn as |
+| --- | --- | --- |
+| *Orthogonal* (`ORTHOGONAL`) | horizontal and vertical segments (ELK orthogonal routing) | straight lines with sharp corners |
+| *Rounded* (`ROUNDED`) | the orthogonal routes | circular arcs at the corners (radius 10, smaller where a segment is shorter than 20) – between *Orthogonal* and *Splines* |
+| *Polyline* (`POLYLINE`) | straight segments in any direction (ELK polyline routing) | straight lines |
+| *Smooth* (`SMOOTH`) | the polyline routes | a smooth curve through all bend points (centripetal Catmull-Rom spline) |
+| *Splines* (`SPLINES`, default) | curves computed by ELK | cubic Bézier curves |
+
+*Rounded* and *Smooth* change only the drawing, not the layout: the states are where they are with
+*Orthogonal* resp. *Polyline*, labels stay next to their routes, the arrow heads point along the last
+segment. In a manual layout the rerouted transitions get the same shapes; a *Smooth* route passes through
+its waypoints, a *Rounded* one rounds the corner at a waypoint (the handle stays on the corner, a few pixels
+from the line). The setting is a preference of the viewer (stored in the browser / the VS Code settings), not
+part of the model.
+
 ## Manual layout (experimental)
 
 🧪 By default the diagram is laid out automatically (ELK). As soon as a state is dragged, the diagram
@@ -97,9 +137,20 @@ before a state, `@via(…)` before a transition, …, see [the language](languag
 A model with layout annotations has a manual layout, one without the automatic layout – there is no
 mode switch. Design and trade-offs: [Manual layout](manual-layout.md).
 
+- The toolbar shows which of the two it is: **Positions: automatic** or **Positions: stored in model**.
 - The first drag writes the annotations of all elements (the current automatic layout plus the move).
-  *Auto-arrange* replaces them with the automatic layout, *Automatic layout* removes all layout
-  annotations (automatic layout again; an earlier arrangement is restored with undo, not with this button).
+
+| Control (toolbar) | Shown | What it does to the model |
+| --- | --- | --- |
+| *Direction* (Top → bottom / Left → right) | always | nothing – direction of the automatic arrangement (for stored positions: of new elements and of *Re-arrange*) |
+| **Store positions** | positions automatic | writes the current automatic arrangement as layout annotations (the diagram does not change; it can then be adjusted by hand) |
+| **Re-arrange** | positions stored | arranges all elements automatically again and replaces the layout annotations with the new positions (waypoints, anchored ends, sizes and label positions are dropped) |
+| **Clear positions** | positions stored | removes all layout annotations: the diagram is arranged automatically again and follows every change of the model |
+
+- *Store positions* / *Re-arrange* and *Clear positions* are one text edit each, undone with `Ctrl+Z`
+  (an earlier arrangement is restored with undo, not with a button). In VS Code they are also the commands
+  **Device Modeler: Re-arrange Diagram and Store Positions in Model** and **Device Modeler: Clear Stored Diagram Positions
+  (Remove Layout Annotations)**.
 - Layout changes are text edits: they are undone with `Ctrl+Z` like every other edit, mark the model as
   modified and are saved with it. Renames (also typed in the text) keep the position, because the
   annotation belongs to the element.
@@ -115,7 +166,9 @@ mode switch. Design and trade-offs: [Manual layout](manual-layout.md).
 | Resize a state | select it, drag the handle at the bottom right corner |
 | Add / move / remove a waypoint | select the transition; double-click its line / drag the point / double-click the point |
 | Move a transition label | select the transition, drag its label |
-| Arrange automatically / back to the automatic layout | *Auto-arrange* / *Automatic layout* in the toolbar |
+| Move the start / end of a transition along the border of its state | select the transition, drag the square at its start / end (it snaps to the nearest point of the border) |
+| Place the start / end automatically again | double-click the square, or *Reset endpoints* in the side panel (both ends) |
+| Arrange automatically / back to the automatic arrangement | *Store positions* or *Re-arrange* / *Clear positions* in the toolbar |
 
 Importing an itemis CREATE `.sct` file keeps the arrangement of its diagram (also when several
 statecharts are imported together). On the command line, `devm layout`, `devm render` and `devm doc` use

@@ -463,12 +463,27 @@ export const DIAGRAM_CSS = `
     cursor: move;
 }
 
+.anchor-handle {
+    fill: #fff;
+    stroke: var(--devm-select);
+    stroke-width: 1.5px;
+    cursor: crosshair;
+}
+
+/* the end of a transition is anchored at the border (@from / @to) */
+.anchor-handle.anchored {
+    fill: var(--devm-select);
+    stroke: #fff;
+    stroke-width: 1px;
+}
+
 .manual-layout .transition.selected .transition-label {
     cursor: move;
 }
 
 .devm-export .resize-handle,
-.devm-export .bend-handle {
+.devm-export .bend-handle,
+.devm-export .anchor-handle {
     display: none;
 }
 

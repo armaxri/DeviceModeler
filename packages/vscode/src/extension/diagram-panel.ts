@@ -1,13 +1,13 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
-import type { FromWebview, LayoutCommand, NavigationLocation, OffsetEdit, TextRange, ToWebview, WebviewSettings } from '../common/protocol.js';
+import type { DebugViewState, FromWebview, LayoutCommand, NavigationLocation, OffsetEdit, TextRange, ToWebview, WebviewSettings } from '../common/protocol.js';
 import { textHash } from '../common/text-hash.js';
 import { canApplyEdit, toRangeEdits } from './logic/edits.js';
 import { effectiveTheme, webviewHtml } from './logic/webview.js';
 import { collectImportedFiles } from './logic/imports.js';
 import { NavigationHistory } from './logic/navigation.js';
 import { WorkspaceFiles } from './workspace-files.js';
-import { isStructureText, type CppHeaderSettings } from 'devm-language';
+import { isStructureText, parseEdgeRouting, type CppHeaderSettings } from 'devm-language';
 // Node-only part of the language package (not exported from its index because the web app bundles the index)
 import {
     HeaderConfigFinder, headerSettingsForModel, headerSettingsFromSection, type HeaderSettingsSection
@@ -29,7 +29,7 @@ function readSettings(): WebviewSettings {
     const config = vscode.workspace.getConfiguration('devm.diagram');
     return {
         direction: config.get<string>('direction') === 'RIGHT' ? 'RIGHT' : 'DOWN',
-        routing: (['SPLINES', 'ORTHOGONAL', 'POLYLINE'] as const).find(r => r === config.get<string>('edgeRouting')) ?? 'SPLINES',
+        routing: parseEdgeRouting(config.get<string>('edgeRouting')) ?? 'SPLINES',
         priorities: config.get<boolean>('priorities', true),
         showProperties: config.get<boolean>('showProperties', true),
         theme: effectiveTheme(config.get<string>('theme', 'auto'), config.get<string>('lightTheme', 'classic'), isDarkColorTheme(vscode.window.activeColorTheme.kind))
@@ -302,11 +302,41 @@ export class DiagramManager implements vscode.Disposable {
         return panel.rasterize(svg, scale);
     }
 
-    /** Runs a layout command (auto-arrange, reset) in the active diagram. */
+    /** Runs a layout command (arrange: Store positions / Re-arrange, reset: Clear positions) in the diagram. */
     layoutCommand(uri: vscode.Uri | undefined, command: LayoutCommand): boolean {
         const panel = uri ? this.panels.get(uri.toString()) : this.active;
         panel?.post({ type: 'layoutCommand', command });
         return panel !== undefined;
+    }
+
+    /**
+     * Shows the state of a debug session in the diagram of the model (opened beside the editor if
+     * necessary, revealed when the session starts showing it); the diagram is read-only meanwhile.
+     * Other diagrams showing a debug state return to editing.
+     */
+    async showDebugState(uri: vscode.Uri, state: DebugViewState): Promise<void> {
+        const key = uri.toString();
+        for (const panel of this.panels.values()) {
+            if (panel.key !== key && panel.debugState) {
+                panel.setDebugState(undefined);
+            }
+        }
+        let panel = this.panels.get(key);
+        if (!panel) {
+            panel = await this.open(uri, true);
+        } else if (!panel.debugState && !panel.panel.visible) {
+            panel.panel.reveal(undefined, true);
+        }
+        panel.setDebugState(state);
+    }
+
+    /** The debug session ended: all diagrams return to editing. */
+    clearDebugState(): void {
+        for (const panel of this.panels.values()) {
+            if (panel.debugState) {
+                panel.setDebugState(undefined);
+            }
+        }
     }
 
     private broadcastSettings(): void {
@@ -333,6 +363,8 @@ export class DiagramPanel {
     private sendQueue: Promise<void> = Promise.resolve();
     private readonly readyWaiters: Array<() => void> = [];
     private rasterizeRequest = 0;
+    /** The state of the debug session shown in the diagram (read-only while set). */
+    private debugView?: DebugViewState;
     private readonly rasterizeRequests = new Map<number, { resolve: (data: Uint8Array) => void, reject: (error: Error) => void }>();
 
     constructor(private readonly manager: DiagramManager, readonly panel: vscode.WebviewPanel, private document: vscode.TextDocument) {
@@ -353,6 +385,18 @@ export class DiagramPanel {
 
     get key(): string {
         return this.document.uri.toString();
+    }
+
+    get debugState(): DebugViewState | undefined {
+        return this.debugView;
+    }
+
+    /** Shows the state of a debug session (undefined: back to editing). */
+    setDebugState(state: DebugViewState | undefined): void {
+        this.debugView = state;
+        if (this.ready) {
+            this.post({ type: 'debugState', state });
+        }
     }
 
     get uri(): vscode.Uri {
@@ -463,6 +507,9 @@ export class DiagramPanel {
                 this.post({ type: 'settings', settings: this.manager.settings() });
                 this.post({ type: 'history', state: this.manager.history.state });
                 this.sendText();
+                if (this.debugView) {
+                    this.post({ type: 'debugState', state: this.debugView });
+                }
                 this.readyWaiters.splice(0).forEach(resolve => resolve());
                 break;
             case 'edit':
@@ -574,6 +621,10 @@ export class DiagramPanel {
         const answer = (ok: boolean, message?: string) => this.post({
             type: 'editResult', requestId, ok, text: document.getText(), version: document.version, message
         });
+        if (this.debugView) {
+            answer(false, 'The diagram is read-only while a test is being debugged.');
+            return;
+        }
         if (!canApplyEdit(version, document.version)) {
             answer(false, 'The document was changed in the meantime – please try again.');
             return;

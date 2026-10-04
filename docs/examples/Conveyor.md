@@ -38,6 +38,7 @@ Source: [`examples/cpp-types/conveyor.devm`](../../examples/cpp-types/conveyor.d
 | Name | Kind | Type | Initial value | Description |
 | --- | --- | --- | --- | --- |
 | `mode` | var | `conveyor::Mode` | (default) |   |
+| `led` | var | `conveyor_led_t` | `::LED_OFF` | The status LED. |
 | `settings` | var | `conveyor::Settings` | `conveyor::kDefaultSettings` |   |
 | `faults` | var | `integer` | (default) |   |
 | `count` | var | `integer` | (default) |   |
@@ -53,12 +54,12 @@ Source: [`examples/cpp-types/conveyor.devm`](../../examples/cpp-types/conveyor.d
 
 | State | Kind | Description | Entry | Exit | Local reactions | Sub states |
 | --- | --- | --- | --- | --- | --- | --- |
-| `Idle` | state |   | `mode = conveyor::Mode::Stopped; setSpeed(0); raise modeChanged : mode` |   |   |   |
-| `Operating` | composite state |   |   |   |   | Running<br>Careful |
+| `Idle` | state |   | `mode = conveyor::Mode::Stopped; setSpeed(0); raise modeChanged : mode; led = ::LED_OFF` |   |   |   |
+| `Operating` | composite state |   | `led = ::LED_GREEN` |   |   | Running<br>Careful |
 | `Operating.Running` | state |   | `mode = conveyor::Mode::Normal; setSpeed(settings.normalSpeed); raise modeChanged : mode` |   | `packageDetected [!valueof(packageDetected).fragile && valueof(packageDetected).weightGrams <= settings.maxWeightGrams] / last = valueof(packageDetected); count++` |   |
 | `Operating.Careful` | state |   | `mode = conveyor::Mode::Slow; setSpeed(settings.slowSpeed); raise modeChanged : mode` |   |   |   |
-| `Clearing` | state |   | `mode = conveyor::Mode::Reverse; setSpeed(conveyor::kReverseSpeed); raise modeChanged : mode` |   |   |   |
-| `Faulted` | state |   | `mode = conveyor::Mode::Stopped; setSpeed(0); raise modeChanged : mode` |   |   |   |
+| `Clearing` | state |   | `mode = conveyor::Mode::Reverse; setSpeed(conveyor::kReverseSpeed); raise modeChanged : mode; led = ::LED_BLINKING` |   |   |   |
+| `Faulted` | state |   | `mode = conveyor::Mode::Stopped; setSpeed(0); raise modeChanged : mode; led = ::LED_RED` |   |   |   |
 
 ## Transitions
 

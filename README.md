@@ -80,6 +80,10 @@ machine, every other file is a structure file.
     enums, structs, type aliases and constants of the application's headers (`var mode : motor::Mode`,
     `pos.x = motor::kHome.x`), in the simulator, the unit tests and the generated C++ code (see
     [C/C++ header imports](docs/language.md#cc-header-imports))
+  - **C++ class sections** `public:` / `protected:` / `private:`: data members and member functions of the
+    generated C++ class with C++ types (`var errorCnt : unsigned int`, `operation setConfig(config : const
+    app::Config&)`), used in guards and effects, implemented by the application, with their doc comments (see
+    [C++ class sections](docs/language.md#c-class-sections))
 - **Language services** in the browser: syntax highlighting, validation, code completion (events,
   variables, operations, qualified state names), formatting, go to definition, find references and
   rename (Monaco editor).
@@ -95,7 +99,7 @@ machine, every other file is a structure file.
   itemis CREATE. **Transition priorities** are shown like in itemis CREATE: if a vertex has several
   outgoing transitions, their labels are prefixed with the priority (`1: ev [g] / a`; toggle
   *Priorities* in the toolbar). Themes: *PlantUML classic* (yellow/red), *PlantUML modern* (gray) and
-  *Dark*. Top-down or left-right layout, spline / orthogonal / polyline edges.
+  *Dark*. Top-down or left-right layout, orthogonal, rounded, polyline, smooth or spline edges.
 - **Graphical editing** – every diagram operation is translated into a minimal text edit, so comments
   and formatting are preserved and everything is undoable with `Ctrl+Z`:
   - palette tools for states, regions, choice, junction, history, synchronization, entry points, exit
@@ -130,11 +134,40 @@ machine, every other file is a structure file.
 - **VS Code extension** (`packages/vscode`): language server for `.devm` and `.devmtest` files, the diagram
   editors of the web app next to the text editor, C++ generation, tests in the Test Explorer (with model
   coverage) and the itemis CREATE import – see [VS Code extension](docs/vscode.md).
+- 🧪 **Eclipse plugin** (prototype, `eclipse-plugin/`): the web app as editor of `.devm` files in the Eclipse
+  IDE (embedded browser): workspace files with dirty state, Save As and rename, problems in the Problems
+  view, Outline, Eclipse's edit commands, imports within the project, C++ generation, and the language server in
+  Eclipse's Generic Editor (LSP4E / TM4E) – see [eclipse-plugin/README.md](eclipse-plugin/README.md).
+- 🧪 **JetBrains plugin** (prototype, `jetbrains-plugin/`): the web app as editor of `.devm` files in CLion,
+  IntelliJ IDEA and the other JetBrains IDEs (JCEF): views *Text* / *Text and Diagram* / *Diagram* on the IDE's
+  document, problems in the editor and the Problems tool window (closed files with `devm validate`), Structure
+  view, edit shortcuts in the page, C++ generation, and the language server in the text editor with LSP4IJ – see
+  [jetbrains-plugin/README.md](jetbrains-plugin/README.md).
 - **Build integration**: a generator configuration file (`devm.gen.json`, like the `.sgen` files of itemis
   CREATE), `devm generate --check` for CI and CMake functions (`devm_generate`, `devm_add_tests`) that
   regenerate the code when a model changes (see [Build integration (CMake)](docs/build-integration.md)).
 
 ## Getting started
+
+### Installation
+
+Download from the [releases](https://github.com/armaxri/DeviceModeler/releases) (or the artifacts of the
+*Distribution* workflow) – no Node.js needed:
+
+- **Desktop app *Device Modeler*** (Windows installer / zip, macOS `.dmg`, Linux AppImage / `.deb`): the
+  graphical editor in a native window, opening and saving `.devm` files on disk.
+- **Command line tool `devm`** (one executable per platform): all commands below, e.g. for builds and CI.
+- **VS Code extension** (`.vsix`), **Eclipse plugin** (update site archive) and **JetBrains plugin** (`.zip`).
+
+```bash
+devm validate examples/cd-player.devm
+devm generate cpp examples/traffic-light.devm -o gen
+```
+
+Nothing is signed with a certificate: see [Installation and usage](docs/installation.md) for the macOS and
+Windows warnings, the features of the desktop app and how everything is built.
+
+### Development
 
 Requires Node.js ≥ 20.10.
 
@@ -146,11 +179,18 @@ npm run dev        # starts the editor on http://localhost:5173
 Other scripts:
 
 ```bash
-npm test           # unit tests of the language package and of the VS Code extension
+npm test           # unit tests of the language package, the VS Code extension and the desktop app
 npm run build      # langium generate + TypeScript build + web app (packages/web/dist) + extension bundles (packages/vscode/dist)
 npm run typecheck
 npm run package:vscode   # packages/vscode/devm-vscode-<version>.vsix
+npm run build:exe        # packages/cli/dist/bin/<platform>/devm: the CLI without Node.js
+npm run package:desktop  # packages/desktop/release/: the desktop app (installers of this platform)
+npm start -w packages/desktop   # the desktop app from the sources
 ```
+
+To try the IDE integrations, `npm run ide:vscode`, `npm run ide:eclipse`, `npm run ide:clion` and
+`npm run ide:desktop` build the plugin and start the IDE with it and the examples – in a sandbox (`.ide/`), without
+touching your IDE installations and settings (see [Trying the plugins locally](docs/installation.md#trying-the-plugins-locally)).
 
 ### Command line
 
@@ -160,6 +200,7 @@ The command line tool is `devm` (`npm install -g ./packages/language` after the 
 ```bash
 npm run build -w packages/language
 node packages/language/bin/cli.js validate examples/cd-player.devm
+node packages/language/bin/cli.js validate --json examples/*.devm     # problems as JSON (IDE integrations)
 node packages/language/bin/cli.js layout examples/keyboard.devm --direction RIGHT
 node packages/language/bin/cli.js render examples -o out --theme modern     # SVG diagrams, see below
 node packages/language/bin/cli.js render examples/device/system.devm -o system.svg   # internal block diagram of the closed system
@@ -172,17 +213,19 @@ node packages/language/bin/cli.js generate cpp examples/traffic-light.devm -o ge
 node packages/language/bin/cli.js generate c examples/traffic-light.devm -o gen     # C code
 node packages/language/bin/cli.js generate                  # all models / targets of ./devm.gen.json, see below
 node packages/language/bin/cli.js generate --check          # exit 1 if generated files are out of date (CI)
+node packages/language/bin/cli.js lsp --stdio               # language server for LSP clients (docs/installation.md)
 ```
 
 ## Documentation
 
 | Document | Content |
 | --- | --- |
-| [The language](docs/language.md) | syntax of the models: definition section, reactions, expressions, states, regions, pseudo states; imports and submachines; C/C++ header imports |
+| [The language](docs/language.md) | syntax of the models: definition section, reactions, expressions, states, regions, pseudo states; imports and submachines; C/C++ header imports; C++ class sections |
 | [Structure language](docs/structure-language.md) | 🧪 structure files: components, ports, subsystems, threads, instances, connections; port ↔ state machine rules; route analysis |
 | [Execution semantics](docs/semantics.md) | how a state machine executes – the specification implemented by the interpreter and the code generators |
 | [Web editor](docs/editor.md) | editing in the diagram, 🧪 structure diagrams and navigation, 🧪 manual layout, simulation |
 | [Manual layout](docs/manual-layout.md) | on the main branch since PR #4 (from the branch `claude/layout-annotations`): layout annotations in the model (state machines and structure diagrams), layout computation, routing, editor integration, migration |
+| [Installation and usage](docs/installation.md) | downloads, desktop app, command line executable `devm`, VS Code, Eclipse, JetBrains IDEs; unsigned downloads; how they are built; trying the plugins locally (`npm run ide:*`) |
 | [VS Code extension](docs/vscode.md) | language server, diagrams, 🧪 structure files, generation, Test Explorer (details in [packages/vscode/README.md](packages/vscode/README.md)) |
 | [Rendering and model documentation](docs/rendering.md) | `devm render` (SVG diagrams), `devm doc` (Markdown / HTML documentation), doc comments |
 | [Unit tests and coverage](docs/testing.md) | the `.devmtest` language, `devm test`, model coverage, CI examples |
@@ -197,12 +240,13 @@ node packages/language/bin/cli.js generate --check          # exit 1 if generate
 
 ## Architecture
 
-The repository is an npm workspace with three packages: `packages/language` (the Langium languages – the
-`.devm` language of state machines and structures and the unit test language –, CLI `devm`, interpreter,
-test runner, renderer and code generators –
-no DOM dependencies, runs in Node.js and in the browser), `packages/web` (the Vite web app: Monaco editor
-and Sprotty diagram) and `packages/vscode` (the VS Code extension). The npm packages are named
-`devm-language`, `devm-web` and `devm-vscode`. The text is the single source of truth: diagram
-edits become text edits, which run
+The repository is an npm workspace with five packages: `packages/language` (the Langium languages – the
+`.devm` language of state machines and structures and the unit test language –, CLI, interpreter, test
+runner, renderer and code generators – no DOM dependencies, runs in Node.js and in the browser),
+`packages/web` (the Vite web app: Monaco editor and Sprotty diagram), `packages/vscode` (the VS Code
+extension), `packages/desktop` (the Electron desktop app around the web app) and `packages/cli` (the
+self-contained `devm` command line executable); `eclipse-plugin/` is the Eclipse plugin (Maven / Tycho),
+`jetbrains-plugin/` the JetBrains plugin (Gradle). The npm packages are named `devm-language`, `devm-web`,
+`devm-vscode`, `devm-cli` and `devm-desktop`. The text is the single source of truth: diagram edits become text edits, which run
 through the same parse → validate → layout → render pipeline as typed changes. See
 [docs/architecture.md](docs/architecture.md) for the details.

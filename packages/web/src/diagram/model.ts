@@ -3,7 +3,7 @@ import {
     type SModelElementImpl
 } from 'sprotty';
 import type { SModelElement, SModelRoot } from 'sprotty-protocol';
-import type { DiagramEdge, DiagramGraph, DiagramLabel, DiagramNode, DiagramNodeKind, DiagramSubmachine, Point } from 'devm-language';
+import { supportsAnchors, type DiagramEdge, type DiagramGraph, type DiagramLabel, type DiagramNode, type DiagramNodeKind, type DiagramSubmachine, type Point } from 'devm-language';
 
 export type IssueSeverity = 'error' | 'warning';
 
@@ -75,6 +75,8 @@ export class TransitionEdge extends SChildElementImpl {
     sourceId = '';
     targetId = '';
     routing: DiagramEdge['routing'] = 'polyline';
+    /** How a polyline / orthogonal route is drawn (rounded corners, smooth curve). */
+    curve?: DiagramEdge['curve'];
     points: Point[] = [];
     label?: DiagramEdge['label'];
     issue?: Issue;
@@ -88,6 +90,10 @@ export class TransitionEdge extends SChildElementImpl {
     waypoints: Point[] = [];
     /** Manual layout: the waypoints can be moved when the transition is selected. */
     editable = false;
+    /** The ends at states can be anchored (dragged along the border of the state): source, target. */
+    anchorable: [boolean, boolean] = [false, false];
+    /** The ends are anchored (`@from` / `@to`): source, target. */
+    anchored: [boolean, boolean] = [false, false];
 }
 
 export function isVertexNode(element: SModelElementImpl | undefined): element is VertexNode {
@@ -117,6 +123,12 @@ export interface SchemaOptions {
 /** Converts the layouted diagram into the sprotty model schema. */
 export function toSchema(graph: DiagramGraph, options: SchemaOptions): SModelRoot {
     const separator = graph.direction === 'DOWN' ? 'top' : 'left';
+    const kinds = new Map<string, DiagramNode['kind']>();
+    const collectKinds = (nodes: DiagramNode[]) => nodes.forEach(n => {
+        kinds.set(n.id, n.kind);
+        collectKinds(n.children);
+    });
+    collectKinds(graph.children);
     const convertNode = (node: DiagramNode): SModelElement => ({
         type: nodeType(node.kind),
         id: node.id,
@@ -147,8 +159,11 @@ export function toSchema(graph: DiagramGraph, options: SchemaOptions): SModelRoo
         sourceId: edge.source,
         targetId: edge.target,
         routing: edge.routing,
+        curve: edge.curve,
         points: edge.points,
         waypoints: edge.waypoints ?? [],
+        anchorable: [supportsAnchors(kinds.get(edge.source)), supportsAnchors(kinds.get(edge.target))],
+        anchored: [!!edge.anchors?.source, !!edge.anchors?.target],
         label: edge.label,
         selected: options.selected.has(edge.id),
         issue: options.issues.get(edge.id),

@@ -17,9 +17,10 @@
   PlantUML classic, configurable with `devm.diagram.lightTheme`; dark: dark theme).
 - **Manual layout** (merged into main from the branch `claude/layout-annotations`, PR #4): the
   diagram is arranged by hand as soon as a state is dragged; the positions are layout annotations in the
-  model (`@at(x, y)`, `@via(…)`, …, see [Manual layout](manual-layout.md)). *Auto-arrange* and *Automatic layout* in
-  the toolbar of the diagram (also as commands **Device Modeler: Auto-arrange Diagram** and **Device Modeler: Use Automatic
-  Diagram Layout**) write the automatic layout as annotations / remove them.
+  model (`@at(x, y)`, `@via(…)`, …, see [Manual layout](manual-layout.md)). The toolbar of the diagram shows
+  *Positions: automatic* / *stored in model*; *Store positions* / *Re-arrange* writes the automatic
+  arrangement as annotations, *Clear positions* removes them (also the commands **Device Modeler: Re-arrange Diagram
+  and Store Positions in Model** and **Device Modeler: Clear Stored Diagram Positions (Remove Layout Annotations)**).
   **Device Modeler: Convert Layout File to Annotations** writes an old `<model>.devm.layout` into the model.
   Layout changes are `WorkspaceEdit`s like every diagram edit: one undo history (`Ctrl+Z` in the text
   editor or in the diagram), the dirty marker and *Save* apply to them. The `.sct` import writes the
@@ -39,6 +40,11 @@
 - **Tests** in the Test Explorer (all `@Test` operations of the workspace; failures with location and
   trace; **Device Modeler: Run Tests** for the active file) and a **Run with Model Coverage** profile that shows
   covered states / transitions / reactions and guard decisions in the coverage view.
+- **Debugging tests** (*Debug Test* in the Test Explorer, **Device Modeler: Debug Tests**, `F5` in a `.devmtest`
+  file, or a launch configuration `"type": "devm-test"`): see [Debugging tests](#debugging-tests) below.
+- **Device Modeler: Import itemis CREATE Model (.sct)**, **Device Modeler: Export Diagram…** (SVG rendered with `renderSvg`,
+  or PNG: the same SVG rasterized in the diagram webview; also *Export…* in the diagram toolbar).
+
 - **Device Modeler: Import itemis CREATE Model (.sct)**, **Device Modeler: Export Diagram…** (SVG rendered with `renderSvg`
   – structure files: `renderIbdSvg` of the structure shown in the diagram –, or PNG: the same SVG
   rasterized in the diagram webview; also *Export…* in the diagram toolbar).
@@ -65,9 +71,9 @@ same extension:
   of the file as «struct» boxes (a file with data types only shows only them). **Manual layout** as in the web app: drag nodes, resize them, drag ports along the border of their
   node, add / move waypoints of connectors – the positions are layout annotations of the `.devm` text
   (`@at`, `@size`, `@port`, `@via`, see [Manual layout](manual-layout.md#structure-diagrams)), written as
-  `WorkspaceEdit`s (undone with `Ctrl+Z`). *Auto-arrange* / *Automatic layout* (toolbar, the *…* menu of the
-  diagram panel and the commands **Device Modeler: Auto-arrange Diagram** / **Device Modeler: Use Automatic Diagram Layout**, also
-  with the `.devm` editor active) apply to the shown diagram, and **Device Modeler: Export Diagram…** uses the layout. The
+  `WorkspaceEdit`s (undone with `Ctrl+Z`). *Store positions* / *Re-arrange* / *Clear positions* (toolbar, the *…* menu of the
+  diagram panel and the commands **Device Modeler: Re-arrange Diagram and Store Positions in Model** / **Device Modeler: Clear
+  Stored Diagram Positions (Remove Layout Annotations)**, also with the `.devm` editor active) apply to the shown diagram, and **Device Modeler: Export Diagram…** uses the layout. The
   controls of the state machines (layout direction and edge routing, simulation, C++) are disabled; the
   context key `devm.structureDiagramActive` hides *Generate C++* and *Convert Layout File to Annotations* for
   structure diagrams.
@@ -93,10 +99,10 @@ npm run package:vscode    # builds and packages packages/vscode/devm-vscode-<ver
 code --install-extension packages/vscode/devm-vscode-0.1.0.vsix
 ```
 
-The extension id is `device-modeler.devm-vscode` (formerly `hsm-modeler.hsm-vscode`): a build with the
+The extension id is `device-modeler.devm-vscode` (formerly `devm-modeler.devm-vscode`): a build with the
 former id is a different extension and has to be uninstalled first
-(`code --uninstall-extension hsm-modeler.hsm-vscode`); builds with the same id replace each other with
-`--force`. Its settings `hsm.*` are not taken over, the settings are now `devm.*`.
+(`code --uninstall-extension devm-modeler.devm-vscode`); builds with the same id replace each other with
+`--force`. Its settings `devm.*` are not taken over, the settings are now `devm.*`.
 
 Three bundles: `dist/extension.cjs` (extension host, esbuild), `dist/server.cjs` (language server,
 esbuild) and `dist/webview/` (Vite, the diagram controller, views and styles of `packages/web` – no
@@ -109,3 +115,58 @@ references, rename, formatting, symbols, folding, completion, semantic tokens; f
 to implementation and renames across files). There are no tests in a real VS Code
 instance yet (`@vscode/test-electron` needs to download VS Code, which was not possible in the build
 environment).
+
+## Debugging tests
+
+The tests of `.devmtest` files can be run in the debugger, step by step, while the diagram of the
+state machine under test shows the current states:
+
+- **Start**: the *Debug Test* action of the Test Explorer (also the debug icon next to the run icon in
+  the gutter of a test), **Device Modeler: Debug Tests** (debug button in the editor title of `.devmtest` files,
+  context menu of the explorer), `F5` in a `.devmtest` file without a `launch.json`, or a launch
+  configuration:
+
+  ```jsonc
+  {
+      "type": "devm-test",
+      "request": "launch",
+      "name": "Debug Device Modeler tests",
+      "program": "${file}",              // the .devmtest file
+      "test": "DoorTest.opensAndCloses", // optional: a test class, Class.test or a test name
+      "stopOnEntry": false               // pause before the first statement
+  }
+  ```
+
+  Results of debug runs started from the Test Explorer (or with *Device Modeler: Debug Tests*) are reported there
+  like normal runs (passed / failed with message, location and trace).
+- **Breakpoints** on statements of tests (`raise`, `proceed`, `assert`, …; a breakpoint on another line
+  moves to the next statement) and in models: on a state (pauses when it is entered), on a transition
+  (when it is taken) and on a local reaction (`entry / …`, when it runs). *Function breakpoints* with
+  the name of a state (`Closed`, `Moving.Up`, `motor.Running`) pause when the state is entered. The
+  exception breakpoints **Assertion failures** and **Errors** (both enabled by default) pause on a
+  failed assertion or a runtime error with the message, before the test ends.
+- **Stepping**: *Step Over* runs the current statement (with all run-to-completion steps of the state
+  machine) and pauses at the next statement; *Step Into* pauses at every microstep of the interpreter –
+  state exited, transition taken, state entered, reaction executed (the frame shows the element in the
+  `.devm` file) – and enters called helper operations; *Step Out* finishes the microsteps of the
+  statement or returns from a helper operation; *Continue*, *Pause* (also in endless loops), *Restart*
+  and *Stop*.
+- **Views**: the call stack (microstep → helper operation → test), the variables in the scopes
+  *Locals* (parameters and local variables of the test operation), *Microstep*, *Active states*,
+  *State machine* (all variables, also of submachine instances, structured C/C++ values expandable),
+  *Events* (out events of the last step, events raised by the statement), *Operation calls* (calls of
+  the state machine and the mocks) and *Execution* (test, virtual time, execution mode, last trace
+  lines). Hover, watch and the debug console evaluate names: local variables, variables of the state
+  machine (`count`, `Iface.x`, `motor.speed`), `active(State)` or a state name, `time`, `is_final`
+  (no complete expressions). The debug console shows the execution trace (`> raise open`,
+  `transition Closed -> Moving`, …) and the result of every test.
+- **Live diagram**: on every stop the diagram of the model under test is opened beside the editor (if
+  necessary) and shows the active states and the transitions taken since the previous stop, like the
+  simulation; its side panel lists the active states and the stop location. The diagram is read-only
+  while the session runs (no edits, no simulation, layout controls disabled) and returns to normal when
+  the session ends.
+
+The debug adapter runs inline in the extension host (`vscode.DebugAdapterInlineImplementation`,
+`src/debug/adapter.ts`); the tests run in a worker thread (`dist/debug-worker.cjs`, `src/debug/engine.ts`)
+that pauses inside the hooks of the test runner of the language package (`TestDebugHooks`) and waits
+for the next command of the adapter.

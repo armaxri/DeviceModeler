@@ -39,6 +39,5 @@ export const Icons = {
     portOutAsync: portIcon(true, 'out'),
     connector: svg('<rect x="2" y="9" width="6" height="6" class="icon-port-sync"/><path d="M8 12 H13" class="icon-edge"/><path d="M16.5 12 L12.5 9.5 L12.5 14.5 Z" class="icon-arrow"/><rect x="16.5" y="9" width="6" height="6" class="icon-port-async"/>'),
     delete: svg('<path d="M6 7 H18 M9 7 V4.5 H15 V7 M7.5 7 L8.5 20 H15.5 L16.5 7" class="icon-edge"/>'),
-    fit: svg('<path d="M4 9 V4 H9 M15 4 H20 V9 M20 15 V20 H15 M9 20 H4 V15" class="icon-edge"/>'),
-    relayout: svg('<path d="M19 12 A7 7 0 1 1 16.5 6.6 M17 3 V7 H13" class="icon-edge"/>')
+    fit: svg('<path d="M4 9 V4 H9 M15 4 H20 V9 M20 15 V20 H15 M9 20 H4 V15" class="icon-edge"/>')
 };

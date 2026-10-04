@@ -45,6 +45,8 @@ statemachine CdPlayer {
         choice HasDisc
         @via(120, 60) @label(10, -4)
         Stopped -> HasDisc : play
+        @from("right", 30) @to("left", 75)
+        Stopped -> Stopped : next
     }
     @at(40, 500) @regions("horizontal")
     state Active {
@@ -63,10 +65,11 @@ statemachine CdPlayer {
 | `@regions("vertical" \| "horizontal")` | state | whether the regions are stacked or side by side (default: by layout direction) |
 | `@via(x1, y1, x2, y2, …)` | transition | waypoints, relative to the transition's *frame* (the innermost node containing both end points, so waypoints move with a composite state) |
 | `@label(dx, dy)` | transition | offset of the label from its computed position |
+| `@from(side, position)`, `@to(side, position)` | transition | **anchor** of the start / end on the border of the source / target state: side `"top"`, `"right"`, `"bottom"` or `"left"`, position along the side in percent (0: left / top end, 100: right / bottom end) |
 | `@initial(x, y)`, `@final(x, y)` | in the body of the state machine, a state or a region | position of the implicit `[*]` initial / final state of that container |
 | `@definitions(x, y[, width, height])` | in the body of the state machine | position (and size) of the definition box |
 
-- **Element annotations** (`@at`, `@size`, `@regions`, `@via`, `@label`) belong to the state, pseudo
+- **Element annotations** (`@at`, `@size`, `@regions`, `@via`, `@label`, `@from`, `@to`) belong to the state, pseudo
   state, region or transition that follows them; only other annotations may come in between.
   **Container annotations** (`@initial`, `@final`, `@definitions`) belong to the body they are written
   in. Annotations are members of the bodies in the grammar, so there is no ambiguity with the
@@ -77,6 +80,44 @@ statemachine CdPlayer {
   `@size` / `@regions` of a state without `@at` are ignored.
 - The annotations belong to the transition itself, so duplicates between the same vertices
   (`A -> B : e1`, `A -> B : e2`) keep their own waypoints.
+- Anchors are relative (side + percent of the side), so they stay on the same part of the side when the
+  state is moved or resized. The position is written as an integer; the validator checks the side and the
+  range 0 … 100 and warns about an anchor at a pseudo state (`[*]`, choice, history, …), which is ignored.
+  States are drawn as rounded rectangles (corner radius 12.5): an anchor always lies on the straight part
+  of its side; positions in a corner are moved to the end of the straight part.
+
+#### Anchors (`@from` / `@to`): design
+
+*Pseudo states are not anchored.* Their outlines are circles, diamonds or bars; the ends of the
+transitions already point at their center (round shapes) or the middle of a side (choice), and an
+anchor on a 20 px circle would hardly be visible. Only the ends at states (also composite states and
+submachine states) have handles; anchors stored for other ends are ignored (validation warning).
+
+*Why no ELK ports.* Anchors are layout annotations, so a model with an anchor always has a manual layout:
+the automatic layout (ELK) still runs first, but every transition with an anchor is routed by the manual
+router (`orthogonal-router.ts`) – its ELK route is never reused. ELK ports (`portConstraints: FIXED_POS`)
+would only help if the automatic layout had to respect anchors, and they would make the automatic layout
+depend on the annotations (the base the manual layout builds on, which is cached while dragging). The
+manual router gets the anchor as a fixed port instead: the route starts exactly at the anchor and leaves
+the state perpendicular to the side (its first grid point lies `margin` in front of the anchor), the
+same for the end; distributing the ends along a side leaves anchored ends where they are.
+
+*Per routing style:* *Orthogonal* / *Rounded*: first and last segment perpendicular to the side.
+*Polyline* / *Smooth*: corners are cut where the shortcut keeps clear of the vertices, but the segment at
+an anchored end leaves / enters the side at an angle of at least 30°. *Splines*: the curve leaves / enters
+perpendicular to the side. Arrow heads follow the last segment / control point.
+
+*Self transitions* with an anchor become a loop of 22 px out of the side of `@from`, around the corners
+of the state (the shorter way) and back into the side of `@to` (a missing anchor: right side, 35 % /
+65 %; when one end is dragged, the editor also anchors the other one where it is, so the loop keeps its
+shape). *Transitions between a composite state and its content* start / end at the anchor on the border
+of the composite state (inside it; without anchor there: the side nearest to the inner vertex) and are
+routed around the other vertices inside the state. Transitions across containers and transitions with
+waypoints combine with anchors (the first / last part of the route through the waypoints starts / ends at
+the anchor). Labels are placed along the new route as for all rerouted transitions.
+
+*Re-arrange* drops anchors like waypoints and label offsets (it writes a fresh automatic arrangement);
+*Clear positions* removes them with all other layout annotations.
 
 ### Writing the annotations
 
@@ -118,12 +159,16 @@ automatic layout, which is always computed first:
    through each waypoint to the target (it does not turn back at a waypoint; a waypoint inside a
    state lets the route cross that state; the ends of such routes are not spread). The path is then
    shaped like the **edge routing setting** (`routing` option, the *Edges*
-   setting of the web app and `devm.diagram.edgeRouting` in VS Code): *orthogonal* as it is, *polyline*
-   with the corners removed where the shortcut keeps clear of the vertices (but not the waypoints),
+   setting of the web app and `devm.diagram.edgeRouting` in VS Code): *orthogonal* as it is (*rounded*: drawn
+   with rounded corners), *polyline*
+   with the corners removed where the shortcut keeps clear of the vertices (but not the waypoints; *smooth*:
+   drawn as a smooth curve through its corners),
    *splines* as a smooth curve through the corners of that polyline which leaves and enters the states perpendicular to their sides
    (like the splines of the automatic layout; flatter, or with only the corners rounded, where a round
    curve would touch a vertex). Their labels are placed
    next to a long segment where they cover no vertex, label or route.
+   Transitions with an anchored end (`@from` / `@to`) are always rerouted, from / to the anchor (see
+   *Anchors* above).
    Transitions between a composite state and its content start at the nearest border of the state
    (with waypoints: straight lines through them), self
    transitions become a small loop (and a transition for which no orthogonal route exists becomes a
@@ -142,8 +187,10 @@ the layout of every parsed model with `layoutFromModel` and turns every layout c
 (`layoutTextEdits`), which the host applies like any other diagram edit (`DiagramHost.applyTextEdits`).
 
 - No *Auto | Manual* toggle: the diagram is manual as soon as the model has a layout annotation.
-  *Auto-arrange* writes the automatic layout as annotations, *Automatic layout* removes all layout
-  annotations (it does not restore an earlier arrangement – that is undo).
+  The toolbar shows *Positions: automatic* / *stored in model*. *Store positions* (automatic) /
+  *Re-arrange* (stored) writes the automatic layout as annotations, *Clear positions* removes all layout
+  annotations (it does not restore an earlier arrangement – that is undo). Names, tooltips and status
+  messages are defined once in `packages/web/src/layout-actions.ts` (web app and VS Code webview).
   The first drag in an automatic diagram writes the annotations of all elements (the current automatic
   layout plus the move), so nothing jumps.
 - Drag a vertex (also initial / final states and the definition box) to move it; the transitions
@@ -157,6 +204,13 @@ the layout of every parsed model with `layoutFromModel` and turns every layout c
   inserted between the waypoints of the clicked part of the route), double-click a waypoint to remove
   it (without waypoints the transition is routed automatically again); drag the label of a selected
   transition to move it.
+- A selected transition also shows a small square at its start and its end (at states only; filled if
+  the end is anchored). Dragging a square slides that end along the border of the state: it snaps to the
+  nearest point of the border (straight part of the nearest side); while dragging, the transition is
+  shown as straight lines from the anchor (with a short piece perpendicular to the side) through its
+  waypoints. On drop the anchor is written as `@from` / `@to` (one undoable text edit; in a model
+  without layout annotations the whole automatic layout is written as well, like the first drag of a
+  state). Double-clicking a square removes that anchor; *Reset endpoints* in the side panel removes both.
 - **Undo** is the undo of the text: layout changes are text edits, so `Ctrl+Z` / `Ctrl+Y` (in the text
   editor or the diagram) undo them in order with all other edits, they mark the document as modified
   and are saved with it.
@@ -164,8 +218,9 @@ the layout of every parsed model with `layoutFromModel` and turns every layout c
 
 ## VS Code extension
 
-- **Toolbar and commands:** the diagram webview shows *Auto-arrange* and *Automatic layout* like the web app; the
-  same actions are the commands **Device Modeler: Auto-arrange Diagram** and **Device Modeler: Use Automatic Diagram Layout** (command
+- **Toolbar and commands:** the diagram webview shows *Positions: …*, *Store positions* / *Re-arrange* and
+  *Clear positions* like the web app; the same actions are the commands **Device Modeler: Re-arrange Diagram and Store
+  Positions in Model** and **Device Modeler: Clear Stored Diagram Positions (Remove Layout Annotations)** (command
   palette and the *…* menu of the diagram panel).
   **Device Modeler: Convert Layout File to Annotations** writes an old `<model>.devm.layout` into the model.
 - The layout is part of the document: diagram edits and layout changes are `WorkspaceEdit`s, undone
@@ -187,7 +242,7 @@ diagram as annotations (`--no-layout` to skip them).
 
 `devm migrate-layout model.devm [--layout <file>]` reads the layout file of the previous experiment
 (default `model.devm.layout`; files of that experiment named after the formerly used extension
-`.hsm`, e.g. `model.hsm.layout`, are passed with `--layout`) and writes it into the model as layout annotations (the keys are the same
+`.devm`, e.g. `model.devm.layout`, are passed with `--layout`) and writes it into the model as layout annotations (the keys are the same
 diagram ids: qualified names, `<state>#region<n>`, `<container>#initial` / `#final`, `#definitions`,
 `<source>-><target>~<n>`). The layout file is kept; delete it once the model looks right.
 In VS Code, **Device Modeler: Convert Layout File to Annotations** does the same for the model of the active editor.
@@ -208,7 +263,7 @@ pushed apart; the relative arrangement is kept.
 
 The internal block diagrams of structure files are arranged by hand the same way: layout annotations in
 the `.devm` text, no mode switch (a diagram with at least one layout annotation is arranged by hand),
-applied on top of the automatic ELK layout, the same editor gestures, *Auto-arrange* / *Automatic layout*,
+applied on top of the automatic ELK layout, the same editor gestures, *Store positions* / *Re-arrange* / *Clear positions*,
 undo of the text.
 
 ```
@@ -260,7 +315,7 @@ subsystem CourtesyLight {
   reused while only the layout annotations change (dragging re-runs only the manual step).
 - **Layout settings**: structure diagrams are always laid out from left to right with orthogonal
   connectors, so the *Layout* direction and *Edges* settings do not apply to them (they are disabled for
-  `.devm` files); *Auto-arrange* and *Automatic layout* do.
+  `.devm` files); *Re-arrange* and *Clear positions* do.
 
 Editing (web app and VS Code, `StructureDiagram` with the shared `LayoutEditor` and mouse listener):
 
@@ -277,7 +332,7 @@ Editing (web app and VS Code, `StructureDiagram` with the shared `LayoutEditor` 
   (`@port`); its connectors follow while dragging.
 - A selected connector shows its waypoints: drag them, double-click the connector to add one, double-click
   a waypoint to remove it (`@via`).
-- *Auto-arrange* writes the automatic layout of the diagram as annotations, *Automatic layout* removes the
+- *Store positions* / *Re-arrange* writes the automatic layout of the diagram as annotations, *Clear positions* removes the
   layout annotations of the diagram (other annotations such as `@priority` stay).
 - `devm render` and the SVG / PNG export (web app and VS Code) use the annotations (`devm render --auto`
   ignores them).
@@ -297,3 +352,7 @@ Editing (web app and VS Code, `StructureDiagram` with the shared `LayoutEditor` 
 - Structure diagrams: the type boxes of a file share one position in all diagrams of the file; deleting a
   port in a component type leaves `@port` annotations of other files until their diagram is arranged again
   (they are reported and ignored); the labels of ports are not obstacles of the connector routes.
+- Anchors: the ends at pseudo states cannot be anchored. An anchored end of a transition whose route was
+  kept from the automatic layout is not considered when the other routes are placed (they avoid ending
+  on top of the end points of other routes, but ends may still come close). If no orthogonal route from
+  the anchor exists (vertices very close to each other), a straight line from the anchor is drawn.

@@ -8,4 +8,4 @@ export * from './tree.js';
 export * from './placement.js';
 export * from './routing.js';
 export * from './annotation-edits.js';
-export { crossesRect, distributePorts, routeOrthogonal, type OrthogonalRoute, type OrthogonalRouteRequest, type RoutedEnd, type RouterRect } from './orthogonal-router.js';
+export { crossesRect, distributePorts, routeOrthogonal, type FixedPort, type OrthogonalRoute, type OrthogonalRouteRequest, type RoutedEnd, type RouterRect } from './orthogonal-router.js';

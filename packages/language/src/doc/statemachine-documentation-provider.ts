@@ -3,11 +3,14 @@ import * as ast from '../generated/ast.js';
 import { qualifiedName } from '../statemachine-scope.js';
 import { eventDirection, returnTypeOf, typeName, typeOfEvent, typeOfParameter, typeOfVariable } from '../typesystem.js';
 import { nodeText } from '../model-utils.js';
+import { docCommentMarkdown } from './doc-comments.js';
+import { isClassMember, isDevmTypeReference, writtenCppType } from '../class-members.js';
 
 /**
  * Documentation of model elements for hover (language server): a signature line (e.g.
  * `in event finished : integer`, `state Closed.Active`), the description of a state and the
- * documentation comment (`/** … *\/`) preceding the element.
+ * documentation comment (`/** … *\/`) preceding the element (as written, Doxygen / JSDoc commands
+ * rendered, `{@link Name}` links to model elements, see `doxygen.ts`).
  */
 export class StateMachineDocumentationProvider extends JSDocDocumentationProvider {
 
@@ -20,7 +23,10 @@ export class StateMachineDocumentationProvider extends JSDocDocumentationProvide
         if (ast.isState(node) && node.description) {
             parts.push(node.description);
         }
-        const comment = super.getDocumentation(node);
+        const text = this.commentProvider.getComment(node);
+        const comment = text ? docCommentMarkdown(text, {
+            renderLink: (target, display) => this.documentationLinkRenderer(node, target, display)
+        }) : undefined;
         if (comment) {
             parts.push(comment);
         }
@@ -35,14 +41,18 @@ export function elementSignature(node: AstNode): string | undefined {
         const type = typeOfEvent(node);
         return `${direction === 'internal' ? '' : `${direction} `}event ${node.name}${type === 'void' ? '' : ` : ${typeName(type)}`}`;
     }
+    // the members of the C++ class sections show the C++ types as written (`unsigned int`, `const app::Config&`)
+    const classMember = isClassMember(node);
+    const typeText = (reference: ast.TypeReference | undefined, type: () => string) =>
+        classMember && reference && !isDevmTypeReference(reference) ? writtenCppType(reference) : type();
     if (ast.isVariableDeclaration(node)) {
         const keyword = node.const ? 'const' : node.readonly ? 'var readonly' : 'var';
         const initial = node.initialValue ? ` = ${nodeText(node.initialValue)}` : '';
-        return `${keyword} ${node.name} : ${typeName(typeOfVariable(node))}${initial}`;
+        return `${keyword} ${node.name} : ${typeText(node.type, () => typeName(typeOfVariable(node)))}${initial}`;
     }
     if (ast.isOperationDeclaration(node)) {
-        const parameters = node.parameters.map(p => `${p.name}${p.varArgs ? '...' : ''} : ${typeName(typeOfParameter(p))}`);
-        return `operation ${node.name}(${parameters.join(', ')}) : ${typeName(returnTypeOf(node))}`;
+        const parameters = node.parameters.map(p => `${p.name}${p.varArgs ? '...' : ''} : ${typeText(p.type, () => typeName(typeOfParameter(p)))}`);
+        return `${node.const ? 'const ' : ''}operation ${node.name}(${parameters.join(', ')}) : ${typeText(node.returnType, () => typeName(returnTypeOf(node)))}`;
     }
     if (ast.isState(node)) {
         return `state ${qualifiedName(node)}`;

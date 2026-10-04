@@ -8,7 +8,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/armaxri/HSM"
+    "url": "https://github.com/armaxri/DeviceModeler"
   },
   "engines": {
     "vscode": "^1.95.0"
@@ -37,7 +37,9 @@
     "onLanguage:devm",
     "onLanguage:devmtest",
     "onWebviewPanel:devm.diagram",
-    "onCommand:devm.importSct"
+    "onCommand:devm.importSct",
+    "onDebugResolve:devm-test",
+    "onDebugInitialConfigurations"
   ],
   "contributes": {
     "languages": [
@@ -74,6 +76,84 @@
         "language": "devmtest",
         "scopeName": "source.devmtest",
         "path": "./syntaxes/devmtest.tmLanguage.json"
+      },
+      {
+        "scopeName": "documentation.injection.devm",
+        "path": "./syntaxes/devm-doc-comments.tmLanguage.json",
+        "injectTo": [
+          "source.devm",
+          "source.devmtest"
+        ]
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "devmtest"
+      },
+      {
+        "language": "devm"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "devm-test",
+        "label": "Device Modeler Tests",
+        "languages": [
+          "devmtest"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "The .devmtest file whose tests are debugged (absolute path; ${file}: the file of the active editor).",
+                "default": "${file}"
+              },
+              "test": {
+                "type": "string",
+                "description": "Only this test class or test: TestClass, TestClass.test or test. Default: all tests of the file."
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Pause before the first statement of the first test.",
+                "default": false
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "devm-test",
+            "request": "launch",
+            "name": "Debug Device Modeler tests of the current file",
+            "program": "${file}"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Device Modeler: Debug tests",
+            "description": "Debug the tests of a .devmtest file",
+            "body": {
+              "type": "devm-test",
+              "request": "launch",
+              "name": "Debug Device Modeler tests",
+              "program": "^\"\\${file}\""
+            }
+          },
+          {
+            "label": "Device Modeler: Debug one test",
+            "description": "Debug one test (or test class) of a .devmtest file",
+            "body": {
+              "type": "devm-test",
+              "request": "launch",
+              "name": "Debug Device Modeler test",
+              "program": "^\"\\${workspaceFolder}/${1:tests/example.devmtest}\"",
+              "test": "${2:TestClass.test}",
+              "stopOnEntry": true
+            }
+          }
+        ]
       }
     ],
     "commands": [
@@ -95,6 +175,12 @@
         "icon": "$(run-all)"
       },
       {
+        "command": "devm.debugTests",
+        "title": "Debug Tests",
+        "category": "Device Modeler",
+        "icon": "$(debug-alt)"
+      },
+      {
         "command": "devm.importSct",
         "title": "Import itemis CREATE Model (.sct)",
         "category": "Device Modeler"
@@ -106,13 +192,13 @@
       },
       {
         "command": "devm.autoArrange",
-        "title": "Auto-arrange Diagram",
+        "title": "Re-arrange Diagram and Store Positions in Model",
         "category": "Device Modeler",
         "icon": "$(layout)"
       },
       {
         "command": "devm.resetLayout",
-        "title": "Use Automatic Diagram Layout",
+        "title": "Clear Stored Diagram Positions (Remove Layout Annotations)",
         "category": "Device Modeler",
         "icon": "$(discard)"
       },
@@ -143,6 +229,11 @@
         },
         {
           "command": "devm.runTests",
+          "when": "editorLangId == devmtest",
+          "group": "navigation"
+        },
+        {
+          "command": "devm.debugTests",
           "when": "editorLangId == devmtest",
           "group": "navigation"
         }
@@ -186,6 +277,11 @@
           "group": "devm@1"
         },
         {
+          "command": "devm.debugTests",
+          "when": "resourceExtname == .devmtest",
+          "group": "devm@2"
+        },
+        {
           "command": "devm.importSct",
           "when": "resourceExtname == .sct",
           "group": "devm@1"
@@ -223,6 +319,10 @@
         {
           "command": "devm.navigateForward",
           "when": "devm.diagramCanGoForward"
+        },
+        {
+          "command": "devm.debugTests",
+          "when": "editorLangId == devmtest"
         }
       ],
       "webview/title": [
@@ -291,7 +391,16 @@
           "enum": [
             "SPLINES",
             "ORTHOGONAL",
-            "POLYLINE"
+            "ROUNDED",
+            "POLYLINE",
+            "SMOOTH"
+          ],
+          "enumDescriptions": [
+            "Curves computed by the layout",
+            "Horizontal and vertical segments",
+            "Orthogonal segments with rounded corners",
+            "Straight segments in any direction",
+            "A smooth curve through the bend points of the polyline"
           ],
           "default": "SPLINES",
           "description": "Routing of the transitions in the diagram."
@@ -304,7 +413,7 @@
         "devm.diagram.showProperties": {
           "type": "boolean",
           "default": true,
-          "description": "Show the properties panel next to the diagram."
+          "description": "Show the side panel (properties of the selection, simulation) next to the diagram. Also toggled by the panel button in the toolbar of the diagram."
         },
         "devm.cpp.outputDirectory": {
           "type": "string",

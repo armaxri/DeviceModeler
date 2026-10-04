@@ -100,6 +100,16 @@ export function installNodeHeaderSupport(shared: LangiumSharedCoreServices, opti
             return undefined;
         }
     };
+    store.lister = uri => {
+        if (uri.scheme !== 'file') {
+            return undefined;
+        }
+        try {
+            return fs.readdirSync(uri.fsPath, { withFileTypes: true }).map(entry => entry.isDirectory() ? `${entry.name}/` : entry.name);
+        } catch {
+            return undefined;
+        }
+    };
     const finder = new HeaderConfigFinder(options.root);
     store.updateSettings(normalizeSettings(options.settings ?? {}));
     if (options.configs ?? true) {

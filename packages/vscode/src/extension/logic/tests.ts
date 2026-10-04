@@ -1,8 +1,8 @@
 import { GrammarUtils, type AstNode, type LangiumDocument } from 'langium';
 import type { Diagnostic } from 'vscode-languageserver-types';
 import {
-    createDevmServices, hasAnnotation, DevmTestWorkspace, runTests, type CppHeaderSettings, type CoverageCollector, type MachineCoverage, type TestModel, type TestResult,
-    type WorkspaceFile
+    createDevmServices, hasAnnotation, DevmTestWorkspace, runTests, type CppHeaderSettings, type CoverageCollector, type MachineCoverage, type TestDebugHooks, type TestModel,
+    type TestResult, type WorkspaceFile
 } from 'devm-language';
 // Node-only part of the language package (not exported from its index because the web app bundles the index)
 import { installNodeHeaderSupport } from '../../../../language/src/node/cpp-headers-node.js';
@@ -77,6 +77,8 @@ export interface DevmTestRunOptions {
     coverage?: CoverageCollector;
     /** Settings of imported C/C++ headers (the VS Code settings `devm.headers.*`). */
     headers?: CppHeaderSettings;
+    /** Hooks of the debugger (debug sessions of tests). */
+    debug?: TestDebugHooks;
 }
 
 /**
@@ -106,7 +108,8 @@ export async function runDevmTests(models: readonly WorkspaceFile[], testFiles: 
             filter: filter ? (testClass, test) => filter(loaded.uri, testClass, test) : undefined,
             onResult: options.onResult,
             onTrace: options.onTrace,
-            coverage: options.coverage
+            coverage: options.coverage,
+            debug: options.debug
         }));
     }
     return { results, problems };

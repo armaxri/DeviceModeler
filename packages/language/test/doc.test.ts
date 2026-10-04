@@ -173,6 +173,14 @@ describe('model documentation', () => {
         expect(generateDocIndex(entries, 'html', 'Models')).toContain('<h1>Models</h1>');
         expect(markdownToHtml('a **b** *c* `<d>`\n\n- x\n- [y](https://e.org)')).toBe(
             '<p>a <strong>b</strong> <em>c</em> <code>&lt;d&gt;</code></p>\n<ul><li>x</li><li><a href="https://e.org">y</a></li></ul>');
+        // rendered Doxygen comments: line breaks, a label followed by a list, code blocks, escapes
+        expect(markdownToHtml('Line one  \nline two\n\n**Parameters:**\n- `a` — first  \n  continued\n\n```cpp\nif (a < b) {}\n```\n\nstd::vector\\<int>')).toBe([
+            '<p>Line one<br>line two</p>',
+            '<p><strong>Parameters:</strong></p>',
+            '<ul><li><code>a</code> — first<br>continued</li></ul>',
+            '<pre><code>if (a &lt; b) {}</code></pre>',
+            '<p>std::vector&lt;int&gt;</p>'
+        ].join('\n'));
     });
 
     test('examples are documented', async () => {
@@ -194,12 +202,12 @@ describe('CLI render and doc', () => {
 
     test('expands directories and glob patterns', async () => {
         const all = (await expandFiles([EXAMPLES_DIR])).map(f => path.basename(f));
-        // cpp-types/: the example importing a C++ header, device/: the structure example (structure files
-        // and state machines), door-with-motor/: the submachine example (two files)
-        expect(all).toEqual(['cd-player.devm', 'conveyor.devm', 'components.devm', 'controller.devm', 'drive-unit.devm', 'drive.devm', 'garage-door.devm',
-            'light.devm', 'system.devm', 'types.devm', 'gate.devm', 'motor.devm', 'door.devm', 'keyboard.devm', 'traffic-light.devm']);
+        // cpp-class-sections/, cpp-enum-values/ and cpp-types/: the examples importing C++ headers, device/: the structure example
+        // (structure files and state machines), door-with-motor/: the submachine example (two files)
+        expect(all).toEqual(['cd-player.devm', 'restart-controller.devm', 'sensor.devm', 'conveyor.devm', 'components.devm', 'controller.devm', 'drive-unit.devm', 'drive.devm',
+            'garage-door.devm', 'light.devm', 'system.devm', 'types.devm', 'gate.devm', 'motor.devm', 'door.devm', 'keyboard.devm', 'traffic-light.devm']);
         expect((await expandFiles([path.join(EXAMPLES_DIR, 'k*.devm')])).map(f => path.basename(f))).toEqual(['keyboard.devm']);
-        expect(await expandFiles([path.join(EXAMPLES_DIR, '**/*.devm')])).toHaveLength(15);
+        expect(await expandFiles([path.join(EXAMPLES_DIR, '**/*.devm')])).toHaveLength(17);
         expect(await expandFiles([path.join(EXAMPLES_DIR, '*.nothing')])).toEqual([]);
     });
 
@@ -209,16 +217,22 @@ describe('CLI render and doc', () => {
         expect(await runRenderCommand([EXAMPLES_DIR], { out: dir, theme: 'dark', direction: 'right', routing: 'orthogonal' }, log)).toBe(0);
         // (with the structure files of examples/device)
         expect(fs.readdirSync(dir).sort()).toEqual(['cd-player.svg', 'components.svg', 'controller.svg', 'conveyor.svg', 'door.svg', 'drive-unit.svg', 'drive.svg',
-            'garage-door.svg', 'gate.svg', 'keyboard.svg', 'light.svg', 'motor.svg', 'system.svg', 'traffic-light.svg', 'types.svg']);
+            'garage-door.svg', 'gate.svg', 'keyboard.svg', 'light.svg', 'motor.svg', 'restart-controller.svg', 'sensor.svg', 'system.svg', 'traffic-light.svg', 'types.svg']);
         const svg = fs.readFileSync(path.join(dir, 'door.svg'), 'utf-8');
         expect(parseXml(svg).attributes.class).toContain('theme-dark');
         const single = path.join(dir, 'sub', 'door-classic.svg');
         expect(await runRenderCommand([path.join(EXAMPLES_DIR, 'door.devm')], { out: single }, log)).toBe(0);
         expect(fs.existsSync(single)).toBe(true);
+        // the routing styles drawn by the renderer: curves along the orthogonal routes
+        const rounded = path.join(dir, 'rounded', 'door.svg');
+        expect(await runRenderCommand([path.join(EXAMPLES_DIR, 'door.devm')], { out: rounded, routing: 'rounded-orthogonal' }, log)).toBe(0);
+        expect(fs.readFileSync(rounded, 'utf-8')).toMatch(/class="transition-line" d="M [^"]* C /);
         expect(log.messages.filter(m => m.startsWith('ERROR'))).toEqual([]);
         // errors
         expect(await runRenderCommand([EXAMPLES_DIR], { theme: 'neon' }, log)).toBe(2);
         expect(await runRenderCommand([EXAMPLES_DIR], { format: 'png' }, log)).toBe(2);
+        expect(await runRenderCommand([EXAMPLES_DIR], { routing: 'zigzag' }, log)).toBe(2);
+        expect(log.messages.some(m => m.includes("Unknown routing 'zigzag'") && m.includes('ROUNDED') && m.includes('SMOOTH'))).toBe(true);
         const broken = path.join(dir, 'broken.devm');
         fs.writeFileSync(broken, 'statemachine {');
         expect(await runRenderCommand([broken], { out: dir }, log)).toBe(1);
@@ -240,7 +254,7 @@ describe('CLI render and doc', () => {
         expect(page).toContain('cycle based, period `100 ms`');
         const html = path.join(dir, 'html');
         expect(await runDocCommand([EXAMPLES_DIR], { out: html, format: 'html', title: 'Examples' }, log)).toBe(0);
-        expect(fs.readdirSync(html).sort()).toEqual(['CdPlayer.html', 'Conveyor.html', 'Door.html', 'DoorController.html', 'Drive.html', 'Gate.html', 'Keyboard.html', 'Motor.html', 'TrafficLight.html', 'index.html']);
+        expect(fs.readdirSync(html).sort()).toEqual(['CdPlayer.html', 'Controller.html', 'Conveyor.html', 'Door.html', 'DoorController.html', 'Drive.html', 'Gate.html', 'Keyboard.html', 'Motor.html', 'Sensor.html', 'TrafficLight.html', 'index.html']);
         const door = fs.readFileSync(path.join(html, 'Door.html'), 'utf-8');
         expect(door).toContain('<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic devm-export"');
         expect(door).toContain('Automatic door with obstacle detection');

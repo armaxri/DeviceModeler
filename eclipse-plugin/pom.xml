@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- Eclipse plugin (prototype): the HSM web app in an editor of the Eclipse IDE. See README.md. -->
+    <groupId>hsm.eclipse</groupId>
+    <artifactId>hsm.eclipse.parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <properties>
+        <tycho.version>5.0.4</tycho.version>
+        <!-- the plugin is compiled against this release; it runs on older and newer releases too (see README.md) -->
+        <eclipse.repository>https://download.eclipse.org/releases/2025-06/</eclipse.repository>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- the hsm executables of packages/cli (packages/cli/dist/bin/<target>/hsm, other folder: -Dhsm.cli.dir=…)
+             are shipped in the platform fragments hsm.eclipse.cli.<os>.<arch>; a missing one leaves its fragment
+             empty (the plugin then uses hsm of the PATH) unless -Dhsm.cli.optional=false -->
+        <hsm.cli.optional>true</hsm.cli.optional>
+    </properties>
+
+    <modules>
+        <module>hsm.eclipse</module>
+        <module>hsm.eclipse.lsp</module>
+        <module>hsm.eclipse.cli.linux.x86_64</module>
+        <module>hsm.eclipse.cli.linux.aarch64</module>
+        <module>hsm.eclipse.cli.macosx.x86_64</module>
+        <module>hsm.eclipse.cli.macosx.aarch64</module>
+        <module>hsm.eclipse.cli.win32.x86_64</module>
+        <module>hsm.eclipse.feature</module>
+        <module>hsm.eclipse.site</module>
+    </modules>
+
+    <profiles>
+        <profile>
+            <!-- mvn verify -Pui-tests: opens a model in a real workbench (a window opens for a minute) -->
+            <id>ui-tests</id>
+            <modules>
+                <module>hsm.eclipse.tests</module>
+            </modules>
+        </profile>
+    </profiles>
+
+    <repositories>
+        <repository>
+            <id>eclipse-release</id>
+            <layout>p2</layout>
+            <url>${eclipse.repository}</url>
+        </repository>
+    </repositories>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.eclipse.tycho</groupId>
+                <artifactId>tycho-maven-plugin</artifactId>
+                <version>${tycho.version}</version>
+                <extensions>true</extensions>
+            </plugin>
+            <plugin>
+                <groupId>org.eclipse.tycho</groupId>
+                <artifactId>target-platform-configuration</artifactId>
+                <version>${tycho.version}</version>
+                <configuration>
+                    <environments>
+                        <environment><os>win32</os><ws>win32</ws><arch>x86_64</arch></environment>
+                        <environment><os>linux</os><ws>gtk</ws><arch>x86_64</arch></environment>
+                        <environment><os>linux</os><ws>gtk</ws><arch>aarch64</arch></environment>
+                        <environment><os>macosx</os><ws>cocoa</ws><arch>x86_64</arch></environment>
+                        <environment><os>macosx</os><ws>cocoa</ws><arch>aarch64</arch></environment>
+                    </environments>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

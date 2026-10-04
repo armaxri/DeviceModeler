@@ -6,7 +6,8 @@
  * that should be there – and {@link annotationSlotEdits} computes the edits:
  *
  * - values of existing layout annotations are replaced in place (only if they differ),
- * - new annotations are appended to the last annotation of the slot (separated by a space), or take the
+ * - new annotations are appended to the last annotation of the slot (separated by a space; or written in
+ *   front of an annotation they belong before, see {@link WantedAnnotation.before}), or take the
  *   place of a removed one, or are inserted by the slot (on a line of their own before the element, or in
  *   front of it on the same line, see {@link insertAnnotations}),
  * - layout annotations which are not wanted are removed, with the white space separating them from the
@@ -25,6 +26,8 @@ export interface WantedAnnotation {
     /** Identifies the annotation among those of the slot (default: the name; e.g. `port:cmd` for `@port(cmd, …)`). */
     key?: string;
     args: readonly LayoutArgument[];
+    /** A new annotation is written in front of the existing annotation with this key (e.g. `@from` before `@to`). */
+    before?: string;
 }
 
 /** An annotation written in the text. */
@@ -101,6 +104,13 @@ export function annotationSlotEdits(text: string, slots: readonly AnnotationSlot
             kept.push(annotation);
             if (!sameArguments(annotation.args, wanted.args)) {
                 edits.push({ offset: annotation.offset, length: annotation.end - annotation.offset, text: annotationText(wanted) });
+            }
+        }
+        for (const [key, wanted] of [...missing]) {
+            const next = wanted.before !== undefined ? kept.find(a => (a.key ?? a.name) === wanted.before) : undefined;
+            if (next) {
+                edits.push({ offset: next.offset, length: 0, text: `${annotationText(wanted)} ` });
+                missing.delete(key);
             }
         }
         const added = [...missing.values()].map(annotationText).join(' ');

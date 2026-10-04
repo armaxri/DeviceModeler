@@ -127,28 +127,30 @@ button.primary {
     padding: 0 6px;
 }
 
-.toolbar .icon-button {
-    display: inline-flex;
-    align-items: center;
-    padding: 0 6px;
-    color: var(--ui-muted);
-}
-
-.toolbar .icon-button[aria-pressed="true"] {
-    color: var(--ui-text);
-}
-
-.toolbar .icon-button[aria-pressed="false"] .panel-fill {
-    opacity: 0;
-}
-
 #example-select {
     max-width: 130px;
 }
 
-@media (max-width: 1600px) {
+/* narrower windows: the toolbar stays one row as long as possible – first without the labels of the selects
+   (their tooltips name them), then without the name of the app */
+@media (max-width: 1800px) {
     .toolbar label .label-text {
         display: none;
+    }
+}
+
+@media (max-width: 1600px) {
+    .toolbar {
+        column-gap: 10px;
+    }
+    .toolbar .brand span {
+        display: none;
+    }
+    .toolbar select {
+        max-width: 140px;
+    }
+    #example-select {
+        max-width: 104px;
     }
 }
 
@@ -525,20 +527,11 @@ body:not(.structure-mode) .ibd-element-choice {
 
 /* ---- properties ---- */
 
-#diagram-pane.hide-properties {
-    grid-template-columns: auto 1fr;
-}
-
-#diagram-pane.hide-properties #properties {
-    display: none;
-}
-
+/* the content of the side panel (see side-panel.css) */
 #properties {
-    width: 280px;
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
-    background: var(--ui-panel);
-    border-left: 1px solid var(--ui-border);
-    padding: 12px 14px;
 }
 
 #properties h2 {
@@ -854,6 +847,73 @@ body.ui-dark #properties .problems li.error { background: #3d1f1f; color: #ffb4b
     color: var(--ui-select);
 }
 
+/* ---- file viewer (read-only header of a go to definition, ui/file-viewer.ts) ---- */
+
+.file-viewer-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 210;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 0, 0, 0.35);
+}
+
+.file-viewer-backdrop .file-viewer {
+    width: min(1000px, 94vw);
+    height: min(720px, 88vh);
+    border-radius: 10px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.file-viewer-page {
+    position: fixed;
+    inset: 0;
+    z-index: 210;
+    display: flex;
+}
+
+.file-viewer-page .file-viewer {
+    flex: 1;
+}
+
+.file-viewer {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--ui-panel);
+}
+
+.file-viewer-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--ui-border);
+}
+
+.file-viewer-title {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-viewer-hint {
+    flex: 1;
+    color: var(--ui-muted);
+    font-size: 12px;
+}
+
+.file-viewer-close {
+    border: none;
+    background: transparent;
+}
+
+.file-viewer-editor {
+    flex: 1;
+    min-height: 0;
+}
+
 /* ---- editor decorations ---- */
 
 .devm-selected-range {
@@ -864,16 +924,22 @@ body.ui-dark #properties .problems li.error { background: #3d1f1f; color: #ffb4b
 @media (max-width: 900px) {
     main {
         grid-template-columns: 1fr;
-        grid-template-rows: 35% 5px 1fr;
+        grid-template-rows: var(--editor-height, 35%) 5px 1fr;
     }
     #splitter { cursor: row-resize; }
-    #properties { display: none; }
 }
 
 /* ---- manual layout (experimental) ---- */
 
-.toolbar .layout-label {
+.toolbar .layout-mode {
     color: var(--ui-muted);
+    white-space: nowrap;
+    cursor: help;
+}
+
+.toolbar .layout-mode-value {
+    color: var(--ui-text);
+    font-weight: 600;
 }
 
 .toolbar .segmented {

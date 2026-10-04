@@ -1,0 +1,35 @@
+// Gradle init script of scripts/ide/clion.mjs: adds the task `runLocalIde` to the build of jetbrains-plugin/,
+// which starts a locally installed IDE (CLion, IntelliJ IDEA, …) with the plugin, without changing the build:
+//
+//   ./gradlew -I ../scripts/ide/jetbrains-local-ide.init.gradle -PhsmLocalIde=<IDE> [-PhsmSandbox=<dir>] \
+//       runLocalIde --args=<project folder>
+//
+// -PhsmLocalIde: the installation (CLion.app on macOS, the installation folder elsewhere)
+// -PhsmSandbox:  config, system, plugins and log folders of the started IDE (default: the plugin's sandbox)
+def localIde = startParameter.projectProperties.get('hsmLocalIde')
+def sandbox = startParameter.projectProperties.get('hsmSandbox')
+
+allprojects {
+    pluginManager.withPlugin('org.jetbrains.intellij.platform') {
+        if (localIde == null) {
+            return
+        }
+        intellijPlatformTesting.runIde.register('runLocalIde') {
+            localPath.set(file(localIde))
+            if (sandbox != null) {
+                sandboxDirectory.set(file(sandbox))
+            }
+            task {
+                // a sandbox for trying the plugin: trust the opened folder, no tips
+                jvmArgs('-Didea.trust.all.projects=true', '-Dide.show.tips.on.startup.default.value=false')
+            }
+            // LSP4IJ (optional dependency of the plugin): the language server in the text editor
+            def lsp4ij = project.findProperty('lsp4ijVersion')
+            if (lsp4ij != null) {
+                plugins {
+                    plugin('com.redhat.devtools.lsp4ij', lsp4ij.toString())
+                }
+            }
+        }
+    }
+}

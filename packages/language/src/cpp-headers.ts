@@ -70,6 +70,13 @@ export class CppHeaderStore {
     /** Reads a header synchronously if its text was not set (Node hosts: `fs.readFileSync`); `undefined` if it does not exist. */
     reader?: (uri: URI) => string | undefined;
 
+    /**
+     * Lists a directory (Node hosts: `fs.readdirSync`): the names of its entries, directories with a
+     * trailing `/`; `undefined` if it cannot be read. Used to find the header declaring an unknown C++
+     * type ({@link availableHeaders}); without a lister only the texts set with {@link setText} are found.
+     */
+    lister?: (directory: URI) => readonly string[] | undefined;
+
     /** Settings used for all documents (unless {@link settingsProvider} gives settings for a document). */
     settings: CppHeaderSettings = {};
 
@@ -243,6 +250,63 @@ export function headerCandidates(path: string, directory: URI | undefined, setti
     }
     const seen = new Set<string>();
     return result.filter(uri => !seen.has(uri.toString()) && seen.add(uri.toString()));
+}
+
+/** A header that a model could import, with the path for `import "…"`. */
+export interface AvailableHeader {
+    readonly uri: URI;
+    /** The path relative to the directory of the model or to an include path (`driver.h`, `hal/driver.h`). */
+    readonly importPath: string;
+}
+
+const HEADER_FILE = /\.(h|hh|hpp|hxx|h\+\+|inl)$/i;
+const SKIPPED_DIRECTORIES = new Set(['node_modules', 'build', 'out', 'dist', 'target', 'cmake-build-debug', 'cmake-build-release']);
+
+/**
+ * The headers a model in `documentUri` can import: the headers in the directory of the model and in the
+ * include paths (and their subdirectories, two levels deep), found with the {@link CppHeaderStore.lister}
+ * and among the texts set in the store. A header reachable from several directories is listed once
+ * (with the path of the first directory, the order in which imports are resolved).
+ */
+export function availableHeaders(store: CppHeaderStore, documentUri: URI, settings: CppHeaderSettings, limit = 2000): AvailableHeader[] {
+    const directory = UriUtils.dirname(documentUri);
+    const roots = [directory, ...(settings.includePaths ?? []).map(path => includePathUri(path, directory))];
+    const result: AvailableHeader[] = [];
+    const seen = new Set<string>();
+    const add = (uri: URI, importPath: string) => {
+        if (!seen.has(uri.toString()) && result.length < limit) {
+            seen.add(uri.toString());
+            result.push({ uri, importPath });
+        }
+    };
+    for (const root of roots) {
+        const prefix = root.toString().replace(/\/?$/, '/');
+        for (const key of store.uris) {
+            if (key.startsWith(prefix) && HEADER_FILE.test(key)) {
+                const relative = key.substring(prefix.length);
+                if (relative.split('/').length <= 3) {
+                    add(URI.parse(key), decodeURIComponent(relative));
+                }
+            }
+        }
+        const visit = (dir: URI, relative: string, depth: number) => {
+            for (const entry of store.lister?.(dir) ?? []) {
+                if (entry.startsWith('.')) {
+                    continue;
+                }
+                if (entry.endsWith('/')) {
+                    const name = entry.slice(0, -1);
+                    if (depth < 2 && !SKIPPED_DIRECTORIES.has(name)) {
+                        visit(UriUtils.joinPath(dir, name), `${relative}${name}/`, depth + 1);
+                    }
+                } else if (HEADER_FILE.test(entry)) {
+                    add(UriUtils.joinPath(dir, entry), relative + entry);
+                }
+            }
+        };
+        visit(root, '', 0);
+    }
+    return result;
 }
 
 /** Finds a header in the store: the first candidate location with a text (see {@link headerCandidates}). */

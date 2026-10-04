@@ -457,12 +457,27 @@
     cursor: move;
 }
 
+.anchor-handle {
+    fill: #fff;
+    stroke: var(--devm-select);
+    stroke-width: 1.5px;
+    cursor: crosshair;
+}
+
+/* the end of a transition is anchored at the border (@from / @to) */
+.anchor-handle.anchored {
+    fill: var(--devm-select);
+    stroke: #fff;
+    stroke-width: 1px;
+}
+
 .manual-layout .transition.selected .transition-label {
     cursor: move;
 }
 
 .devm-export .resize-handle,
-.devm-export .bend-handle {
+.devm-export .bend-handle,
+.devm-export .anchor-handle {
     display: none;
 }
 
@@ -1053,7 +1068,7 @@
 </g>
 <g class="transition">
 <path class="transition-line" d="M 617,1243 C 617,1249 617,1258 573.17,1262.5 C 529.33,1267 441.67,1267 397.83,1264 C 354,1261 354,1255 354,1146 C 354,1037 354,825 354,715.08 C 354,605.17 354,597.33 354,589.5 C 354,581.67 354,573.83 354,559.75 C 354,545.67 354,525.33 354,491.75 C 354,458.17 354,411.33 354,364.5 C 354,317.67 354,270.83 354,244.42 C 354,218 354,212 364.33,209 C 374.67,206 395.33,206 405.67,210.5 C 416,215 416,224 416,224"/>
-<path class="transition-arrow" d="M 416,224 L 406,219.5 L 409,224 L 406,228.5 Z"/>
+<path class="transition-arrow" d="M 416,224 L 420.5,214 L 416,217 L 411.5,214 Z"/>
 <g class="transition-label">
 <text x="258" y="544.7">lower # &gt;Closing</text>
 </g>

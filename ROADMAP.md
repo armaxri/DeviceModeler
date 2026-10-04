@@ -36,11 +36,12 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
   relative to the importing file, loaded transitively (CLI, tests, language server, VS Code webview, a
   virtual file list in the web editor); missing files, cycles and duplicate names are reported
 - ✅ **C++ header imports** (`import "motor_types.h"`, [docs/cpp-integration.md](docs/cpp-integration.md)):
-  enums / enum classes, structs, `typedef` / `using` aliases and constants of namespaces are types and values
+  enums (`enum`, `enum class`, C `typedef enum`, nested in namespaces / classes, opaque, `using enum`), structs, `typedef` / `using` aliases and constants of namespaces are types and values
   of models (`var mode : motor::Mode = motor::Mode::Off`, `pos.x`, `a[i]`, `motor::kMaxSpeed`); C++ integer
-  widths are kept as storage types (wrap-around on assignment, range warnings), enums compare with `==` / `!=`,
-  structs are assigned as a whole; interpreter, unit tests, scenarios (14 `s10-cpp-*`), C++ generator
-  (`#include`s the headers, uses the types by name), hover / definition / completion, include paths, defines
+  widths are kept as storage types (wrap-around on assignment, range warnings), enums compare with `==` / `!=` (and are ordered),
+  structs are assigned as a whole; interpreter, unit tests, scenarios (15 `s10-cpp-*`), C++ generator
+  (`#include`s the headers, uses the types by name), hover / definition / completion (enumerators of the expected enum, C++ types
+  in type positions), include paths, defines
   and data model in the `headers` block of `devm.gen.json`, `-I` / `-D` / `--data-model`, VS Code settings,
   headers re-read on change; web app: headers in the virtual file list, editors for enum and struct values
   in the simulation. Example [`examples/cpp-types`](examples/cpp-types) (also built by the CMake example)
@@ -49,6 +50,15 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
     `std::array`, whole-array assignment of C arrays, unsaved header edits in VS Code (headers are read from
     disk), viewing headers in the web editor, go to definition into headers in the web editor
   - 💭 functions of headers as operations (callbacks generated from declarations)
+- ✅ **C++ class sections** `public:`, `protected:`, `private:` ([docs/language.md](docs/language.md#c-class-sections)):
+  variables, constants and operations that are members of the generated C++ class with that access, C++ types
+  (`unsigned int`, `const T&`, pointers, template arguments), doc comments copied into the header; member functions
+  implemented by the application, data members initialized at construction (not reset by `enter()`); members whose
+  types the model does not know are declared for the C++ code only; interpreter, unit tests, scenario
+  `s10-cpp-class-sections`, example [`examples/cpp-class-sections`](examples/cpp-class-sections)
+  - ✅ `const operation` (const member functions), member functions `virtual` by default (`virtualMethods: false`),
+    reference members bound by a generated constructor, headers only included (`import "<vector>"`)
+  - 💭 `static` members (reported as not supported), pure virtual member functions
 
 ## Phase 2 – Structure parity ✅
 
@@ -194,15 +204,15 @@ Experimental on the branch `claude/device-modeling`: the structure of a product 
 machines ([docs/structure-language.md](docs/structure-language.md), example [`examples/device`](examples/device)).
 
 - 🧪 Renamed to **Device Modeler** (formerly *Device Modeling Framework* / *HSM Modeler*) with one file
-  extension for all models: `.devm` (formerly `.hsm` for state machines and `.dmf` for structure files),
-  unit tests `.devmtest` (formerly `.hsmtest`), the CLI `devm` (formerly `hsm`) and the generator
-  configuration `devm.gen.json` (formerly `hsm.gen.json`). A `.devm` file contains either a state machine
+  extension for all models: `.devm` (formerly `.devm` for state machines and `.dmf` for structure files),
+  unit tests `.devmtest` (formerly `.devmtest`), the CLI `devm` (formerly `devm`) and the generator
+  configuration `devm.gen.json` (formerly `devm.gen.json`). A `.devm` file contains either a state machine
   or structure elements: one Langium language whose entry rule is the alternative of both kinds
   (`src/devm.langium`, [Architecture](docs/architecture.md#one-language-for-two-kinds-of-model-files))
 - 🧪 The remaining old names are gone (no compatibility aliases): npm packages `devm-language`,
-  `devm-web`, `devm-vscode`; VS Code commands, settings and context keys `devm.*` (formerly `hsm.*`);
+  `devm-web`, `devm-vscode`; VS Code commands, settings and context keys `devm.*` (formerly `devm.*`);
   CMake `find_package(Devm)`, `devm_generate`, `devm_add_tests`, `DEVM_EXECUTABLE` (formerly
-  `find_package(Hsm)`, `hsm_generate`, `hsm_add_tests`, `HSM_EXECUTABLE`); CSS classes `devm-*`; in the
+  `find_package(Devm)`, `devm_generate`, `devm_add_tests`, `DEVM_EXECUTABLE`); CSS classes `devm-*`; in the
   language package `createDevmServices` / `DevmServices`, `StateMachine*` and `Structure*` services and
   the AST type `CompositeType` of subsystems and systems
 - 🧪 Structure elements (`src/structure.langium` in the language package, one language with the state machines): component types with ports as **directed data flow** –

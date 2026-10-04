@@ -2,8 +2,11 @@ const files = {
     ...import.meta.glob('../../../examples/*.devm', { query: '?raw', import: 'default', eager: true }),
     // two files: the gate imports the motor (submachine instance)
     ...import.meta.glob('../../../examples/door-with-motor/*.devm', { query: '?raw', import: 'default', eager: true }),
-    // a model importing a C++ header (docs/cpp-integration.md)
+    // models importing C++ headers (docs/cpp-integration.md)
     ...import.meta.glob('../../../examples/cpp-types/*.devm', { query: '?raw', import: 'default', eager: true }),
+    ...import.meta.glob('../../../examples/cpp-enum-values/*.devm', { query: '?raw', import: 'default', eager: true }),
+    // C++ class sections: members of the generated class (docs/language.md#c-class-sections)
+    ...import.meta.glob('../../../examples/cpp-class-sections/*.devm', { query: '?raw', import: 'default', eager: true }),
     // the structure of a product (docs/structure-language.md): structure files and the state machines of its components
     ...import.meta.glob('../../../examples/device/*.devm', { query: '?raw', import: 'default', eager: true })
 } as Record<string, string>;
@@ -11,7 +14,9 @@ const files = {
 /** C/C++ headers of the examples (imported by the example models; not opened in the editor). */
 const headerFiles = {
     ...import.meta.glob('../../../examples/cpp-types/*.h', { query: '?raw', import: 'default', eager: true }),
-    ...import.meta.glob('../../../examples/device/*.h', { query: '?raw', import: 'default', eager: true })
+    ...import.meta.glob('../../../examples/device/*.h', { query: '?raw', import: 'default', eager: true }),
+    ...import.meta.glob('../../../examples/cpp-enum-values/*.h', { query: '?raw', import: 'default', eager: true }),
+    ...import.meta.glob('../../../examples/cpp-class-sections/*.h', { query: '?raw', import: 'default', eager: true })
 } as Record<string, string>;
 
 /** The headers of the examples by file name. */
@@ -32,6 +37,8 @@ const TITLES: Record<string, string> = {
     'gate.devm': 'Gate with a motor submachine (imports motor.devm)',
     'motor.devm': 'Motor (submachine of the gate)',
     'conveyor.devm': 'Conveyor (C++ enums, structs and constants of conveyor_types.h)',
+    'sensor.devm': 'Sensor (values of C++ enumerators, sensor_codes.h)',
+    'restart-controller.devm': 'Controller (C++ class sections: members of the generated class)',
     'system.devm': 'Garage installation: the closed system (door, remote control, display)',
     'garage-door.devm': 'Garage door: subsystem (threads, ports, connections, delegations)',
     'drive-unit.devm': 'Garage door: drive unit (subsystem)',

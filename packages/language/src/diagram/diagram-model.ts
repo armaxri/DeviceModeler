@@ -1,4 +1,5 @@
 import type { AstNode } from 'langium';
+import type { EdgeAnchor } from './edge-anchors.js';
 
 export interface Point {
     x: number;
@@ -13,7 +14,12 @@ export type TextMeasure = (text: string, style: TextStyle) => { width: number, h
 
 export type LayoutDirection = 'DOWN' | 'RIGHT';
 
-export type EdgeRouting = 'SPLINES' | 'ORTHOGONAL' | 'POLYLINE';
+/**
+ * Routing style of the transitions: the routing modes of ELK (`SPLINES`, `ORTHOGONAL`, `POLYLINE`) and
+ * `ROUNDED` (orthogonal routes with rounded corners) and `SMOOTH` (polyline routes drawn as a smooth curve
+ * through their bend points), see `EDGE_ROUTINGS`.
+ */
+export type EdgeRouting = 'SPLINES' | 'ORTHOGONAL' | 'ROUNDED' | 'POLYLINE' | 'SMOOTH';
 
 export interface LayoutOptionsInput {
     direction?: LayoutDirection;
@@ -103,10 +109,17 @@ export interface DiagramEdge {
      * of cubic bezier segments. Otherwise the points describe a polyline.
      */
     routing: 'spline' | 'polyline' | 'orthogonal';
+    /**
+     * How a polyline / orthogonal route is drawn (default: straight segments): with rounded corners
+     * (`rounded`) or as a smooth curve through the points (`smooth`), see `displayRoute`.
+     */
+    curve?: 'rounded' | 'smooth';
     /** Absolute coordinates of the route. */
     points: Point[];
     /** Manual layout: the points the route passes through (set by the user, absolute coordinates). */
     waypoints?: Point[];
+    /** Manual layout: the stored anchors of the ends (`@from` / `@to`, only at states). */
+    anchors?: { source?: EdgeAnchor, target?: EdgeAnchor };
     label?: DiagramLabel;
     /** Priority of the transition among the outgoing transitions of its source (if it has several). */
     priority?: number;

@@ -29,8 +29,16 @@ generation, a test runner in the Test Explorer and the import of itemis CREATE m
   git work as usual. The simulation of the web app is available in the diagram (**▶ Simulate**).
 - **C/C++ header imports** (`import "motor_types.h"`, see [docs/language.md](../../docs/language.md#cc-header-imports)): models use the enums, structs,
   aliases and constants of headers. Headers are read from disk and re-read when they change (the models
-  importing them are validated again); hover shows declarations with their documentation comments, go to
-  definition opens the header, completion after `ns::` and `var.`. Include paths, defines and the data
+  importing them are validated again); hover shows declarations with their documentation comments,
+  completion after `ns::` and `var.`. **Navigation into the headers** works with the usual keys: Go to
+  Definition (`F12`, `Ctrl`/`Cmd`+Click), Peek Definition (`Alt+F12`), Go to Declaration and Go to Type
+  Definition. Each segment of a qualified name leads to its own declaration (`app` → the namespace,
+  `Mode` → the enum, `Fast` → the enumerator in `app::Mode::Fast`), struct members (`cfg.limits.low`)
+  lead to the fields, the definition is preferred (the enum definition over an opaque declaration, the
+  target of `using ns::Name;`; Go to Declaration lists all of them), Go to Type Definition leads from a
+  variable, event, parameter, constant, enumerator or member to its C++ enum or struct (or the alias of a
+  built-in type); the path in `import "header.h"` is a link that opens the header (also headers found
+  through include paths and `#include`s). Include paths, defines and the data
   model come from the `headers` block of the nearest `devm.gen.json` and the settings
   `devm.headers.includePaths`, `devm.headers.defines` and `devm.headers.dataModel` (also used by the diagram,
   its simulation – enum drop-downs and struct editors – and the Test Explorer).
@@ -49,11 +57,71 @@ generation, a test runner in the Test Explorer and the import of itemis CREATE m
   profile **Run with Model Coverage** shows which states, transitions and local reactions of the
   models were covered (statements) and which guards were true / false (branches) in the coverage
   view of VS Code. **Device Modeler: Run Tests** runs the tests of the active `.devmtest` file.
+- **Debugging tests** (*Debug Test* in the Test Explorer, **Device Modeler: Debug Tests**, `F5` or a launch
+  configuration of type `devm-test`): breakpoints on test statements and on states, transitions and
+  reactions of the model, stepping over statements and into the microsteps of the interpreter, the
+  active states, variables, events and operation calls in the debug views, and the diagram of the
+  model showing the current states on every stop – see [Debugging tests](#debugging-tests).
 - **Device Modeler: Import itemis CREATE Model (.sct)** converts an `.sct` file into a `.devm` file next to it
   (also in the context menu of `.sct` files in the explorer).
 - **Device Modeler: Export Diagram…** (also *Export…* in the diagram toolbar): standalone SVG with embedded styles,
   rendered like `devm render`, or the same diagram as PNG image (twice the resolution, rasterized in the
   diagram webview, which is opened if necessary).
+
+## Debugging tests
+
+The tests of `.devmtest` files can be run in the debugger, step by step, while the diagram of the
+state machine under test shows the current states:
+
+- **Start**: the *Debug Test* action of the Test Explorer (also the debug icon next to the run icon in
+  the gutter of a test), **Device Modeler: Debug Tests** (debug button in the editor title of `.devmtest` files,
+  context menu of the explorer), `F5` in a `.devmtest` file without a `launch.json`, or a launch
+  configuration:
+
+  ```jsonc
+  {
+      "type": "devm-test",
+      "request": "launch",
+      "name": "Debug Device Modeler tests",
+      "program": "${file}",              // the .devmtest file
+      "test": "DoorTest.opensAndCloses", // optional: a test class, Class.test or a test name
+      "stopOnEntry": false               // pause before the first statement
+  }
+  ```
+
+  Results of debug runs started from the Test Explorer (or with *Device Modeler: Debug Tests*) are reported there
+  like normal runs (passed / failed with message, location and trace).
+- **Breakpoints** on statements of tests (`raise`, `proceed`, `assert`, …; a breakpoint on another line
+  moves to the next statement) and in models: on a state (pauses when it is entered), on a transition
+  (when it is taken) and on a local reaction (`entry / …`, when it runs). *Function breakpoints* with
+  the name of a state (`Closed`, `Moving.Up`, `motor.Running`) pause when the state is entered. The
+  exception breakpoints **Assertion failures** and **Errors** (both enabled by default) pause on a
+  failed assertion or a runtime error with the message, before the test ends.
+- **Stepping**: *Step Over* runs the current statement (with all run-to-completion steps of the state
+  machine) and pauses at the next statement; *Step Into* pauses at every microstep of the interpreter –
+  state exited, transition taken, state entered, reaction executed (the frame shows the element in the
+  `.devm` file) – and enters called helper operations; *Step Out* finishes the microsteps of the
+  statement or returns from a helper operation; *Continue*, *Pause* (also in endless loops), *Restart*
+  and *Stop*.
+- **Views**: the call stack (microstep → helper operation → test), the variables in the scopes
+  *Locals* (parameters and local variables of the test operation), *Microstep*, *Active states*,
+  *State machine* (all variables, also of submachine instances, structured C/C++ values expandable),
+  *Events* (out events of the last step, events raised by the statement), *Operation calls* (calls of
+  the state machine and the mocks) and *Execution* (test, virtual time, execution mode, last trace
+  lines). Hover, watch and the debug console evaluate names: local variables, variables of the state
+  machine (`count`, `Iface.x`, `motor.speed`), `active(State)` or a state name, `time`, `is_final`
+  (no complete expressions). The debug console shows the execution trace (`> raise open`,
+  `transition Closed -> Moving`, …) and the result of every test.
+- **Live diagram**: on every stop the diagram of the model under test is opened beside the editor (if
+  necessary) and shows the active states and the transitions taken since the previous stop, like the
+  simulation; its side panel lists the active states and the stop location. The diagram is read-only
+  while the session runs (no edits, no simulation, layout controls disabled) and returns to normal when
+  the session ends.
+
+The debug adapter runs inline in the extension host (`vscode.DebugAdapterInlineImplementation`,
+`src/debug/adapter.ts`); the tests run in a worker thread (`dist/debug-worker.cjs`, `src/debug/engine.ts`)
+that pauses inside the hooks of the test runner of the language package (`TestDebugHooks`) and waits
+for the next command of the adapter.
 
 ## Manual layout (experimental)
 
@@ -61,15 +129,20 @@ The diagram is laid out automatically by default. It can be arranged by hand, as
 states, pseudo states and the definitions box (`Shift` while dropping moves a state into the state below
 the mouse), resize a selected state with the handle at its bottom right corner, double-click a selected
 transition to add a waypoint the route passes through (drag it, double-click it to remove it), drag the
-label of a selected transition. The first drag turns the diagram into a manual layout.
+label of a selected transition, drag the square at the start or end of a selected transition along the border
+of its state (double-click it to place that end automatically again). The first drag turns the diagram into a manual layout.
 
 - **Storage:** the layout is part of the model – layout annotations before the elements (`@at(x, y)`,
-  `@size(w, h)`, `@via(x1, y1, …)`, `@label(dx, dy)`, `@regions(…)`) and in their bodies (`@initial`,
+  `@size(w, h)`, `@via(x1, y1, …)`, `@label(dx, dy)`, `@from(side, %)` / `@to(side, %)`, `@regions(…)`) and in their bodies (`@initial`,
   `@final`, `@definitions`); syntax in `docs/manual-layout.md` of the repository. A model with layout
   annotations has a manual layout, one without the automatic layout.
-- **Auto-arrange** writes the automatic layout as annotations, **Automatic layout** removes all layout annotations;
-  both are also commands (**Device Modeler: Auto-arrange Diagram**, **Device Modeler: Use Automatic Diagram Layout**) and in the *…*
-  menu of the diagram.
+- **Toolbar:** *Positions: automatic* or *Positions: stored in model* shows whether the model has layout
+  annotations. **Store positions** (no annotations yet) / **Re-arrange** (annotations present) arranges all
+  elements automatically and writes the positions as annotations (Re-arrange replaces the stored ones and
+  drops waypoints, sizes and label positions); **Clear positions** removes all layout annotations, so the
+  diagram is arranged automatically again. Both are one undoable edit and also commands (**Device Modeler: Re-arrange
+  Diagram and Store Positions in Model**, **Device Modeler: Clear Stored Diagram Positions (Remove Layout
+  Annotations)**) in the command palette and the *…* menu of the diagram.
   **Device Modeler: Convert Layout File to Annotations** writes a `<model>.devm.layout` of the earlier sidecar
   experiment into the model (the file is kept).
 - **Undo and saving:** layout changes are edits of the document like all diagram edits – undone with
@@ -112,9 +185,9 @@ in threads, instances of subsystems outside of them) and connections.
 | `devm.diagram.theme` | `auto` | `auto`, `classic`, `modern`, `dark` |
 | `devm.diagram.lightTheme` | `classic` | theme for light color themes with `auto` |
 | `devm.diagram.direction` | `DOWN` | layout direction (`DOWN`, `RIGHT`) |
-| `devm.diagram.edgeRouting` | `SPLINES` | `SPLINES`, `ORTHOGONAL`, `POLYLINE` |
+| `devm.diagram.edgeRouting` | `SPLINES` | `SPLINES`, `ORTHOGONAL`, `ROUNDED` (orthogonal with rounded corners), `POLYLINE`, `SMOOTH` (smooth curve through the polyline) |
 | `devm.diagram.priorities` | `true` | show transition priorities |
-| `devm.diagram.showProperties` | `true` | properties panel next to the diagram |
+| `devm.diagram.showProperties` | `true` | side panel (properties, simulation) next to the diagram; also toggled by the panel button of the diagram's toolbar |
 | `devm.diagram.autoOpen` | `false` | open the diagram whenever a `.devm` file is opened |
 | `devm.cpp.outputDirectory` | `""` | relative to the model; `${workspaceFolder}` and absolute paths work |
 | `devm.cpp.namespace` | `null` | `null`: namespace of the model, `""`: global namespace |
@@ -125,8 +198,9 @@ in threads, instances of subsystems outside of them) and connections.
 
 | Process | Bundle | Content |
 | --- | --- | --- |
-| Extension host | `dist/extension.cjs` (esbuild, CJS) | language client, commands, diagram panels, test controller; the language package (generators, test runner, SVG renderer) is bundled |
-| Language server | `dist/server.cjs` (esbuild, CJS) | Langium services of the two languages (`.devm`, `.devmtest`: `createDevmServices` of the language package) plus semantic tokens and hover signatures; started via IPC, `--stdio` for other clients |
+| Extension host | `dist/extension.cjs` (esbuild, CJS) | language client, commands, diagram panels, test controller, debug adapter of tests; the language package (generators, test runner, SVG renderer) is bundled |
+| Debug worker | `dist/debug-worker.cjs` (esbuild, CJS) | worker thread of the extension host executing the tests of a debug session (`src/debug/worker.ts`, `engine.ts`) |
+| Language server | `dist/server.cjs` (esbuild, CJS) | Langium services of the two languages (`.devm`, `.devmtest`: `createDevmServices` of the language package) plus semantic tokens, hover signatures and navigation (`src/node/language-server.ts` of the language package); started via IPC, `--stdio` for other clients |
 | Diagram webview | `dist/webview/webview.js`, `webview.css` (Vite, IIFE) | `DiagramController`, views, properties / simulation panels and styles of the web app (`packages/web/src`), ELK in a blob web worker |
 
 The webview parses the text of the document itself (the same code as the web app) and computes the
@@ -157,6 +231,11 @@ rebuilds the extension and the server on changes).
   generator configuration is not generated by the extension (use `devm generate`).
 - Tests run in the extension host on the interpreter of the language package (no compiled C++).
 - Structure files: no simulation or code generation of structures; the diagrams get at most 1000 workspace files.
+- Debugging: the debug console, hover and watch evaluate names (variables, states, `active(State)`), not
+  complete expressions; variables cannot be changed in the Variables view; conditional and hit count
+  breakpoints are not supported; breakpoints in models work on the elements of the files of the workspace
+  (also of imported submachines), the diagram highlights the elements of the model under test only
+  (submachine instances show their active states in the state they are bound to).
 - The extension has no end-to-end tests in a real VS Code instance yet (`@vscode/test-electron`
   needs to download VS Code); the language server is tested over stdio, the extension logic by unit
   tests.

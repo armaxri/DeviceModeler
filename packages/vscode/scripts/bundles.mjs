@@ -5,13 +5,20 @@ import { fileURLToPath } from 'node:url';
 
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+const ENTRIES = {
+    extension: 'src/extension/extension.ts',
+    server: 'src/server/main.ts',
+    // the debug engine of .devmtest tests (a worker thread of the extension host)
+    'debug-worker': 'src/debug/worker.ts'
+};
+
 /**
- * @param {'extension' | 'server'} name
+ * @param {'extension' | 'server' | 'debug-worker'} name
  * @param {{ outdir?: string, minify?: boolean }} [options]
  * @returns {import('esbuild').BuildOptions}
  */
 export function bundleOptions(name, options = {}) {
-    const entry = name === 'extension' ? 'src/extension/extension.ts' : 'src/server/main.ts';
+    const entry = ENTRIES[name];
     return {
         entryPoints: { [name]: path.join(root, entry) },
         outdir: options.outdir ?? path.join(root, 'dist'),

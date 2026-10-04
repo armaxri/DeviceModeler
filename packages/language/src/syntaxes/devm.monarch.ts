@@ -1,7 +1,7 @@
 // Monarch syntax highlighting for the devm language.
 export default {
     keywords: [
-        'statemachine','deephistory','component','interface','namespace','operation','subsystem','behavior','delegate','internal','junction','readonly','connect','default','history','oncycle','package','valueof','active','always','choice','import','region','struct','system','thread','after','alias','async','const','entry','event','every','false','inout','raise','state','else','exit','null','sync','true','out','var','as','in'
+        'statemachine','deephistory','component','interface','namespace','operation','protected','subsystem','behavior','delegate','internal','junction','readonly','unsigned','connect','default','history','oncycle','package','private','valueof','active','always','choice','double','import','public','region','signed','static','struct','system','thread','after','alias','async','const','entry','event','every','false','float','inout','raise','short','state','bool','char','else','exit','long','null','sync','true','void','int','out','var','as','in'
     ],
     operators: [
         '...','<<=','>>=','--','-=','->','::','!=','*=','/=','&&','&=','%=','^=','++','+=','<<','<=','==','>=','>>','|=','||','-',',',';',':','!','?','.','@','*','/','&','#','%','^','+','<','=','>','|','~'

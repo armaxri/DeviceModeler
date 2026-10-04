@@ -39,7 +39,7 @@ describe('parseGeneratorConfig', () => {
             `/extra unknown property 'extra' (expected one of models, cpp, c, headers, writeOnlyIfChanged)`,
             `/cpp/std 'std' must be 17 or 11`,
             `/cpp/headerExtension 'headerExtension' must be a file extension starting with a dot, e.g. '.hpp'`,
-            `/cpp/nameSpace unknown option 'nameSpace' of target 'cpp' (expected one of outDir, headerExtension, sourceExtension, licenseHeader, licenseHeaderFile, maxMicrosteps, namespace, className, std)`
+            `/cpp/nameSpace unknown option 'nameSpace' of target 'cpp' (expected one of outDir, headerExtension, sourceExtension, licenseHeader, licenseHeaderFile, maxMicrosteps, namespace, className, std, virtualMethods)`
         ]);
         expect(messages({ models: [{ file: 'a.devm' }, 3], c: { prefix: 'a-b', licenseHeader: 'x', licenseHeaderFile: 'y' } })).toEqual([
             `/models/0/file unknown property 'file' of a model entry (expected path, cpp, c)`,

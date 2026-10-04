@@ -31,12 +31,12 @@ export class LayoutEditor<L extends BaseManualLayout> {
         return this.target.write(layout);
     }
 
-    /** Auto-arrange: the automatic layout is written as layout annotations. */
+    /** Store positions / Re-arrange: the automatic layout is written as layout annotations. */
     arrange(): Promise<boolean> {
         return this.target.write(this.target.capture());
     }
 
-    /** Automatic layout: all layout annotations are removed. */
+    /** Clear positions: all layout annotations are removed. */
     reset(): Promise<boolean> {
         return this.target.write(undefined);
     }
@@ -101,7 +101,8 @@ export class LayoutEditor<L extends BaseManualLayout> {
             } else {
                 delete entry.bends;
             }
-            if (entry.bends || entry.label) {
+            // (an entry may hold more than waypoints and the label offset, e.g. the anchors of a transition)
+            if (Object.values(entry).some(value => value !== undefined)) {
                 layout.edges[edgeId] = entry;
             } else {
                 delete layout.edges[edgeId];

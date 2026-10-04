@@ -177,7 +177,8 @@ StructureId returns string:
     ID | 'statemachine' | 'namespace' | 'internal' | 'in' | 'out' | 'inout' | 'interface' | 'event' | 'const' | 'var' | 'readonly' | 'operation'
     | 'alias' | 'state' | 'region' | 'choice' | 'junction' | 'history' | 'deephistory' | 'entry' | 'exit'
     | 'after' | 'every' | 'always' | 'oncycle' | 'else' | 'default' | 'raise' | 'as' | 'valueof' | 'active'
-    | 'true' | 'false' | 'null';
+    | 'true' | 'false' | 'null' | 'static' | 'public' | 'protected' | 'private'
+    | 'void' | 'bool' | 'char' | 'short' | 'int' | 'long' | 'signed' | 'unsigned' | 'float' | 'double';
 
 StructureQualifiedName returns string:
     StructureId ('.' StructureId)*;

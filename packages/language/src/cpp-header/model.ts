@@ -183,10 +183,12 @@ export interface CppNamespaceAlias extends CppDeclarationBase {
     readonly target: CppQualifiedName;
 }
 
-/** `using namespace x::y;` (its name is `''`). */
+/** `using namespace x::y;` or (`enum: true`) the C++20 `using enum E;` (its name is `''`). */
 export interface CppUsingDirective extends CppDeclarationBase {
     readonly kind: 'usingDirective';
     readonly target: CppQualifiedName;
+    /** `using enum E;`: the enumerators of `E` are members of the scope. */
+    readonly enum?: boolean;
 }
 
 export interface CppEnum extends CppDeclarationBase {
@@ -196,6 +198,11 @@ export interface CppEnum extends CppDeclarationBase {
     readonly anonymous: boolean;
     /** The fixed underlying type (`enum class E : uint8_t`). */
     readonly underlyingType?: CppTypeRef;
+    /**
+     * An opaque declaration without enumerator list (`enum class E : int;`). The index prefers the
+     * definition of the enum if one exists.
+     */
+    readonly opaque?: boolean;
     readonly enumerators: readonly CppEnumerator[];
 }
 
@@ -289,11 +296,29 @@ export interface CppMacro {
     readonly range: CppRange;
 }
 
+/**
+ * A type name declared by a header that the index does not model: a forward declaration of a class
+ * (`class Driver;`) or a class / alias template (`template <typename T> class Buffer {…};`). Such names
+ * are valid C++ types of the C++ class sections (references, pointers, template arguments).
+ */
+export interface CppOtherTypeName {
+    readonly kind: 'forward' | 'template';
+    /** Qualified name, e.g. `app::Driver`. */
+    readonly qualifiedName: string;
+    readonly range: CppRange;
+    /** The class key of a forward declaration (`class`, `struct`, `union`). */
+    readonly keyword?: string;
+    /** Documentation comment of a forward declaration (text without comment markers). */
+    readonly doc?: string;
+}
+
 /** The syntactic model of one header. */
 export interface CppHeader {
     readonly fileName: string;
     /** Top-level declarations (namespaces contain their members). */
     readonly declarations: readonly CppDeclaration[];
+    /** Forward declared classes and templates (not part of {@link declarations}). */
+    readonly otherTypes?: readonly CppOtherTypeName[];
     readonly includes: readonly CppInclude[];
     readonly macros: readonly CppMacro[];
     readonly diagnostics: readonly CppDiagnostic[];
@@ -356,10 +381,29 @@ export interface CppStringType {
 export interface CppResolvedEnumerator {
     readonly name: string;
     readonly qualifiedName: string;
-    /** The value (for enumerators that cannot be evaluated: the previous value + 1, or 0). */
+    /**
+     * The value computed like a C++ compiler does. For enumerators whose value cannot be computed
+     * (`valid: false`) this is only a placeholder (the previous value + 1, or 0) that keeps the
+     * values of the enum distinct in the simulation; it must not be displayed (see `unknown`).
+     */
     readonly value: bigint;
     /** Whether the value could be computed. */
     readonly valid: boolean;
+    /** `explicit`: the enumerator has an initializer (`A = 5`); `implicit`: previous value + 1, or 0 for the first. */
+    readonly origin: 'explicit' | 'implicit';
+    /** The initializer as written in the header (`A | B`, `FLAG(3)`), for explicit values. */
+    readonly expression?: string;
+    /**
+     * Values that cannot be computed (`valid: false`): the initializer that cannot be evaluated (of
+     * this or the last explicit enumerator), the distance to it (`FOO(3)` + 2 for the second implicit
+     * successor of `X = FOO(3)`) and the reason.
+     */
+    readonly unknown?: { readonly expression: string; readonly offset: bigint; readonly reason: string };
+    /**
+     * An error of the value in C++ (the program is ill-formed), e.g. a value that does not fit into
+     * the fixed underlying type (`enum class E : uint8_t { A = 256 }`). `value` is the computed value.
+     */
+    readonly error?: string;
     readonly declaration: CppEnumerator;
 }
 

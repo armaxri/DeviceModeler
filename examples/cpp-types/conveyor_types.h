@@ -9,6 +9,14 @@
 #include <array>
 #include <cstdint>
 
+/// Status LED of the belt (a C style enum, shared with the C parts of the firmware).
+typedef enum {
+    LED_OFF,       ///< the belt is stopped
+    LED_GREEN,     ///< the belt is running
+    LED_BLINKING,  ///< a jam is being cleared
+    LED_RED        ///< fault, a reset is needed
+} conveyor_led_t;
+
 namespace conveyor {
 
 /// Operating mode of the belt drive.
