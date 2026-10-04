@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feature
+      id="devm.eclipse.feature"
+      label="Device Modeler (prototype)"
+      version="0.1.0.qualifier"
+      provider-name="Device Modeler">
+
+   <description>
+      Editor for Device Modeler models (.devm): hierarchical state machines and structure files (components,
+      ports, subsystems, systems, threads, connections). The Device Modeler web app (text editor, PlantUML-style
+      state machine diagram editor, structure diagram, simulation, export) runs in an embedded browser of the
+      Eclipse IDE; language support
+      (diagnostics, completion, hover, navigation into C/C++ headers, formatting, outline, rename) for .devm and
+      .devmtest files in Eclipse's Generic Editor through the Device Modeler language server (LSP4E, TM4E).
+   </description>
+
+   <license url="https://opensource.org/licenses/MIT">
+      See the LICENSE file of the DeviceModeler repository.
+   </license>
+
+   <plugin
+         id="devm.eclipse"
+         version="0.0.0"/>
+
+   <!-- language support in text editors (Generic Editor): language server via LSP4E, highlighting via TM4E;
+        p2 installs LSP4E, TM4E and LSP4J from the Eclipse release repository (see README.md) -->
+   <plugin
+         id="devm.eclipse.lsp"
+         version="0.0.0"/>
+
+
+   <!-- the devm executable (validation of closed files) for linux x86_64 -->
+   <plugin
+         id="devm.eclipse.cli.linux.x86_64"
+         os="linux"
+         arch="x86_64"
+         version="0.0.0"
+         fragment="true"/>
+
+   <!-- the devm executable (validation of closed files) for linux aarch64 -->
+   <plugin
+         id="devm.eclipse.cli.linux.aarch64"
+         os="linux"
+         arch="aarch64"
+         version="0.0.0"
+         fragment="true"/>
+
+   <!-- the devm executable (validation of closed files) for macosx x86_64 -->
+   <plugin
+         id="devm.eclipse.cli.macosx.x86_64"
+         os="macosx"
+         arch="x86_64"
+         version="0.0.0"
+         fragment="true"/>
+
+   <!-- the devm executable (validation of closed files) for macosx aarch64 -->
+   <plugin
+         id="devm.eclipse.cli.macosx.aarch64"
+         os="macosx"
+         arch="aarch64"
+         version="0.0.0"
+         fragment="true"/>
+
+   <!-- the devm executable (validation of closed files) for win32 x86_64 -->
+   <plugin
+         id="devm.eclipse.cli.win32.x86_64"
+         os="win32"
+         arch="x86_64"
+         version="0.0.0"
+         fragment="true"/>
+
+</feature>

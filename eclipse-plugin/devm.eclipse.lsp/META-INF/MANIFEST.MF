@@ -1,0 +1,17 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Device Modeler language support (LSP4E, TM4E)
+Bundle-SymbolicName: devm.eclipse.lsp;singleton:=true
+Bundle-Version: 0.1.0.qualifier
+Bundle-Vendor: Device Modeler
+Bundle-ActivationPolicy: lazy
+Bundle-RequiredExecutionEnvironment: JavaSE-17
+Automatic-Module-Name: devm.eclipse.lsp
+Require-Bundle: org.eclipse.core.runtime,
+ devm.eclipse,
+ org.eclipse.lsp4e,
+ org.eclipse.tm4e.registry,
+ org.eclipse.tm4e.ui,
+ org.eclipse.tm4e.languageconfiguration,
+ org.eclipse.ui.genericeditor
+Export-Package: devm.eclipse.lsp
