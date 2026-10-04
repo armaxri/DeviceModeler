@@ -12,22 +12,26 @@
 // the root are rejected). Requests without a known token are rejected, so other local processes and web
 // sites cannot read or write files (the token is only in the URL of the app's window).
 //
-// Like Eclipse, the app calls functions of the page for the other direction (`hsmApp.reloadFromHost()` after
+// Like Eclipse, the app calls functions of the page for the other direction (`devmApp.reloadFromHost()` after
 // changes on disk, see `FileHostListener.externalChange`).
 import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import type * as http from 'node:http';
 import * as path from 'node:path';
 
-/** Files a model may import: other models and C/C++ headers (as in the Eclipse plugin). */
-export const IMPORTABLE = /\.(hsm|h|hh|hpp|hxx|h\+\+|inl)$/i;
-/** Generator configurations (`hsm generate`). */
-export const GENERATOR_CONFIG = /^(hsm\.gen\.json|.+\.hsm\.gen\.json)$/;
+/**
+ * Files a model may import: other models (state machines and structure files, which also need every other
+ * structure file of the root for the "used by" links, routes and breadcrumbs) and C/C++ headers.
+ */
+export const IMPORTABLE = /\.(devm|h|hh|hpp|hxx|h\+\+|inl)$/i;
+/** Generator configurations (`devm generate`). */
+export const GENERATOR_CONFIG = /^(devm\.gen\.json|.+\.devm\.gen\.json)$/;
 
 const MAX_FILES = 500;
 const MAX_FILE_SIZE = 2_000_000;
 const MAX_TOTAL_SIZE = 30_000_000;
 const MAX_BODY_SIZE = 50_000_000;
+const MAX_LOCATION_SIZE = 100_000;
 const SKIPPED_FOLDERS = new Set(['node_modules']);
 
 /** One opened file (one window of the web app). */
@@ -71,6 +75,29 @@ export function openPosition(parameters: URLSearchParams): OpenPosition | undefi
         : { line, column, endLine: line, endColumn: column };
 }
 
+/**
+ * The navigation location of `api/open` (query parameter `location`: JSON of a `DiagramLocation` of
+ * packages/web/src/structure-diagram.ts — the structure to show, the element to select and the breadcrumb
+ * context of a subsystem part), checked to be an object with a `uri`; undefined without a valid one.
+ */
+export function openLocation(parameters: URLSearchParams): string | undefined {
+    const json = parameters.get('location');
+    if (!json || json.length > MAX_LOCATION_SIZE) {
+        return undefined;
+    }
+    try {
+        const value = JSON.parse(json) as { uri?: unknown } | null;
+        return value && typeof value === 'object' && !Array.isArray(value) && typeof value.uri === 'string' ? JSON.stringify(value) : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+/** The query parameter of a navigation location (`&location=…`, empty without one). */
+export function locationQuery(location: string | undefined): string {
+    return location ? `&location=${encodeURIComponent(location)}` : '';
+}
+
 /** The query parameters of a position (`&line=…&column=…&endLine=…&endColumn=…`, empty without one). */
 export function positionQuery(position: OpenPosition | undefined): string {
     return position ? `&line=${position.line}&column=${position.column}&endLine=${position.endLine}&endColumn=${position.endColumn}` : '';
@@ -81,10 +108,12 @@ export interface FileHostListener {
     /** The dirty state of a session changed (or it was saved). */
     dirtyChanged?(session: Session): void;
     /**
-     * The page asks to open another file of the root (double-click on a submachine state, go to definition
-     * into a model or a header), at a position if one is given (`api/open?line=…`).
+     * The page asks to open another file of the root (double-click on a submachine state or on an instance in
+     * the structure diagram, go to definition into a model or a header), at a position if one is given
+     * (`api/open?line=…`), showing a location of the diagram if one is given (`api/open?location=…`, see
+     * {@link openLocation}: e.g. a subsystem part with its breadcrumb).
      */
-    openFile?(session: Session, file: string, position?: OpenPosition): void;
+    openFile?(session: Session, file: string, position?: OpenPosition, location?: string): void;
     /**
      * The page asks to save (`api/save`): a promise if the app saves itself (e.g. a new model that needs a
      * file name first; false: not saved), undefined to let the host write the file.
@@ -328,7 +357,7 @@ export class FileHost {
                 if (!isFile(file)) {
                     throw new HttpError(404, 'Not found');
                 }
-                this.options.listener?.openFile?.(session, file, openPosition(url.searchParams));
+                this.options.listener?.openFile?.(session, file, openPosition(url.searchParams), openLocation(url.searchParams));
                 sendEmpty(response);
                 return;
             }
@@ -399,8 +428,8 @@ export class FileHost {
         if (rest === 'open') {
             // a model of the list (or a new one): redirect to its page
             let name = (url.searchParams.get('path') ?? '').trim();
-            if (name && !name.endsWith('.hsm')) {
-                name += '.hsm';
+            if (name && !name.endsWith('.devm')) {
+                name += '.devm';
             }
             try {
                 const file = resolveInRoot(root, name);
@@ -542,7 +571,7 @@ export function models(root: string): string[] {
             if (result.length >= MAX_FILES) {
                 return;
             }
-            if (entry.isFile() && entry.name.endsWith('.hsm')) {
+            if (entry.isFile() && entry.name.endsWith('.devm')) {
                 result.push(relativePath(root, path.join(dir, entry.name)));
             } else if (entry.isDirectory() && !entry.name.startsWith('.') && !SKIPPED_FOLDERS.has(entry.name)) {
                 collect(path.join(dir, entry.name));
@@ -654,10 +683,10 @@ function folderPage(root: string, items: string): string {
 <h1>${escapeHtml(path.basename(root))}</h1>
 <p>${escapeHtml(root)}</p>
 <ul>
-${items || '<li><p>No models (*.hsm) in this folder.</p></li>'}
+${items || '<li><p>No models (*.devm) in this folder.</p></li>'}
 </ul>
 <form action="open" method="get">
-  <input name="path" placeholder="new-model.hsm" aria-label="Path of a new model" required>
+  <input name="path" placeholder="new-model.devm" aria-label="Path of a new model" required>
   <button type="submit">New model</button>
 </form>
 </main>

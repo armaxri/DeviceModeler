@@ -1,12 +1,12 @@
 {
   "name": "devm-desktop",
-  "productName": "HSM Modeler",
+  "productName": "Device Modeler",
   "version": "0.1.0",
   "private": true,
-  "description": "HSM Modeler: desktop editor for hierarchical state machines (.hsm)",
-  "author": "HSM Modeler contributors",
+  "description": "Device Modeler: desktop editor for device structures and hierarchical state machines (.devm)",
+  "author": "Device Modeler contributors",
   "license": "MIT",
-  "homepage": "https://github.com/armaxri/HSM",
+  "homepage": "https://github.com/armaxri/DeviceModeler",
   "main": "dist/main.cjs",
   "scripts": {
     "bundle": "node scripts/build.mjs",

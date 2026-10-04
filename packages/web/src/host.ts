@@ -20,13 +20,17 @@
  *   UTF-16 columns as in Monaco; pages before them sent none): the host selects the range and reveals it.
  *   Answers 2xx if it opened the file, 404 if it does not exist or the host cannot open it (the page then
  *   shows a header itself, read-only). Hosts that do not know the parameters ignore them.
+ *   A navigation of the diagram to another file also sends `location=<JSON>` (a `DiagramLocation` of
+ *   structure-diagram.ts: the structure or component type to show, the element to select and the instance tree
+ *   context, i.e. the breadcrumb of a subsystem part): a host that knows it passes it on to the page of the file
+ *   (`index.html?host=http&location=…`, or `revealLocation(json)` of a page that is already open).
  * - `POST api/export?fileName=…` (binary body): store an exported diagram; answers `{ message }`
  * - `POST api/generate` (JSON {@link HostGeneratedFiles}): write generated files; answers `{ message }`
  *
  * The host calls functions of the page (`window.devmApp`): `reloadFromHost(replaceText)` after external
  * changes, `hostCommand(name, argument)` for its edit commands (undo, copy, find, …), `revealRange(offset, end)`
  * (problem markers, outline), `revealPosition(line, column, endLine?, endColumn?)` (1-based, like `api/open`:
- * a host opened the model at a position), `generateCpp()`, `getText()` and `setHostTheme('light' | 'dark')`
+ * a host opened the model at a position), `revealLocation(json)` (see `api/open`), `generateCpp()`, `getText()` and `setHostTheme('light' | 'dark')`
  * (the theme of the host changed; optional, hosts check that they exist).
  * The page also reveals a position given in its URL at the start: `index.html?host=http&line=…&column=…`
  * (`endLine`, `endColumn`), and `index.html?host=http&view=<path>&line=…` shows another file of the root
@@ -190,8 +194,12 @@ export class HttpHost {
     }
 
     /** Asks the host to open a file of its root (a model or a header), optionally at a position; false if it did not. */
-    async open(path: string, position?: HostOpenPosition): Promise<boolean> {
-        const response = await fetch(`api/open${openQuery(position)}`, { method: 'POST', body: path, headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
+    async open(path: string, position?: HostOpenPosition, location?: object): Promise<boolean> {
+        let query = openQuery(position);
+        if (location) {
+            query += `${query ? '&' : '?'}location=${encodeURIComponent(JSON.stringify(location))}`;
+        }
+        const response = await fetch(`api/open${query}`, { method: 'POST', body: path, headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
         return response.ok;
     }
 

@@ -1,25 +1,29 @@
-// The HSM Modeler desktop app (Electron main process): one native window per opened model, showing the web
+// The Device Modeler desktop app (Electron main process): one native window per opened model, showing the web
 // app of packages/web in its embedded mode (`?host=http`, packages/web/src/host.ts), served by a loopback
 // HTTP server of this process (server.ts) that reads and writes the files on disk (file-host.ts) - the same
 // protocol as the Eclipse plugin. The app adds what a browser cannot do: native menus, file dialogs, recent
 // files, file associations, dirty state and a confirmation before unsaved changes are lost.
 //
-// Command line: `HSM Modeler [file.hsm | folder]...`; `--smoke-test <model.hsm> --smoke-result <file.json>`
-// opens the model in a hidden window, edits and saves it through the page and exits (used by CI).
+// Command line: `Device Modeler [file.devm | folder]...`; `--smoke-test <model.devm> --smoke-result <file.json>`
+// opens the model in a hidden window, edits and saves it through the page and exits (used by CI);
+// `--smoke-structure <structure.devm>` also checks the structure diagram of a structure file and its navigation.
 import { app, BrowserWindow, dialog, Menu, nativeTheme, shell, type MenuItemConstructorOptions, type WebContents } from 'electron';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { FileHost, isInside, positionQuery, writeFileAtomic, type OpenPosition, type Session } from './file-host.js';
+import { FileHost, isInside, locationQuery, positionQuery, writeFileAtomic, type OpenPosition, type Session } from './file-host.js';
 import { createServer, listen } from './server.js';
 import { directoryWebFiles } from './web-files.js';
 
-declare const __HSM_VERSION__: string;
-const version = typeof __HSM_VERSION__ === 'string' ? __HSM_VERSION__ : app.getVersion();
+declare const __DEVM_VERSION__: string;
+const version = typeof __DEVM_VERSION__ === 'string' ? __DEVM_VERSION__ : app.getVersion();
 
-const PRODUCT = 'HSM Modeler';
-/** Preferred port: the same origin in every run keeps the settings of the page (local storage). */
-const PREFERRED_PORT = 51735;
+const PRODUCT = 'Device Modeler';
+/**
+ * Preferred port: the same origin in every run keeps the settings of the page (local storage); not the one
+ * of the HSM Modeler (51735), the app this one was forked from, so that both can run at the same time.
+ */
+const PREFERRED_PORT = 51736;
 const MAX_RECENT = 10;
 const NEW_MODEL = `statemachine NewMachine {
     interface:
@@ -28,6 +32,12 @@ const NEW_MODEL = `statemachine NewMachine {
     [*] -> Idle
 
     state Idle
+}
+`;
+const NEW_STRUCTURE = `/** A component type: its ports carry data and events (docs/structure-language.md). */
+component NewComponent {
+    in async start
+    out sync value : integer
 }
 `;
 
@@ -62,6 +72,8 @@ interface Arguments {
     paths: string[];
     smokeTest?: string;
     smokeResult?: string;
+    /** Smoke test: a structure file to check as well (structure diagram, navigation). */
+    smokeStructure?: string;
 }
 
 function parseArguments(argv: string[]): Arguments {
@@ -72,6 +84,8 @@ function parseArguments(argv: string[]): Arguments {
             result.smokeTest = argv[++i];
         } else if (arg === '--smoke-result') {
             result.smokeResult = argv[++i];
+        } else if (arg === '--smoke-structure') {
+            result.smokeStructure = argv[++i];
         } else if (!arg.startsWith('-') && arg !== '.' && !arg.startsWith('psn_')) {
             result.paths.push(path.resolve(arg));
         }
@@ -176,9 +190,10 @@ function windowOfSession(session: Session): BrowserWindow | undefined {
 
 /**
  * Opens a model in a window (or focuses the window that shows it); `root`: the boundary of its imports;
- * `position`: the range to select (go to definition from another model).
+ * `position`: the range to select (go to definition from another model); `location`: what the diagram shows
+ * (JSON of a navigation of the structure diagram, e.g. a subsystem part with its breadcrumb).
  */
-function openFile(file: string, root?: string, position?: OpenPosition): BrowserWindow {
+function openFile(file: string, root?: string, position?: OpenPosition, location?: string): BrowserWindow {
     const resolved = path.resolve(file);
     for (const [win, state] of windows) {
         const session = state.token ? host.session(state.token) : undefined;
@@ -186,7 +201,10 @@ function openFile(file: string, root?: string, position?: OpenPosition): Browser
             win.show();
             win.focus();
             if (position) {
-                void inPage(win.webContents, `window.hsmApp.revealPosition(${position.line}, ${position.column}, ${position.endLine}, ${position.endColumn})`).catch(() => undefined);
+                void inPage(win.webContents, `window.devmApp.revealPosition(${position.line}, ${position.column}, ${position.endLine}, ${position.endColumn})`).catch(() => undefined);
+            }
+            if (location) {
+                void inPage(win.webContents, `window.devmApp && typeof window.devmApp.revealLocation === "function" && window.devmApp.revealLocation(${JSON.stringify(location)})`).catch(() => undefined);
             }
             return win;
         }
@@ -195,8 +213,8 @@ function openFile(file: string, root?: string, position?: OpenPosition): Browser
     root ??= [...windows.values()].map(state => state.folder).find(folder => folder && isInside(folder, safeRealPath(resolved)));
     const { session, page } = host.openFile(resolved, root);
     const win = createWindow({ token: session.token });
-    // (the page reveals a position of its URL once it has started)
-    void win.loadURL(baseUrl + page + positionQuery(position));
+    // (the page reveals a position and a location of its URL once it has started)
+    void win.loadURL(baseUrl + page + positionQuery(position) + locationQuery(location));
     addRecent(host.fileOf(session));
     return win;
 }
@@ -228,12 +246,12 @@ function openFolder(folder: string): BrowserWindow {
     return win;
 }
 
-/** A new model, saved to a file chosen on the first save. */
-function newModel(): BrowserWindow {
-    const folder = path.join(os.tmpdir(), `hsm-modeler-${process.pid}`);
+/** A new model (a state machine or a structure file), saved to a file chosen on the first save. */
+function newModel(kind: 'statemachine' | 'structure' = 'statemachine'): BrowserWindow {
+    const folder = path.join(os.tmpdir(), `device-modeler-${process.pid}`);
     fs.mkdirSync(folder, { recursive: true });
-    const name = `Untitled-${++untitledCount}.hsm`;
-    fs.writeFileSync(path.join(folder, name), NEW_MODEL);
+    const name = `Untitled-${++untitledCount}.devm`;
+    fs.writeFileSync(path.join(folder, name), kind === 'structure' ? NEW_STRUCTURE : NEW_MODEL);
     const { session, page } = host.openFile(path.join(folder, name));
     const win = createWindow({ token: session.token, untitled: true });
     void win.loadURL(baseUrl + page);
@@ -248,7 +266,7 @@ function openPath(file: string): void {
             openFile(file);
         }
     } catch {
-        if (file.endsWith('.hsm') && fs.existsSync(path.dirname(file))) {
+        if (file.endsWith('.devm') && fs.existsSync(path.dirname(file))) {
             // a new model (created by the first save)
             openFile(file);
         } else {
@@ -276,7 +294,7 @@ function updateTitle(win: BrowserWindow): void {
 // ---------------------------------------------------------------------------------------------------------
 // Page
 
-/** Runs a script in the page (`window.hsmApp` is the web app). */
+/** Runs a script in the page (`window.devmApp` is the web app). */
 async function inPage<T>(contents: WebContents, script: string): Promise<T> {
     return await contents.executeJavaScript(script, true) as T;
 }
@@ -285,7 +303,7 @@ async function inPage<T>(contents: WebContents, script: string): Promise<T> {
 async function pageText(win: BrowserWindow): Promise<string | undefined> {
     try {
         return await inPage<string | null>(win.webContents,
-            'window.hsmApp && window.hsmApp.diagram ? (typeof window.hsmApp.getText === "function" ? window.hsmApp.getText() : window.hsmApp.editor.getValue()) : null') ?? undefined;
+            'window.devmApp && window.devmApp.diagram ? (typeof window.devmApp.getText === "function" ? window.devmApp.getText() : window.devmApp.editor.getValue()) : null') ?? undefined;
     } catch {
         return undefined;
     }
@@ -294,7 +312,7 @@ async function pageText(win: BrowserWindow): Promise<string | undefined> {
 /** An edit command of the menu: by the web app if it offers it (`hostCommand`), else by Chromium. */
 async function pageCommand(win: BrowserWindow, command: 'undo' | 'redo' | 'find'): Promise<void> {
     const handled = await inPage<boolean>(win.webContents,
-        `!!(window.hsmApp && typeof window.hsmApp.hostCommand === "function" && window.hsmApp.hostCommand(${JSON.stringify(command)}))`).catch(() => false);
+        `!!(window.devmApp && typeof window.devmApp.hostCommand === "function" && window.devmApp.hostCommand(${JSON.stringify(command)}))`).catch(() => false);
     if (!handled && command !== 'find') {
         win.webContents[command]();
     }
@@ -342,7 +360,7 @@ async function saveAs(win: BrowserWindow, text?: string): Promise<boolean> {
         const result = await dialog.showSaveDialog(win, {
             title: 'Save Model',
             defaultPath: state.untitled ? path.join(app.getPath('documents'), path.basename(session.path)) : host.fileOf(session),
-            filters: [{ name: 'State machine models', extensions: ['hsm'] }, { name: 'All files', extensions: ['*'] }]
+            filters: [{ name: 'Device Modeler models', extensions: ['devm'] }, { name: 'All files', extensions: ['*'] }]
         });
         if (result.canceled || !result.filePath) {
             return false;
@@ -415,7 +433,7 @@ function recent(): string[] {
 }
 
 function addRecent(file: string): void {
-    if (args.smokeTest || file.startsWith(path.join(os.tmpdir(), 'hsm-modeler-'))) {
+    if (args.smokeTest || file.startsWith(path.join(os.tmpdir(), 'device-modeler-'))) {
         return;
     }
     const list = [file, ...recent().filter(item => item !== file)].slice(0, MAX_RECENT);
@@ -439,7 +457,7 @@ async function showOpenDialog(folder: boolean): Promise<void> {
         : {
             title: 'Open Model',
             properties: ['openFile', 'multiSelections'],
-            filters: [{ name: 'State machine models', extensions: ['hsm'] }, { name: 'All files', extensions: ['*'] }]
+            filters: [{ name: 'Device Modeler models', extensions: ['devm'] }, { name: 'All files', extensions: ['*'] }]
         };
     const result = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
     for (const file of result.canceled ? [] : result.filePaths) {
@@ -459,7 +477,8 @@ function buildMenu(): void {
         {
             label: '&File',
             submenu: [
-                { label: 'New Model', accelerator: 'CmdOrCtrl+N', click: () => newModel() },
+                { label: 'New State Machine', accelerator: 'CmdOrCtrl+N', click: () => newModel() },
+                { label: 'New Structure File', accelerator: 'CmdOrCtrl+Alt+N', click: () => newModel('structure') },
                 { label: 'Open…', accelerator: 'CmdOrCtrl+O', click: () => void showOpenDialog(false) },
                 { label: 'Open Folder…', accelerator: 'CmdOrCtrl+Shift+O', click: () => void showOpenDialog(true) },
                 {
@@ -509,7 +528,7 @@ function buildMenu(): void {
         {
             role: 'help',
             submenu: [
-                { label: 'Documentation', click: () => void shell.openExternal('https://github.com/armaxri/HSM#readme') },
+                { label: 'Documentation', click: () => void shell.openExternal('https://github.com/armaxri/DeviceModeler#readme') },
                 { label: `${PRODUCT} ${version}`, enabled: false }
             ]
         }
@@ -550,7 +569,7 @@ async function smokeTest(model: string, resultFile: string | undefined): Promise
         let states = 0;
         for (let i = 0; i < 600 && states === 0; i++) {
             await new Promise(resolve => setTimeout(resolve, 100));
-            states = await inPage<number>(contents, 'window.hsmApp && window.hsmApp.diagram ? document.querySelectorAll("#sprotty .hsm-node").length : 0').catch(() => 0);
+            states = await inPage<number>(contents, 'window.devmApp && window.devmApp.diagram ? document.querySelectorAll("#sprotty .devm-node").length : 0').catch(() => 0);
         }
         const text = await pageText(win);
         if (text !== before) {
@@ -570,7 +589,7 @@ async function smokeTest(model: string, resultFile: string | undefined): Promise
         }
         // an edit in the page and Save (button of the page → api/save)
         const marker = `// smoke test ${Date.now()}`;
-        await inPage(contents, `window.hsmApp.editor.setValue(window.hsmApp.editor.getValue() + ${JSON.stringify(`\n${marker}\n`)}); document.getElementById('btn-save').click();`);
+        await inPage(contents, `window.devmApp.editor.setValue(window.devmApp.editor.getValue() + ${JSON.stringify(`\n${marker}\n`)}); document.getElementById('btn-save').click();`);
         let saved = false;
         for (let i = 0; i < 100 && !saved; i++) {
             await new Promise(resolve => setTimeout(resolve, 100));
@@ -580,6 +599,9 @@ async function smokeTest(model: string, resultFile: string | undefined): Promise
             throw new Error('Save in the page did not write the file');
         }
         const navigation = await smokeTestNavigation(win, model);
+        if (args.smokeStructure) {
+            navigation.push(...await smokeTestStructure(path.resolve(args.smokeStructure)));
+        }
         report({ ok: true, states, file: model, navigation });
         clearTimeout(timeout);
         app.exit(0);
@@ -590,25 +612,16 @@ async function smokeTest(model: string, resultFile: string | undefined): Promise
 }
 
 /**
- * Go to definition in the page (smoke test): F12 on the import path of `motor.hsm` opens the model in a window
+ * Go to definition in the page (smoke test): F12 on the import path of `motor.devm` opens the model in a window
  * of its own; a header next to the model (`smoke_types.h`, written by scripts/smoke-test.mjs) opens in a
  * read-only viewer window with the name of the declaration selected (`api/open` with a position).
  */
 async function smokeTestNavigation(win: BrowserWindow, model: string): Promise<string[]> {
     const done: string[] = [];
-    const until = async (what: string, condition: () => Promise<boolean> | boolean) => {
-        for (let i = 0; i < 150; i++) {
-            if (await condition()) {
-                return;
-            }
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        throw new Error(`navigation: ${what}`);
-    };
-    const motor = safeRealPath(path.join(path.dirname(model), 'motor.hsm'));
-    await inPage(win.webContents, `(() => { const e = window.hsmApp.editor; const m = e.getModel(); e.setPosition(m.getPositionAt(m.getValue().indexOf('motor.hsm')));
+    const motor = safeRealPath(path.join(path.dirname(model), 'motor.devm'));
+    await inPage(win.webContents, `(() => { const e = window.devmApp.editor; const m = e.getModel(); e.setPosition(m.getPositionAt(m.getValue().indexOf('motor.devm')));
         e.focus(); e.trigger('smoke', 'editor.action.revealDefinition', null); })()`);
-    await until('motor.hsm was not opened', () => [...windows.values()].some(state => {
+    await until('navigation: motor.devm was not opened', () => [...windows.values()].some(state => {
         const session = state.token ? host.session(state.token) : undefined;
         return !!session && host.fileOf(session) === motor;
     }));
@@ -617,12 +630,108 @@ async function smokeTestNavigation(win: BrowserWindow, model: string): Promise<s
     if (fs.existsSync(header)) {
         await inPage(win.webContents, `fetch('api/open?line=2&column=12&endLine=2&endColumn=16', { method: 'POST', body: 'smoke_types.h' }).then(r => r.status)`);
         const viewer = () => [...windows].find(([, state]) => state.viewer === safeRealPath(header))?.[0];
-        await until('no viewer window for the header', () => !!viewer());
+        await until('navigation: no viewer window for the header', () => !!viewer());
         const contents = viewer()!.webContents;
-        await until('the viewer does not show the declaration', async () => await inPage<string>(contents,
+        await until('navigation: the viewer does not show the declaration', async () => await inPage<string>(contents,
             "(() => { const t = document.querySelector('.file-viewer-title'); return t ? t.textContent : ''; })()").catch(() => '') === 'smoke_types.h');
         done.push('header');
     }
+    return done;
+}
+
+/** Waits until a condition holds (smoke test); throws with the description after 15 s. */
+async function until(what: string, condition: () => Promise<boolean> | boolean): Promise<void> {
+    for (let i = 0; i < 150; i++) {
+        if (await condition()) {
+            return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    throw new Error(what);
+}
+
+/** Double-clicks the shape of the first instance of the structure diagram matching a selector (smoke test). */
+async function doubleClickInstance(contents: WebContents, selector: string): Promise<boolean> {
+    return await inPage<boolean>(contents, `(() => {
+        const shape = document.querySelector(${JSON.stringify(`#sprotty ${selector} .ibd-instance-shape`)});
+        if (!shape) { return false; }
+        shape.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, detail: 2 }));
+        return true; })()`).catch(() => false);
+}
+
+/** The text of the file of a window (smoke test). */
+function fileText(win: BrowserWindow): string {
+    const session = sessionOf(win);
+    return session ? fs.readFileSync(host.fileOf(session), 'utf-8') : '';
+}
+
+/**
+ * The structure file in the smoke test (examples/device/garage-door.devm): the page shows the structure diagram
+ * and validates the file (with the other structure files of the folder) without errors; go to definition on the
+ * type of an instance opens the file of the component type with the name selected; a double-click on a
+ * subsystem part opens the file of the subsystem showing the breadcrumb of the part ("Part of"), and a
+ * double-click on an instance with a behavior there opens its state machine.
+ */
+async function smokeTestStructure(file: string): Promise<string[]> {
+    const done: string[] = [];
+    const win = openFile(file);
+    const contents = win.webContents;
+    let nodes = 0;
+    await until('structure: the structure diagram is not shown', async () => {
+        nodes = await inPage<number>(contents, `window.devmApp && window.devmApp.diagram && document.getElementById('diagram-area').classList.contains('structure-diagram')
+            ? document.querySelectorAll('#sprotty .ibd-node').length : 0`).catch(() => 0);
+        return nodes > 0;
+    });
+    const session = sessionOf(win)!;
+    await until('structure: no validation report', () => !!session.problems);
+    const errors = session.problems!.filter(problem => problem.severity === 'error');
+    if (errors.length > 0) {
+        throw new Error(`structure: problems: ${errors.map(problem => `${problem.line}:${problem.column} ${problem.message}`).join('; ')}`);
+    }
+    done.push(`structure diagram (${nodes} nodes)`);
+
+    // go to definition on the type of an instance (`door : DoorController`)
+    const text = fileText(win);
+    const instance = /^[ \t]+\w+[ \t]*:[ \t]*(\w+)[ \t]*$/m.exec(text);
+    if (!instance) {
+        throw new Error('structure: no instance in the file');
+    }
+    const type = instance[1];
+    const offset = instance.index + instance[0].lastIndexOf(type);
+    await inPage(contents, `(() => { const e = window.devmApp.editor; e.setPosition(e.getModel().getPositionAt(${offset}));
+        e.focus(); e.trigger('smoke', 'editor.action.revealDefinition', null); })()`);
+    let typeWindow: BrowserWindow | undefined;
+    await until(`structure: the definition of ${type} was not opened`, () => {
+        typeWindow = [...windows.keys()].find(other => other !== win && fileText(other).includes(`component ${type}`));
+        return !!typeWindow;
+    });
+    await until(`structure: ${type} is not selected in its file`, async () => await inPage<string>(typeWindow!.webContents,
+        '(() => { const e = window.devmApp && window.devmApp.editor; return e && e.getSelection() ? e.getModel().getValueInRange(e.getSelection()) : ""; })()').catch(() => '') === type);
+    done.push('structure definition');
+
+    // double-click on a subsystem part: its file with the breadcrumb of the part
+    const before = new Set(windows.keys());
+    await until('structure: no subsystem part in the diagram', () => doubleClickInstance(contents, '.ibd-node.composite'));
+    let part: BrowserWindow | undefined;
+    await until('structure: the subsystem of the part was not opened', () => {
+        part = [...windows.keys()].find(other => !before.has(other) && sessionOf(other));
+        return !!part;
+    });
+    await until('structure: the subsystem does not show the breadcrumb of the part', async () => (await inPage<string>(part!.webContents,
+        "(() => { const b = document.getElementById('diagram-breadcrumb'); return b && !b.hidden ? b.textContent : ''; })()").catch(() => '')).startsWith('Part of'));
+    if (await pageText(win) !== text) {
+        // (Save would write the other file into this one)
+        throw new Error('structure: the window of the structure file shows another file');
+    }
+    done.push('subsystem part');
+
+    // double-click on an instance with a behavior: its state machine
+    const partContents = part!.webContents;
+    const opened = new Set(windows.keys());
+    await until('structure: no instance with a behavior in the subsystem', () => doubleClickInstance(partContents, '.ibd-node.has-behavior'));
+    await until('structure: the state machine of the instance was not opened', () => [...windows.keys()].some(other =>
+        !opened.has(other) && /^\s*(\/\/[^\n]*\s*|\/\*[\s\S]*?\*\/\s*)*statemachine\b/.test(fileText(other))));
+    done.push('state machine of an instance');
     return done;
 }
 
@@ -654,8 +763,8 @@ async function startServer(): Promise<void> {
                     updateTitle(win);
                 }
             },
-            // models in their own window; headers (go to definition) in a read-only viewer window
-            openFile: (session, file, position) => /\.hsm$/i.test(file) ? openFile(file, session.root, position) : openViewer(session, file, position),
+            // models (state machines and structure files) in their own window; headers (go to definition) in a read-only viewer window
+            openFile: (session, file, position, location) => /\.devm$/i.test(file) ? openFile(file, session.root, position, location) : openViewer(session, file, position),
             // a new model: Save (also Ctrl+S in the page) asks for the file
             saveRequested: (session, text) => {
                 const win = windowOfSession(session);
@@ -692,7 +801,7 @@ async function reloadFromDisk(session: Session, replaceText: boolean): Promise<v
             return;
         }
     }
-    await inPage(win.webContents, `window.hsmApp && window.hsmApp.reloadFromHost(${replaceText})`).catch(() => undefined);
+    await inPage(win.webContents, `window.devmApp && window.devmApp.reloadFromHost(${replaceText})`).catch(() => undefined);
 }
 
 if (!args.smokeTest && !app.requestSingleInstanceLock()) {

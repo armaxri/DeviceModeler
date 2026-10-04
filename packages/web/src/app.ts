@@ -1,6 +1,6 @@
 import { monaco } from './monaco.js';
 import {
-    applyEdits, importSct, importSctFiles, isModelPath, isStructureText, type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ParsedModel, type ParsedStructureModel, type TextEdit
+    applyEdits, importSct, importSctFiles, isModelPath, isStructureText, normalizeUri, type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ParsedModel, type ParsedStructureModel, type TextEdit
 } from 'devm-language';
 import { EDITOR_THEMES, DevmLanguageSupport, LANGUAGE_ID, WORKSPACE_SCHEME } from './language-support.js';
 import { DiagramController, type DiagramHost, type DiagramLocation, type DiagramSettings, type StatusSeverity, type TextRange } from './diagram-controller.js';
@@ -90,6 +90,11 @@ export class DevmApp implements DiagramHost {
         this.bindSplitter();
         this.createSidePanel();
         this.applyTheme();
+        // a host opened the file for a navigation of the diagram of another file (`location`, see host.ts)
+        const location = this.host ? locationOfQuery(query.get('location')) : undefined;
+        if (location) {
+            this.diagram.revealLocation(location);
+        }
         await this.diagram.update();
         // a host opened the model at a position (go to definition from another model)
         const position = this.host ? positionOfQuery(query) : undefined;
@@ -759,6 +764,18 @@ export class DevmApp implements DiagramHost {
         this.viewFile(path, range, true);
     }
 
+    /**
+     * A host shows the file of a navigation of another page (`api/open` with `location`, see host.ts): the
+     * diagram shows and selects the location (with its breadcrumb context).
+     */
+    revealLocation(json: string): void {
+        const location = locationOfQuery(json);
+        if (location && normalizeUri(location.uri) === normalizeUri(FILE_BASE + this.fileName)) {
+            this.diagram.revealLocation(location);
+            void this.diagram.update(true);
+        }
+    }
+
     /** Selects a range of the text given by 1-based lines and columns (a host opened the model at a position). */
     revealPosition(line: number, column: number, endLine?: number, endColumn?: number): void {
         const model = this.editor.getModel()!;
@@ -845,17 +862,24 @@ export class DevmApp implements DiagramHost {
      * show and select the target; the current location is recorded for Back (unless `record` is false).
      */
     openLocation(location: DiagramLocation, record = true): boolean {
-        if (this.host && location.uri.startsWith(FILE_BASE) && location.uri !== FILE_BASE + this.fileName) {
-            // another file of the host: the host opens it in its own editor (the diagram there shows the file)
-            const path = decodeURIComponent(location.uri.substring(FILE_BASE.length));
-            this.host.open(path).then(opened => {
+        const hostPath = this.host ? hostPathOf(location.uri) : undefined;
+        if (this.host && hostPath !== this.fileName) {
+            // another file of the host: the host opens it in its own editor (the diagram there shows the file);
+            // the page never loads another file itself (Save would write it into the edited file)
+            const path = hostPath;
+            if (path === undefined) {
+                return false;
+            }
+            // (the element, the selection and the breadcrumb context go along: the page of the file shows them)
+            this.host.open(path, undefined, location).then(opened => {
                 if (!opened) {
                     this.setStatus(`The file ${path} could not be opened.`, 'warning');
                 }
             }, error => this.setStatus(String(error), 'error'));
             return true;
         }
-        const fileName = fileNameOf(location.uri);
+        // (the edited file of the host may be in a folder of its root)
+        const fileName = hostPath ?? fileNameOf(location.uri);
         const available = fileName === this.fileName || this.files.has(fileName) || EXAMPLES.some(e => e.fileName === fileName);
         if (!available) {
             return false;
@@ -932,9 +956,9 @@ export class DevmApp implements DiagramHost {
 
     /** Double-click on a submachine state: opens the file of its state machine if it is available. */
     openStateMachine(submachine: DiagramSubmachine): boolean {
-        if (this.host && submachine.uri?.startsWith(FILE_BASE)) {
+        const path = this.host && submachine.uri ? hostPathOf(submachine.uri) : undefined;
+        if (this.host && path !== undefined) {
             // the host opens the file in its own editor
-            const path = decodeURIComponent(submachine.uri.substring(FILE_BASE.length));
             this.host.open(path).then(opened => {
                 if (!opened) {
                     this.setStatus(`The file ${path} of the state machine ${submachine.machine} could not be opened.`, 'warning');
@@ -1122,6 +1146,16 @@ export class DevmApp implements DiagramHost {
     }
 }
 
+/**
+ * The path of a file of the host (relative to its root) of a URI of the virtual workspace (`memory:///models/motor.devm`;
+ * the language services give them normalized: `memory:/models/motor.devm`).
+ */
+function hostPathOf(uri: string): string | undefined {
+    const base = normalizeUri(FILE_BASE + 'x').slice(0, -1);
+    const normalized = normalizeUri(uri);
+    return normalized.startsWith(base) ? decodeURIComponent(normalized.substring(base.length)) : undefined;
+}
+
 /** The file name of a URI of the virtual workspace (`memory:///door.devm` -> `door.devm`). */
 function fileNameOf(uri: string): string {
     return decodeURIComponent(uri.replace(/^.*\//, ''));
@@ -1161,5 +1195,18 @@ function inputCommand(input: HTMLInputElement | HTMLTextAreaElement, command: st
             return document.execCommand(command);
         default:
             return false;
+    }
+}
+
+/** The `location` query parameter of a page opened by a navigation (JSON of a {@link DiagramLocation}). */
+function locationOfQuery(json: string | null): DiagramLocation | undefined {
+    if (!json) {
+        return undefined;
+    }
+    try {
+        const value = JSON.parse(json) as Partial<DiagramLocation> | null;
+        return value && typeof value === 'object' && typeof value.uri === 'string' ? value as DiagramLocation : undefined;
+    } catch {
+        return undefined;
     }
 }

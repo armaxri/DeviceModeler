@@ -7,7 +7,7 @@ import { FileHost, resolveInRoot, type FileHostListener, type Session } from '..
 import { createServer, fileOfPath, isLoopbackHost, listen } from '../src/server.js';
 
 const files = new Map<string, Uint8Array>([
-    ['index.html', Buffer.from('<!doctype html><title>HSM Modeler</title>')],
+    ['index.html', Buffer.from('<!doctype html><title>Device Modeler</title>')],
     ['assets/index-abc.js', Buffer.from('console.log(1)')],
     ['assets/codicon.ttf', Buffer.from([0, 1, 2])]
 ]);
@@ -42,18 +42,18 @@ describe('isLoopbackHost', () => {
 describe('resolveInRoot', () => {
     let root: string;
     beforeEach(() => {
-        root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-root-')));
+        root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'devm-root-')));
     });
     afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
     it('resolves paths below the root', () => {
-        expect(resolveInRoot(root, 'a/b.hsm')).toBe(path.join(root, 'a', 'b.hsm'));
-        expect(resolveInRoot(root, 'a\\b.hsm')).toBe(path.join(root, 'a', 'b.hsm'));
-        expect(resolveInRoot(root, 'a/../b.hsm')).toBe(path.join(root, 'b.hsm'));
+        expect(resolveInRoot(root, 'a/b.devm')).toBe(path.join(root, 'a', 'b.devm'));
+        expect(resolveInRoot(root, 'a\\b.devm')).toBe(path.join(root, 'a', 'b.devm'));
+        expect(resolveInRoot(root, 'a/../b.devm')).toBe(path.join(root, 'b.devm'));
     });
 
     it('rejects paths leaving the root', () => {
-        expect(() => resolveInRoot(root, '../x.hsm')).toThrow(/outside/);
+        expect(() => resolveInRoot(root, '../x.devm')).toThrow(/outside/);
         expect(() => resolveInRoot(root, '/etc/passwd')).toThrow(/Invalid/);
         expect(() => resolveInRoot(root, 'C:/x')).toThrow(/Invalid/);
         expect(() => resolveInRoot(root, '')).toThrow(/Invalid/);
@@ -61,10 +61,10 @@ describe('resolveInRoot', () => {
     });
 
     it.skipIf(process.platform === 'win32')('rejects symbolic links leading outside', () => {
-        const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-outside-'));
+        const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'devm-outside-'));
         try {
             fs.symlinkSync(outside, path.join(root, 'link'));
-            expect(() => resolveInRoot(root, 'link/x.hsm')).toThrow(/leads outside/);
+            expect(() => resolveInRoot(root, 'link/x.devm')).toThrow(/leads outside/);
         } finally {
             fs.rmSync(outside, { recursive: true, force: true });
         }
@@ -78,14 +78,14 @@ describe('server with file host', () => {
     const events: string[] = [];
 
     beforeEach(() => {
-        root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-host-')));
+        root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'devm-host-')));
         fs.mkdirSync(path.join(root, 'models', 'sub'), { recursive: true });
-        fs.writeFileSync(path.join(root, 'models', 'gate.hsm'), 'statemachine Gate {}\n');
-        fs.writeFileSync(path.join(root, 'models', 'sub', 'motor.hsm'), 'statemachine Motor {}\n');
+        fs.writeFileSync(path.join(root, 'models', 'gate.devm'), 'statemachine Gate {}\n');
+        fs.writeFileSync(path.join(root, 'models', 'sub', 'motor.devm'), 'statemachine Motor {}\n');
         fs.writeFileSync(path.join(root, 'types.h'), 'struct A {};\n');
         fs.writeFileSync(path.join(root, 'readme.txt'), 'not importable');
-        fs.writeFileSync(path.join(root, 'hsm.gen.json'), '{"root":true}');
-        fs.writeFileSync(path.join(root, 'models', 'hsm.gen.json'), '{"near":true}');
+        fs.writeFileSync(path.join(root, 'devm.gen.json'), '{"root":true}');
+        fs.writeFileSync(path.join(root, 'models', 'devm.gen.json'), '{"near":true}');
         events.length = 0;
     });
     afterEach(() => {
@@ -116,11 +116,11 @@ describe('server with file host', () => {
 
     it('serves the web app only below the token of an opened file', async () => {
         const url = await start();
-        const { page } = host.openFile(path.join(root, 'models', 'gate.hsm'), root);
+        const { page } = host.openFile(path.join(root, 'models', 'gate.devm'), root);
         expect(page).toMatch(/^s\/[0-9a-f]{32}\/index\.html\?host=http$/);
         const index = await fetch(url + page);
         expect(index.status).toBe(200);
-        expect(await index.text()).toContain('HSM Modeler');
+        expect(await index.text()).toContain('Device Modeler');
         const script = await fetch(url + page.replace('index.html?host=http', 'assets/index-abc.js'));
         expect(script.headers.get('content-type')).toBe('text/javascript; charset=utf-8');
         expect(script.headers.get('cache-control')).toContain('immutable');
@@ -132,59 +132,81 @@ describe('server with file host', () => {
 
     it('provides the document, its imports and generator configurations', async () => {
         const url = await start();
-        const { page } = host.openFile(path.join(root, 'models', 'gate.hsm'), root);
+        const { page } = host.openFile(path.join(root, 'models', 'gate.devm'), root);
         const api = url + page.replace('index.html?host=http', 'api/');
         const document = await (await fetch(`${api}document`)).json();
         expect(document).toEqual({
-            fileName: 'gate.hsm',
-            path: 'models/gate.hsm',
+            fileName: 'gate.devm',
+            path: 'models/gate.devm',
             text: 'statemachine Gate {}\n',
-            files: { 'models/sub/motor.hsm': 'statemachine Motor {}\n', 'types.h': 'struct A {};\n' },
-            configs: [{ path: 'models/hsm.gen.json', text: '{"near":true}' }, { path: 'hsm.gen.json', text: '{"root":true}' }],
+            files: { 'models/sub/motor.devm': 'statemachine Motor {}\n', 'types.h': 'struct A {};\n' },
+            configs: [{ path: 'models/devm.gen.json', text: '{"near":true}' }, { path: 'devm.gen.json', text: '{"root":true}' }],
             theme: 'dark'
         });
-        expect(await (await fetch(`${api}file?path=hsm.gen.json`)).text()).toBe('{"root":true}');
+        expect(await (await fetch(`${api}file?path=devm.gen.json`)).text()).toBe('{"root":true}');
         expect((await fetch(`${api}file?path=../../etc/passwd`)).status).toBe(403);
         expect((await fetch(`${api}file?path=missing.h`)).status).toBe(404);
     });
 
     it('tracks the dirty state and saves', async () => {
         const url = await start();
-        const { session, page } = host.openFile(path.join(root, 'models', 'gate.hsm'), root);
+        const { session, page } = host.openFile(path.join(root, 'models', 'gate.devm'), root);
         const api = url + page.replace('index.html?host=http', 'api/');
         await fetch(`${api}document`);
         expect((await post(`${api}changed`, 'statemachine Gate { }\n')).status).toBe(204);
         expect(session.dirty).toBe(true);
         expect((await post(`${api}save`, 'statemachine Gate { }\n')).status).toBe(204);
-        expect(fs.readFileSync(path.join(root, 'models', 'gate.hsm'), 'utf-8')).toBe('statemachine Gate { }\n');
+        expect(fs.readFileSync(path.join(root, 'models', 'gate.devm'), 'utf-8')).toBe('statemachine Gate { }\n');
         expect(session.dirty).toBe(false);
-        expect(events).toEqual(['dirty models/gate.hsm true', 'dirty models/gate.hsm false']);
+        expect(events).toEqual(['dirty models/gate.devm true', 'dirty models/gate.devm false']);
         expect(fs.readdirSync(path.join(root, 'models')).filter(name => name.endsWith('.tmp'))).toEqual([]);
     });
 
     it('lets the app save new models itself', async () => {
         const saved: Array<[Session, string]> = [];
         const url = await start({ saveRequested: (session, text) => { saved.push([session, text]); return Promise.resolve(false); } });
-        const { page } = host.openFile(path.join(root, 'new.hsm'), root);
+        const { page } = host.openFile(path.join(root, 'new.devm'), root);
         const api = url + page.replace('index.html?host=http', 'api/');
         expect((await (await fetch(`${api}document`)).json()).text).toBe('');
         expect((await post(`${api}save`, 'x')).status).toBe(409);
-        expect(saved.map(([session, text]) => [session.path, text])).toEqual([['new.hsm', 'x']]);
-        expect(fs.existsSync(path.join(root, 'new.hsm'))).toBe(false);
+        expect(saved.map(([session, text]) => [session.path, text])).toEqual([['new.devm', 'x']]);
+        expect(fs.existsSync(path.join(root, 'new.devm'))).toBe(false);
+    });
+
+    it('provides all structure files of the root and passes navigation locations on', async () => {
+        fs.mkdirSync(path.join(root, 'device'));
+        fs.writeFileSync(path.join(root, 'device', 'system.devm'), 'import "unit.devm"\nsystem Plant {\n    unit : Unit\n}\n');
+        fs.writeFileSync(path.join(root, 'device', 'unit.devm'), 'subsystem Unit {\n}\n');
+        fs.writeFileSync(path.join(root, 'device', 'other.devm'), 'component Other {\n}\n');
+        const opened: Array<string | undefined> = [];
+        const url = await start({ openFile: (_session, file, _position, location) => opened.push(`${path.relative(root, file)} ${location}`) });
+        const { page } = host.openFile(path.join(root, 'device', 'unit.devm'), root);
+        const api = url + page.replace('index.html?host=http', 'api/');
+        const document = await (await fetch(`${api}document`)).json() as { files: Record<string, string> };
+        // also the structure files that do not import the edited file (used by, routes, breadcrumbs)
+        expect(Object.keys(document.files)).toEqual(['device/other.devm', 'device/system.devm', 'models/gate.devm', 'models/sub/motor.devm', 'types.h']);
+        // a double-click on a subsystem part: the location of the structure diagram (with the breadcrumb context)
+        const location = { uri: 'memory:///device/unit.devm', element: 'Unit', context: { rootUri: 'memory:///device/system.devm', root: 'Plant', path: ['unit'] } };
+        expect((await post(`${api}open?location=${encodeURIComponent(JSON.stringify(location))}`, 'device/unit.devm')).status).toBe(204);
+        // invalid locations are dropped
+        expect((await post(`${api}open?location=${encodeURIComponent('{"element":"Unit"}')}`, 'device/unit.devm')).status).toBe(204);
+        expect((await post(`${api}open?location=not-json`, 'device/unit.devm')).status).toBe(204);
+        expect(opened).toEqual([`${path.join('device', 'unit.devm')} ${JSON.stringify(location)}`,
+            `${path.join('device', 'unit.devm')} undefined`, `${path.join('device', 'unit.devm')} undefined`]);
     });
 
     it('opens, exports and generates within the root only', async () => {
         const url = await start();
-        const { page } = host.openFile(path.join(root, 'models', 'gate.hsm'), root);
+        const { page } = host.openFile(path.join(root, 'models', 'gate.devm'), root);
         const api = url + page.replace('index.html?host=http', 'api/');
         // paths relative to the root (host.ts) and, for older pages, to the edited file
-        expect((await post(`${api}open`, 'models/sub/motor.hsm')).status).toBe(204);
-        expect((await post(`${api}open`, 'sub/motor.hsm')).status).toBe(204);
-        expect((await post(`${api}open`, 'missing.hsm')).status).toBe(404);
-        expect((await post(`${api}open`, '../../x.hsm')).status).toBe(403);
+        expect((await post(`${api}open`, 'models/sub/motor.devm')).status).toBe(204);
+        expect((await post(`${api}open`, 'sub/motor.devm')).status).toBe(204);
+        expect((await post(`${api}open`, 'missing.devm')).status).toBe(404);
+        expect((await post(`${api}open`, '../../x.devm')).status).toBe(403);
         // go to definition into a header: with the range to select
         expect((await post(`${api}open?line=1&column=8&endLine=1&endColumn=9`, 'types.h')).status).toBe(204);
-        expect(events).toEqual([`open ${path.join('models', 'sub', 'motor.hsm')}`, `open ${path.join('models', 'sub', 'motor.hsm')}`,
+        expect(events).toEqual([`open ${path.join('models', 'sub', 'motor.devm')}`, `open ${path.join('models', 'sub', 'motor.devm')}`,
             'open types.h {"line":1,"column":8,"endLine":1,"endColumn":9}']);
 
         const exported = await fetch(`${api}export?fileName=${encodeURIComponent('../../gate.svg')}`, { method: 'POST', body: '<svg/>' });
@@ -202,7 +224,7 @@ describe('server with file host', () => {
 
     it('stores the page settings', async () => {
         const url = await start();
-        const { page } = host.openFile(path.join(root, 'models', 'gate.hsm'), root);
+        const { page } = host.openFile(path.join(root, 'models', 'gate.devm'), root);
         const api = url + page.replace('index.html?host=http', 'api/');
         expect((await post(`${api}settings`, '{"theme":"dark"}')).status).toBe(204);
         expect(fs.readFileSync(path.join(root, '.settings', 'page.json'), 'utf-8')).toBe('{"theme":"dark"}');
@@ -214,9 +236,9 @@ describe('server with file host', () => {
         const url = await start();
         const folder = url + host.openFolder(root);
         const list = await (await fetch(folder)).text();
-        expect(list).toContain('href="open?path=models%2Fgate.hsm"');
-        expect(list).toContain('models/sub/motor.hsm');
-        const opened = await fetch(`${folder}open?path=models%2Fgate.hsm`, { redirect: 'manual' });
+        expect(list).toContain('href="open?path=models%2Fgate.devm"');
+        expect(list).toContain('models/sub/motor.devm');
+        const opened = await fetch(`${folder}open?path=models%2Fgate.devm`, { redirect: 'manual' });
         expect(opened.status).toBe(303);
         expect(opened.headers.get('location')).toMatch(/\/s\/[0-9a-f]{32}\/index\.html\?host=http$/);
         expect((await fetch(`${folder}open?path=..%2Fx`, { redirect: 'manual' })).status).toBe(403);
@@ -224,10 +246,10 @@ describe('server with file host', () => {
 
     it('rejects foreign hosts and origins', async () => {
         const url = await start();
-        const { page } = host.openFile(path.join(root, 'models', 'gate.hsm'), root);
+        const { page } = host.openFile(path.join(root, 'models', 'gate.devm'), root);
         const api = url + page.replace('index.html?host=http', 'api/');
         expect((await post(`${api}save`, 'evil', { Origin: 'https://evil.example' })).status).toBe(403);
-        expect(fs.readFileSync(path.join(root, 'models', 'gate.hsm'), 'utf-8')).toBe('statemachine Gate {}\n');
+        expect(fs.readFileSync(path.join(root, 'models', 'gate.devm'), 'utf-8')).toBe('statemachine Gate {}\n');
         const { request } = await import('node:http');
         const status = await new Promise<number | undefined>((resolve, reject) => {
             request(`${api}document`, { headers: { host: 'attacker.example' } }, response => {
@@ -241,15 +263,15 @@ describe('server with file host', () => {
     it('reports changes on disk', async () => {
         const changes: string[] = [];
         host = new FileHost({ listener: { externalChange: (session, replaceText) => changes.push(`${session.path} ${replaceText}`) } });
-        const { session } = host.openFile(path.join(root, 'models', 'gate.hsm'), root);
+        const { session } = host.openFile(path.join(root, 'models', 'gate.devm'), root);
         session.diskText = 'statemachine Gate {}\n';
         await new Promise(resolve => setTimeout(resolve, 100));
-        fs.writeFileSync(path.join(root, 'models', 'sub', 'motor.hsm'), 'statemachine Motor { }\n');
-        fs.writeFileSync(path.join(root, 'models', 'gate.hsm'), 'statemachine Gate { }\n');
-        for (let i = 0; i < 50 && !changes.includes('models/gate.hsm true'); i++) {
+        fs.writeFileSync(path.join(root, 'models', 'sub', 'motor.devm'), 'statemachine Motor { }\n');
+        fs.writeFileSync(path.join(root, 'models', 'gate.devm'), 'statemachine Gate { }\n');
+        for (let i = 0; i < 50 && !changes.includes('models/gate.devm true'); i++) {
             await new Promise(resolve => setTimeout(resolve, 100));
         }
         // (the watcher may also report the files created before it started)
-        expect([...new Set(changes)].sort()).toEqual(['models/gate.hsm false', 'models/gate.hsm true']);
+        expect([...new Set(changes)].sort()).toEqual(['models/gate.devm false', 'models/gate.devm true']);
     });
 });
