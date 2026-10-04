@@ -24,6 +24,11 @@ Eclipse editor (HsmDiagramEditor)                       SWT Browser (Edge / WebK
   result) and are not persisted across restarts.
 - **Outline view**: state machine, definitions, states with regions and nested states, pseudo states and
   transitions; selecting an element selects its text and diagram element.
+- **Navigation from the page's text editor** (`F12`, `Cmd/Ctrl`+Click, *Go to Declaration / Type
+  Definition*, links of import paths): C++ names lead into the imported headers, which open in their default
+  editor (CDT's C/C++ editor if installed, otherwise the text editor) with the declaration selected; names of
+  imported models and model import paths open the model in the HSM editor at the target (`api/open` with a
+  position). Peek shows the target inside the page.
 - **Edit commands**: Eclipse's *Undo*, *Redo*, *Cut*, *Copy*, *Paste*, *Select All* and *Find/Replace* (menus
   and key bindings) act on the page: on the text editor, on an input field of the properties panel or on the
   diagram (undo / select all). Copy and paste use the Eclipse clipboard. On macOS (WebKit) the key bindings

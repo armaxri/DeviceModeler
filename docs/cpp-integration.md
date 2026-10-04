@@ -406,6 +406,14 @@ Event payloads, operation parameters and return values may use all these types.
     of built-in types: the alias); from a variable, event, parameter, operation or type alias of the model
     (declaration or reference) to its C++ type.
   - Document links on header (and model) import paths.
+  - The web app's Monaco editor (also embedded in Eclipse, CLion / JetBrains IDEs and the desktop app) has the
+    same navigation (`definitionLinks`, `declarationLinks`, `typeDefinitionLinks`, `importLinks` in
+    `lsp/model-navigation.ts`): Monaco models of the targets make Peek and the `Ctrl`/`Cmd`+hover preview
+    work; opening a target in another file sends `api/open` with the selected range to the host (see
+    `packages/web/src/host.ts`): Eclipse opens it in the default editor of the file (CDT's C/C++ editor if
+    installed, otherwise the text editor; models in the HSM editor), JetBrains IDEs in the editor of its type
+    (CLion's C/C++ editor), the desktop app shows headers in a read-only viewer window and models in their
+    window. The web app without host shows headers in a read-only viewer over the app.
   - Name ranges: the name of a using-declaration is its last segment, an anonymous enum / struct named by
     `typedef` (`typedef enum { … } color_t;`) has the range of the typedef name. Declarations produced by
     macro expansions have the range of the macro invocation. Forward declarations of classes (`class Driver;`)
@@ -428,8 +436,10 @@ Event payloads, operation parameters and return values may use all these types.
 - Hover of enumerators shows the computed value (also hexadecimal, its derivation, implicit or unknown, see
   §3.5), the enum and its underlying type; hover of enums the enumerators with their values, the underlying
   type, whether the enum is unscoped or an opaque declaration.
-- Semantic highlighting (VS Code): C++ types (enum types as enums), enumerators and constants; the names in the
-  types of the C++ class sections are types even if the headers do not declare them (they get a warning, see below).
+- Semantic highlighting (VS Code and the web app's Monaco editor, `lsp/semantic-tokens.ts`; colors of the
+  Light+ / Dark+ themes): C++ types (enum types as enums), enumerators and constants, and the names and
+  references of states, events, variables, operations by their kind; the names in the types of the C++ class
+  sections are types even if the headers do not declare them (they get a warning, see below).
 - Unknown C++ types of the C++ class sections (`cpp-unknown-types.ts`, a check of `HsmImportValidator`): a warning on
   the part of the name that the imported headers do not declare (`Driver` of `EpicProject::Driver`), see
   [language.md](language.md#c-class-sections) for the rules. If a header in the directory of the model or in the include

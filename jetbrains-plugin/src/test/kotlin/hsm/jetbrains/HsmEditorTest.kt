@@ -8,6 +8,7 @@ import com.intellij.ide.structureView.TreeBasedStructureViewBuilder
 import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.TextEditorWithPreview
 import com.intellij.openapi.fileEditor.ex.FileEditorProviderManager
 import com.intellij.openapi.fileTypes.FileTypeManager
@@ -24,6 +25,7 @@ import hsm.jetbrains.lang.HsmTestFileType
 import hsm.jetbrains.lang.HsmTokens
 import hsm.jetbrains.model.ProblemSource
 import hsm.jetbrains.problems.HsmProblems
+import hsm.jetbrains.server.OpenPosition
 import hsm.jetbrains.settings.HsmSettings
 
 /**
@@ -107,8 +109,22 @@ class HsmEditorTest : BasePlatformTestCase() {
         assertEquals("typedef int speed_t;", session.file("include/types.h"))
         assertNull(session.file("../outside.hsm"))
         assertNull(session.file("models/missing.hsm"))
-        assertTrue(session.open("models/motor.hsm"))
-        assertFalse(session.open("../motor.hsm"))
+        assertTrue(session.open("models/motor.hsm", null))
+        assertFalse(session.open("../motor.hsm", null))
+    }
+
+    /** Go to definition in the page into a header (api/open with a position): the header opens with the range selected. */
+    fun testOpenAtPosition() {
+        val session = openEditor().diagram.session
+        myFixture.addFileToProject("include/modes.h", "#pragma once\nnamespace t {\nenum class Mode { Off, On };\n}\n")
+        assertTrue(session.open("include/modes.h", OpenPosition(3, 12, 3, 16)))
+        PlatformTestUtil.dispatchAllEventsInIdeEventQueue()
+        val editor = FileEditorManager.getInstance(project).selectedTextEditor
+        assertNotNull(editor)
+        assertEquals("modes.h", FileDocumentManager.getInstance().getFile(editor!!.document)?.name)
+        assertEquals("Mode", editor.selectionModel.selectedText)
+        assertEquals(2, editor.document.getLineNumber(editor.caretModel.offset))
+        assertFalse(session.open("include/missing.h", OpenPosition(1, 1, 1, 1)))
     }
 
     fun testChangesOfThePageGoToTheDocument() {

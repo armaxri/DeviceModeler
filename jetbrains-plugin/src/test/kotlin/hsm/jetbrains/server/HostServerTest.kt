@@ -41,7 +41,10 @@ class HostServerTest {
         override fun settings(json: String) {
             calls.add("settings:$json")
         }
-        override fun open(path: String): Boolean = path == "models/b.hsm"
+        override fun open(path: String, position: OpenPosition?): Boolean {
+            calls.add("open:$path:$position")
+            return path == "models/b.hsm" || path == "include/b.h"
+        }
         override fun export(fileName: String, content: ByteArray): String = "Exported $fileName (${content.size} bytes)."
         override fun generated(result: JsonObject): String = "Generated ${result.getAsJsonArray("files").size()} files."
     }
@@ -156,6 +159,8 @@ class HostServerTest {
         assertEquals(400, post(base + "api/settings", "[1").statusCode())
         assertEquals(204, post(base + "api/open", "models/b.hsm").statusCode())
         assertEquals(404, post(base + "api/open", "models/c.hsm").statusCode())
+        // with a position (go to definition into a header); pages before it sent none
+        assertEquals(204, post(base + "api/open?line=3&column=12&endLine=3&endColumn=16", "include/b.h").statusCode())
         val export = post(base + "api/export?fileName=gate.svg", "<svg/>")
         assertEquals("Exported gate.svg (6 bytes).", JsonParser.parseString(export.body()).asJsonObject.get("message").asString)
         val generate = post(base + "api/generate", """{"files":[{"path":"a.h","content":""}],"messages":[]}""")
@@ -163,7 +168,8 @@ class HostServerTest {
         assertEquals(404, post(base + "api/unknown", "").statusCode())
         assertEquals(405, post(base + "index.html", "").statusCode())
 
-        assertEquals(listOf("changed:text ä", "save:saved", "model:5", "settings:{\"theme\":\"dark\"}"), session.calls)
+        assertEquals(listOf("changed:text ä", "save:saved", "model:5", "settings:{\"theme\":\"dark\"}", "open:models/b.hsm:null", "open:models/c.hsm:null",
+            "open:include/b.h:OpenPosition(line=3, column=12, endLine=3, endColumn=16)"), session.calls)
     }
 
     @Test
