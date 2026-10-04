@@ -65,6 +65,7 @@ export const HsmSharedModule: Module<LangiumSharedServices, PartialLangiumShared
 export interface HsmServiceExtensions {
     hsm?: Module<HsmServices, PartialLangiumServices>;
     hsmTest?: Module<HsmTestServices, PartialLangiumServices>;
+    shared?: Module<LangiumSharedServices, PartialLangiumSharedServices>;
 }
 
 /**
@@ -81,7 +82,8 @@ export function createHsmServices(context: DefaultSharedModuleContext = EmptyFil
     const shared = inject(
         createDefaultSharedModule(context),
         HsmGeneratedSharedModule,
-        HsmSharedModule
+        HsmSharedModule,
+        extensions.shared ?? {}
     );
     const Hsm = inject(
         createDefaultModule({ shared }),

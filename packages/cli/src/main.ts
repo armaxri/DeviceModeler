@@ -1,5 +1,6 @@
 // Entry point of the self-contained `hsm` command line executable (docs/installation.md):
 //   hsm <command> ...       the command line tool of packages/language (validate, generate, render, ...)
+//   hsm lsp --stdio         the language server for IDEs (packages/language/src/node/language-server.ts)
 //   hsm                     prints the help
 //   hsm --version | --help
 // The graphical editor is the desktop app (packages/desktop), not part of this executable.

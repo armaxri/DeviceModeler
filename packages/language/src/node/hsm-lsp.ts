@@ -1,5 +1,5 @@
 import {
-    AstUtils, CstUtils, DocumentState, GrammarUtils, isReference, URI, type AstNode, type LangiumDocument, type MaybePromise,
+    AstUtils, CstUtils, DefaultWorkspaceManager, DocumentState, GrammarUtils, isReference, URI, type AstNode, type LangiumDocument, type MaybePromise,
     type Module, type References
 } from 'langium';
 import {
@@ -15,12 +15,12 @@ import {
     isElementReference, isEventDeclaration, isImportPath, isInterfaceScope, isInternalScope, isOperationDeclaration, isPseudoState, isState, isStateMachine,
     isTypeReference, isVariableDeclaration, machineType, nodeText, qualifiedName, referenceBaseRange, resolveCppValue, resolvedImports, scopeLabel,
     type CppLocation, type HsmServiceExtensions, type StateMachine
-} from 'hsm-language';
-import type { DefaultSharedModuleContext, LangiumSharedServices } from 'langium/lsp';
-// Node-only part of the language package (not exported from its index because the web app bundles the index)
+} from '../index.js';
+import type { DefaultSharedModuleContext, LangiumSharedServices, PartialLangiumSharedServices } from 'langium/lsp';
+import type { InitializeParams } from 'vscode-languageserver';
 import {
     headerSettingsFromSection, installNodeHeaderSupport, type HeaderConfigFinder, type HeaderSettingsSection
-} from '../../../language/src/node/cpp-headers-node.js';
+} from './cpp-headers-node.js';
 
 interface TokenKind {
     type: string;
@@ -281,17 +281,42 @@ export const HsmLspModule: Module<LangiumServices, PartialLangiumServices> = {
     }
 };
 
+/**
+ * The workspace of clients that only send the deprecated `rootUri` / `rootPath` (no `workspaceFolders`):
+ * the root is indexed as the only workspace folder, so references between files work in every client.
+ */
+export class HsmWorkspaceManager extends DefaultWorkspaceManager {
+
+    override initialize(params: InitializeParams): void {
+        super.initialize(params);
+        const root = params.rootUri ?? (params.rootPath ? URI.file(params.rootPath).toString() : undefined);
+        if ((!this.folders || this.folders.length === 0) && root) {
+            this.folders = [{ uri: root, name: URI.parse(root).path.split('/').pop() || 'workspace' }];
+        }
+    }
+}
+
+/** Shared services of the language server. */
+export const HsmSharedLspModule: Module<LangiumSharedServices, PartialLangiumSharedServices> = {
+    workspace: {
+        WorkspaceManager: services => new HsmWorkspaceManager(services)
+    }
+};
+
 /** The services of the language server: the HSM languages with the additional LSP features. */
 export function createHsmLanguageServerServices(context: DefaultSharedModuleContext) {
-    const extensions: HsmServiceExtensions = { hsm: HsmLspModule, hsmTest: HsmLspModule };
+    const extensions: HsmServiceExtensions = { hsm: HsmLspModule, hsmTest: HsmLspModule, shared: HsmSharedLspModule };
     return createHsmServices(context, extensions);
 }
 
 /**
  * Imported C/C++ headers in the language server: headers are read from the file system (changed files
  * are re-read: file watcher events), the settings come from the `headers` block of the nearest
- * `hsm.gen.json` and from the VS Code settings `hsm.headers.*` (include paths relative to the first
- * workspace folder, `${workspaceFolder}`). Documents importing a changed header are validated again.
+ * `hsm.gen.json` and from the client settings `hsm.headers.*` (VS Code settings, `workspace/configuration`;
+ * include paths relative to the first workspace folder, `${workspaceFolder}`; clients without settings
+ * use the defaults). Documents importing a changed header are validated again. Changed files are
+ * reported by the client (`workspace/didChangeWatchedFiles`, the watcher for all files is registered
+ * dynamically by Langium when the client supports it).
  */
 export function installHeaderSupport(shared: LangiumSharedServices): HeaderConfigFinder {
     const finder = installNodeHeaderSupport(shared);

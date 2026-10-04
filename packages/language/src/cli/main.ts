@@ -17,6 +17,7 @@ import { runTestCommand, type TestCommandOptions } from '../testing/test-command
 import { registerRenderCommands } from './render-commands.js';
 import { validateJson } from './validate-json.js';
 import { CppTypeIndex, cppHeaderReport } from '../cpp-header/index.js';
+import type { LanguageServerOptions } from '../node/language-server.js';
 import { cliHeaderSettings, dataModelNamed, installNodeHeaderSupport, parseDefines, type NodeHeaderOptions } from '../node/cpp-headers-node.js';
 
 const severities = ['', 'error', 'warning', 'info', 'hint'];
@@ -224,6 +225,22 @@ export function createProgram(): Command {
         });
 
     registerRenderCommands(program);
+
+    program.command('lsp')
+        .option('--stdio', 'communicate over stdin / stdout (default)')
+        .option('--socket <port>', 'connect to the TCP port on localhost on which the client listens')
+        .option('--pipe <name>', 'connect to the named pipe / Unix domain socket of the client')
+        .option('--node-ipc', 'Node.js IPC channel (only when started by a Node.js client)')
+        .option('--clientProcessId <pid>', 'exit when the client process ends')
+        .allowUnknownOption()
+        .summary('runs the language server for IDEs (Language Server Protocol, usually with --stdio)')
+        .description('runs the language server (Language Server Protocol) for .hsm and .hsmtest files: diagnostics, completion, '
+            + 'hover, go to definition into C/C++ headers and other models, formatting, … for any LSP client (Eclipse, JetBrains IDEs, Neovim, …)')
+        .action(async (options: LanguageServerOptions) => {
+            // loaded on demand: the command line tool does not need the language server otherwise
+            const { runLanguageServer } = await import('../node/language-server.js');
+            runLanguageServer(options);
+        });
 
     return program;
 }
