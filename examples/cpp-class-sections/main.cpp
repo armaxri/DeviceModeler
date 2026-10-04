@@ -8,7 +8,7 @@
 // The member functions of the class sections are virtual: a subclass may override them.
 class VerboseController : public example::Controller {
 public:
-    explicit VerboseController(EpicProject::Driver& driver) : example::Controller(driver) {}
+    explicit VerboseController(EpicProject::Driver& driver_) : example::Controller(driver_) {}
 
     std::size_t shutdowns() const {
         return shutdownErrors.size();

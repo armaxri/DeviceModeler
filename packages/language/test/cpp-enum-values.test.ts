@@ -419,7 +419,12 @@ function hasCompiler(command: string): boolean {
 }
 
 const COMPILERS = ['g++', 'clang++'].filter(hasCompiler);
-const FLAGS = ['-std=c++20', '-fsyntax-only', '-Wno-multichar'];
+/**
+ * Strict ISO C++: without `-pedantic-errors`, older clang versions (e.g. clang 18) fold a signed
+ * overflow in an enumerator as a GNU extension and only warn, although the expression is not a
+ * constant expression (ill-formed); newer clang versions and g++ reject it in any case.
+ */
+const FLAGS = ['-std=c++20', '-fsyntax-only', '-pedantic-errors', '-Wno-multichar'];
 
 /** A C++ integer literal for a value (`-9223372036854775808` as `(-9223372036854775807LL - 1)`). */
 function literal(value: bigint): string {
