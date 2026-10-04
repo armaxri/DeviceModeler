@@ -252,7 +252,6 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         }
         palette.append(h('div', { class: 'separator' }));
         palette.append(h('button', { title: 'Delete selection (Del)', 'aria-label': 'Delete', html: Icons.delete, onClick: () => this.deleteSelection() }));
-        palette.append(h('button', { title: 'Re-layout diagram', 'aria-label': 'Re-layout', html: Icons.relayout, onClick: () => this.update(true) }));
         palette.append(h('button', { title: 'Fit to screen', 'aria-label': 'Fit to screen', html: Icons.fit, onClick: () => this.fit() }));
         this.updatePalette();
     }
