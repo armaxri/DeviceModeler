@@ -72,7 +72,8 @@ with the text editor, the diagram, the properties, the simulation and the export
 web app, see [Web editor](editor.md)) and is read from and saved to its file on disk. Structure files open
 with their internal block diagram (see [Structure diagrams](editor.md#structure-diagrams)).
 
-- **File menu**: *New Model* (`Ctrl+N`; the file is chosen on the first save), *Open…* (`Ctrl+O`, several
+- **File menu**: *New State Machine* (`Ctrl+N`) and *New Structure File* (`Ctrl+Alt+N`; the file is chosen on the
+  first save), *Open…* (`Ctrl+O`, several
   files at once), *Open Folder…* (`Ctrl+Shift+O`: a list of the models of a folder, with *New model*), *Open
   Recent*, *Save* (`Ctrl+S`), *Save As…* (`Ctrl+Shift+S`), *Close Window*. On macOS `Cmd` instead of `Ctrl`.
 - **Starting with files**: `Device Modeler model.devm other.devm folder/` (Linux: `device-modeler …`), double-click
@@ -104,8 +105,9 @@ links to other sites open in the default browser.
 
 `devm` (`devm.exe`) is a single executable with exactly the commands and options described in the
 [README](../README.md#command-line) (`validate`, `generate`, `test`, `render`, `doc`, `import`, `simulate`,
-`lsp`, …); without arguments it prints the help. `validate` and `render` handle structure files as
-well (`devm render examples/device/system.devm -o system.svg` writes the internal block diagram). Unpack it into a directory of the `PATH`; the
+`lsp`, …); without arguments it prints the help. `validate`, `render`, `layout` and `test` handle structure files as
+well (`devm render examples/device/system.devm -o system.svg` writes the internal block diagram, `devm layout
+examples/device/system.devm --element GarageInstallation` prints its layout as JSON). Unpack it into a directory of the `PATH`; the
 [CMake integration](build-integration.md#installing-the-command-line-tool) finds it there (or set
 `-DDEVM_EXECUTABLE=/path/to/devm`).
 
@@ -199,7 +201,7 @@ the plugin keeps its own highlighting and the validation described below.
 
 The plugin does not bundle the command line executable (one zip for all platforms). With `devm` in the `PATH`
 (or its path in *Settings → Tools → Device Modeler*), saved and closed models and their importers are validated
-with `devm validate --json` (*Tools → Validate Device Modeler Models* validates all). In CLion, the CMake functions of
+with `devm validate --json` (*Tools → Validate Device Models* validates all). In CLion, the CMake functions of
 [Build integration](build-integration.md) (`devm_generate`, `devm_add_tests`) work as in any CMake project once
 `devm` is in the `PATH` of CLion or `-DDEVM_EXECUTABLE=<path>` is set in the CMake options of the profile. Details,
 architecture and the development setup: [jetbrains-plugin/README.md](../jetbrains-plugin/README.md).
