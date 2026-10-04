@@ -1,4 +1,4 @@
-// Creates the self-contained `hsm` command line executable from the bundle of scripts/build.mjs as a Node.js
+// Creates the self-contained `devm` command line executable from the bundle of scripts/build.mjs as a Node.js
 // single executable application (https://nodejs.org/api/single-executable-applications.html): the bundle is
 // injected into an official Node.js binary (downloaded from nodejs.org, checksum verified,
 // cached in .cache/). Official binaries are needed: Node.js of package managers (e.g. Homebrew) links
@@ -8,10 +8,10 @@
 //   --target   linux-x64, linux-arm64, macos-x64, macos-arm64, windows-x64 or windows-arm64
 //              (default: the current platform). macOS executables must be signed on macOS (ad-hoc signature,
 //              `codesign`), so build them on a Mac.
-//   --archive  also writes dist/release/hsm-<version>-<target>.tar.gz (.zip for Windows) with the
+//   --archive  also writes dist/release/devm-<version>-<target>.tar.gz (.zip for Windows) with the
 //              executable and the license
-// Environment: HSM_NODE_VERSION overrides the Node.js version (must support SEA assets, i.e. >= 20.12).
-// Output: dist/bin/<target>/hsm (hsm.exe on Windows)
+// Environment: DEVM_NODE_VERSION overrides the Node.js version (must support SEA assets, i.e. >= 20.12).
+// Output: dist/bin/<target>/devm (devm.exe on Windows)
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 /** Node.js version of the executables (an LTS release). */
-const NODE_VERSION = process.env.HSM_NODE_VERSION || 'v24.21.0';
+const NODE_VERSION = process.env.DEVM_NODE_VERSION || 'v24.21.0';
 const SENTINEL_FUSE = 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -69,7 +69,7 @@ async function main() {
     execFileSync(hostNode, ['--experimental-sea-config', seaConfig], { stdio: 'inherit' });
 
     // 2. a copy of the Node.js binary of the target with the blob injected
-    const exe = path.join(dist, 'bin', target, targetOs === 'win' ? 'hsm.exe' : 'hsm');
+    const exe = path.join(dist, 'bin', target, targetOs === 'win' ? 'devm.exe' : 'devm');
     await fs.mkdir(path.dirname(exe), { recursive: true });
     await fs.rm(exe, { force: true });
     await fs.copyFile(await nodeBinary(target), exe);
@@ -125,7 +125,7 @@ async function nodeBinary(target) {
     if (nodeOs === 'win') {
         await fs.writeFile(binary, data);
     } else {
-        const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'hsm-node-'));
+        const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'devm-node-'));
         try {
             const archiveFile = path.join(tmp, path.basename(file));
             await fs.writeFile(archiveFile, data);
@@ -148,10 +148,10 @@ async function download(url) {
     return Buffer.from(await response.arrayBuffer());
 }
 
-/** dist/release/hsm-<version>-<target>.tar.gz (.zip for Windows): the executable and the license. */
+/** dist/release/devm-<version>-<target>.tar.gz (.zip for Windows): the executable and the license. */
 async function archive(exe, target) {
     const { version } = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf-8'));
-    const name = `hsm-${process.env.HSM_VERSION || version}-${target}`;
+    const name = `devm-${process.env.DEVM_VERSION || version}-${target}`;
     const staging = path.join(dist, 'release', name);
     await fs.rm(staging, { recursive: true, force: true });
     await fs.mkdir(staging, { recursive: true });

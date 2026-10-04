@@ -2,7 +2,7 @@
   "name": "devm-cli",
   "version": "0.1.0",
   "private": true,
-  "description": "Self-contained hsm command line executable (Node.js single executable application), no Node.js installation needed",
+  "description": "Self-contained devm command line executable of the Device Modeler (Node.js single executable application), no Node.js installation needed",
   "type": "module",
   "scripts": {
     "bundle": "node scripts/build.mjs",
