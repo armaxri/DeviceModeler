@@ -15,6 +15,8 @@ import { enumeratorListItem, enumeratorSpelling, enumeratorValueMarkdown, enumer
 import { cppLocations } from './cpp-navigation.js';
 import { cppImports, machineType, resolvedImports } from '../imports.js';
 import { isClassMember } from '../class-members.js';
+import { resolveDataType } from '../structure-types.js';
+import { structureCppImports, structureModelOf } from '../structure-imports.js';
 import { forwardDeclarationLocation, incompleteCppType, namespaceScopes, type CppForwardDeclaration } from '../cpp-unknown-types.js';
 import {
     inferType, returnTypeOf, typeAliases, typeName, typeOfAlias, typeOfDeclaration, typeOfEvent, typeOfParameter, type DevmType
@@ -72,7 +74,20 @@ export function cppElementAt(document: LangiumDocument, offset: number): CppElem
     if (ast.isElementReference(node)) {
         return referenceMemberAt(node, leaf);
     }
+    if (ast.isDataTypeReference(node)) {
+        return dataTypeReferenceAt(node);
+    }
     return undefined;
+}
+
+/** The C++ type of a type reference of a structure file (`door::Position`, `uint8_t`). */
+function dataTypeReferenceAt(node: ast.DataTypeReference): CppElementAt | undefined {
+    const resolution = resolveDataType(node);
+    const declaration = resolution.kind === 'data' ? resolution.cpp : undefined;
+    const origin = GrammarUtils.findNodeForProperty(node.$cstNode, 'name')?.range ?? node.$cstNode?.range;
+    return declaration && origin
+        ? { declaration, index: structureCppImports(structureModelOf(node)).index, origin }
+        : undefined;
 }
 
 /** The part of a qualified C++ name up to the segment at the leaf: `motor` in `motor::Mode`, `motor::Mode` at `Mode`. */

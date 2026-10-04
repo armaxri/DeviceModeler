@@ -10,7 +10,7 @@ import { DevmTestWorkspace } from '../src/testing/index.js';
 import { cppCompletionItems, cppDefinition, cppHover } from '../src/lsp/cpp-lsp.js';
 import { cliHeaderSettings, installNodeHeaderSupport } from '../src/node/cpp-headers-node.js';
 import { createDevmServices } from '../src/devm-module.js';
-import { StateMachineModelLoader } from '../src/model-loader.js';
+import { StateMachineModelLoader, StructureModelLoader } from '../src/model-loader.js';
 import { storageOfTypeReference } from '../src/cpp-storage.js';
 import type { VariableDeclaration } from '../src/generated/ast.js';
 
@@ -244,5 +244,19 @@ describe('C++ header imports: Node.js hosts', () => {
         const results = workspace.runDocuments(documents);
         expect(results.length).toBeGreaterThanOrEqual(5);
         expect(results.filter(r => r.status !== 'passed').map(r => `${r.name}: ${r.message}`)).toEqual([]);
+    });
+});
+
+describe('C++ header imports: structure files', () => {
+    test('hover on a C++ type of a port shows the declaration of the header', async () => {
+        const loader = new StructureModelLoader();
+        const text = 'import "motor_types.h"\ncomponent Motor {\n    out sync position : motor::Position\n    in sync mode : motor::Mode\n}\n';
+        const parsed = await loader.load(text, undefined, { files: { 'motor_types.h': MOTOR_TYPES } });
+        expect(errors(parsed as never)).toEqual([]);
+        const at = (name: string, delta: number) => text.indexOf(name) + delta;
+        const position = cppHover(parsed.document, at('motor::Position', 9))!;
+        expect(position).toContain('struct motor::Position');
+        expect(cppHover(parsed.document, at('motor::Mode', 2))).toContain('enum class motor::Mode');
+        expect(cppHover(parsed.document, at('component', 2))).toBeUndefined();
     });
 });

@@ -207,9 +207,11 @@ async function structureLspSession(dir) {
         const outside = await complete(positionOf(model, 'drive : DriveUnit', 8));
         assert(outside.includes('DriveUnit') && !outside.includes('DoorController'), `completion outside of threads: ${outside.join(', ')}`);
 
-        // a C++ type of an imported header: definition into the header
+        // a C++ type of an imported header: hover with its declaration, definition into the header
         lsp.open(components, componentsText);
         const cppPosition = positionOf(componentsText, 'door::Position', 7);
+        const cppHover = await lsp.request('textDocument/hover', { textDocument: { uri: components }, position: cppPosition });
+        assert(JSON.stringify(cppHover).includes('struct door::Position'), `hover on a C++ type: ${JSON.stringify(cppHover)}`);
         const cppDefinition = await lsp.request('textDocument/definition', { textDocument: { uri: components }, position: cppPosition });
         assert(sameFile(targetOf(cppDefinition) ?? '', pathToFileURL(path.join(dir, 'door_types.h')).toString()),
             `definition of a C++ type: ${JSON.stringify(cppDefinition)}`);
@@ -301,7 +303,7 @@ await check('test (structure files next to the state machines)', () => {
     assert(/\d+ passed, 0 failed/.test(run('test', 'examples/tests/door.devmtest', '--machine', 'examples', 'examples/device')), 'tests failed');
 });
 await check('lsp --stdio (diagnostics, hover, definition into a header, shutdown)', () => lspSession(path.join(tmp, 'lsp')));
-await check('lsp --stdio (structure files: diagnostics, hover, definition, completion, links, symbols, semantic tokens)',
+await check('lsp --stdio (structure files: diagnostics, hover, definition, C++ type hover, completion, links, symbols, semantic tokens)',
     () => structureLspSession(path.join(tmp, 'lsp-structure')));
 
 await fs.rm(tmp, { recursive: true, force: true });
