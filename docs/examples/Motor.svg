@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic hsm-export" width="1012" height="989" viewBox="0 0 1012 989" font-family="Helvetica, Arial, sans-serif">
-<title>TrafficLight</title>
+<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic hsm-export" width="861" height="415" viewBox="0 0 861 415" font-family="Helvetica, Arial, sans-serif">
+<title>Motor</title>
 <style><![CDATA[
 .theme-classic, .theme-modern, .theme-dark {
     --hsm-font: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
@@ -585,144 +585,91 @@
 <rect class="export-background" width="100%" height="100%"/>
 <g>
 <g class="hsm-node definition" transform="translate(20, 20)">
-<rect class="definition-shape" x="0" y="0" rx="3" ry="3" width="314" height="278"/>
-<text class="definition-header" x="8" y="17.9"><tspan class="definition-name">TrafficLight</tspan><tspan class="definition-kind" dx="6">definitions</tspan></text>
-<line class="definition-separator" x1="0" y1="26" x2="314" y2="26"/>
-<text class="definition-line definition-scope" x="8" y="43.53">@CycleBased(100)</text>
-<text class="definition-line definition-scope" x="8" y="58.53">interface:</text>
-<text class="definition-line" x="8" y="73.53">  in event powerOn</text>
-<text class="definition-line" x="8" y="88.53">  in event powerOff</text>
-<text class="definition-line" x="8" y="103.53">  in event failure</text>
-<text class="definition-line" x="8" y="118.53">  in event reset</text>
-<text class="definition-line" x="8" y="133.53">  out event lightsChanged : integer</text>
-<text class="definition-line definition-scope" x="8" y="148.53">interface Pedestrian:</text>
-<text class="definition-line" x="8" y="163.53">  in event request</text>
-<text class="definition-line" x="8" y="178.53">  var waiting : boolean = false</text>
-<text class="definition-line definition-scope" x="8" y="193.53">internal:</text>
-<text class="definition-line" x="8" y="208.53">  const RED : integer = 1</text>
-<text class="definition-line" x="8" y="223.53">  const YELLOW : integer = 2</text>
-<text class="definition-line" x="8" y="238.53">  const GREEN : integer = 4</text>
-<text class="definition-line" x="8" y="253.53">  var lights : integer = 0</text>
-<text class="definition-line" x="8" y="268.52">  operation switchOn(mask : integer) : void</text>
+<rect class="definition-shape" x="0" y="0" rx="3" ry="3" width="300" height="173"/>
+<text class="definition-header" x="8" y="17.9"><tspan class="definition-name">Motor</tspan><tspan class="definition-kind" dx="6">definitions</tspan></text>
+<line class="definition-separator" x1="0" y1="26" x2="300" y2="26"/>
+<text class="definition-line definition-scope" x="8" y="43.53">interface:</text>
+<text class="definition-line" x="8" y="58.53">  in event start</text>
+<text class="definition-line" x="8" y="73.53">  in event stop</text>
+<text class="definition-line" x="8" y="88.53">  in event fault</text>
+<text class="definition-line" x="8" y="103.53">  out event stopped</text>
+<text class="definition-line" x="8" y="118.53">  out event failed : integer</text>
+<text class="definition-line" x="8" y="133.53">  var speed : integer = 0</text>
+<text class="definition-line" x="8" y="148.53">  var maxSpeed : integer = 3</text>
+<text class="definition-line" x="8" y="163.53">  operation setPwm(duty : integer) : void</text>
 </g>
-<g class="hsm-node initial" transform="translate(708, 20)">
+<g class="hsm-node initial" transform="translate(524, 20)">
 <circle class="initial-shape" cx="10" cy="10" r="10"/>
 </g>
-<g class="hsm-node state" transform="translate(632, 76)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="172" height="53"/>
-<text class="state-name" x="86" y="17.9">Off</text>
-<line class="state-separator" x1="0" y1="26" x2="172" y2="26"/>
-<text class="state-body" x="6" y="43.7">entry / lights = 0; switchOn(0)</text>
+<g class="hsm-node entry-point" transform="translate(664, 165)">
+<title>Entry point Run</title>
+<circle class="entry-shape" cx="8" cy="8" r="7.25"/>
+<text class="node-label" x="23" y="12.2">Run</text>
 </g>
-<g class="hsm-node state composite" transform="translate(374, 216)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="516" height="613"/>
-<text class="state-name" x="258" y="17.9">Operating</text>
-<line class="state-separator" x1="0" y1="26" x2="516" y2="26"/>
-<g class="hsm-node initial" transform="translate(239, 40)">
-<circle class="initial-shape" cx="10" cy="10" r="10"/>
+<g class="hsm-node exit-point" transform="translate(507, 357)">
+<title>Exit node Failed</title>
+<circle class="exit-shape" cx="8" cy="8" r="7.25"/>
+<path class="exit-cross" d="M 2.87,2.87 L 13.13,13.13 M 2.87,13.13 L 13.13,2.87"/>
+<text class="node-label" x="23" y="12.2">Failed</text>
 </g>
-<g class="hsm-node state" transform="translate(141, 96)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="216" height="68"/>
-<text class="state-name" x="108" y="17.9">Red</text>
-<line class="state-separator" x1="0" y1="26" x2="216" y2="26"/>
-<text class="state-body" x="6" y="43.7">entry / lights = RED; switchOn(lights);<title>entry / lights = RED; switchOn(lights); raise lightsChanged : lights</title></text>
-<text class="state-body" x="6" y="58.7">    raise lightsChanged : lights<title>entry / lights = RED; switchOn(lights); raise lightsChanged : lights</title></text>
+<g class="hsm-node state" transform="translate(449, 76)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="170" height="53"/>
+<text class="state-name" x="85" y="17.9">Off</text>
+<line class="state-separator" x1="0" y1="26" x2="170" y2="26"/>
+<text class="state-body" x="6" y="43.7">entry / speed = 0; setPwm(0)</text>
 </g>
-<g class="hsm-node state" transform="translate(230, 251)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="272" height="53"/>
-<text class="state-name" x="136" y="17.9">RedYellow</text>
-<line class="state-separator" x1="0" y1="26" x2="272" y2="26"/>
-<text class="state-body" x="6" y="43.7">entry / lights = RED | YELLOW; switchOn(lights)</text>
+<g class="hsm-node state" transform="translate(424, 217)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="273" height="53"/>
+<text class="state-name" x="136.5" y="17.9">Ramping</text>
+<line class="state-separator" x1="0" y1="26" x2="273" y2="26"/>
+<text class="state-body" x="6" y="43.7">every 100 ms / speed += 1; setPwm(speed * 10)</text>
 </g>
-<g class="hsm-node state" transform="translate(230, 391)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="260" height="68"/>
-<text class="state-name" x="130" y="17.9">Green</text>
-<line class="state-separator" x1="0" y1="26" x2="260" y2="26"/>
-<text class="state-body" x="6" y="43.7">entry / lights = GREEN; switchOn(lights)</text>
-<text class="state-body" x="6" y="58.7">Pedestrian.request / Pedestrian.waiting = true</text>
-</g>
-<g class="hsm-node state" transform="translate(134, 546)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="237" height="53"/>
-<text class="state-name" x="118.5" y="17.9">Yellow</text>
-<line class="state-separator" x1="0" y1="26" x2="237" y2="26"/>
-<text class="state-body" x="6" y="43.7">entry / lights = YELLOW; switchOn(lights)</text>
-</g>
-</g>
-<g class="hsm-node state" transform="translate(556, 916)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="323" height="53"/>
-<text class="state-name" x="161.5" y="17.9">Blinking</text>
-<line class="state-separator" x1="0" y1="26" x2="323" y2="26"/>
-<text class="state-body" x="6" y="43.7">every 500 ms / lights = lights ^ YELLOW; switchOn(lights)</text>
+<g class="hsm-node state" transform="translate(673, 357)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="81" height="38"/>
+<text class="state-name" x="40.5" y="17.9">Running</text>
+<line class="state-separator" x1="0" y1="26" x2="81" y2="26"/>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 718,40 C 718,40 718,58 718,76"/>
-<path class="transition-arrow" d="M 718,76 L 722.5,66 L 718,69 L 713.5,66 Z"/>
+<path class="transition-line" d="M 534,40 C 534,40 534,58 534,76"/>
+<path class="transition-arrow" d="M 534,76 L 538.5,66 L 534,69 L 529.5,66 Z"/>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 675,129 C 546,147 546,156 546,163.25 C 546,170.5 546,176 546,182.87 C 546,189.75 546,198 546,216"/>
-<path class="transition-arrow" d="M 546,216 L 550.5,206 L 546,209 L 541.5,206 Z"/>
+<path class="transition-line" d="M 672,181 C 672,181 667.7,199 629,217"/>
+<path class="transition-arrow" d="M 629,217 L 639.96,216.86 L 635.35,214.05 L 636.17,208.7 Z"/>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 492,129 C 492,147 492,160 492,173 C 492,186 492,199 492,217"/>
+<path class="transition-arrow" d="M 492,217 L 496.5,207 L 492,210 L 487.5,207 Z"/>
 <g class="transition-label">
-<text x="491" y="176.7">powerOn</text>
+<text x="462" y="177.2">start</text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 546,829 C 637,847 637,856 637,863.25 C 637,870.5 637,876 637,882.87 C 637,889.75 637,898 637,916"/>
-<path class="transition-arrow" d="M 637,916 L 641.5,906 L 637,909 L 632.5,906 Z"/>
+<path class="transition-line" d="M 606,270 C 700,288 700,297 700,304.25 C 700,311.5 700,317 700,323.87 C 700,330.75 700,339 700,357"/>
+<path class="transition-arrow" d="M 700,357 L 704.5,347 L 700,350 L 695.5,347 Z"/>
 <g class="transition-label">
-<text x="584" y="876.7">1: failure</text>
+<text x="563" y="317.7">1: [speed &gt;= maxSpeed]</text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 718,916 C 718,898 718,885.25 718,872.5 C 718,859.75 718,847 718,829"/>
-<path class="transition-arrow" d="M 718,829 L 713.5,839 L 718,836 L 722.5,839 Z"/>
+<path class="transition-line" d="M 561,217 C 506,199 506,190 506,184.17 C 506,178.33 506,175.67 506,173 C 506,170.33 506,167.67 506,161.83 C 506,156 506,147 534,129"/>
+<path class="transition-arrow" d="M 534,129 L 523.15,130.62 L 528.11,132.79 L 528.02,138.19 Z"/>
 <g class="transition-label">
-<text x="725" y="876.7">1: reset</text>
+<text x="513" y="177.2">2: stop / raise stopped</text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 718,216 C 718,198 718,185.25 718,172.5 C 718,159.75 718,147 718,129"/>
-<path class="transition-arrow" d="M 718,129 L 713.5,139 L 718,136 L 722.5,139 Z"/>
+<path class="transition-line" d="M 727,357 C 727,339 727,326.25 727,315.62 C 727,305 727,296.5 727,277.42 C 727,258.33 727,228.67 727,211 C 727,193.33 727,187.67 727,182 C 727,176.33 727,170.67 727,163.33 C 727,156 727,147 577,129"/>
+<path class="transition-arrow" d="M 577,129 L 586.39,134.66 L 583.95,129.83 L 587.46,125.72 Z"/>
 <g class="transition-label">
-<text x="725" y="176.7">2: powerOff</text>
+<text x="734" y="247.7">stop / raise stopped</text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 798,916 C 920,898 920,889 920,881.75 C 920,874.5 920,869 920,863.5 C 920,858 920,852.5 920,741.58 C 920,630.67 920,414.33 920,303.42 C 920,192.5 920,187 920,181.5 C 920,176 920,170.5 920,163.25 C 920,156 920,147 761,129"/>
-<path class="transition-arrow" d="M 761,129 L 770.43,134.6 L 767.96,129.79 L 771.44,125.65 Z"/>
+<path class="transition-line" d="M 515,270 C 515,288 515,300.75 515,313.5 C 515,326.25 515,339 515,357"/>
+<path class="transition-arrow" d="M 515,357 L 519.5,347 L 515,350 L 510.5,347 Z"/>
 <g class="transition-label">
-<text x="927" y="526.7">2: powerOff</text>
-</g>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 623,276 C 623,276 623,294 623,312"/>
-<path class="transition-arrow" d="M 623,312 L 627.5,302 L 623,305 L 618.5,302 Z"/>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 659,380 C 659,398 659,406.25 659,413.13 C 659,420 659,425.5 659,432.75 C 659,440 659,449 740,467"/>
-<path class="transition-arrow" d="M 740,467 L 731.21,460.44 L 733.17,465.48 L 729.26,469.22 Z"/>
-<g class="transition-label">
-<text x="666" y="427.7">after 20 s</text>
-</g>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 740,520 C 734,538 734,547 734,554.25 C 734,561.5 734,567 734,573.87 C 734,580.75 734,589 734,607"/>
-<path class="transition-arrow" d="M 734,607 L 738.5,597 L 734,600 L 729.5,597 Z"/>
-<g class="transition-label">
-<text x="741" y="567.7">after 2 s</text>
-</g>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 734,675 C 666,693 666,702 666,709.25 C 666,716.5 666,722 666,728.88 C 666,735.75 666,744 666,762"/>
-<path class="transition-arrow" d="M 666,762 L 670.5,752 L 666,755 L 661.5,752 Z"/>
-<g class="transition-label">
-<text x="673" y="722.7">after 30 s [Pedestrian.waiting]</text>
-</g>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 587,762 C 587,744 587,731.25 587,720.63 C 587,710 587,701.5 587,679.92 C 587,658.33 587,623.67 587,602.08 C 587,580.5 587,572 587,563.5 C 587,555 587,546.5 587,527.42 C 587,508.33 587,478.67 587,459.58 C 587,440.5 587,432 587,421.38 C 587,410.75 587,398 587,380"/>
-<path class="transition-arrow" d="M 587,380 L 582.5,390 L 587,387 L 591.5,390 Z"/>
-<g class="transition-label">
-<text x="390" y="567.7">after 3 s / Pedestrian.waiting = false</text>
+<text x="362" y="317.7">3: fault / raise failed : speed</text>
 </g>
 </g>
 </g>

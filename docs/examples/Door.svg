@@ -168,6 +168,23 @@
     font-size: 12px;
 }
 
+/* ---- submachine states ---- */
+
+.submachine-icon rect,
+.submachine-icon line {
+    fill: none;
+    stroke: var(--hsm-state-stroke);
+    stroke-width: 1.2px;
+}
+
+.submachine-instance {
+    font-style: italic;
+}
+
+.submachine-point-label {
+    font-size: 11px;
+}
+
 /* ---- definition section ---- */
 
 .definition-shape {
@@ -421,6 +438,31 @@
 }
 
 .hsm-export .breakpoint-marker {
+    display: none;
+}
+
+/* ---- manual layout (experimental) ---- */
+
+.resize-handle {
+    fill: var(--hsm-select);
+    stroke: #fff;
+    stroke-width: 1px;
+    cursor: nwse-resize;
+}
+
+.bend-handle {
+    fill: #fff;
+    stroke: var(--hsm-select);
+    stroke-width: 1.5px;
+    cursor: move;
+}
+
+.manual-layout .transition.selected .transition-label {
+    cursor: move;
+}
+
+.hsm-export .resize-handle,
+.hsm-export .bend-handle {
     display: none;
 }
 
