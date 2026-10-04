@@ -14,6 +14,7 @@ version = providers.gradleProperty("pluginVersion").get()
 
 val platformVersion = providers.gradleProperty("platformVersion")
 val latestPlatformVersion = providers.gradleProperty("latestPlatformVersion")
+val lsp4ijVersion = providers.gradleProperty("lsp4ijVersion")
 
 kotlin {
     jvmToolchain(21)
@@ -36,6 +37,8 @@ repositories {
 dependencies {
     intellijPlatform {
         intellijIdeaCommunity(platformVersion)
+        // optional dependency (hsm-lsp4ij.xml): compiled against, installed into the sandboxes of runIde and the tests
+        plugin("com.redhat.devtools.lsp4ij", lsp4ijVersion.get())
         testFramework(TestFrameworkType.Platform)
     }
     testImplementation("junit:junit:4.13.2")
@@ -64,11 +67,17 @@ intellijPlatformTesting {
         register("runLatestIde") {
             type = IntelliJPlatformType.IntellijIdea
             version = latestPlatformVersion
+            plugins {
+                plugin("com.redhat.devtools.lsp4ij", lsp4ijVersion.get())
+            }
         }
         // ./gradlew runClion: CLion with the plugin (large download)
         register("runClion") {
             type = IntelliJPlatformType.CLion
             version = latestPlatformVersion
+            plugins {
+                plugin("com.redhat.devtools.lsp4ij", lsp4ijVersion.get())
+            }
         }
         // ./gradlew runIdeForUiTests --args=<project>: an IDE with the Robot server (http://127.0.0.1:8082, see
         // the README), without the dialogs of a first start
@@ -87,6 +96,7 @@ intellijPlatformTesting {
             }
             plugins {
                 robotServerPlugin()
+                plugin("com.redhat.devtools.lsp4ij", lsp4ijVersion.get())
             }
         }
     }

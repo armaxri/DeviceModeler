@@ -102,6 +102,27 @@ hsm --version
 With Node.js the same tool is available from the repository (`node packages/language/bin/cli.js …`, see
 the README).
 
+### Language server (`hsm lsp`)
+
+`hsm lsp --stdio` runs the language server of the VS Code extension for any editor with an LSP client (the
+Eclipse and JetBrains plugins use it for their text editors, see below; Neovim, Helix, Emacs, Sublime Text, Zed,
+Kate, … can be configured the same way): diagnostics, completion, hover with documentation, go to definition /
+declaration / type definition (into imported C/C++ headers and other models), references, document links on
+import paths, formatting, document symbols / outline, folding, rename and semantic tokens for `.hsm` and
+`.hsmtest` (language ids `hsm` and `hsmtest`). The workspace folders (or the `rootUri`) are indexed, so test
+classes and imports find the models of other files; imported headers are found through the `headers` block of
+the nearest `hsm.gen.json`, and changed headers are re-read when the client reports file changes (Langium
+registers a watcher for all files if the client supports dynamic registration of
+`workspace/didChangeWatchedFiles`). The client settings `hsm.headers.*` (`workspace/configuration`) are
+optional. Other transports: `--socket <port>` (connects to a port the client listens on), `--pipe <name>`.
+
+```lua
+-- Neovim (0.11+)
+vim.filetype.add({ extension = { hsm = 'hsm', hsmtest = 'hsmtest' } })
+vim.lsp.config('hsm', { cmd = { 'hsm', 'lsp', '--stdio' }, filetypes = { 'hsm', 'hsmtest' }, root_markers = { 'hsm.gen.json', '.git' } })
+vim.lsp.enable('hsm')
+```
+
 ## VS Code extension
 
 Install the `.vsix`: *Extensions* view → `…` → *Install from VSIX…*, or `code --install-extension
@@ -114,6 +135,17 @@ Node.js runtime); it does not need the command line tool. Features and settings:
 Modeler (prototype)* (uncheck *Group items by category* if the list is empty), accept the warning about
 unsigned content and restart. Double-clicking a `.hsm` file in the Project Explorer opens the graphical
 editor; *Open With → Text Editor* still opens the plain text.
+
+**Text editor with language support:** *Open With → Generic Text Editor* opens a `.hsm` file in Eclipse's Generic
+Editor with the HSM language server (`hsm lsp` of the bundled executable, through LSP4E): problems as markers,
+completion, hover with documentation, *F3* / Ctrl+Click into imported C/C++ headers (the CDT editor if CDT is
+installed) and other models, document links, *Format* (Ctrl+Shift+F), *Outline*, rename (Alt+Shift+R),
+semantic highlighting, and TextMate highlighting with TM4E. `.hsmtest` files open in the Generic Editor by
+default. Requirements: LSP4E and TM4E (Eclipse projects, part of the Eclipse release repository and already
+installed in *Eclipse IDE for C/C++ Developers* and most other packages). p2 installs them from the release
+repository if they are missing: the update site references `https://download.eclipse.org/releases/2025-06/`,
+and for the zip archive the release site of your Eclipse must be available (*Contact all update sites during
+install to find required software*, checked by default).
 
 The feature also installs the command line executable `hsm` of the platform (a fragment of the plugin). With
 *Configure → Enable / Disable HSM Validation* on a project, the builder validates closed models with it
@@ -130,6 +162,14 @@ shows the graphical editor (the web app in the IDE's JCEF browser) with the view
 *Diagram*; page and IntelliJ text editor edit the same document (undo, autosave, local history and VCS as for
 any file). Problems appear in the text editor and in the *Problems* tool window, the outline in the *Structure*
 tool window; *Generate C++* is in the context menu of `.hsm` files and in the page.
+
+**Language server in the text editor:** with the free plugin [LSP4IJ](https://plugins.jetbrains.com/plugin/23257-lsp4ij)
+(Red Hat, works in all JetBrains IDEs including the free ones; *Settings → Plugins → Marketplace → LSP4IJ*) and the
+`hsm` executable (see below), the IDE's text editor of `.hsm` and `.hsmtest` files runs the HSM language server
+(`hsm lsp --stdio`): diagnostics, completion, hover with documentation, *Go to Declaration* / Ctrl+Click into
+imported C/C++ headers and other models, document links, *Reformat Code*, structure view, folding, rename and
+semantic highlighting. The *LSP Consoles* tool window of LSP4IJ shows the server's state and log. Without LSP4IJ
+the plugin keeps its own highlighting and the validation described below.
 
 The plugin does not bundle the command line executable (one zip for all platforms). With `hsm` in the `PATH`
 (or its path in *Settings → Tools → HSM Modeler*), saved and closed models and their importers are validated
@@ -158,7 +198,7 @@ npm run ide:eclipse -- --help   # all options of a script
 | --- | --- | --- |
 | `ide:vscode` | `.ide/vscode/` | builds `packages/vscode`, starts `code` with its own `--user-data-dir` and `--extensions-dir` and `--extensionDevelopmentPath=packages/vscode` (an *Extension Development Host* window), or with `--vsix` packages the `.vsix` and installs it into the sandbox's extensions folder. `code` is taken from the `PATH` (also `code-insiders`, `codium`) or the standard installation folders; `--code <path>` / `HSM_VSCODE` choose another one. |
 | `ide:eclipse` | `.ide/eclipse/` | builds the update site (`mvn verify`, needs Java 21 and Maven, and the `hsm` executable of this platform for the plugin's fragment), downloads *Eclipse IDE for C/C++ Developers* of the release the plugin is built against (2025-06, from archive.eclipse.org, checked against its SHA-512; once, into `.ide/eclipse/install/`), installs the feature with the p2 director (replacing an older build), imports the examples as the project `hsm-examples` with CDT's headless import (no wizard) and starts Eclipse with that workspace and `traffic-light.hsm` opened. `--eclipse <path>` / `HSM_ECLIPSE` use an existing installation instead – the plugin is installed **into** it, so use a separate one. |
-| `ide:clion` | `.ide/clion/` | Finds CLion (`/Applications`, `~/Applications`, JetBrains Toolbox, `/opt`, `%LOCALAPPDATA%\Programs`, `%ProgramFiles%\JetBrains`; `--clion <path>` / `HSM_CLION`, any IntelliJ Platform IDE ≥ 2025.2 works) and runs `./gradlew runLocalIde` with [`jetbrains-local-ide.init.gradle`](../scripts/ide/jetbrains-local-ide.init.gradle): the plugin build is unchanged, Gradle builds the plugin and starts that installation with it in `.ide/clion/gradle-sandbox/` (the script waits until the IDE is closed). Without CLion it starts IntelliJ IDEA Community of the plugin's target platform (`./gradlew runIde`, downloaded by Gradle) and says so; `--download-clion` lets Gradle download CLion instead. `--zip` builds the plugin zip, unpacks it into an isolated plugins folder and starts the installed IDE directly with its own `idea.properties` (`CLION_PROPERTIES`: config, system, plugins and log folders in `.ide/clion/zip/`). The `hsm` executable of this platform is put into the plugin (`-PhsmExecutable`) for the validation of closed models. |
+| `ide:clion` | `.ide/clion/` | Installs LSP4IJ next to the plugin (language server in the text editor; Gradle modes: dependency of the build, `--zip`: downloaded from the JetBrains Marketplace into `.ide/clion/downloads/`). Finds CLion (`/Applications`, `~/Applications`, JetBrains Toolbox, `/opt`, `%LOCALAPPDATA%\Programs`, `%ProgramFiles%\JetBrains`; `--clion <path>` / `HSM_CLION`, any IntelliJ Platform IDE ≥ 2025.2 works) and runs `./gradlew runLocalIde` with [`jetbrains-local-ide.init.gradle`](../scripts/ide/jetbrains-local-ide.init.gradle): the plugin build is unchanged, Gradle builds the plugin and starts that installation with it in `.ide/clion/gradle-sandbox/` (the script waits until the IDE is closed). Without CLion it starts IntelliJ IDEA Community of the plugin's target platform (`./gradlew runIde`, downloaded by Gradle) and says so; `--download-clion` lets Gradle download CLion instead. `--zip` builds the plugin zip, unpacks it into an isolated plugins folder and starts the installed IDE directly with its own `idea.properties` (`CLION_PROPERTIES`: config, system, plugins and log folders in `.ide/clion/zip/`). The `hsm` executable of this platform is put into the plugin (`-PhsmExecutable`) for the validation of closed models. |
 | `ide:desktop` | `.ide/desktop/` | builds `packages/desktop` and starts it with Electron from `node_modules` and `--user-data-dir` in the sandbox (an installed *HSM Modeler* keeps its recent files and is not reused as running instance), with the examples folder. |
 
 Options of all scripts:
@@ -179,7 +219,8 @@ Notes:
   `.ide/eclipse/workspace/.metadata/.log`; CLion: `.ide/clion/gradle-sandbox/log_runLocalIde/idea.log`).
 - First starts ask what a fresh profile asks: Eclipse nothing (the welcome page is turned off), JetBrains IDEs
   their user agreement / license (once per sandbox).
-- Only the HSM plugin is installed. Other extensions (e.g. the C/C++ extension for the generated code) can be
+- Only the HSM plugin is installed (plus LSP4IJ for the JetBrains IDEs; Eclipse's C/C++ package already contains
+  LSP4E and TM4E, otherwise the script's p2 director installs them from the release repository). Other extensions (e.g. the C/C++ extension for the generated code) can be
   installed in the sandbox IDE as usual; they stay in the sandbox.
 - Eclipse is started with `-data .ide/eclipse/workspace`; the `ide:eclipse` script refuses to update the plugin
   while that Eclipse is running (p2 changes the installation).

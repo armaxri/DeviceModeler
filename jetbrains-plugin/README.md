@@ -62,6 +62,15 @@ HsmSplitEditor (TextEditorWithPreview)                   JCEF browser
 - **Text editor support** without a language server: highlighting (keywords of the grammars, comments, strings,
   numbers, `@annotations`), comment / uncomment, brace matching for `.hsm` and `.hsmtest` (file types with
   icon; `.hsmtest` opens in the text editor only).
+- **Language server in the text editor** with [LSP4IJ](https://plugins.jetbrains.com/plugin/23257-lsp4ij)
+  installed (optional dependency, `META-INF/hsm-lsp4ij.xml`): LSP4IJ starts `hsm lsp --stdio` of the executable
+  found by `HsmExecutable` (setting, bundled, `PATH`) for `.hsm` and `.hsmtest` (also in the *Text* view of the
+  HSM editor): diagnostics, completion, hover with documentation, *Go to Declaration* / Ctrl+Click into imported
+  C/C++ headers (CLion's editor) and other models, document links, *Reformat Code*, *Find Usages*, rename,
+  structure view and folding of the server, semantic tokens on top of the lexer highlighting. While it runs,
+  the plugin's annotator leaves the problems of the text to the server (no duplicates); the *Problems* tool
+  window and the validation of closed files stay. *LSP Consoles* (LSP4IJ) shows the server's state, log and
+  traces.
 
 ## Architecture
 
@@ -79,6 +88,8 @@ HsmSplitEditor (TextEditorWithPreview)                   JCEF browser
 | `problems.HsmValidation` | validation of saved / closed models with `hsm validate --json` (VFS listener, *Validate HSM Models*) |
 | `cli.HsmExecutable`, `cli.CliValidator` | executable lookup and `hsm validate --json` (same as the Eclipse plugin) |
 | `lang.*` | file types, lexer, highlighting, commenter, brace matcher, flat PSI |
+| `lsp.HsmLanguageServerFactory`, `HsmConnectionProvider` | LSP4IJ server factory: `hsm lsp --stdio` (only loaded with LSP4IJ, `hsm-lsp4ij.xml`) |
+| `lsp.HsmLanguageServerSupport` | whether the language server runs (LSP4IJ loaded and an executable found), without LSP4IJ classes |
 | `settings.*` | settings and settings page |
 | `actions.*` | *Generate C++*, *Validate HSM Models* |
 
@@ -98,6 +109,14 @@ Decisions:
   plugin directory (only in a plugin built with `-PhsmExecutable=<path>` for one platform), `hsm` in the `PATH`
   (plus `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`). Without one, a notification (with *Configure…*)
   says so once per project; everything except the validation of closed files works without it.
+- **LSP4IJ instead of the platform's LSP API** for the text editor: the platform API (`com.intellij.platform.lsp`)
+  is not available in IntelliJ IDEA Community / PyCharm Community 2025.2 (the oldest supported platform; only
+  the commercial IDEs have it). LSP4IJ works in every JetBrains IDE ≥ 2024.2, covers the LSP features of
+  the server and brings the *LSP Consoles* for diagnosis. It is an **optional** dependency
+  (`<depends optional="true" config-file="hsm-lsp4ij.xml">`): without it the plugin works as before (lexer
+  highlighting, problems of the page and of `hsm validate`). Highlighting stays the plugin's own lexer plus the
+  server's semantic tokens (TextMate highlighting through the TextMate plugin would need the file types to be
+  given up).
 - **CLion**: no CLion-specific code is needed. CLion's CMake integration of the models (`cmake/HsmGenerate.cmake`,
   `hsm_generate` / `hsm_add_tests`, see [Build integration](../docs/build-integration.md)) works when `hsm` is in
   the `PATH` of CLion (or with `-DHSM_EXECUTABLE=<path>` in the CMake options of the CLion profile) – it
@@ -118,9 +137,13 @@ cd jetbrains-plugin
 ./gradlew buildPlugin        # → build/distributions/hsm-jetbrains-<version>.zip
 ./gradlew test               # unit tests and light platform tests (headless)
 ./gradlew verifyPlugin       # Plugin Verifier against IntelliJ IDEA 2025.2 and the latest release
-./gradlew runIde             # IntelliJ IDEA 2025.2 with the plugin (runLatestIde, runClion: other IDEs)
+./gradlew runIde             # IntelliJ IDEA 2025.2 with the plugin and LSP4IJ (runLatestIde, runClion: other IDEs)
 ./gradlew buildPlugin -PhsmExecutable=../packages/cli/dist/bin/macos-arm64/hsm   # with the executable of one platform
 ```
+
+LSP4IJ (`lsp4ijVersion` in `gradle.properties`) is a compile dependency (`plugin(…)` in `build.gradle.kts`) and is
+installed in the sandboxes of `runIde`, `runLatestIde`, `runClion`, `runIdeForUiTests` and the tests;
+`npm run ide:clion` adds it to its IDE, too.
 
 `./gradlew runIdeForUiTests --args="<project> <file>"` starts the IDE with the
 [Robot server](https://github.com/JetBrains/intellij-ui-test-robot) on `http://127.0.0.1:8082` and without the
@@ -130,8 +153,9 @@ below were done).
 ## Install
 
 *Settings > Plugins > ⚙ > Install Plugin from Disk…* → `hsm-jetbrains-<version>.zip`, restart if asked. Open a
-`.hsm` file. For the validation of closed files install the `hsm` command line tool (see
-[Installation](../docs/installation.md#command-line-tool-hsm)) or set its path in *Settings > Tools > HSM Modeler*.
+`.hsm` file. For the validation of closed files and the language server install the `hsm` command line tool (see
+[Installation](../docs/installation.md#command-line-tool-hsm)) or set its path in *Settings > Tools > HSM Modeler*;
+for the language server in the text editor also install LSP4IJ (*Settings > Plugins > Marketplace*).
 
 Requirements: an IntelliJ Platform IDE 2025.2 or newer (CLion, IntelliJ IDEA, PyCharm, …) with JCEF (all
 standard JetBrains runtimes have it; without it the editor shows the text only).
@@ -145,7 +169,16 @@ standard JetBrains runtimes have it; without it the editor shows the text only).
   headers and configuration, file reads confined to the project, changes of the page → undoable document
   changes, save, document changes → page with a late echo that must not win, problems → Problems tool window
   and text editor annotations, structure view, generated / exported files, settings), the lexer.
-- `./gradlew buildPlugin` and `verifyPlugin` (IntelliJ IDEA 2025.2.6 and 2026.2.3).
+- `./gradlew buildPlugin` and `verifyPlugin` (IntelliJ IDEA 2025.2.6 and 2026.2.3, with LSP4IJ 0.21.0 as optional
+  dependency).
+- Language server (`lsp.HsmLanguageServerTest`, light platform test with LSP4IJ 0.21.0 and the executable of
+  `npm run build:exe`; skipped without it): the server definition and language mapping of `hsm-lsp4ij.xml`, the
+  annotator stays silent, LSP4IJ starts `hsm lsp --stdio` (started explicitly: the light fixture does not start
+  servers for opened files), opens the model in it, hover with the documentation of a header and definition
+  into the header of the include paths of `hsm.gen.json` through the LSP4IJ connection.
+- `./gradlew runIde` (IntelliJ IDEA Community 2025.2.6): the IDE loads LSP4IJ 0.21.0 and the plugin (idea.log);
+  it stopped at the first-start dialogs of the fresh sandbox (user agreement / data sharing, not accepted), so
+  the server start in the real editor was not observed.
 - End to end in IntelliJ IDEA Community 2025.2.6 (macOS, real JCEF; `runIdeForUiTests` with scripts through the
   Robot server): the page starts and reports its outline (the import `motor.hsm` resolved); an edit in the
   page reaches the document; *Select All* + *Copy* puts the model into the IDE clipboard; a change of the
@@ -157,17 +190,20 @@ standard JetBrains runtimes have it; without it the editor shows the text only).
 - `./gradlew runLatestIde`: IntelliJ IDEA 2026.2.3 starts with the plugin loaded, without errors (not driven
   further: it stopped at the dialogs of a first start).
 
-**Not tested**: CLion itself and IDEs other than IntelliJ IDEA (the plugin uses only platform APIs), Windows
+**Not tested**: the language server features in the real editor (diagnostics display, completion popup,
+Ctrl+Click, reformat, rename, structure view, semantic colors – LSP4IJ applies diagnostics outside the light
+fixture's highlighting passes), CLion itself and IDEs other than IntelliJ IDEA (the plugin uses only platform APIs), Windows
 and Linux, real key presses in the page (the shortcuts were called as commands), the reaction to a change of
 the IDE theme (`LafManagerListener`; the page function it calls is tested), the red files in the project view
 (`WolfTheProblemSolver` did not report the file as a problem file in the test project), interactive use.
 
 ## Limitations / next steps
 
-- A language server for the text editor (completion, hover, go to definition): the platform's LSP API (IntelliJ
-  Ultimate / CLion and other commercial IDEs) or [LSP4IJ](https://github.com/redhat-developer/lsp4ij) (all IDEs)
-  with the language server of `packages/vscode` (needs Node.js) or of the `hsm` executable.
-- TextMate highlighting with the grammars of `packages/language/syntaxes` (the plugin has its own small lexer).
+- The language server needs the `hsm` executable, which the published plugin does not bundle; the `hsm.headers.*`
+  settings of the server (include paths for all models) are not offered (the `headers` block of `hsm.gen.json`
+  applies).
+- TextMate highlighting with the grammars of `packages/language/syntaxes` (the plugin has its own small lexer;
+  with LSP4IJ the server's semantic tokens add the kinds of names).
 - `.hsmtest` files: no test runner integration (`hsm test` in a run configuration would be the next step).
 - Imports and include paths are limited to the project directory; at most 500 importable files (2 MB each).
 - The page and the text editor have separate undo histories (both change the same document).

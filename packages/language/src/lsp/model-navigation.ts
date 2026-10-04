@@ -10,7 +10,7 @@ import { cppLocations, cppTypeLocationsOf, referenceBaseRange, type CppNavigatio
  * Go to definition / declaration / type definition and the links of import paths of a model as plain
  * data, for editors without a language server (the Monaco editor of the web app, embedded in Eclipse,
  * CLion and the desktop app). The same rules as the language server of the VS Code extension
- * (`packages/vscode/src/server/hsm-lsp.ts`): C++ names, struct members and header imports lead into the
+ * (`packages/language/src/node/hsm-lsp.ts`): C++ names, struct members and header imports lead into the
  * headers (each segment of `app::Mode::Fast` to its own declaration), the name of an imported state
  * machine used as a type and the path of a model import to the imported state machine, everything else
  * to the declaration in the models (Langium's definition provider).

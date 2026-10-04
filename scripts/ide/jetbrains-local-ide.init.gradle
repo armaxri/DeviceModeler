@@ -23,6 +23,13 @@ allprojects {
                 // a sandbox for trying the plugin: trust the opened folder, no tips
                 jvmArgs('-Didea.trust.all.projects=true', '-Dide.show.tips.on.startup.default.value=false')
             }
+            // LSP4IJ (optional dependency of the plugin): the language server in the text editor
+            def lsp4ij = project.findProperty('lsp4ijVersion')
+            if (lsp4ij != null) {
+                plugins {
+                    plugin('com.redhat.devtools.lsp4ij', lsp4ij.toString())
+                }
+            }
         }
     }
 }

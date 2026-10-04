@@ -9,7 +9,7 @@ import { isClassMember } from '../class-members.js';
 /**
  * Semantic highlighting of models for editors without a language server (the Monaco editor of the web
  * app, also embedded in Eclipse, CLion and the desktop app): the same tokens as the language server of
- * the VS Code extension (its `HsmSemanticTokenProvider` in `packages/vscode/src/server/hsm-lsp.ts` is this class). Names of
+ * the VS Code extension (its `HsmSemanticTokenProvider` in `packages/language/src/node/hsm-lsp.ts` is this class). Names of
  * declarations and cross references get the kind of the element (state, event, variable, constant,
  * operation, …), C++ names of imported headers are types, enums, enumerators and constants, which a
  * TextMate / Monarch grammar cannot know.

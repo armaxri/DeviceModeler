@@ -23,6 +23,7 @@
 
     <modules>
         <module>hsm.eclipse</module>
+        <module>hsm.eclipse.lsp</module>
         <module>hsm.eclipse.cli.linux.x86_64</module>
         <module>hsm.eclipse.cli.linux.aarch64</module>
         <module>hsm.eclipse.cli.macosx.x86_64</module>

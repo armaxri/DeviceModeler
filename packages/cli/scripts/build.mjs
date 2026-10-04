@@ -6,9 +6,8 @@
 import * as esbuild from 'esbuild';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { bundleOptions, root } from './bundle-options.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dist = path.join(root, 'dist');
 
 const packageJson = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf-8'));
@@ -16,22 +15,7 @@ const version = process.env.HSM_VERSION || packageJson.version;
 
 await fs.rm(dist, { recursive: true, force: true });
 await fs.mkdir(dist, { recursive: true });
-// one CommonJS file: the main script of a single executable application must be CommonJS and can only
-// require built-in modules
-await esbuild.build({
-    entryPoints: { hsm: path.join(root, 'src/main.ts') },
-    outdir: dist,
-    outExtension: { '.js': '.cjs' },
-    bundle: true,
-    platform: 'node',
-    format: 'cjs',
-    target: 'node22',
-    minify: true,
-    legalComments: 'none',
-    define: { __HSM_VERSION__: JSON.stringify(version) },
-    tsconfig: path.join(root, 'tsconfig.json'),
-    logLevel: 'warning'
-});
+await esbuild.build(bundleOptions({ outdir: dist, version }));
 
 // the input of `node --experimental-sea-config` (see scripts/sea.mjs)
 await fs.writeFile(path.join(dist, 'sea-config.json'), JSON.stringify({

@@ -4,4 +4,6 @@
       <category name="hsm"/>
    </feature>
    <category-def name="hsm" label="HSM Modeler (prototype)"/>
+   <!-- LSP4E, TM4E and LSP4J (dependencies of hsm.eclipse.lsp) are installed from the Eclipse release repository -->
+   <repository-reference location="https://download.eclipse.org/releases/2025-06/" enabled="true"/>
 </site>

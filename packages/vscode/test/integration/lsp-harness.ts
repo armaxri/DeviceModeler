@@ -7,16 +7,24 @@ import * as esbuild from 'esbuild';
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter, type MessageConnection } from 'vscode-jsonrpc/node';
 // @ts-expect-error untyped build helper (ES module script)
 import { bundleOptions } from '../../scripts/bundles.mjs';
+// @ts-expect-error untyped build helper (ES module script)
+import { bundleOptions as cliBundleOptions } from '../../../cli/scripts/bundle-options.mjs';
 
 /**
- * A language server process for integration tests: the bundled server (built into a temporary
- * directory with the options of the extension build), started with `--stdio`, in a temporary
- * workspace with the given files.
+ * A language server process for integration tests, started with `--stdio` in a temporary workspace
+ * with the given files: by default the bundled server of the extension (built into the temporary
+ * directory with the options of the extension build); `server: 'cli'` runs `hsm lsp --stdio` of the
+ * command line executable's bundle (what Eclipse and the JetBrains IDEs start), `command` any other
+ * server command (e.g. the built executable).
  */
 export interface LspServer {
     readonly dir: string;
     readonly connection: MessageConnection;
     readonly capabilities: Record<string, unknown>;
+    /** The capabilities registered dynamically by the server (`client/registerCapability`). */
+    readonly registrations: Array<{ method: string, registerOptions?: unknown }>;
+    /** The exit code of the server process (after `stop`). */
+    readonly exited: Promise<number | null>;
     /** The `file:` URI of a workspace file. */
     uriOf(relative: string): string;
     /** Opens a document (`textDocument/didOpen`). */
@@ -32,15 +40,38 @@ export interface LspDiagnostic {
     range: { start: { line: number, character: number } };
 }
 
+export interface LspServerOptions {
+    /** The server: the extension's bundle (default) or `hsm lsp` of the command line executable's bundle. */
+    server?: 'vscode' | 'cli';
+    /** The command line of the server (instead of a bundle), e.g. `['dist/bin/macos-arm64/hsm', 'lsp', '--stdio']`. */
+    command?: string[];
+    /** `initialize` parameters replacing the defaults (e.g. without `workspaceFolders`, as older clients). */
+    initialize?: (defaults: Record<string, unknown>) => Record<string, unknown>;
+}
+
+/** The command line of the server (bundles are built into `dir/out`). */
+async function serverCommand(dir: string, options: LspServerOptions): Promise<string[]> {
+    if (options.command) {
+        return options.command;
+    }
+    const outdir = path.join(dir, 'out');
+    if (options.server === 'cli') {
+        await esbuild.build({ ...cliBundleOptions({ outdir }), minify: false });
+        return [process.execPath, path.join(outdir, 'hsm.cjs'), 'lsp', '--stdio'];
+    }
+    await esbuild.build({ ...bundleOptions('server', { outdir }), logLevel: 'warning', sourcemap: false });
+    return [process.execPath, path.join(outdir, 'server.cjs'), '--stdio'];
+}
+
 /** Starts the server in a new temporary workspace containing `files` (path relative to the workspace -> text). */
-export async function startLspServer(files: Record<string, string>): Promise<LspServer> {
+export async function startLspServer(files: Record<string, string>, options: LspServerOptions = {}): Promise<LspServer> {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'hsm-lsp-'));
     for (const [relative, text] of Object.entries(files)) {
         await fs.mkdir(path.dirname(path.join(dir, relative)), { recursive: true });
         await fs.writeFile(path.join(dir, relative), text);
     }
-    await esbuild.build({ ...bundleOptions('server', { outdir: path.join(dir, 'out') }), logLevel: 'warning', sourcemap: false });
-    const server: ChildProcess = spawn(process.execPath, [path.join(dir, 'out/server.cjs'), '--stdio'], { stdio: ['pipe', 'pipe', 'inherit'] });
+    const [command, ...args] = await serverCommand(dir, options);
+    const server: ChildProcess = spawn(command, args, { stdio: ['pipe', 'pipe', 'inherit'] });
     const connection = createMessageConnection(new StreamMessageReader(server.stdout!), new StreamMessageWriter(server.stdin!));
     const diagnostics = new Map<string, LspDiagnostic[]>();
     const waiters: Array<() => void> = [];
@@ -48,10 +79,15 @@ export async function startLspServer(files: Record<string, string>): Promise<Lsp
         diagnostics.set(params.uri, params.diagnostics);
         waiters.splice(0).forEach(resolve => resolve());
     });
-    connection.onRequest('client/registerCapability', () => null);
+    const registrations: Array<{ method: string, registerOptions?: unknown }> = [];
+    connection.onRequest('client/registerCapability', (params: { registrations: Array<{ method: string, registerOptions?: unknown }> }) => {
+        registrations.push(...params.registrations);
+        return null;
+    });
+    const exited = new Promise<number | null>(resolve => server.on('exit', code => resolve(code)));
     connection.onRequest('workspace/configuration', (params: { items: unknown[] }) => params.items.map(() => null));
     connection.listen();
-    const result = await connection.sendRequest<{ capabilities: Record<string, unknown> }>('initialize', {
+    const defaults: Record<string, unknown> = {
         processId: process.pid,
         rootUri: pathToFileURL(dir).toString(),
         workspaceFolders: [{ uri: pathToFileURL(dir).toString(), name: 'workspace' }],
@@ -62,13 +98,16 @@ export async function startLspServer(files: Record<string, string>): Promise<Lsp
                 definition: { linkSupport: true }, declaration: { linkSupport: true }, typeDefinition: { linkSupport: true }
             }
         }
-    });
+    };
+    const result = await connection.sendRequest<{ capabilities: Record<string, unknown> }>('initialize', options.initialize?.(defaults) ?? defaults);
     await connection.sendNotification('initialized', {});
     const uriOf = (relative: string) => pathToFileURL(path.join(dir, relative)).toString();
     return {
         dir,
         connection,
         capabilities: result.capabilities,
+        registrations,
+        exited,
         uriOf,
         open(relative, languageId, text, version = 1) {
             void connection.sendNotification('textDocument/didOpen', { textDocument: { uri: uriOf(relative), languageId, version, text } });
@@ -96,8 +135,11 @@ export async function startLspServer(files: Record<string, string>): Promise<Lsp
             } catch {
                 // already gone
             }
+            // the server exits on `exit` (killed if it does not within 5 s)
+            const timeout = setTimeout(() => server.kill(), 5000);
+            await exited;
+            clearTimeout(timeout);
             connection.dispose();
-            server.kill();
             await fs.rm(dir, { recursive: true, force: true });
         }
     };

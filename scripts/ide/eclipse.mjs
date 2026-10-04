@@ -47,6 +47,14 @@ export function releaseOfPom(pomText) {
     return match?.[1];
 }
 
+/**
+ * The repositories of the p2 director: the built update site and the Eclipse release repository, from which p2
+ * installs the dependencies of the language support (LSP4E, TM4E, LSP4J) if the installation has none.
+ */
+export function directorRepositories(siteUrl, release) {
+    return `${siteUrl},https://download.eclipse.org/releases/${release}/`;
+}
+
 /** The EPP download for a platform: archive name and URL on archive.eclipse.org. */
 export function eclipseDownload({ release, pkg = 'cpp', platform = process.platform, arch = process.arch }) {
     const os = { darwin: 'macosx-cocoa', linux: 'linux-gtk', win32: 'win32' }[platform];
@@ -253,7 +261,7 @@ function director(layout, args, options) {
     return run(layout.console, ['-nosplash', '-consoleLog', '-application', 'org.eclipse.equinox.p2.director', ...args], options);
 }
 
-function installFeature(layout, options) {
+function installFeature(layout, release, options) {
     const siteVersion = siteFeatureVersion();
     if (!siteVersion && !options.dryRun) {
         throw new ScriptError(`the update site is not built (${show(siteRepository)}): run without --no-build`);
@@ -265,7 +273,7 @@ function installFeature(layout, options) {
         info(`already installed: ${installed}`);
         return;
     }
-    const args = ['-repository', pathToFileURL(siteRepository).href, '-installIU', FEATURE_IU];
+    const args = ['-repository', directorRepositories(pathToFileURL(siteRepository).href, release), '-installIU', FEATURE_IU];
     if (installed) {
         info(`replacing ${installed}`);
         args.push('-uninstallIU', FEATURE_IU);
@@ -346,12 +354,12 @@ if (isMain(import.meta.url)) await runScript({
         if (options.build) {
             buildPlugin(options);
         }
-        const layout = configuredEclipse(options) ??
-            (await sandboxEclipse({ release: options.release ?? defaultRelease(), pkg, dryRun: options.dryRun }));
+        const release = options.release ?? defaultRelease();
+        const layout = configuredEclipse(options) ?? (await sandboxEclipse({ release, pkg, dryRun: options.dryRun }));
         if (!options.dryRun) {
             assertNotRunning(layout);
         }
-        installFeature(layout, options);
+        installFeature(layout, release, options);
 
         const workspace = path.join(sandbox, 'workspace');
         const projectDir = prepareExamples(options, 'eclipse');
