@@ -1,22 +1,25 @@
 <idea-plugin>
-    <id>hsm.jetbrains</id>
-    <name>HSM Modeler</name>
-    <vendor url="https://github.com/armaxri/HSM">HSM</vendor>
+    <id>devm.jetbrains</id>
+    <name>Device Modeler</name>
+    <vendor url="https://github.com/armaxri/DeviceModeler">Device Modeler</vendor>
 
     <description><![CDATA[
-    Hierarchical state machines (<code>.hsm</code>) in CLion and the other JetBrains IDEs: the HSM web app
-    (text editor, PlantUML-style diagram editor, properties, simulation, export, C++ generation) in an editor tab,
-    working on the IDE's document of the file, next to the IDE's text editor.
+    Device models (<code>.devm</code>) in CLion and the other JetBrains IDEs: hierarchical state machines and
+    structure files (components, data-flow ports, subsystems, systems, threads, connections). The Device Modeler web
+    app (text editor, PlantUML-style state machine diagram, internal-block structure diagram, properties, simulation,
+    export, C++ generation) runs in an editor tab, working on the IDE's document of the file, next to the IDE's text
+    editor.
     <ul>
-      <li>Editor with the views <b>Text</b>, <b>Text and Diagram</b> and <b>Diagram</b> (JCEF)</li>
+      <li>Editor with the views <b>Text</b>, <b>Text and Diagram</b> and <b>Diagram</b> (JCEF): the state machine
+          diagram for state machines, the structure diagram for structure files</li>
       <li>Problems of the model in the text editor and in the Problems tool window (also of closed files, with the
-          <code>hsm</code> command line tool)</li>
+          <code>devm</code> command line tool)</li>
       <li>Structure view, navigation from problems and structure into the diagram</li>
-      <li><i>Generate C++</i> (configured by <code>hsm.gen.json</code> or the settings)</li>
+      <li><i>Generate C++</i> of state machines (configured by <code>devm.gen.json</code> or the settings)</li>
       <li>Undo, redo, copy, paste, find and save shortcuts in the diagram editor; dark theme of the IDE</li>
-      <li>Highlighting, comments and braces of <code>.hsm</code> and <code>.hsmtest</code> files</li>
-      <li>With the plugin <a href="https://plugins.jetbrains.com/plugin/23257-lsp4ij">LSP4IJ</a>: the HSM language
-          server (<code>hsm lsp</code>) in the text editor – diagnostics, completion, hover, go to definition /
+      <li>Highlighting, comments and braces of <code>.devm</code> and <code>.devmtest</code> files</li>
+      <li>With the plugin <a href="https://plugins.jetbrains.com/plugin/23257-lsp4ij">LSP4IJ</a>: the Device Modeler language
+          server (<code>devm lsp</code>) in the text editor – diagnostics, completion, hover, go to definition /
           declaration / type definition into C/C++ headers and other models, document links, formatting, structure,
           folding, rename and semantic highlighting</li>
     </ul>
@@ -25,46 +28,46 @@
     <!-- only the platform: runs in CLion, IntelliJ IDEA and the other IDEs of the IntelliJ Platform -->
     <depends>com.intellij.modules.platform</depends>
     <!-- optional: the language server in the text editor (LSP4IJ, works in all JetBrains IDEs incl. the free ones) -->
-    <depends optional="true" config-file="hsm-lsp4ij.xml">com.redhat.devtools.lsp4ij</depends>
+    <depends optional="true" config-file="devm-lsp4ij.xml">com.redhat.devtools.lsp4ij</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <fileType name="HSM" implementationClass="hsm.jetbrains.lang.HsmFileType" fieldName="INSTANCE"
-                  language="HSM" extensions="hsm"/>
-        <fileType name="HSM Test" implementationClass="hsm.jetbrains.lang.HsmTestFileType" fieldName="INSTANCE"
-                  language="HSMTest" extensions="hsmtest"/>
+        <fileType name="Devm" implementationClass="devm.jetbrains.lang.DevmFileType" fieldName="INSTANCE"
+                  language="Devm" extensions="devm"/>
+        <fileType name="Devm Test" implementationClass="devm.jetbrains.lang.DevmTestFileType" fieldName="INSTANCE"
+                  language="DevmTest" extensions="devmtest"/>
 
-        <lang.parserDefinition language="HSM" implementationClass="hsm.jetbrains.lang.HsmParserDefinition"/>
-        <lang.syntaxHighlighterFactory language="HSM" implementationClass="hsm.jetbrains.lang.HsmSyntaxHighlighterFactory"/>
-        <lang.commenter language="HSM" implementationClass="hsm.jetbrains.lang.HsmCommenter"/>
-        <lang.braceMatcher language="HSM" implementationClass="hsm.jetbrains.lang.HsmBraceMatcher"/>
-        <externalAnnotator language="HSM" implementationClass="hsm.jetbrains.problems.HsmExternalAnnotator"/>
+        <lang.parserDefinition language="Devm" implementationClass="devm.jetbrains.lang.DevmParserDefinition"/>
+        <lang.syntaxHighlighterFactory language="Devm" implementationClass="devm.jetbrains.lang.DevmSyntaxHighlighterFactory"/>
+        <lang.commenter language="Devm" implementationClass="devm.jetbrains.lang.DevmCommenter"/>
+        <lang.braceMatcher language="Devm" implementationClass="devm.jetbrains.lang.DevmBraceMatcher"/>
+        <externalAnnotator language="Devm" implementationClass="devm.jetbrains.problems.DevmExternalAnnotator"/>
 
-        <lang.parserDefinition language="HSMTest" implementationClass="hsm.jetbrains.lang.HsmTestParserDefinition"/>
-        <lang.syntaxHighlighterFactory language="HSMTest" implementationClass="hsm.jetbrains.lang.HsmTestSyntaxHighlighterFactory"/>
-        <lang.commenter language="HSMTest" implementationClass="hsm.jetbrains.lang.HsmTestCommenter"/>
-        <lang.braceMatcher language="HSMTest" implementationClass="hsm.jetbrains.lang.HsmTestBraceMatcher"/>
+        <lang.parserDefinition language="DevmTest" implementationClass="devm.jetbrains.lang.DevmTestParserDefinition"/>
+        <lang.syntaxHighlighterFactory language="DevmTest" implementationClass="devm.jetbrains.lang.DevmTestSyntaxHighlighterFactory"/>
+        <lang.commenter language="DevmTest" implementationClass="devm.jetbrains.lang.DevmTestCommenter"/>
+        <lang.braceMatcher language="DevmTest" implementationClass="devm.jetbrains.lang.DevmTestBraceMatcher"/>
 
-        <fileEditorProvider implementation="hsm.jetbrains.editor.HsmEditorProvider"/>
+        <fileEditorProvider implementation="devm.jetbrains.editor.DevmEditorProvider"/>
 
-        <applicationConfigurable parentId="tools" instance="hsm.jetbrains.settings.HsmConfigurable"
-                                 id="hsm.settings" displayName="HSM Modeler"/>
-        <notificationGroup id="HSM Modeler" displayType="BALLOON"/>
+        <applicationConfigurable parentId="tools" instance="devm.jetbrains.settings.DevmConfigurable"
+                                 id="devm.settings" displayName="Device Modeler"/>
+        <notificationGroup id="Device Modeler" displayType="BALLOON"/>
     </extensions>
 
     <projectListeners>
-        <listener class="hsm.jetbrains.problems.HsmValidationListener"
+        <listener class="devm.jetbrains.problems.DevmValidationListener"
                   topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
     </projectListeners>
 
     <actions>
-        <action id="hsm.GenerateCpp" class="hsm.jetbrains.actions.GenerateCppAction" text="Generate C++"
-                description="Generate the C++ code of the state machine (configured by hsm.gen.json or the HSM settings)">
+        <action id="devm.GenerateCpp" class="devm.jetbrains.actions.GenerateCppAction" text="Generate C++"
+                description="Generate the C++ code of the state machine (configured by devm.gen.json or the Device Modeler settings)">
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
             <add-to-group group-id="EditorTabPopupMenu" anchor="last"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
-        <action id="hsm.ValidateModels" class="hsm.jetbrains.actions.ValidateModelsAction" text="Validate HSM Models"
-                description="Validate all state machines of the project with the hsm command line tool">
+        <action id="devm.ValidateModels" class="devm.jetbrains.actions.ValidateModelsAction" text="Validate Device Models"
+                description="Validate all models (state machines and structure files) of the project with the devm command line tool">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
     </actions>

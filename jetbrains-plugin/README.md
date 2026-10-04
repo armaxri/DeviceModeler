@@ -1,25 +1,28 @@
 # JetBrains plugin (prototype)
 
-An editor for `.hsm` files in CLion, IntelliJ IDEA and the other IDEs of the IntelliJ Platform (2025.2 or
-newer): the HSM web app (Monaco text editor, diagram editor, properties, simulation, export, C++ generation)
+An editor for `.devm` files – state machines and structure files (components, data-flow ports, subsystems,
+systems, threads, connections) – in CLion, IntelliJ IDEA and the other IDEs of the IntelliJ Platform (2025.2 or
+newer): the Device Modeler web app (Monaco text editor, diagram editor, properties, simulation, export, C++ generation)
 runs in a JCEF browser (the Chromium embedded in the IDE) inside an editor tab and edits the IDE's document of
 the file. Like the [Eclipse plugin](../eclipse-plugin/README.md), nothing of the language is reimplemented in
 Kotlin – the plugin hosts the web app and connects it to the IDE (document, Problems, Structure, edit shortcuts,
 settings, VFS). It depends only on `com.intellij.modules.platform`, so it runs in every JetBrains IDE.
 
 ```
-HsmSplitEditor (TextEditorWithPreview)                   JCEF browser
+DevmSplitEditor (TextEditorWithPreview)                   JCEF browser
   ├─ IntelliJ text editor ─┐                              ├─ packages/web/dist (webapp/, ?host=http)
   │                        ├─ the Document of the file    └─ packages/web/src/host*.ts: document, changed,
-  └─ HsmDiagramEditor ─────┘        ▲                         save, model (problems + outline), settings,
-       └─ HsmSession ── HTTP ───────┼──────────────────►      open, export, generate
+  └─ DevmDiagramEditor ─────┘        ▲                         save, model (problems + outline), settings,
+       └─ DevmSession ── HTTP ───────┼──────────────────►      open, export, generate
             HostServer (127.0.0.1, JDK HttpServer, token per editor)
 ```
 
 ## What it does
 
-- **Editor** for `.hsm` with the views *Text*, *Text and Diagram* and *Diagram* (toolbar at the top right of
-  the editor; default *Diagram*). Page and IntelliJ text editor work on the same `Document`: changes of the
+- **Editor** for `.devm` with the views *Text*, *Text and Diagram* and *Diagram* (toolbar at the top right of
+  the editor; default *Diagram*). The page decides by the text which diagram it shows: the state machine
+  diagram for a file starting with `statemachine`, the internal-block structure diagram for every other
+  `.devm` file (structure file). Page and IntelliJ text editor work on the same `Document`: changes of the
   page become undoable commands of the document (only the changed part is replaced, so carets and markers
   survive), changes of the document from elsewhere (text editor, VCS, external changes, refactorings) are
   loaded into the page. Dirty state, autosave, local history and *File > Save All* are the IDE's; `Cmd/Ctrl+S`
@@ -30,42 +33,46 @@ HsmSplitEditor (TextEditorWithPreview)                   JCEF browser
   They are shown in the text editor (external annotator) and in the *Problems* tool window (*Project
   Errors*), and stay when the editor is closed (like the markers of a build). Navigating to a problem (or a
   search result) selects the position in the text editor and the range / element in the page.
-- **Closed files**: after a model, a header or a generator configuration of the project was saved or changed on
-  disk, `hsm validate --json` validates the changed models and the models importing a changed model or header
-  (all models after a change of `hsm.gen.json`) – the counterpart of the Eclipse builder. *Tools > Validate HSM
+- **Closed files** (state machines and structure files): after a model, a header or a generator configuration of the project was saved or changed on
+  disk, `devm validate --json` validates the changed models and the models importing a changed model or header
+  (all models after a change of `devm.gen.json`) – the counterpart of the Eclipse builder. *Tools > Validate Device
   Models* validates all models of the project. Models with an open diagram are left to their page. A saved
   model opened without page (no JCEF) is validated by the annotator with the executable.
-- **Structure** tool window: state machine, definitions, states, regions, pseudo states and transitions of the
-  page; selecting an element selects its text and its diagram element.
+- **Structure** tool window: state machine, definitions, states, regions, pseudo states and transitions of a
+  state machine, structs, components, subsystems, systems, ports, threads, instances, connections and
+  delegations of a structure file (the outline the page reports); selecting an element selects its text and
+  its diagram element.
 - **Navigation from the page's text editor** (`F12`, `Cmd/Ctrl`+Click, *Go to Declaration / Type
   Definition*, links of import paths): C++ names open the imported header in the editor of its type (CLion's
-  C/C++ editor) with the declaration selected, imported models open in the HSM editor at the target
+  C/C++ editor) with the declaration selected, imported models open in the Device Modeler editor at the target
   (`api/open` with a position, `OpenFileDescriptor`). Peek shows the target inside the page.
 - **Edit shortcuts in the page**: the IDE's *Undo*, *Redo*, *Cut*, *Copy*, *Paste*, *Select All*, *Find*,
   *Replace* and *Save All* shortcuts of the active keymap act on the page while it has the focus (on the
   Monaco editor, an input field of the properties panel or the diagram); copy and paste use the IDE clipboard
-  (`hsmApp.hostCommand`, the same as in Eclipse; a key the page already handled itself is not applied twice).
-- **Imports**: the `.hsm` models and C/C++ headers below the project directory are passed to the page with
-  their project-relative paths (unsaved changes of open files included; excluded and ignored folders,
-  `node_modules` and dot folders skipped), so `import "../motor.hsm"` works within the project. The `headers`
-  block of the nearest `hsm.gen.json` / `*.hsm.gen.json` is applied. Changes of models, headers and
+  (`devmApp.hostCommand`, the same as in Eclipse; a key the page already handled itself is not applied twice).
+- **Imports**: all `.devm` models (state machines and structure files, also those the edited file does not
+  import: the structure diagram's *Used by*, routes and navigation across files need them) and C/C++ headers
+  below the project directory are passed to the page with their project-relative paths (unsaved changes of open files included; excluded and ignored folders,
+  `node_modules` and dot folders skipped), so `import "../motor.devm"` works within the project. The `headers`
+  block of the nearest `devm.gen.json` / `*.devm.gen.json` is applied. Changes of models, headers and
   configurations update the page.
-- **Generate C++**: context menu of `.hsm` files (project view, editor tab) and *Tools > Generate C++*, and the
+- **Generate C++**: context menu of state machine `.devm` files (project view, editor tab; not offered for
+  structure files) and *Tools > Generate C++*, and the
   *C++* button of the page. The generator of the language package runs in the page (no Node.js), configured
-  like `hsm generate` (nearest `hsm.gen.json` listing the model, else the settings); the files are written
+  like `devm generate` (nearest `devm.gen.json` listing the model, else the settings); the files are written
   through the VFS (unchanged files are not touched); the result is shown as a notification.
-- **Settings** (*Settings > Tools > HSM Modeler*): `hsm` executable, validation of saved models, the defaults of
+- **Settings** (*Settings > Tools > Device Modeler*): `devm` executable, validation of saved models, the defaults of
   *Generate C++* (output folder relative to the model or `${project}/…`, namespace, C++ standard). The page
-  settings (theme, layout direction, edge routing, …) are stored by the IDE (`hsm.xml`).
+  settings (theme, layout direction, edge routing, …) are stored by the IDE (`devm.xml`).
 - **Theme**: with a dark IDE theme the page uses its *Dark* theme, with a light one *PlantUML classic*; a
-  change of the IDE theme is applied to the open pages (`hsmApp.setHostTheme`).
+  change of the IDE theme is applied to the open pages (`devmApp.setHostTheme`).
 - **Text editor support** without a language server: highlighting (keywords of the grammars, comments, strings,
-  numbers, `@annotations`), comment / uncomment, brace matching for `.hsm` and `.hsmtest` (file types with
-  icon; `.hsmtest` opens in the text editor only).
+  numbers, `@annotations`), comment / uncomment, brace matching for `.devm` and `.devmtest` (file types with
+  icon; `.devmtest` opens in the text editor only).
 - **Language server in the text editor** with [LSP4IJ](https://plugins.jetbrains.com/plugin/23257-lsp4ij)
-  installed (optional dependency, `META-INF/hsm-lsp4ij.xml`): LSP4IJ starts `hsm lsp --stdio` of the executable
-  found by `HsmExecutable` (setting, bundled, `PATH`) for `.hsm` and `.hsmtest` (also in the *Text* view of the
-  HSM editor): diagnostics, completion, hover with documentation, *Go to Declaration* / Ctrl+Click into imported
+  installed (optional dependency, `META-INF/devm-lsp4ij.xml`): LSP4IJ starts `devm lsp --stdio` of the executable
+  found by `DevmExecutable` (setting, bundled, `PATH`) for `.devm` and `.devmtest` (also in the *Text* view of the
+  Device Modeler editor): diagnostics, completion, hover with documentation, *Go to Declaration* / Ctrl+Click into imported
   C/C++ headers (CLion's editor) and other models, document links, *Reformat Code*, *Find Usages*, rename,
   structure view and folding of the server, semantic tokens on top of the lexer highlighting. While it runs,
   the plugin's annotator leaves the problems of the text to the server (no duplicates); the *Problems* tool
@@ -78,20 +85,20 @@ HsmSplitEditor (TextEditorWithPreview)                   JCEF browser
 |---|---|
 | `server.HostServer` | loopback HTTP server (JDK `com.sun.net.httpserver` + Gson, no IntelliJ dependencies): web app + API, one random token per editor; rejects unknown tokens, foreign `Host` headers (DNS rebinding) and foreign `Origin`s; static files only below `webapp/` |
 | `server.HostSession` | the API of one page (protocol: `packages/web/src/host.ts`) |
-| `server.HsmWebServer` | application service: the one server of the IDE (port 47915, a free one if taken; `-Dhsm.server.port`), `webapp/` of the plugin directory (`-Dhsm.webapp` for development) |
-| `editor.HsmSession` | the host side of a page on the IntelliJ `Document`: text sync (with protection against late echoes of pushed text), save, problems, settings, open, export, generated files |
-| `editor.HsmDiagramEditor` | the JCEF browser (`JBCefBrowser`, `JBCefJSQuery` for return values), page scripts, edit shortcuts, VFS / theme listeners; a message instead of the browser if JCEF is unavailable |
-| `editor.HsmSplitEditor`, `HsmEditorProvider` | `TextEditorWithPreview` *Text / Text and Diagram / Diagram*, navigation into the page, Structure view |
+| `server.DevmWebServer` | application service: the one server of the IDE (port 47915, a free one if taken; `-Ddevm.server.port`), `webapp/` of the plugin directory (`-Ddevm.webapp` for development) |
+| `editor.DevmSession` | the host side of a page on the IntelliJ `Document`: text sync (with protection against late echoes of pushed text), save, problems, settings, open, export, generated files |
+| `editor.DevmDiagramEditor` | the JCEF browser (`JBCefBrowser`, `JBCefJSQuery` for return values), page scripts, edit shortcuts, VFS / theme listeners; a message instead of the browser if JCEF is unavailable |
+| `editor.DevmSplitEditor`, `DevmEditorProvider` | `TextEditorWithPreview` *Text / Text and Diagram / Diagram*, navigation into the page, Structure view |
 | `editor.ProjectFiles` | root (project directory, else content root, else folder), project-relative paths, confinement (no `..`, no symlinks out of the root), importable files, generator configurations, writing files |
-| `problems.HsmProblems` | problems per file → Problems tool window (`ProblemsCollector`), red files (`WolfTheProblemSolver`), annotator |
-| `problems.HsmExternalAnnotator` | problems in the text editor |
-| `problems.HsmValidation` | validation of saved / closed models with `hsm validate --json` (VFS listener, *Validate HSM Models*) |
-| `cli.HsmExecutable`, `cli.CliValidator` | executable lookup and `hsm validate --json` (same as the Eclipse plugin) |
+| `problems.DevmProblems` | problems per file → Problems tool window (`ProblemsCollector`), red files (`WolfTheProblemSolver`), annotator |
+| `problems.DevmExternalAnnotator` | problems in the text editor |
+| `problems.DevmValidation` | validation of saved / closed models with `devm validate --json` (VFS listener, *Validate Device Models*) |
+| `cli.DevmExecutable`, `cli.CliValidator` | executable lookup and `devm validate --json` (same as the Eclipse plugin) |
 | `lang.*` | file types, lexer, highlighting, commenter, brace matcher, flat PSI |
-| `lsp.HsmLanguageServerFactory`, `HsmConnectionProvider` | LSP4IJ server factory: `hsm lsp --stdio` (only loaded with LSP4IJ, `hsm-lsp4ij.xml`) |
-| `lsp.HsmLanguageServerSupport` | whether the language server runs (LSP4IJ loaded and an executable found), without LSP4IJ classes |
+| `lsp.DevmLanguageServerFactory`, `DevmConnectionProvider` | LSP4IJ server factory: `devm lsp --stdio` (only loaded with LSP4IJ, `devm-lsp4ij.xml`) |
+| `lsp.DevmLanguageServerSupport` | whether the language server runs (LSP4IJ loaded and an executable found), without LSP4IJ classes |
 | `settings.*` | settings and settings page |
-| `actions.*` | *Generate C++*, *Validate HSM Models* |
+| `actions.*` | *Generate C++*, *Validate Device Models* |
 
 Decisions:
 
@@ -104,22 +111,22 @@ Decisions:
   saved): the IDE's text editor, undo, autosave, local history, VCS and other plugins see every change of the
   diagram immediately. The page's own undo (Monaco) is used for the undo shortcut while the page has the
   focus; *Edit > Undo* of the menu undoes the document, which the page then shows.
-- **No bundled `hsm` executable**: a JetBrains plugin is one zip for all platforms, the executables have about
-  120 MB each (600 MB for five platforms). The plugin looks for it in this order: the setting, `bin/hsm` of the
-  plugin directory (only in a plugin built with `-PhsmExecutable=<path>` for one platform), `hsm` in the `PATH`
+- **No bundled `devm` executable**: a JetBrains plugin is one zip for all platforms, the executables have about
+  120 MB each (600 MB for five platforms). The plugin looks for it in this order: the setting, `bin/devm` of the
+  plugin directory (only in a plugin built with `-PdevmExecutable=<path>` for one platform), `devm` in the `PATH`
   (plus `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`). Without one, a notification (with *Configure…*)
   says so once per project; everything except the validation of closed files works without it.
 - **LSP4IJ instead of the platform's LSP API** for the text editor: the platform API (`com.intellij.platform.lsp`)
   is not available in IntelliJ IDEA Community / PyCharm Community 2025.2 (the oldest supported platform; only
   the commercial IDEs have it). LSP4IJ works in every JetBrains IDE ≥ 2024.2, covers the LSP features of
   the server and brings the *LSP Consoles* for diagnosis. It is an **optional** dependency
-  (`<depends optional="true" config-file="hsm-lsp4ij.xml">`): without it the plugin works as before (lexer
-  highlighting, problems of the page and of `hsm validate`). Highlighting stays the plugin's own lexer plus the
+  (`<depends optional="true" config-file="devm-lsp4ij.xml">`): without it the plugin works as before (lexer
+  highlighting, problems of the page and of `devm validate`). Highlighting stays the plugin's own lexer plus the
   server's semantic tokens (TextMate highlighting through the TextMate plugin would need the file types to be
   given up).
-- **CLion**: no CLion-specific code is needed. CLion's CMake integration of the models (`cmake/HsmGenerate.cmake`,
-  `hsm_generate` / `hsm_add_tests`, see [Build integration](../docs/build-integration.md)) works when `hsm` is in
-  the `PATH` of CLion (or with `-DHSM_EXECUTABLE=<path>` in the CMake options of the CLion profile) – it
+- **CLion**: no CLion-specific code is needed. CLion's CMake integration of the models (`cmake/DevmGenerate.cmake`,
+  `devm_generate` / `devm_add_tests`, see [Build integration](../docs/build-integration.md)) works when `devm` is in
+  the `PATH` of CLion (or with `-DDEVM_EXECUTABLE=<path>` in the CMake options of the CLion profile) – it
   regenerates the code on every build;
   *Generate C++* of the plugin is for projects without that.
 
@@ -134,11 +141,11 @@ npm ci
 npm run build -w packages/web
 
 cd jetbrains-plugin
-./gradlew buildPlugin        # → build/distributions/hsm-jetbrains-<version>.zip
+./gradlew buildPlugin        # → build/distributions/devm-jetbrains-<version>.zip
 ./gradlew test               # unit tests and light platform tests (headless)
 ./gradlew verifyPlugin       # Plugin Verifier against IntelliJ IDEA 2025.2 and the latest release
 ./gradlew runIde             # IntelliJ IDEA 2025.2 with the plugin and LSP4IJ (runLatestIde, runClion: other IDEs)
-./gradlew buildPlugin -PhsmExecutable=../packages/cli/dist/bin/macos-arm64/hsm   # with the executable of one platform
+./gradlew buildPlugin -PdevmExecutable=../packages/cli/dist/bin/macos-arm64/devm   # with the executable of one platform
 ```
 
 LSP4IJ (`lsp4ijVersion` in `gradle.properties`) is a compile dependency (`plugin(…)` in `build.gradle.kts`) and is
@@ -152,9 +159,9 @@ below were done).
 
 ## Install
 
-*Settings > Plugins > ⚙ > Install Plugin from Disk…* → `hsm-jetbrains-<version>.zip`, restart if asked. Open a
-`.hsm` file. For the validation of closed files and the language server install the `hsm` command line tool (see
-[Installation](../docs/installation.md#command-line-tool-hsm)) or set its path in *Settings > Tools > HSM Modeler*;
+*Settings > Plugins > ⚙ > Install Plugin from Disk…* → `devm-jetbrains-<version>.zip`, restart if asked. Open a
+`.devm` file. For the validation of closed files and the language server install the `devm` command line tool (see
+[Installation](../docs/installation.md#command-line-tool-devm)) or set its path in *Settings > Tools > Device Modeler*;
 for the language server in the text editor also install LSP4IJ (*Settings > Plugins > Marketplace*).
 
 Requirements: an IntelliJ Platform IDE 2025.2 or newer (CLion, IntelliJ IDEA, PyCharm, …) with JCEF (all
@@ -163,7 +170,7 @@ standard JetBrains runtimes have it; without it the editor shows the text only).
 ## Verified
 
 - `./gradlew test` (macOS): the host server (tokens, unknown / closed sessions, `Host` and `Origin` checks,
-  path traversal, every API operation, missing web app), paths and outputs (`hsm validate --json` with a fake
+  path traversal, every API operation, missing web app), paths and outputs (`devm validate --json` with a fake
   executable, executable lookup in the `PATH`), and light platform tests in a headless IDE: file types, editor
   provider (without JCEF: text layout and fallback), the session on the document (document with imports,
   headers and configuration, file reads confined to the project, changes of the page → undoable document
@@ -171,22 +178,22 @@ standard JetBrains runtimes have it; without it the editor shows the text only).
   and text editor annotations, structure view, generated / exported files, settings), the lexer.
 - `./gradlew buildPlugin` and `verifyPlugin` (IntelliJ IDEA 2025.2.6 and 2026.2.3, with LSP4IJ 0.21.0 as optional
   dependency).
-- Language server (`lsp.HsmLanguageServerTest`, light platform test with LSP4IJ 0.21.0 and the executable of
-  `npm run build:exe`; skipped without it): the server definition and language mapping of `hsm-lsp4ij.xml`, the
-  annotator stays silent, LSP4IJ starts `hsm lsp --stdio` (started explicitly: the light fixture does not start
+- Language server (`lsp.DevmLanguageServerTest`, light platform test with LSP4IJ 0.21.0 and the executable of
+  `npm run build:exe`; skipped without it): the server definition and language mapping of `devm-lsp4ij.xml`, the
+  annotator stays silent, LSP4IJ starts `devm lsp --stdio` (started explicitly: the light fixture does not start
   servers for opened files), opens the model in it, hover with the documentation of a header and definition
-  into the header of the include paths of `hsm.gen.json` through the LSP4IJ connection.
+  into the header of the include paths of `devm.gen.json` through the LSP4IJ connection.
 - `./gradlew runIde` (IntelliJ IDEA Community 2025.2.6): the IDE loads LSP4IJ 0.21.0 and the plugin (idea.log);
   it stopped at the first-start dialogs of the fresh sandbox (user agreement / data sharing, not accepted), so
   the server start in the real editor was not observed.
 - End to end in IntelliJ IDEA Community 2025.2.6 (macOS, real JCEF; `runIdeForUiTests` with scripts through the
-  Robot server): the page starts and reports its outline (the import `motor.hsm` resolved); an edit in the
+  Robot server): the page starts and reports its outline (the import `motor.devm` resolved); an edit in the
   page reaches the document; *Select All* + *Copy* puts the model into the IDE clipboard; a change of the
   document reaches the page, its problems reach the Problems tool window; *Undo* in the page reverts it in the
   document; *Save* in the page saves the file; `setHostTheme('dark')` switches the page; *Generate C++* (the
   action, for a model that is not open) opens the editor and writes `Door.h` / `Door.cpp`, and reports the
   errors of a model the generator does not support; an external change of the file reaches document and page;
-  `hsm validate --json` with the executable of `npm run build:exe` reports the problem of a closed model.
+  `devm validate --json` with the executable of `npm run build:exe` reports the problem of a closed model.
 - Resizing in the real editor (IntelliJ IDEA Community 2025.2.6, macOS, JCEF with off-screen rendering; mouse
   events posted to the IDE event queue through the Robot server, the path of real mouse input inside the IDE):
   the bar between text and diagram of the page side by side (page wider than 900 px) and on top of each other
@@ -194,6 +201,13 @@ standard JetBrains runtimes have it; without it the editor shows the text only).
   divider and on the page side of it) and dragging a state in the diagram.
 - `./gradlew runLatestIde`: IntelliJ IDEA 2026.2.3 starts with the plugin loaded, without errors (not driven
   further: it stopped at the dialogs of a first start).
+
+- Structure files (Device Modeler): light platform tests of a structure file in the editor (file type, editor
+  provider, all models of the project in `api/document`, structure outline in the structure view, `api/open`
+  into a state machine at a position), the lexer with the structure keywords, `isStructureText`, and with the
+  executable of `npm run build:exe` go to definition from a structure file into the component type of an
+  imported structure file through LSP4IJ. The end-to-end checks above were done before the rename to the Device Modeler
+  (with state machines only) and have not been repeated for structure files in a real IDE.
 
 **Not tested**: the language server features in the real editor (diagnostics display, completion popup,
 Ctrl+Click, reformat, rename, structure view, semantic colors – LSP4IJ applies diagnostics outside the light
@@ -204,12 +218,12 @@ the IDE theme (`LafManagerListener`; the page function it calls is tested), the 
 
 ## Limitations / next steps
 
-- The language server needs the `hsm` executable, which the published plugin does not bundle; the `hsm.headers.*`
-  settings of the server (include paths for all models) are not offered (the `headers` block of `hsm.gen.json`
+- The language server needs the `devm` executable, which the published plugin does not bundle; the `devm.headers.*`
+  settings of the server (include paths for all models) are not offered (the `headers` block of `devm.gen.json`
   applies).
 - TextMate highlighting with the grammars of `packages/language/syntaxes` (the plugin has its own small lexer;
   with LSP4IJ the server's semantic tokens add the kinds of names).
-- `.hsmtest` files: no test runner integration (`hsm test` in a run configuration would be the next step).
+- `.devmtest` files: no test runner integration (`devm test` in a run configuration would be the next step).
 - Imports and include paths are limited to the project directory; at most 500 importable files (2 MB each).
 - The page and the text editor have separate undo histories (both change the same document).
 - Signing and publication on the JetBrains Marketplace.
