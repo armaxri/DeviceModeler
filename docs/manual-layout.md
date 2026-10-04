@@ -162,10 +162,6 @@ the layout of every parsed model with `layoutFromModel` and turns every layout c
 
 ## VS Code extension
 
-The extension of this branch is packaged as `hsm-vscode-0.1.0-manual-layout.vsix` (display name
-*HSM Modeler (manual layout)*). It has the same extension id as the build of the main branch, so only
-one of them can be installed at a time (uninstall the other one first, or install with `--force`).
-
 - **Toolbar and commands:** the diagram webview shows *Auto-arrange* and *Automatic layout* like the web app; the
   same actions are the commands **HSM: Auto-arrange Diagram** and **HSM: Use Automatic Diagram Layout** (command
   palette and the *…* menu of the diagram panel).

@@ -39,15 +39,8 @@
 
 ```bash
 npm run package:vscode    # builds and packages packages/vscode/hsm-vscode-<version>.vsix
-code --install-extension packages/vscode/hsm-vscode-0.1.0-manual-layout.vsix   # main branch: hsm-vscode-0.1.0.vsix
+code --install-extension packages/vscode/hsm-vscode-0.1.0.vsix
 ```
-
-On the branches `claude/manual-layout` and `claude/layout-annotations` the package is `hsm-vscode-0.1.0-manual-layout.vsix` with the
-display name *HSM Modeler (manual layout)*, so the two builds can be told apart. Both have the same
-extension id (`hsm-modeler.hsm-vscode`): only one of them can be installed at a time. To switch, uninstall
-the other one first (`code --uninstall-extension hsm-modeler.hsm-vscode`) or install with `--force`.
-Models with layout annotations (`@at`, …) cannot be opened by the build of the main branch (syntax
-errors) until the experiment is merged.
 
 Three bundles: `dist/extension.cjs` (extension host, esbuild), `dist/server.cjs` (language server,
 esbuild) and `dist/webview/` (Vite, the diagram controller, views and styles of `packages/web` – no

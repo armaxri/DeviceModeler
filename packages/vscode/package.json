@@ -1,14 +1,14 @@
 {
   "name": "hsm-vscode",
-  "displayName": "HSM Modeler (manual layout)",
-  "description": "Hierarchical state machines (.hsm) and their unit tests (.hsmtest): language server, PlantUML-style diagram editor, C++ code generation, test runner and itemis CREATE import – experimental build with hand-arranged diagrams (layout annotations in the model)",
-  "version": "0.1.0-manual-layout",
+  "displayName": "HSM Modeler",
+  "description": "Hierarchical state machines (.hsm) and their unit tests (.hsmtest): language server, PlantUML-style diagram editor, C++ code generation, test runner and itemis CREATE import",
+  "version": "0.1.0",
   "private": true,
   "publisher": "hsm-modeler",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/arnemrichter/HSM"
+    "url": "https://github.com/armaxri/HSM"
   },
   "engines": {
     "vscode": "^1.95.0"
