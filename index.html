@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Device Modeler</title>
+<style>
+:root{color-scheme:light dark;--fg:#222;--bg:#fff;--muted:#666;--accent:#a80036;--line:#ddd}
+@media (prefers-color-scheme:dark){:root{--fg:#ddd;--bg:#1e1e1e;--muted:#999;--accent:#ff7a9c;--line:#3a3a3a}}
+body{font-family:system-ui,sans-serif;max-width:46rem;margin:2rem auto;padding:0 1rem;color:var(--fg);background:var(--bg);line-height:1.45}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+ul.branches{list-style:none;padding:0}
+ul.branches>li{border-top:1px solid var(--line);padding:.8rem 0}
+.branch{font-weight:600;font-size:1.05rem}
+small{color:var(--muted)}
+.examples{margin:.3rem 0 0;padding-left:1.2rem}
+.examples li{margin:.15rem 0}
+</style>
+</head>
+<body>
+<h1>Device Modeler</h1>
+<p>Product structures (components, ports, subsystems, threads) and hierarchical state machines with diagrams,
+simulation and C++ code generation. The web app of each branch runs in the browser; your edits stay in this browser.</p>
+<p><a href="https://github.com/armaxri/DeviceModeler">Sources on GitHub</a></p>
+<ul class="branches">
+<li><a class="branch" href="./main/">main</a> <small>5326ae3 · 2026-10-04</small>
+<ul class="examples">
+<li><a href="./main/?example=system.devm">Garage installation (structure diagram)</a></li>
+<li><a href="./main/?example=garage-door.devm">Garage door subsystem (structure diagram)</a></li>
+<li><a href="./main/?example=traffic-light.devm">Traffic light (state machine)</a></li>
+<li><a href="./main/?example=controller.devm">Garage door controller (state machine)</a></li>
+</ul></li>
+</ul>
+</body>
+</html>
