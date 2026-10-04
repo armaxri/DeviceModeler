@@ -1,4 +1,5 @@
 import type { AstNode } from 'langium';
+import type { EdgeAnchor } from './edge-anchors.js';
 
 export interface Point {
     x: number;
@@ -117,6 +118,8 @@ export interface DiagramEdge {
     points: Point[];
     /** Manual layout: the points the route passes through (set by the user, absolute coordinates). */
     waypoints?: Point[];
+    /** Manual layout: the stored anchors of the ends (`@from` / `@to`, only at states). */
+    anchors?: { source?: EdgeAnchor, target?: EdgeAnchor };
     label?: DiagramLabel;
     /** Priority of the transition among the outgoing transitions of its source (if it has several). */
     priority?: number;

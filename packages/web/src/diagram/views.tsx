@@ -347,10 +347,30 @@ export class TransitionView implements IView {
                     </circle>)}
                 </g>
                 : undefined}
+            {edge.editable && edge.selected && (edge.anchorable[0] || edge.anchorable[1])
+                ? <g class-anchor-handles={true}>
+                    {...([0, 1] as const).filter(i => edge.anchorable[i]).map(i => anchorHandle(i === 0 ? points[0] : end, i, edge.anchored[i]))}
+                </g>
+                : undefined}
             {breakpointMarker(edge.breakpoint, label ? label.x - 7 : middle.x, label ? label.y + label.height / 2 : middle.y)}
             {issueMarker(edge.issue, label ? label.x + label.width + 8 : (points[0].x + end.x) / 2, label ? label.y + label.height / 2 : (points[0].y + end.y) / 2)}
         </g>;
     }
+}
+
+/** Size of the square handles at the ends of a selected transition. */
+export const ANCHOR_HANDLE_SIZE = 8;
+
+/** The handle of the start (`end` 0) or end (1) of a selected transition: drag it along the border of the state. */
+function anchorHandle(p: Point, end: 0 | 1, anchored: boolean): VNode {
+    const s = ANCHOR_HANDLE_SIZE;
+    const what = end === 0 ? 'start' : 'end';
+    return <rect class-anchor-handle={true} class-anchored={anchored} class-anchor-source={end === 0} class-anchor-target={end === 1}
+        x={p.x - s / 2} y={p.y - s / 2} width={s} height={s}>
+        <title>{anchored
+            ? `Drag to move the ${what} of the transition along the border of the state, double-click to place it automatically again`
+            : `Drag to anchor the ${what} of the transition at a point on the border of the state`}</title>
+    </rect>;
 }
 
 export function routePath(points: Point[], spline: boolean): string {
