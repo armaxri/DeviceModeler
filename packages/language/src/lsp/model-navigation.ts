@@ -1,6 +1,6 @@
 import { AstUtils, CstUtils, GrammarUtils, type LangiumDocument } from 'langium';
 import type { LangiumServices } from 'langium/lsp';
-import type { Range } from 'vscode-languageserver-types';
+import type { LocationLink, Position, Range } from 'vscode-languageserver-types';
 import * as ast from '../generated/ast.js';
 import { machineType, resolvedImports } from '../imports.js';
 import { cppElementAt, type CppLocation } from './cpp-lsp.js';
@@ -18,6 +18,15 @@ import { cppLocations, cppTypeLocationsOf, referenceBaseRange, type CppNavigatio
 
 /** A target of a navigation: a {@link CppLocation} (also for targets in models). */
 export type NavigationLink = CppLocation;
+
+/** The definitions within the models (Langium's definition provider); the language server passes its base class. */
+export type ModelDefinitions = (document: LangiumDocument, params: { textDocument: { uri: string }, position: Position }) =>
+    Promise<LocationLink[] | undefined> | LocationLink[] | undefined;
+
+/** LSP location links of navigation targets. */
+export function toLocationLinks(links: readonly NavigationLink[]): LocationLink[] {
+    return links.map(l => ({ targetUri: l.uri, targetRange: l.range, targetSelectionRange: l.selection, originSelectionRange: l.origin }));
+}
 
 /** The link of an import path (`import "motor.h"`, `import "motor.hsm"`) whose file was found. */
 export interface ImportLink {
@@ -58,8 +67,12 @@ function machineLink(machine: ast.StateMachine, origin: Range): NavigationLink |
     return { uri, range: cst.range, selection: name.range, origin };
 }
 
-/** Go to definition at an offset (empty: nothing to navigate to). */
-export async function definitionLinks(services: LangiumServices, document: LangiumDocument, offset: number): Promise<NavigationLink[]> {
+/**
+ * Go to definition at an offset (empty: nothing to navigate to); `modelDefinitions`: the definitions within the
+ * models (default: the definition provider of the services).
+ */
+export async function definitionLinks(services: LangiumServices, document: LangiumDocument, offset: number,
+    modelDefinitions: ModelDefinitions = (d, p) => services.lsp.DefinitionProvider?.getDefinition(d, p)): Promise<NavigationLink[]> {
     const cpp = cppLocations(document, offset, 'definition');
     if (cpp.length > 0) {
         return cpp;
@@ -69,7 +82,7 @@ export async function definitionLinks(services: LangiumServices, document: Langi
         const link = machineLink(imported.machine, imported.origin);
         return link ? [link] : [];
     }
-    const links = await services.lsp.DefinitionProvider?.getDefinition(document, position(document, offset)) ?? [];
+    const links = await modelDefinitions(document, position(document, offset)) ?? [];
     // in a reference followed by struct members (`cfg.reading.speed`) only the name of the variable leads to it
     const root = document.parseResult.value.$cstNode;
     const node = root ? CstUtils.findLeafNodeAtOffset(root, offset)?.astNode : undefined;
@@ -82,10 +95,14 @@ export async function definitionLinks(services: LangiumServices, document: Langi
     }));
 }
 
-/** Go to declaration: all declarations of a C++ name (the definition first), otherwise the definition. */
-export async function declarationLinks(services: LangiumServices, document: LangiumDocument, offset: number): Promise<NavigationLink[]> {
+/**
+ * Go to declaration: all declarations of a C++ name (the definition first), otherwise the definition
+ * (`definition`: default {@link definitionLinks}).
+ */
+export async function declarationLinks(services: LangiumServices, document: LangiumDocument, offset: number,
+    definition: () => Promise<NavigationLink[]> = () => definitionLinks(services, document, offset)): Promise<NavigationLink[]> {
     const cpp = cppLocations(document, offset, 'declaration');
-    return cpp.length > 0 ? cpp : definitionLinks(services, document, offset);
+    return cpp.length > 0 ? cpp : definition();
 }
 
 /**

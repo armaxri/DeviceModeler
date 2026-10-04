@@ -1,7 +1,7 @@
 import { monaco } from './monaco.js';
 import { conf as cppConfiguration, language as cppMonarchSyntax } from 'monaco-editor/esm/vs/basic-languages/cpp/cpp.js';
 import {
-    cppHover, DOC_COMMENT_RULES, DOC_COMMENT_START, HsmMonarchSyntax, importKind, importLinks, ModelSemanticTokenProvider, navigationLinks,
+    DOC_COMMENT_RULES, DOC_COMMENT_START, HsmMonarchSyntax, importKind, importLinks, ModelHoverProvider, ModelSemanticTokenProvider, navigationLinks,
     type CppNavigationKind, type NavigationLink
 } from 'hsm-language';
 import { HsmModelService } from './model-service.js';
@@ -175,16 +175,15 @@ export class HsmLanguageSupport extends HsmModelService {
             }
         });
 
+        // the hover of the VS Code language server: signatures and documentation, the declarations of C++ names
+        const hoverProvider = new ModelHoverProvider(services);
         monaco.languages.registerHoverProvider(LANGUAGE_ID, {
             provideHover: async (model, position) => {
                 if (!isEditedModel(model)) {
                     return undefined;
                 }
                 const document = await this.document(model);
-                const offset = model.getOffsetAt(position);
-                // C++ names of imported headers: declaration, value and documentation of the header
-                const cpp = cppHover(document, offset);
-                const hover = cpp ? { contents: { kind: 'markdown', value: cpp } } : await services.lsp.HoverProvider?.getHoverContent(document, {
+                const hover = await hoverProvider.getHoverContent(document, {
                     textDocument: { uri: document.uri.toString() },
                     position: { line: position.lineNumber - 1, character: position.column - 1 }
                 });

@@ -3,11 +3,13 @@ import { AbstractSemanticTokenProvider, type SemanticTokenAcceptor } from 'langi
 import { SemanticTokenModifiers, SemanticTokenTypes } from 'vscode-languageserver-types';
 import * as ast from '../generated/ast.js';
 import { cppTypeOfReference, resolveCppValue } from '../cpp-types.js';
+import { cppTypeNames } from '../cpp-unknown-types.js';
+import { isClassMember } from '../class-members.js';
 
 /**
  * Semantic highlighting of models for editors without a language server (the Monaco editor of the web
  * app, also embedded in Eclipse, CLion and the desktop app): the same tokens as the language server of
- * the VS Code extension (`HsmSemanticTokenProvider` in `packages/vscode/src/server/hsm-lsp.ts`). Names of
+ * the VS Code extension (its `HsmSemanticTokenProvider` in `packages/vscode/src/server/hsm-lsp.ts` is this class). Names of
  * declarations and cross references get the kind of the element (state, event, variable, constant,
  * operation, …), C++ names of imported headers are types, enums, enumerators and constants, which a
  * TextMate / Monarch grammar cannot know.
@@ -54,6 +56,11 @@ export class ModelSemanticTokenProvider extends AbstractSemanticTokenProvider {
         const cppType = ast.isTypeReference(node) && node.$cstNode ? cppTypeOfReference(node) : undefined;
         if (cppType && node.$cstNode) {
             acceptor({ cst: node.$cstNode, type: cppType.resolved.kind === 'enum' ? SemanticTokenTypes.enum : SemanticTokenTypes.type });
+        } else if (ast.isTypeReference(node) && isClassMember(node)) {
+            // C++ types of class sections that are not declared in the imported headers (a warning) are still types
+            for (const name of cppTypeNames(node).filter(n => !n.dotted)) {
+                acceptor({ range: name.range, type: SemanticTokenTypes.type });
+            }
         } else if (ast.isCppReference(node) && node.$cstNode) {
             const resolved = resolveCppValue(node);
             const enumerator = resolved.info?.declaration.kind === 'enumerator';

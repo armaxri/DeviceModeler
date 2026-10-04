@@ -46,5 +46,6 @@ export * from './hsm-value-converter.js';
 export * from './lsp/cpp-navigation.js';
 export * from './lsp/model-navigation.js';
 export * from './lsp/semantic-tokens.js';
+export * from './lsp/model-hover.js';
 export * from './cpp-unknown-types.js';
 export * from './lsp/cpp-code-actions.js';

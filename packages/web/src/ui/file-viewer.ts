@@ -63,7 +63,7 @@ export function showFileViewer(options: FileViewerOptions): FileViewer {
             editor.focus();
         },
         close() {
-            document.removeEventListener('keydown', onKey, true);
+            document.removeEventListener('keydown', onKey);
             editor.dispose();
             root.remove();
             if (current?.viewer === viewer) {
@@ -71,14 +71,21 @@ export function showFileViewer(options: FileViewerOptions): FileViewer {
             }
         }
     };
+    // (bubbling phase: an Escape the editor used itself, e.g. to close its find widget, does not arrive or is handled)
     const onKey = (event: KeyboardEvent) => {
-        if (event.key === 'Escape' && !options.fullPage) {
+        if (event.key === 'Escape' && !options.fullPage && !event.defaultPrevented) {
             event.preventDefault();
             event.stopPropagation();
             viewer.close();
         }
     };
-    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('keydown', onKey);
+    if (!options.fullPage) {
+        // Escape in the editor closes the viewer unless the editor uses it (find widget, peek, a selection)
+        editor.createContextKey('hsmFileViewer', true);
+        editor.addCommand(monaco.KeyCode.Escape, () => viewer.close(),
+            'hsmFileViewer && !findWidgetVisible && !suggestWidgetVisible && !parameterHintsVisible && !markersNavigationVisible && !referenceSearchVisible');
+    }
     close.addEventListener('click', () => viewer.close());
     root.addEventListener('mousedown', event => {
         if (event.target === root && !options.fullPage) {

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { SemanticTokenTypes } from 'vscode-languageserver-types';
 import { definitionLinks, declarationLinks, importLinks, navigationLinks, typeDefinitionLinks } from '../src/lsp/model-navigation.js';
 import { ModelSemanticTokenProvider } from '../src/lsp/semantic-tokens.js';
+import { hoverSignature, ModelHoverProvider } from '../src/lsp/model-hover.js';
 import { errors, loader, parse } from './helpers.js';
 
 /** Navigation and semantic highlighting of the web app's Monaco editor (lsp/model-navigation.ts, lsp/semantic-tokens.ts). */
@@ -47,6 +48,22 @@ const services = loader.services.Hsm;
 
 function text(source: string, range: { start: { line: number, character: number }, end: { line: number, character: number } }): string {
     return source.split('\n')[range.start.line].slice(range.start.character, range.end.character);
+}
+
+/** The decoded semantic tokens of a document: [text, type]. */
+async function semanticTokens(document: Awaited<ReturnType<typeof parse>>['document'], source: string): Promise<Array<[string, string]>> {
+    const provider = new ModelSemanticTokenProvider(services);
+    const types = Object.keys(provider.tokenTypes);
+    const data = (await provider.semanticHighlight(document, { textDocument: { uri: document.uri.toString() } })).data;
+    const tokens: Array<[string, string]> = [];
+    let line = 0;
+    let character = 0;
+    for (let i = 0; i < data.length; i += 5) {
+        line += data[i];
+        character = data[i] === 0 ? character + data[i + 1] : data[i + 1];
+        tokens.push([source.split('\n')[line].slice(character, character + data[i + 2]), types[data[i + 3]]]);
+    }
+    return tokens;
 }
 
 describe('navigation of the web app editor', () => {
@@ -99,22 +116,28 @@ describe('navigation of the web app editor', () => {
     });
 
     test('semantic tokens: C++ names and references by kind', async () => {
-        const document = await model();
-        const provider = new ModelSemanticTokenProvider(services);
-        const types = Object.keys(provider.tokenTypes);
-        const data = (await provider.semanticHighlight(document, { textDocument: { uri: document.uri.toString() } })).data;
-        const tokens: Array<[string, string]> = [];
-        let line = 0;
-        let character = 0;
-        for (let i = 0; i < data.length; i += 5) {
-            line += data[i];
-            character = data[i] === 0 ? character + data[i + 1] : data[i + 1];
-            tokens.push([MODEL.split('\n')[line].slice(character, character + data[i + 2]), types[data[i + 3]]]);
-        }
+        const tokens = await semanticTokens(await model(), MODEL);
         expect(tokens).toContainEqual(['hw::Mode', SemanticTokenTypes.enum]);
         expect(tokens).toContainEqual(['hw::Mode::Fast', SemanticTokenTypes.enumMember]);
         expect(tokens).toContainEqual(['Gate', SemanticTokenTypes.class]);
         expect(tokens).toContainEqual(['open', SemanticTokenTypes.event]);
         expect(tokens).toContainEqual(['Closed', SemanticTokenTypes.type]);
+    });
+
+    test('semantic tokens: undeclared C++ types of class sections are types', async () => {
+        const controller = 'statemachine Controller {\n    import "hw.h"\n    private:\n        var driver : hal::Driver&\n    [*] -> A\n    state A\n}\n';
+        const parsed = await parse(controller, FILES);
+        expect(await semanticTokens(parsed.document, controller)).toContainEqual(['hal::Driver', SemanticTokenTypes.type]);
+    });
+
+    test('hover: signature and documentation, C++ declarations', async () => {
+        const document = await model();
+        const hover = new ModelHoverProvider(services);
+        const at = (search: string, delta: number) => ({ textDocument: { uri: document.uri.toString() }, position: document.textDocument.positionAt(MODEL.indexOf(search) + delta) });
+        const event = await hover.getHoverContent(document, at('in event open', 10));
+        expect((event?.contents as { value: string }).value).toContain('```hsm\ninterface: in event open\n```');
+        const cpp = await hover.getHoverContent(document, at('hw::Mode::Fast', 11));
+        expect((cpp?.contents as { value: string }).value).toContain('Fast');
+        expect(hoverSignature(document.parseResult.value)).toBe('statemachine Gate');
     });
 });
