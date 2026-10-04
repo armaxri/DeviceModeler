@@ -4,7 +4,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
-    ScriptError, cleanSandbox, cliExecutable, commonHelp, ensureCliExecutable, ensureDependencies, homeDir, info, isDirectory, isFile, isMain,
+    ScriptError, cleanSandbox, cliExecutable, commonHelp, download, ensureCliExecutable, ensureDependencies, homeDir, info, isDirectory, isFile, isMain,
     launchDetached, npm, prepareExamples, repoRoot, run, runScript, sandboxDir, show, step
 } from './lib.mjs';
 
@@ -22,6 +22,9 @@ Community of the plugin's target platform instead (downloaded by Gradle) and say
 --zip: builds the plugin zip (./gradlew buildPlugin), unpacks it into an isolated plugins folder and starts
 the IDE directly with an idea.properties of its own (<PRODUCT>_PROPERTIES) – what users get with
 "Install Plugin from Disk…". The IDE runs detached.
+
+Both modes install the plugin LSP4IJ (version of jetbrains-plugin/gradle.properties; --zip downloads it from
+the JetBrains Marketplace into .ide/clion/downloads/ once): the HSM language server in the text editor.
 
 Options:
   --clion <path>     the IDE to use (env HSM_CLION): CLion.app or the installation folder; any IntelliJ
@@ -42,6 +45,19 @@ Needs a JDK ≥ 17 to run Gradle (the build downloads its JDK 21, the platform a
 
 // ---------------------------------------------------------------------------------------------------------
 // Pure helpers (exported for the tests)
+
+/** The LSP4IJ version of jetbrains-plugin/gradle.properties (`lsp4ijVersion = 0.21.0`). */
+export function lsp4ijVersionOf(propertiesText) {
+    return /^lsp4ijVersion\s*=\s*(\S+)\s*$/m.exec(propertiesText)?.[1];
+}
+
+/** The download of an LSP4IJ version from the JetBrains Marketplace. */
+export function lsp4ijDownload(version) {
+    return {
+        fileName: `lsp4ij-${version}.zip`,
+        url: `https://plugins.jetbrains.com/plugin/download?pluginId=com.redhat.devtools.lsp4ij&version=${encodeURIComponent(version)}`
+    };
+}
 
 /**
  * Standard locations of CLion. A `*` segment stands for the entries of that folder (newest last), e.g. the
@@ -223,8 +239,29 @@ function extractZip(zip, dir, options) {
     }
 }
 
+/** --zip: LSP4IJ (downloaded once) in the plugins folder of the profile. */
+async function installLsp4ij(plugins, options) {
+    const version = lsp4ijVersionOf(fs.readFileSync(path.join(pluginProject, 'gradle.properties'), 'utf-8'));
+    if (!version) {
+        throw new ScriptError('no lsp4ijVersion in jetbrains-plugin/gradle.properties');
+    }
+    const { fileName, url } = lsp4ijDownload(version);
+    const zip = path.join(sandbox, 'downloads', fileName);
+    if (!isFile(zip)) {
+        step(`Downloading LSP4IJ ${version} (${url})`);
+        if (!options.dryRun) {
+            await download(url, zip);
+        }
+    }
+    step(`Installing LSP4IJ ${version} into ${show(plugins)}`);
+    if (!options.dryRun) {
+        fs.rmSync(path.join(plugins, 'lsp4ij'), { recursive: true, force: true });
+        extractZip(zip, plugins, options);
+    }
+}
+
 /** --zip: the plugin zip in an isolated profile, IDE started directly. */
-function launchWithZip(ide, folder, options, gradleProperties) {
+async function launchWithZip(ide, folder, options, gradleProperties) {
     if (options.build) {
         step('Building the plugin zip (./gradlew buildPlugin)');
         run(gradlew(), [...gradleProperties, 'buildPlugin'], { cwd: pluginProject, dryRun: options.dryRun });
@@ -248,6 +285,7 @@ function launchWithZip(ide, folder, options, gradleProperties) {
         fs.mkdirSync(plugins, { recursive: true });
         extractZip(zip, plugins, options);
     }
+    await installLsp4ij(plugins, options);
     const propertiesFile = path.join(profile, 'idea.properties');
     if (!options.dryRun) {
         fs.writeFileSync(propertiesFile, ideaProperties(profile));
@@ -316,7 +354,7 @@ if (isMain(import.meta.url)) await runScript({
         const gradleProperties = options.dryRun || isFile(exe) ? [`-PhsmExecutable=${exe}`] : [];
         const folder = prepareExamples(options, 'clion');
         if (options.zip) {
-            launchWithZip(ide, folder, options, gradleProperties);
+            await launchWithZip(ide, folder, options, gradleProperties);
         } else {
             launchWithGradle(ide, folder, options, gradleProperties);
         }

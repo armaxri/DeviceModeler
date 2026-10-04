@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as path from 'node:path';
 import { describe, it } from 'node:test';
 import {
-    clionCandidates, envVarBaseNameOf, expandCandidate, gradleArgs, ideaProperties, jetbrainsIde
+    clionCandidates, envVarBaseNameOf, expandCandidate, gradleArgs, ideaProperties, jetbrainsIde, lsp4ijDownload, lsp4ijVersionOf
 } from './clion.mjs';
 import {
     directorRepositories, eclipseDownload, eclipseLayout, installedVersion, macApp, projectDescription, releaseOfPom
@@ -172,6 +172,15 @@ describe('Eclipse', () => {
 });
 
 describe('CLion', () => {
+    it('installs the LSP4IJ version of the plugin build', () => {
+        assert.equal(lsp4ijVersionOf('platformVersion = 2025.2\nlsp4ijVersion = 0.21.0\n'), '0.21.0');
+        assert.equal(lsp4ijVersionOf('platformVersion = 2025.2\n'), undefined);
+        assert.deepEqual(lsp4ijDownload('0.21.0'), {
+            fileName: 'lsp4ij-0.21.0.zip',
+            url: 'https://plugins.jetbrains.com/plugin/download?pluginId=com.redhat.devtools.lsp4ij&version=0.21.0'
+        });
+    });
+
     it('knows the standard installations', () => {
         const mac = clionCandidates({ platform: 'darwin', env: { HOME: '/Users/me' } });
         assert.equal(mac[0], '/Applications/CLion.app');

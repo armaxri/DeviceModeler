@@ -53,6 +53,17 @@ Eclipse editor (HsmDiagramEditor)                       SWT Browser (Edge / WebK
   preferences, so they survive restarts and port changes.
 - **Dark theme**: with a dark Eclipse theme (CSS theme engine, otherwise the dark mode of the system) the page
   uses its *Dark* theme; with a light Eclipse theme a stored *Dark* is replaced by *PlantUML classic*.
+- **Generic Editor with the language server** (bundle `hsm.eclipse.lsp`): *Open With > Generic Text Editor*
+  for `.hsm` (the HSM Modeler stays the default editor), the default editor of `.hsmtest` (content type
+  `hsm.eclipse.hsmtest`). LSP4E starts `hsm lsp --stdio` of the executable found by `HsmExecutable` (preference,
+  platform fragment, `PATH`) with the project as workspace folder: problems as markers
+  (`org.eclipse.lsp4e.diagnostic`), completion, hover with documentation, *F3* / Ctrl+Click (*Open Declaration*)
+  into imported C/C++ headers (CDT's editor if installed) and other models, document links on import paths,
+  *Format* (Ctrl+Shift+F), *Outline*, rename (Alt+Shift+R), *Find References*, folding and semantic
+  highlighting. TM4E highlights with the TextMate grammars of `packages/language/syntaxes` (including the
+  Doxygen injection of documentation comments) and applies the language configuration of the VS Code extension
+  (comments, brackets, auto closing, indentation). The server's state and log: *Window > Show View > Language
+  Servers* (LSP4E).
 - **Builder for closed files** (prepared): the nature / builder `hsm.eclipse.nature` / `hsm.eclipse.builder`
   (*Configure > Enable / Disable HSM Validation* on projects) writes markers for all changed models – as soon
   as a `ModelValidator` is registered (see below). Without one it does nothing.
@@ -70,6 +81,7 @@ Eclipse editor (HsmDiagramEditor)                       SWT Browser (Edge / WebK
 | `hsm.eclipse.Preferences`, `HsmPreferencePage` | C++ preferences, stored page settings |
 | `hsm.eclipse.tools.*` | **integration point for the bundled executable**: `ModelValidator`, `ModelGenerator`, `ModelProblem`, `HsmTools` (registry), `PageGenerator` (generation in the page) |
 | `hsm.eclipse.builder.*` | nature, builder (uses `HsmTools.validator()`), toggle command |
+| `hsm.eclipse.lsp` (bundle) | `HsmLanguageServer` (LSP4E `ProcessStreamConnectionProvider`: `hsm lsp --stdio`), content type `hsm.eclipse.hsmtest`, Generic Editor bindings, TM4E grammars / language configuration (copied from `packages/language/syntaxes` and `packages/vscode/language-configuration.json` by the build, not committed) |
 | `packages/web/src/host.ts` | embedded mode of the web app (`?host=http`): protocol and client |
 | `packages/web/src/host-model.ts` | problems and outline of a parsed model for the host |
 | `packages/web/src/host-generate.ts` | C++ generation in the page with the configuration resolution of `hsm generate` |
@@ -128,13 +140,25 @@ The Maven build copies `packages/web/dist` into the bundle (`hsm.eclipse/webapp/
 the web app before the plugin to get its latest version.
 
 `mvn verify -Pui-tests` also runs the integration tests in a real workbench (a window opens for a few
-seconds, see `hsm.eclipse.tests/src/hsm/eclipse/HsmDiagramEditorTest.java`).
+seconds, see `hsm.eclipse.tests/src/hsm/eclipse/HsmDiagramEditorTest.java` and `HsmLanguageServerTest.java`).
+
+**Dependencies of `hsm.eclipse.lsp`:** LSP4E (0.18.x bundle in 2025-06), LSP4J, TM4E (0.14.x) and the Generic
+Editor are required bundles; the feature does not include them. They are part of the Eclipse release repository
+and preinstalled in *Eclipse IDE for C/C++ Developers* (checked: installing the feature from the local update
+site into the 2025-06 C/C++ package with the p2 director needs no other repository) and most other EPP packages.
+Otherwise p2 installs them from the release repository: the update site references
+`https://download.eclipse.org/releases/2025-06/` (`category.xml`), the zip archive relies on the release site
+configured in the IDE (*Contact all update sites during install*). Including them in the update site
+(`includeAllDependencies`) was not chosen: it would pull in a large part of the platform and pin versions that
+may not match the user's release, while every Eclipse package can reach its own release repository.
 
 ## Install
 
 *Help > Install New Software… > Add… > Archive…* → `hsm.eclipse.site-0.1.0-SNAPSHOT.zip`, select
 *HSM Modeler (prototype)* (uncheck *Group items by category* if the list is empty), accept the unsigned
-content warning and restart. Double-click a `.hsm` file in the Project Explorer.
+content warning and restart. Double-click a `.hsm` file in the Project Explorer; *Open With > Generic Text
+Editor* for the text with the language server. Without LSP4E / TM4E in the installation, keep *Contact all
+update sites during install to find required software* checked (the release site provides them).
 
 Requirements: Java 17+ and an Eclipse release with Edge support in SWT on Windows (2021-03 or newer).
 It is built and tested against 2025-06; the plugin only uses old, stable APIs, so older releases (e.g.
@@ -169,12 +193,19 @@ On macOS (aarch64) with Eclipse 4.36 and WebKit, by the UI tests (`mvn verify -P
 - the builder with a test `ModelValidator` creates markers for a closed file;
 - the builder with the bundled executable (fragment of the build, macOS aarch64): markers with ranges for a
   closed file, `../` imports and headers of `hsm.gen.json` resolved, the importer of a changed header is
-  validated again.
+  validated again;
+- the Generic Editor with the language server (`HsmLanguageServerTest`, bundled executable): HSM Modeler stays
+  the default editor of `.hsm`, *Open With* offers the Generic Editor, `.hsmtest` defaults to it; LSP4E markers
+  for an unknown name while the header constant of the include path of `hsm.gen.json` resolves; hover
+  (`LSPTextHover`) with the header's documentation comment; *F3* (`open.hyperlink`) opens the header; LSP4E's
+  *Format* re-indents the model; TM4E colors the keywords.
 
 Manually checked once with real (OS-level) key events on macOS: typing, `Cmd+Z` and `Cmd+S` work while the
 page has the focus (they reach the page directly, not Eclipse's key bindings).
 
-**Not tested**: Windows (Edge / WebView2) and Linux (WebKitGTK), older Eclipse releases, the dark theme
+**Not tested**: the CDT editor as target of *F3* (the tests run without CDT and open the header in the text
+editor), completion / outline / rename in the Generic Editor (covered by the language server's own tests),
+Windows (Edge / WebView2) and Linux (WebKitGTK), older Eclipse releases, the dark theme
 detection, `Cmd+A` / `Cmd+C` / `Cmd+V` key presses (only the commands), the context menu entries (the
 commands themselves are tested), interactive use in a full IDE.
 
@@ -188,9 +219,9 @@ commands themselves are tested), interactive use in a full IDE.
   operation history integration (e.g. with refactorings of other plugins).
 - C/C++ unit tests (`.hsmtest`), simulation from Eclipse launch configurations and C generation are not
   integrated (the page's simulator works).
-- Complement for plain text editing: [LSP4E](https://github.com/eclipse/lsp4e) with the language server of
-  `packages/vscode` (or of the bundled executable) and [TM4E](https://github.com/eclipse/tm4e) with its
-  TextMate grammar would give a Generic Editor with validation, completion and hover. The content type
-  `hsm.eclipse.hsm` is already defined for such bindings.
+- A model open in the Generic Editor and validated by the builder can show its problems twice in the
+  *Problems* view (LSP4E markers of the open text, builder markers of the saved file).
+- The language server's `hsm.headers.*` settings (include paths for all models) are not offered in the
+  preferences; the `headers` block of `hsm.gen.json` applies.
 - Signing of the bundles. The update site with all five executables is about 200 MB (each platform installs
   only its fragment of about 40 MB).

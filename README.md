@@ -84,12 +84,13 @@ transitions, nest states by drag and drop, rename in place, … Text and diagram
   coverage) and the itemis CREATE import – see [VS Code extension](docs/vscode.md).
 - 🧪 **Eclipse plugin** (prototype, `eclipse-plugin/`): the web app as editor of `.hsm` files in the Eclipse
   IDE (embedded browser): workspace files with dirty state, Save As and rename, problems in the Problems
-  view, Outline, Eclipse's edit commands, imports within the project, C++ generation – see
-  [eclipse-plugin/README.md](eclipse-plugin/README.md).
+  view, Outline, Eclipse's edit commands, imports within the project, C++ generation, and the language server in
+  Eclipse's Generic Editor (LSP4E / TM4E) – see [eclipse-plugin/README.md](eclipse-plugin/README.md).
 - 🧪 **JetBrains plugin** (prototype, `jetbrains-plugin/`): the web app as editor of `.hsm` files in CLion,
   IntelliJ IDEA and the other JetBrains IDEs (JCEF): views *Text* / *Text and Diagram* / *Diagram* on the IDE's
   document, problems in the editor and the Problems tool window (closed files with `hsm validate`), Structure
-  view, edit shortcuts in the page, C++ generation – see [jetbrains-plugin/README.md](jetbrains-plugin/README.md).
+  view, edit shortcuts in the page, C++ generation, and the language server in the text editor with LSP4IJ – see
+  [jetbrains-plugin/README.md](jetbrains-plugin/README.md).
 - **Build integration**: a generator configuration file (`hsm.gen.json`, like the `.sgen` files of itemis
   CREATE), `hsm generate --check` for CI and CMake functions (`hsm_generate`, `hsm_add_tests`) that
   regenerate the code when a model changes (see [Build integration (CMake)](docs/build-integration.md)).
@@ -156,6 +157,7 @@ node packages/language/bin/cli.js generate cpp examples/traffic-light.hsm -o gen
 node packages/language/bin/cli.js generate c examples/traffic-light.hsm -o gen     # C code
 node packages/language/bin/cli.js generate                  # all models / targets of ./hsm.gen.json, see below
 node packages/language/bin/cli.js generate --check          # exit 1 if generated files are out of date (CI)
+node packages/language/bin/cli.js lsp --stdio               # language server for LSP clients (docs/installation.md)
 ```
 
 ## Documentation

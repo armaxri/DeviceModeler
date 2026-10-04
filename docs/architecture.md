@@ -23,7 +23,8 @@ packages/
     src/class-members.ts        C++ class sections (`public:` …): C++ types of members, members the model cannot use
     src/hsm-value-converter.ts  value converter: white space of (C++) type names (`unsigned int`)
     src/cpp-header/             C++ header analyzer: lexer, preprocessor, parser, type index, constant evaluation
-    src/node/                   Node.js host of header imports (file system, `headers` of hsm.gen.json)
+    src/node/                   Node.js host of header imports (file system, `headers` of hsm.gen.json) and the
+                                Langium language server (hsm-lsp.ts, language-server.ts) of VS Code and `hsm lsp`
     src/lsp/                    hover, go to definition and completion of C++ names (VS Code and web)
     src/model-utils.ts          AST helpers (containers, composite states, …)
     src/diagram/                AST -> PlantUML-like diagram model (layout.ts), laid out with ELK; font metrics
@@ -59,7 +60,7 @@ packages/
   vscode/       VS Code extension
     src/extension/              extension host: language client, commands, diagram panel, test controller
                                 (src/extension/logic: VS Code independent parts, unit tested)
-    src/server/                 Langium language server (with C++ header support)
+    src/server/                 entry point of the language server (packages/language/src/node/language-server.ts)
     src/webview/                diagram webview: the DiagramController of packages/web with a VS Code DiagramHost
     src/common/protocol.ts      messages between extension host and webview
     scripts/                    esbuild / Vite bundling and packaging of the .vsix
@@ -70,6 +71,7 @@ packages/
     scripts/                    build.mjs (Vite + esbuild), package.mjs (electron-builder), smoke-test.mjs
   cli/          self-contained `hsm` command line executable (Node.js single executable application)
     src/main.ts                 entry point: --version / --help, otherwise the CLI of packages/language
+                                (incl. `hsm lsp`: the language server for Eclipse, JetBrains IDEs, other editors)
     scripts/                    build.mjs (esbuild bundle), sea.mjs (executable), smoke-test.mjs
 eclipse-plugin/ Eclipse plugin (prototype, Maven / Tycho): the web app (packages/web/dist, embedded mode of src/host.ts)
                 in an SWT browser, served by a small HTTP server of the plugin; workspace files, problem markers,
