@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic devm-export" width="787" height="1038" viewBox="0 0 787 1038" font-family="Helvetica, Arial, sans-serif">
-<title>CdPlayer</title>
+<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic devm-export" width="861" height="415" viewBox="0 0 861 415" font-family="Helvetica, Arial, sans-serif">
+<title>Motor</title>
 <style><![CDATA[
 .theme-classic, .theme-modern, .theme-dark {
     --devm-font: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
@@ -929,159 +929,91 @@
 <rect class="export-background" width="100%" height="100%"/>
 <g>
 <g class="devm-node definition" transform="translate(20, 20)">
-<rect class="definition-shape" x="0" y="0" rx="3" ry="3" width="266" height="218"/>
-<text class="definition-header" x="8" y="17.9"><tspan class="definition-name">CdPlayer</tspan><tspan class="definition-kind" dx="6">definitions</tspan></text>
-<line class="definition-separator" x1="0" y1="26" x2="266" y2="26"/>
+<rect class="definition-shape" x="0" y="0" rx="3" ry="3" width="300" height="173"/>
+<text class="definition-header" x="8" y="17.9"><tspan class="definition-name">Motor</tspan><tspan class="definition-kind" dx="6">definitions</tspan></text>
+<line class="definition-separator" x1="0" y1="26" x2="300" y2="26"/>
 <text class="definition-line definition-scope" x="8" y="43.53">interface:</text>
-<text class="definition-line" x="8" y="58.53">  in event play</text>
-<text class="definition-line" x="8" y="73.53">  in event pause</text>
-<text class="definition-line" x="8" y="88.53">  in event stop</text>
-<text class="definition-line" x="8" y="103.53">  in event eject</text>
-<text class="definition-line" x="8" y="118.53">  in event powerOff</text>
-<text class="definition-line" x="8" y="133.53">  in event trackEnd</text>
-<text class="definition-line" x="8" y="148.53">  var track : integer = 1</text>
-<text class="definition-line" x="8" y="163.53">  var tracks : integer = 0</text>
-<text class="definition-line" x="8" y="178.53">  operation discInserted() : boolean</text>
-<text class="definition-line" x="8" y="193.53">  operation startMotor() : void</text>
-<text class="definition-line" x="8" y="208.53">  operation stopMotor() : void</text>
+<text class="definition-line" x="8" y="58.53">  in event start</text>
+<text class="definition-line" x="8" y="73.53">  in event stop</text>
+<text class="definition-line" x="8" y="88.53">  in event fault</text>
+<text class="definition-line" x="8" y="103.53">  out event stopped</text>
+<text class="definition-line" x="8" y="118.53">  out event failed : integer</text>
+<text class="definition-line" x="8" y="133.53">  var speed : integer = 0</text>
+<text class="definition-line" x="8" y="148.53">  var maxSpeed : integer = 3</text>
+<text class="definition-line" x="8" y="163.53">  operation setPwm(duty : integer) : void</text>
 </g>
-<g class="devm-node initial" transform="translate(493, 20)">
+<g class="devm-node initial" transform="translate(524, 20)">
 <circle class="initial-shape" cx="10" cy="10" r="10"/>
 </g>
-<g class="devm-node state composite" transform="translate(404, 82)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="363" height="687"/>
-<text class="state-name" x="181.5" y="17.9">Closed</text>
-<line class="state-separator" x1="0" y1="26" x2="363" y2="26"/>
-<g class="devm-node initial" transform="translate(132, 46)">
-<circle class="initial-shape" cx="10" cy="10" r="10"/>
+<g class="devm-node entry-point" transform="translate(664, 165)">
+<title>Entry point Run</title>
+<circle class="entry-shape" cx="8" cy="8" r="7.25"/>
+<text class="node-label" x="23" y="12.2">Run</text>
 </g>
-<g class="devm-node history" transform="translate(76, 40)">
-<title>H</title>
-<circle class="history-shape" cx="13" cy="13" r="12.5"/>
-<text class="history-text" x="13" y="17.5">H</text>
+<g class="devm-node exit-point" transform="translate(507, 357)">
+<title>Exit node Failed</title>
+<circle class="exit-shape" cx="8" cy="8" r="7.25"/>
+<path class="exit-cross" d="M 2.87,2.87 L 13.13,13.13 M 2.87,13.13 L 13.13,2.87"/>
+<text class="node-label" x="23" y="12.2">Failed</text>
 </g>
-<g class="devm-node state" transform="translate(92, 102)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="100" height="53"/>
-<text class="state-name" x="50" y="17.9">Stopped</text>
-<line class="state-separator" x1="0" y1="26" x2="100" y2="26"/>
-<text class="state-body" x="6" y="43.7">entry / track = 1</text>
+<g class="devm-node state" transform="translate(449, 76)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="170" height="53"/>
+<text class="state-name" x="85" y="17.9">Off</text>
+<line class="state-separator" x1="0" y1="26" x2="170" y2="26"/>
+<text class="state-body" x="6" y="43.7">entry / speed = 0; setPwm(0)</text>
 </g>
-<g class="devm-node state composite" transform="translate(14, 355)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="237" height="318"/>
-<text class="state-name" x="118.5" y="17.9">Active</text>
-<line class="state-separator" x1="0" y1="26" x2="237" y2="26"/>
-<g class="devm-node initial" transform="translate(109, 40)">
-<circle class="initial-shape" cx="10" cy="10" r="10"/>
+<g class="devm-node state" transform="translate(424, 217)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="273" height="53"/>
+<text class="state-name" x="136.5" y="17.9">Ramping</text>
+<line class="state-separator" x1="0" y1="26" x2="273" y2="26"/>
+<text class="state-body" x="6" y="43.7">every 100 ms / speed += 1; setPwm(speed * 10)</text>
 </g>
-<g class="devm-node state" transform="translate(14, 96)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="209" height="83"/>
-<text class="state-name" x="104.5" y="17.9">Playing</text>
-<line class="state-separator" x1="0" y1="26" x2="209" y2="26"/>
-<text class="state-body" x="6" y="43.7">entry / startMotor()</text>
-<text class="state-body" x="6" y="58.7">exit / stopMotor()</text>
-<text class="state-body" x="6" y="73.7">trackEnd [track &lt; tracks] / track += 1</text>
-</g>
-<g class="devm-node state" transform="translate(59, 266)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="76" height="38"/>
-<text class="state-name" x="38" y="17.9">Paused</text>
-<line class="state-separator" x1="0" y1="26" x2="76" y2="26"/>
-</g>
-</g>
-<g class="devm-node choice" transform="translate(150, 242)">
-<title>HasDisc</title>
-<polygon class="choice-shape" points="13,0 26,13 13,26 0,13"/>
-</g>
-</g>
-<g class="devm-node state" transform="translate(390, 856)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="83" height="53"/>
-<text class="state-name" x="41.5" y="17.9">Open</text>
-<line class="state-separator" x1="0" y1="26" x2="83" y2="26"/>
-<text class="state-body" x="6" y="43.7">Tray is open</text>
-</g>
-<g class="devm-node final" transform="translate(479, 996)">
-<circle class="final-outer" cx="11" cy="11" r="10.5"/>
-<circle class="final-inner" cx="11" cy="11" r="6"/>
+<g class="devm-node state" transform="translate(673, 357)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="81" height="38"/>
+<text class="state-name" x="40.5" y="17.9">Running</text>
+<line class="state-separator" x1="0" y1="26" x2="81" y2="26"/>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 503,40 C 503,40 503,58 503,82"/>
-<path class="transition-arrow" d="M 503,82 L 507.5,72 L 503,75 L 498.5,72 Z"/>
+<path class="transition-line" d="M 534,40 C 534,40 534,58 534,76"/>
+<path class="transition-arrow" d="M 534,76 L 538.5,66 L 534,69 L 529.5,66 Z"/>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 493,769 C 445,787 445,796 445,803.25 C 445,810.5 445,816 445,822.87 C 445,829.75 445,838 445,856"/>
-<path class="transition-arrow" d="M 445,856 L 449.5,846 L 445,849 L 440.5,846 Z"/>
+<path class="transition-line" d="M 672,181 C 672,181 667.7,199 629,217"/>
+<path class="transition-arrow" d="M 629,217 L 639.96,216.86 L 635.35,214.05 L 636.17,208.7 Z"/>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 492,129 C 492,147 492,160 492,173 C 492,186 492,199 492,217"/>
+<path class="transition-arrow" d="M 492,217 L 496.5,207 L 492,210 L 487.5,207 Z"/>
 <g class="transition-label">
-<text x="400" y="816.7">1: eject</text>
+<text x="462" y="177.2">start</text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 418,856 L 373,838 L 373,829 L 373,819 L 373,809 L 373,798 L 373,733.25 L 373,668.5 L 373,550 L 373,431.5 L 373,313 L 373,194.5 L 373,132.25 L 373,70 L 373,64 L 393,61 L 413,58 L 453,58 L 473,62.5 L 493,67 L 493,76 L 493,122 L 493,122 L 493,122"/>
-<path class="transition-arrow" d="M 493,122 L 483,117.5 L 486,122 L 483,126.5 Z"/>
+<path class="transition-line" d="M 606,270 C 700,288 700,297 700,304.25 C 700,311.5 700,317 700,323.87 C 700,330.75 700,339 700,357"/>
+<path class="transition-arrow" d="M 700,357 L 704.5,347 L 700,350 L 695.5,347 Z"/>
 <g class="transition-label">
-<text x="328" y="426.7">1: eject</text>
+<text x="563" y="317.7">1: [speed &gt;= maxSpeed]</text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 503,769 C 503,787 503,799.75 503,810.38 C 503,821 503,829.5 503,848.58 C 503,867.67 503,897.33 503,914.92 C 503,932.5 503,938 503,943.5 C 503,949 503,954.5 503,961.75 C 503,969 503,978 494,996"/>
-<path class="transition-arrow" d="M 494,996 L 502.5,989.07 L 497.13,989.74 L 494.45,985.04 Z"/>
+<path class="transition-line" d="M 561,217 C 506,199 506,190 506,184.17 C 506,178.33 506,175.67 506,173 C 506,170.33 506,167.67 506,161.83 C 506,156 506,147 534,129"/>
+<path class="transition-arrow" d="M 534,129 L 523.15,130.62 L 528.11,132.79 L 528.02,138.19 Z"/>
 <g class="transition-label">
-<text x="510" y="886.7">2: powerOff</text>
+<text x="513" y="177.2">2: stop / raise stopped</text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 432,909 C 486,927 486,936 486,943.25 C 486,950.5 486,956 486,962.87 C 486,969.75 486,978 486,996"/>
-<path class="transition-arrow" d="M 486,996 L 490.5,986 L 486,989 L 481.5,986 Z"/>
+<path class="transition-line" d="M 727,357 C 727,339 727,326.25 727,315.62 C 727,305 727,296.5 727,277.42 C 727,258.33 727,228.67 727,211 C 727,193.33 727,187.67 727,182 C 727,176.33 727,170.67 727,163.33 C 727,156 727,147 577,129"/>
+<path class="transition-arrow" d="M 577,129 L 586.39,134.66 L 583.95,129.83 L 587.46,125.72 Z"/>
 <g class="transition-label">
-<text x="417" y="956.7">2: powerOff</text>
+<text x="734" y="247.7">stop / raise stopped</text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 546,148 C 546,148 546,166 546,184"/>
-<path class="transition-arrow" d="M 546,184 L 550.5,174 L 546,177 L 541.5,174 Z"/>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 571,237 C 571,255 571,267.75 571,280.5 C 571,293.25 571,306 571,324"/>
-<path class="transition-arrow" d="M 571,324 L 575.5,314 L 571,317 L 566.5,314 Z"/>
+<path class="transition-line" d="M 515,270 C 515,288 515,300.75 515,313.5 C 515,326.25 515,339 515,357"/>
+<path class="transition-arrow" d="M 515,357 L 519.5,347 L 515,350 L 510.5,347 Z"/>
 <g class="transition-label">
-<text x="578" y="284.7">play</text>
-</g>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 567,350 C 576,368 576,377 576,384.25 C 576,391.5 576,397 576,403.87 C 576,410.75 576,419 576,437"/>
-<path class="transition-arrow" d="M 576,437 L 580.5,427 L 576,430 L 571.5,427 Z"/>
-<g class="transition-label">
-<text x="583" y="397.7">1: [discInserted() &amp;&amp; tracks &gt; 0]</text>
-</g>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 563,324 C 558,306 558,297 558,291.25 C 558,285.5 558,283 558,280.5 C 558,278 558,275.5 558,269.75 C 558,264 558,255 546,237"/>
-<path class="transition-arrow" d="M 546,237 L 547.8,247.82 L 549.88,242.82 L 555.29,242.82 Z"/>
-<g class="transition-label">
-<text x="516" y="284.7">2: else</text>
-</g>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 497,437 C 497,419 497,406.25 497,395.63 C 497,385 497,376.5 497,361.92 C 497,347.33 497,326.67 497,313.58 C 497,300.5 497,295 497,289.5 C 497,284 497,278.5 497,271.25 C 497,264 497,255 521,237"/>
-<path class="transition-arrow" d="M 521,237 L 510.3,239.4 L 515.4,241.2 L 515.7,246.6 Z"/>
-<g class="transition-label">
-<text x="468" y="341.2">stop</text>
-</g>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 537,497 C 537,497 537,515 537,533"/>
-<path class="transition-arrow" d="M 537,533 L 541.5,523 L 537,526 L 532.5,523 Z"/>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 571,616 C 571,634 571,642.25 571,649.13 C 571,656 571,661.5 571,668.75 C 571,676 571,685 528,703"/>
-<path class="transition-arrow" d="M 528,703 L 538.96,703.29 L 534.46,700.3 L 535.49,694.99 Z"/>
-<g class="transition-label">
-<text x="578" y="663.7">pause</text>
-</g>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 502,703 C 502,685 502,672.25 502,659.5 C 502,646.75 502,634 502,616"/>
-<path class="transition-arrow" d="M 502,616 L 497.5,626 L 502,623 L 506.5,626 Z"/>
-<g class="transition-label">
-<text x="434" y="663.7">pause, play</text>
+<text x="362" y="317.7">3: fault / raise failed : speed</text>
 </g>
 </g>
 </g>

@@ -1,12 +1,9 @@
 # Device Modeler for VS Code
 
-> Version `0.1.0-manual-layout` (display name *Device Modeler (manual layout)*, the version of the
-> [manual layout](#manual-layout-experimental) experiment, now merged into main), with the 🧪 structure files
-> (branch `claude/device-modeling`), see [Structure files](#structure-files-experimental).
+> With the 🧪 structure files (branch `claude/device-modeling`), see [Structure files](#structure-files-experimental).
 > The extension id is `device-modeler.devm-vscode` (formerly `hsm-modeler.hsm-vscode`, settings formerly
 > `hsm.*`): uninstall a build with the former id first (`code --uninstall-extension hsm-modeler.hsm-vscode`);
 > builds with the same id replace each other with `code --install-extension <file>.vsix --force`.
-
 Hierarchical state machines and the structure of a product (components, ports, threads, instances and
 connections) in `.devm` files – a file contains either a state machine or structure elements – and the
 unit tests of state machines (`.devmtest`) in VS Code: a language server, the
@@ -145,7 +142,7 @@ history are handled by the extension. The protocol is in `src/common/protocol.ts
 npm run build -w packages/vscode      # bundles into packages/vscode/dist
 npm test -w packages/vscode           # unit tests + language server round trip over stdio
 npm run package -w packages/vscode    # build + packages/vscode/devm-vscode-<version>.vsix
-code --install-extension packages/vscode/devm-vscode-0.1.0-manual-layout.vsix --force
+code --install-extension packages/vscode/devm-vscode-0.1.0.vsix --force
 ```
 
 To debug, open the repository in VS Code and start an *Extension Development Host* with

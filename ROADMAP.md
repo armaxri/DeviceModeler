@@ -176,8 +176,6 @@ Possible next steps are described in more detail in [docs/improvements.md](docs/
   - ✅ web app and VS Code extension share the diagram controller; the `.sct` import writes annotations,
     the SVG / PNG export, `devm layout|render|doc` and test coverage diagrams apply them;
     `devm migrate-layout` converts the `.devm.layout` files of the earlier sidecar experiment
-  - 📋 the extension still has the version `0.1.0-manual-layout` and the display name *Device Modeler
-    (manual layout)* of the experiment
   - ✅ resolved by the annotations: renames typed in the text (or via *Rename Symbol*) keep the layout;
     no second file and no separate layout undo history
   - 📋 open: the formatter puts container annotations on lines of their own while the layout writer

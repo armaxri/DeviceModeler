@@ -90,14 +90,13 @@ same extension:
 
 ```bash
 npm run package:vscode    # builds and packages packages/vscode/devm-vscode-<version>.vsix
-code --install-extension packages/vscode/devm-vscode-0.1.0-manual-layout.vsix
+code --install-extension packages/vscode/devm-vscode-0.1.0.vsix
 ```
 
-The package still has the version `0.1.0-manual-layout` and the display name *Device Modeler (manual
-layout)* of the layout experiment (merged into main). The extension id is `device-modeler.devm-vscode`
-(formerly `hsm-modeler.hsm-vscode`): a build with the former id is a different extension and has to be
-uninstalled first (`code --uninstall-extension hsm-modeler.hsm-vscode`); builds with the same id replace
-each other with `--force`. Its settings `hsm.*` are not taken over, the settings are now `devm.*`.
+The extension id is `device-modeler.devm-vscode` (formerly `hsm-modeler.hsm-vscode`): a build with the
+former id is a different extension and has to be uninstalled first
+(`code --uninstall-extension hsm-modeler.hsm-vscode`); builds with the same id replace each other with
+`--force`. Its settings `hsm.*` are not taken over, the settings are now `devm.*`.
 
 Three bundles: `dist/extension.cjs` (extension host, esbuild), `dist/server.cjs` (language server,
 esbuild) and `dist/webview/` (Vite, the diagram controller, views and styles of `packages/web` – no

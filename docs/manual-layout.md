@@ -164,10 +164,6 @@ the layout of every parsed model with `layoutFromModel` and turns every layout c
 
 ## VS Code extension
 
-The extension is still packaged as `devm-vscode-0.1.0-manual-layout.vsix` (display name
-*Device Modeler (manual layout)*), the version of the experiment. All builds have the same extension id, so
-only one of them can be installed at a time (uninstall the other one first, or install with `--force`).
-
 - **Toolbar and commands:** the diagram webview shows *Auto-arrange* and *Automatic layout* like the web app; the
   same actions are the commands **Device Modeler: Auto-arrange Diagram** and **Device Modeler: Use Automatic Diagram Layout** (command
   palette and the *…* menu of the diagram panel).

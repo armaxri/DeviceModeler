@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic devm-export" width="787" height="1038" viewBox="0 0 787 1038" font-family="Helvetica, Arial, sans-serif">
-<title>CdPlayer</title>
+<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic devm-export" width="1900" height="784" viewBox="0 0 1900 784" font-family="Helvetica, Arial, sans-serif">
+<title>Conveyor</title>
 <style><![CDATA[
 .theme-classic, .theme-modern, .theme-dark {
     --devm-font: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
@@ -929,159 +929,145 @@
 <rect class="export-background" width="100%" height="100%"/>
 <g>
 <g class="devm-node definition" transform="translate(20, 20)">
-<rect class="definition-shape" x="0" y="0" rx="3" ry="3" width="266" height="218"/>
-<text class="definition-header" x="8" y="17.9"><tspan class="definition-name">CdPlayer</tspan><tspan class="definition-kind" dx="6">definitions</tspan></text>
-<line class="definition-separator" x1="0" y1="26" x2="266" y2="26"/>
-<text class="definition-line definition-scope" x="8" y="43.53">interface:</text>
-<text class="definition-line" x="8" y="58.53">  in event play</text>
-<text class="definition-line" x="8" y="73.53">  in event pause</text>
-<text class="definition-line" x="8" y="88.53">  in event stop</text>
-<text class="definition-line" x="8" y="103.53">  in event eject</text>
-<text class="definition-line" x="8" y="118.53">  in event powerOff</text>
-<text class="definition-line" x="8" y="133.53">  in event trackEnd</text>
-<text class="definition-line" x="8" y="148.53">  var track : integer = 1</text>
-<text class="definition-line" x="8" y="163.53">  var tracks : integer = 0</text>
-<text class="definition-line" x="8" y="178.53">  operation discInserted() : boolean</text>
-<text class="definition-line" x="8" y="193.53">  operation startMotor() : void</text>
-<text class="definition-line" x="8" y="208.53">  operation stopMotor() : void</text>
+<rect class="definition-shape" x="0" y="0" rx="3" ry="3" width="432" height="293"/>
+<text class="definition-header" x="8" y="17.9"><tspan class="definition-name">Conveyor</tspan><tspan class="definition-kind" dx="6">definitions</tspan></text>
+<line class="definition-separator" x1="0" y1="26" x2="432" y2="26"/>
+<text class="definition-line definition-scope" x="8" y="43.53">namespace example</text>
+<text class="definition-line definition-scope" x="8" y="58.53">import &quot;conveyor_types.h&quot;</text>
+<text class="definition-line definition-scope" x="8" y="73.53">@CycleBased(100)</text>
+<text class="definition-line definition-scope" x="8" y="88.53">interface:</text>
+<text class="definition-line" x="8" y="103.53">  in event start</text>
+<text class="definition-line" x="8" y="118.53">  in event stop</text>
+<text class="definition-line" x="8" y="133.53">  in event packageDetected : conveyor::Package</text>
+<text class="definition-line" x="8" y="148.53">  in event fault : conveyor::Fault</text>
+<text class="definition-line" x="8" y="163.53">  in event reset</text>
+<text class="definition-line" x="8" y="178.53">  out event modeChanged : conveyor::Mode</text>
+<text class="definition-line" x="8" y="193.53">  out event rejected : conveyor::Package</text>
+<text class="definition-line" x="8" y="208.53">  var mode : conveyor::Mode</text>
+<text class="definition-line" x="8" y="223.53">  var settings : conveyor::Settings = conveyor::kDefaultSet…<title>  var settings : conveyor::Settings = conveyor::kDefaultSettings</title></text>
+<text class="definition-line" x="8" y="238.53">  var faults : integer</text>
+<text class="definition-line" x="8" y="253.53">  var count : uint16_t</text>
+<text class="definition-line" x="8" y="268.52">  var last : conveyor::Package</text>
+<text class="definition-line" x="8" y="283.52">  operation setSpeed(speed : conveyor::Speed) : void</text>
 </g>
-<g class="devm-node initial" transform="translate(493, 20)">
+<g class="devm-node initial" transform="translate(1179, 20)">
 <circle class="initial-shape" cx="10" cy="10" r="10"/>
 </g>
-<g class="devm-node state composite" transform="translate(404, 82)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="363" height="687"/>
-<text class="state-name" x="181.5" y="17.9">Closed</text>
-<line class="state-separator" x1="0" y1="26" x2="363" y2="26"/>
-<g class="devm-node initial" transform="translate(132, 46)">
+<g class="devm-node state" transform="translate(1034, 76)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="309" height="68"/>
+<text class="state-name" x="154.5" y="17.9">Idle</text>
+<line class="state-separator" x1="0" y1="26" x2="309" y2="26"/>
+<text class="state-body" x="6" y="43.7">entry / mode = conveyor::Mode::Stopped; setSpeed(0);<title>entry / mode = conveyor::Mode::Stopped; setSpeed(0); raise modeChanged : mode</title></text>
+<text class="state-body" x="6" y="58.7">    raise modeChanged : mode<title>entry / mode = conveyor::Mode::Stopped; setSpeed(0); raise modeChanged : mode</title></text>
+</g>
+<g class="devm-node state composite" transform="translate(533, 231)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="984" height="363"/>
+<text class="state-name" x="492" y="17.9">Operating</text>
+<line class="state-separator" x1="0" y1="26" x2="984" y2="26"/>
+<g class="devm-node initial" transform="translate(552, 40)">
 <circle class="initial-shape" cx="10" cy="10" r="10"/>
 </g>
-<g class="devm-node history" transform="translate(76, 40)">
-<title>H</title>
-<circle class="history-shape" cx="13" cy="13" r="12.5"/>
-<text class="history-text" x="13" y="17.5">H</text>
+<g class="devm-node state" transform="translate(382, 96)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="359" height="98"/>
+<text class="state-name" x="179.5" y="17.9">Running</text>
+<line class="state-separator" x1="0" y1="26" x2="359" y2="26"/>
+<text class="state-body" x="6" y="43.7">entry / mode = conveyor::Mode::Normal;<title>entry / mode = conveyor::Mode::Normal; setSpeed(settings.normalSpeed); raise modeChanged : mode</title></text>
+<text class="state-body" x="6" y="58.7">    setSpeed(settings.normalSpeed); raise modeChanged : mode<title>entry / mode = conveyor::Mode::Normal; setSpeed(settings.normalSpeed); raise modeChanged : mode</title></text>
+<text class="state-body" x="6" y="73.7">packageDetected [!valueof(packageDetected).fragile &amp;&amp; value…<title>packageDetected [!valueof(packageDetected).fragile &amp;&amp; valueof(packageDetected).weightGrams &lt;= settings.maxWeightGrams] / last = valueof(packageDetected); count++</title></text>
+<text class="state-body" x="6" y="88.7">    count++<title>packageDetected [!valueof(packageDetected).fragile &amp;&amp; valueof(packageDetected).weightGrams &lt;= settings.maxWeightGrams] / last = valueof(packageDetected); count++</title></text>
 </g>
-<g class="devm-node state" transform="translate(92, 102)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="100" height="53"/>
-<text class="state-name" x="50" y="17.9">Stopped</text>
-<line class="state-separator" x1="0" y1="26" x2="100" y2="26"/>
-<text class="state-body" x="6" y="43.7">entry / track = 1</text>
+<g class="devm-node state" transform="translate(386, 281)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="347" height="68"/>
+<text class="state-name" x="173.5" y="17.9">Careful</text>
+<line class="state-separator" x1="0" y1="26" x2="347" y2="26"/>
+<text class="state-body" x="6" y="43.7">entry / mode = conveyor::Mode::Slow;<title>entry / mode = conveyor::Mode::Slow; setSpeed(settings.slowSpeed); raise modeChanged : mode</title></text>
+<text class="state-body" x="6" y="58.7">    setSpeed(settings.slowSpeed); raise modeChanged : mode<title>entry / mode = conveyor::Mode::Slow; setSpeed(settings.slowSpeed); raise modeChanged : mode</title></text>
 </g>
-<g class="devm-node state composite" transform="translate(14, 355)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="237" height="318"/>
-<text class="state-name" x="118.5" y="17.9">Active</text>
+</g>
+<g class="devm-node state" transform="translate(725, 681)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="237" height="83"/>
+<text class="state-name" x="118.5" y="17.9">Clearing</text>
 <line class="state-separator" x1="0" y1="26" x2="237" y2="26"/>
-<g class="devm-node initial" transform="translate(109, 40)">
-<circle class="initial-shape" cx="10" cy="10" r="10"/>
+<text class="state-body" x="6" y="43.7">entry / mode = conveyor::Mode::Reverse;<title>entry / mode = conveyor::Mode::Reverse; setSpeed(conveyor::kReverseSpeed); raise modeChanged : mode</title></text>
+<text class="state-body" x="6" y="58.7">    setSpeed(conveyor::kReverseSpeed);<title>entry / mode = conveyor::Mode::Reverse; setSpeed(conveyor::kReverseSpeed); raise modeChanged : mode</title></text>
+<text class="state-body" x="6" y="73.7">    raise modeChanged : mode<title>entry / mode = conveyor::Mode::Reverse; setSpeed(conveyor::kReverseSpeed); raise modeChanged : mode</title></text>
 </g>
-<g class="devm-node state" transform="translate(14, 96)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="209" height="83"/>
-<text class="state-name" x="104.5" y="17.9">Playing</text>
-<line class="state-separator" x1="0" y1="26" x2="209" y2="26"/>
-<text class="state-body" x="6" y="43.7">entry / startMotor()</text>
-<text class="state-body" x="6" y="58.7">exit / stopMotor()</text>
-<text class="state-body" x="6" y="73.7">trackEnd [track &lt; tracks] / track += 1</text>
-</g>
-<g class="devm-node state" transform="translate(59, 266)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="76" height="38"/>
-<text class="state-name" x="38" y="17.9">Paused</text>
-<line class="state-separator" x1="0" y1="26" x2="76" y2="26"/>
-</g>
-</g>
-<g class="devm-node choice" transform="translate(150, 242)">
-<title>HasDisc</title>
-<polygon class="choice-shape" points="13,0 26,13 13,26 0,13"/>
-</g>
-</g>
-<g class="devm-node state" transform="translate(390, 856)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="83" height="53"/>
-<text class="state-name" x="41.5" y="17.9">Open</text>
-<line class="state-separator" x1="0" y1="26" x2="83" y2="26"/>
-<text class="state-body" x="6" y="43.7">Tray is open</text>
-</g>
-<g class="devm-node final" transform="translate(479, 996)">
-<circle class="final-outer" cx="11" cy="11" r="10.5"/>
-<circle class="final-inner" cx="11" cy="11" r="6"/>
+<g class="devm-node state" transform="translate(1341, 681)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="309" height="68"/>
+<text class="state-name" x="154.5" y="17.9">Faulted</text>
+<line class="state-separator" x1="0" y1="26" x2="309" y2="26"/>
+<text class="state-body" x="6" y="43.7">entry / mode = conveyor::Mode::Stopped; setSpeed(0);<title>entry / mode = conveyor::Mode::Stopped; setSpeed(0); raise modeChanged : mode</title></text>
+<text class="state-body" x="6" y="58.7">    raise modeChanged : mode<title>entry / mode = conveyor::Mode::Stopped; setSpeed(0); raise modeChanged : mode</title></text>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 503,40 C 503,40 503,58 503,82"/>
-<path class="transition-arrow" d="M 503,82 L 507.5,72 L 503,75 L 498.5,72 Z"/>
+<path class="transition-line" d="M 1189,40 C 1189,40 1189,58 1189,76"/>
+<path class="transition-arrow" d="M 1189,76 L 1193.5,66 L 1189,69 L 1184.5,66 Z"/>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 493,769 C 445,787 445,796 445,803.25 C 445,810.5 445,816 445,822.87 C 445,829.75 445,838 445,856"/>
-<path class="transition-arrow" d="M 445,856 L 449.5,846 L 445,849 L 440.5,846 Z"/>
+<path class="transition-line" d="M 1111,144 C 861,162 861,171 861,178.25 C 861,185.5 861,191 861,197.87 C 861,204.75 861,213 861,231"/>
+<path class="transition-arrow" d="M 861,231 L 865.5,221 L 861,224 L 856.5,221 Z"/>
 <g class="transition-label">
-<text x="400" y="816.7">1: eject</text>
+<text x="609" y="191.7">start [count &lt; conveyor::kMaintenanceInterval]</text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 418,856 L 373,838 L 373,829 L 373,819 L 373,809 L 373,798 L 373,733.25 L 373,668.5 L 373,550 L 373,431.5 L 373,313 L 373,194.5 L 373,132.25 L 373,70 L 373,64 L 393,61 L 413,58 L 453,58 L 473,62.5 L 493,67 L 493,76 L 493,122 L 493,122 L 493,122"/>
-<path class="transition-arrow" d="M 493,122 L 483,117.5 L 486,122 L 483,126.5 Z"/>
+<path class="transition-line" d="M 1189,231 C 1189,213 1189,200.25 1189,187.5 C 1189,174.75 1189,162 1189,144"/>
+<path class="transition-arrow" d="M 1189,144 L 1184.5,154 L 1189,151 L 1193.5,154 Z"/>
 <g class="transition-label">
-<text x="328" y="426.7">1: eject</text>
+<text x="1196" y="191.7">1: stop</text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 503,769 C 503,787 503,799.75 503,810.38 C 503,821 503,829.5 503,848.58 C 503,867.67 503,897.33 503,914.92 C 503,932.5 503,938 503,943.5 C 503,949 503,954.5 503,961.75 C 503,969 503,978 494,996"/>
-<path class="transition-arrow" d="M 494,996 L 502.5,989.07 L 497.13,989.74 L 494.45,985.04 Z"/>
+<path class="transition-line" d="M 779,594 C 804,612 804,621 804,628.25 C 804,635.5 804,641 804,647.87 C 804,654.75 804,663 804,681"/>
+<path class="transition-arrow" d="M 804,681 L 808.5,671 L 804,674 L 799.5,671 Z"/>
 <g class="transition-label">
-<text x="510" y="886.7">2: powerOff</text>
+<text x="494" y="641.7">2: fault [valueof(fault) == conveyor::kJam] / faults = faul…<title>2: fault [valueof(fault) == conveyor::kJam] / faults = faults | valueof(fault)</title></text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 432,909 C 486,927 486,936 486,943.25 C 486,950.5 486,956 486,962.87 C 486,969.75 486,978 486,996"/>
-<path class="transition-arrow" d="M 486,996 L 490.5,986 L 486,989 L 481.5,986 Z"/>
+<path class="transition-line" d="M 1271,594 C 1444,612 1444,621 1444,628.25 C 1444,635.5 1444,641 1444,647.87 C 1444,654.75 1444,663 1444,681"/>
+<path class="transition-arrow" d="M 1444,681 L 1448.5,671 L 1444,674 L 1439.5,671 Z"/>
 <g class="transition-label">
-<text x="417" y="956.7">2: powerOff</text>
+<text x="1137" y="641.7">3: fault [valueof(fault) != conveyor::kJam] / faults = faul…<title>3: fault [valueof(fault) != conveyor::kJam] / faults = faults | valueof(fault)</title></text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 546,148 C 546,148 546,166 546,184"/>
-<path class="transition-arrow" d="M 546,184 L 550.5,174 L 546,177 L 541.5,174 Z"/>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 571,237 C 571,255 571,267.75 571,280.5 C 571,293.25 571,306 571,324"/>
-<path class="transition-arrow" d="M 571,324 L 575.5,314 L 571,317 L 566.5,314 Z"/>
+<path class="transition-line" d="M 883,681 C 883,663 883,654.75 883,647.87 C 883,641 883,635.5 883,628.25 C 883,621 883,612 1025,594"/>
+<path class="transition-arrow" d="M 1025,594 L 1014.51,590.79 L 1018.06,594.88 L 1015.65,599.72 Z"/>
 <g class="transition-label">
-<text x="578" y="284.7">play</text>
+<text x="890" y="641.7">after 2 s / faults = faults &amp; ~conveyor::kJam</text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 567,350 C 576,368 576,377 576,384.25 C 576,391.5 576,397 576,403.87 C 576,410.75 576,419 576,437"/>
-<path class="transition-arrow" d="M 576,437 L 580.5,427 L 576,430 L 571.5,427 Z"/>
+<path class="transition-line" d="M 1547,681 C 1547,663 1547,650.25 1547,639.63 C 1547,629 1547,620.5 1547,549.75 C 1547,479 1547,346 1547,276.75 C 1547,207.5 1547,202 1547,196.5 C 1547,191 1547,185.5 1547,178.25 C 1547,171 1547,162 1266,144"/>
+<path class="transition-arrow" d="M 1266,144 L 1275.69,149.13 L 1272.99,144.45 L 1276.27,140.15 Z"/>
 <g class="transition-label">
-<text x="583" y="397.7">1: [discInserted() &amp;&amp; tracks &gt; 0]</text>
+<text x="1554" y="416.7">reset [(faults &amp; conveyor::kEmergencyStop) == 0] / faults =…<title>reset [(faults &amp; conveyor::kEmergencyStop) == 0] / faults = conveyor::kNoFault</title></text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 563,324 C 558,306 558,297 558,291.25 C 558,285.5 558,283 558,280.5 C 558,278 558,275.5 558,269.75 C 558,264 558,255 546,237"/>
-<path class="transition-arrow" d="M 546,237 L 547.8,247.82 L 549.88,242.82 L 555.29,242.82 Z"/>
+<path class="transition-line" d="M 1095,291 C 1095,291 1095,309 1095,327"/>
+<path class="transition-arrow" d="M 1095,327 L 1099.5,317 L 1095,320 L 1090.5,317 Z"/>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 915,359.67 C 905,359.67 903,367.83 903,376 C 903,384.17 905,392.33 915,392.33"/>
+<path class="transition-arrow" d="M 915,392.33 L 905,387.83 L 908,392.33 L 905,396.83 Z"/>
 <g class="transition-label">
-<text x="516" y="284.7">2: else</text>
+<text x="549" y="380.2">1: packageDetected [valueof(packageDetected).weightGrams &gt;…<title>1: packageDetected [valueof(packageDetected).weightGrams &gt; settings.maxWeightGrams] / raise rejected : valueof(packageDetected)</title></text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 497,437 C 497,419 497,406.25 497,395.63 C 497,385 497,376.5 497,361.92 C 497,347.33 497,326.67 497,313.58 C 497,300.5 497,295 497,289.5 C 497,284 497,278.5 497,271.25 C 497,264 497,255 521,237"/>
-<path class="transition-arrow" d="M 521,237 L 510.3,239.4 L 515.4,241.2 L 515.7,246.6 Z"/>
+<path class="transition-line" d="M 1154,425 C 1154,443 1154,451.25 1154,458.13 C 1154,465 1154,470.5 1154,477.75 C 1154,485 1154,494 1150,512"/>
+<path class="transition-arrow" d="M 1150,512 L 1156.56,503.21 L 1151.52,505.17 L 1147.78,501.26 Z"/>
 <g class="transition-label">
-<text x="468" y="341.2">stop</text>
+<text x="1161" y="472.7">2: packageDetected [valueof(packageDetected).fragile &amp;&amp; val…<title>2: packageDetected [valueof(packageDetected).fragile &amp;&amp; valueof(packageDetected).weightGrams &lt;= settings.maxWeightGrams] / last = valueof(packageDetected); count++</title></text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 537,497 C 537,497 537,515 537,533"/>
-<path class="transition-arrow" d="M 537,533 L 541.5,523 L 537,526 L 532.5,523 Z"/>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 571,616 C 571,634 571,642.25 571,649.13 C 571,656 571,661.5 571,668.75 C 571,676 571,685 528,703"/>
-<path class="transition-arrow" d="M 528,703 L 538.96,703.29 L 534.46,700.3 L 535.49,694.99 Z"/>
+<path class="transition-line" d="M 1035,512 C 1035,494 1035,481.25 1035,468.5 C 1035,455.75 1035,443 1035,425"/>
+<path class="transition-arrow" d="M 1035,425 L 1030.5,435 L 1035,432 L 1039.5,435 Z"/>
 <g class="transition-label">
-<text x="578" y="663.7">pause</text>
-</g>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 502,703 C 502,685 502,672.25 502,659.5 C 502,646.75 502,634 502,616"/>
-<path class="transition-arrow" d="M 502,616 L 497.5,626 L 502,623 L 506.5,626 Z"/>
-<g class="transition-label">
-<text x="434" y="663.7">pause, play</text>
+<text x="985" y="472.7">after 3 s</text>
 </g>
 </g>
 </g>
