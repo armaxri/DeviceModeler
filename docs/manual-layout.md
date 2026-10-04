@@ -1,11 +1,12 @@
-# Manual layout (experimental)
+# Manual layout
 
-Status: merged into main (PR #4) from the experiment branch `claude/layout-annotations` (based on
-`claude/manual-layout`, which stored the layout in a sidecar file `<model>.layout`). The automatic layout (ELK) stays the default:
+Status: part of the Device Modeler; it was developed in HSM on the branch `claude/layout-annotations` and merged
+there with [HSM PR #4](https://github.com/armaxri/HSM/pull/4) (based on `claude/manual-layout`, which stored the
+layout in a sidecar file `<model>.layout`). The automatic layout (ELK) stays the default:
 a model without layout annotations is exactly the diagram computed by `layoutStateMachine`.
 
 This note describes how hand-arranged diagrams are stored and computed, and the trade-offs behind the
-design, so the experiment can be evaluated (and removed again) easily. The structure diagrams of `.devm`
+design. The structure diagrams of `.devm`
 files are arranged with the same concept and syntax, see [Structure diagrams](#structure-diagrams);
 the parts both share are in `packages/language/src/diagram/layout-core/` (see
 [Architecture](architecture.md#manual-layout-shared-core)).
@@ -21,7 +22,7 @@ has a manual layout, a model without has the automatic one – there is no separ
 | Sidecar file `<model>.layout` (previous experiment) | the text stays free of layout information | two files to keep together; renames in the text lose the position; a second undo history and file synchronization in the editors |
 | Separate section at the end of the text | one file | still noise in the text, fragile when editing by hand, keys by name like the sidecar |
 
-Compatibility: models with layout annotations cannot be opened by builds from before the merge (their
+Compatibility: models with layout annotations cannot be opened by builds from before the layout annotations (their
 grammar does not accept annotations in front of states and transitions). Generated code does not depend on the annotations (`devm generate --check` stays stable when
 only the layout changes).
 
@@ -241,8 +242,8 @@ diagram as annotations (`--no-layout` to skip them).
 ## Migration from sidecar layout files
 
 `devm migrate-layout model.devm [--layout <file>]` reads the layout file of the previous experiment
-(default `model.devm.layout`; files of that experiment named after the formerly used extension
-`.devm`, e.g. `model.devm.layout`, are passed with `--layout`) and writes it into the model as layout annotations (the keys are the same
+(default `model.devm.layout`; files of that experiment named after the extension `.hsm` of HSM,
+e.g. `model.hsm.layout`, are passed with `--layout`) and writes it into the model as layout annotations (the keys are the same
 diagram ids: qualified names, `<state>#region<n>`, `<container>#initial` / `#final`, `#definitions`,
 `<source>-><target>~<n>`). The layout file is kept; delete it once the model looks right.
 In VS Code, **Device Modeler: Convert Layout File to Annotations** does the same for the model of the active editor.
@@ -340,7 +341,7 @@ Editing (web app and VS Code, `StructureDiagram` with the shared `LayoutEditor` 
 ## Limitations and risks
 
 - Coordinate noise: every drag changes the model; reviews and merges see the numbers.
-- Models with layout annotations need a build of this branch (see *Compatibility* above).
+- Models with layout annotations need a build that knows them (see *Compatibility* above).
 - A waypoint inside a state lets the route cross that state. If no route through the waypoints is
   found (e.g. a waypoint very close to a state), straight lines through them are drawn.
 - The formatter puts container annotations (and `@CycleBased`) each on a line of their own, while the

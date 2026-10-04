@@ -15,7 +15,7 @@
   computed with `ModelEditor` and applied to the document as `WorkspaceEdit`s, so undo, the dirty
   state and git behave as for typed changes. The diagram follows the VS Code color theme (light:
   PlantUML classic, configurable with `devm.diagram.lightTheme`; dark: dark theme).
-- **Manual layout** (merged into main from the branch `claude/layout-annotations`, PR #4): the
+- **Manual layout**: the
   diagram is arranged by hand as soon as a state is dragged; the positions are layout annotations in the
   model (`@at(x, y)`, `@via(…)`, …, see [Manual layout](manual-layout.md)). The toolbar of the diagram shows
   *Positions: automatic* / *stored in model*; *Store positions* / *Re-arrange* writes the automatic
@@ -26,7 +26,7 @@
   editor or in the diagram), the dirty marker and *Save* apply to them. The `.sct` import writes the
   arrangement of the itemis diagram as annotations, and the SVG export applies them. Structure diagrams
   are arranged the same way (see below).
-- 🧪 **Structure files**, see [below](#structure-files): language server, the structure
+- **Structure files**, see [below](#structure-files): language server, the structure
   diagram with editing and navigation between the diagrams.
 - **C/C++ header imports**: headers are read from disk (and re-read when they change: the importing models are
   validated again), hover shows their declarations with documentation, go to definition opens the header,
@@ -42,16 +42,13 @@
   covered states / transitions / reactions and guard decisions in the coverage view.
 - **Debugging tests** (*Debug Test* in the Test Explorer, **Device Modeler: Debug Tests**, `F5` in a `.devmtest`
   file, or a launch configuration `"type": "devm-test"`): see [Debugging tests](#debugging-tests) below.
-- **Device Modeler: Import itemis CREATE Model (.sct)**, **Device Modeler: Export Diagram…** (SVG rendered with `renderSvg`,
-  or PNG: the same SVG rasterized in the diagram webview; also *Export…* in the diagram toolbar).
-
 - **Device Modeler: Import itemis CREATE Model (.sct)**, **Device Modeler: Export Diagram…** (SVG rendered with `renderSvg`
   – structure files: `renderIbdSvg` of the structure shown in the diagram –, or PNG: the same SVG
   rasterized in the diagram webview; also *Export…* in the diagram toolbar).
 
 ## Structure files
 
-🧪 The [structure language](structure-language.md) of the Device Modeler is served by the
+The [structure language](structure-language.md) of the Device Modeler is served by the
 same extension:
 
 - **Language**: structure files are `.devm` files of the language `devm` like the state machines (one
@@ -99,10 +96,10 @@ npm run package:vscode    # builds and packages packages/vscode/devm-vscode-<ver
 code --install-extension packages/vscode/devm-vscode-0.1.0.vsix
 ```
 
-The extension id is `device-modeler.devm-vscode` (formerly `devm-modeler.devm-vscode`): a build with the
-former id is a different extension and has to be uninstalled first
-(`code --uninstall-extension devm-modeler.devm-vscode`); builds with the same id replace each other with
-`--force`. Its settings `devm.*` are not taken over, the settings are now `devm.*`.
+The extension id is `device-modeler.devm-vscode` (the extension of HSM was `hsm-modeler.hsm-vscode`): a build
+with the former id is a different extension and has to be uninstalled first
+(`code --uninstall-extension hsm-modeler.hsm-vscode`); builds with the same id replace each other with
+`--force`. Its settings `hsm.*` are not taken over, the settings are now `devm.*`.
 
 Three bundles: `dist/extension.cjs` (extension host, esbuild), `dist/server.cjs` (language server,
 esbuild) and `dist/webview/` (Vite, the diagram controller, views and styles of `packages/web` – no
@@ -119,7 +116,8 @@ environment).
 ## Debugging tests
 
 The tests of `.devmtest` files can be run in the debugger, step by step, while the diagram of the
-state machine under test shows the current states:
+state machine under test shows the current states (unit tests exist for state machines only; structure
+files have no tests):
 
 - **Start**: the *Debug Test* action of the Test Explorer (also the debug icon next to the run icon in
   the gutter of a test), **Device Modeler: Debug Tests** (debug button in the editor title of `.devmtest` files,

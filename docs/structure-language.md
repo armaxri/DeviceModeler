@@ -1,6 +1,6 @@
 # The structure language (structure files, `.devm`)
 
-🧪 Experimental: the structure elements of the **Device Modeler**. A structure file describes
+The structure elements of the **Device Modeler**. A structure file describes
 the structure of a product – component types, their ports, subsystems, threads, instances and
 connections – alongside the state machines that implement the behavior of its components. Ports are
 **directed data flow**: every port carries data in a direction – data values (sync ports) or one event
@@ -330,7 +330,7 @@ the composite. The hops of **inout** ports are followed in both directions (the 
 
 The diagram of a structure file is an internal block diagram (IBD) in the style of SysML, in the themes of
 the state machine diagrams (PlantUML classic / modern, dark). It is shown and edited by the web editor and
-the VS Code extension (palette, rename in place, drag & drop into threads, connectors, properties,
+every host embedding it – the desktop app, the VS Code extension, the Eclipse and JetBrains plugins – (palette, rename in place, drag & drop into threads, connectors, properties,
 navigation into the state machines and subsystems of the instances – see
 [the editor](editor.md#structure-diagrams) and [VS Code](vscode.md)) and rendered by `devm render`
 ([rendering](rendering.md)):
@@ -477,6 +477,15 @@ The VS Code extension serves structure files with the same language server as th
 TextMate grammar, and opens the structure diagram with **Device Modeler: Open Diagram** like the diagram of a state
 machine; navigation between the diagrams and edits of several files go through the extension
 ([VS Code extension](vscode.md#structure-files)).
+
+The desktop app and the Eclipse and JetBrains plugins embed the web app (embedded mode `?host=http`, see
+[Installation and usage](installation.md)): structure files open with the structure diagram, the hosts pass the
+`.devm` files of the folder or project to the page (for *Used by*, routes and go to source across files), receive
+problems and the outline of structure files like those of state machines, and open the target file when the
+diagram navigates to another file. Their text editors and any other LSP client get the language features of
+structure files from the language server of the command line tool (`devm lsp --stdio`, see
+[Language server](installation.md#language-server-devm-lsp)). The command line tool validates structure files
+(`devm validate`) and renders their internal block diagrams (`devm render`).
 
 Not (yet) supported: simulation and code generation of structure files; state machines cannot use the structs
 of structure files (share C/C++ headers instead).
