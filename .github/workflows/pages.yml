@@ -1,8 +1,12 @@
 name: Pages
 
 # Publishes the web app of every branch to GitHub Pages, one folder per branch:
-#   https://<owner>.github.io/<repo>/                  overview of all published branches
-#   https://<owner>.github.io/<repo>/<branch>/         the web app of <branch> ("/" in branch names → "-")
+#   https://armaxri.github.io/DeviceModeler/                    overview of all published branches with links
+#                                                               to examples (structure diagrams, state machines)
+#   https://armaxri.github.io/DeviceModeler/<branch>/           the web app of <branch> ("/" in branch names → "-")
+#   https://armaxri.github.io/DeviceModeler/<branch>/?example=system.devm   the web app with an example opened
+# The web app uses relative paths (vite base './'), so the same build runs in every folder (and in forks).
+# The folder and the overview page are written by scripts/pages/update-site.sh (also usable locally).
 # The site lives on the branch `gh-pages` (Settings → Pages → Deploy from a branch → gh-pages, / (root)).
 # Deleting a branch removes its folder (the `delete` event runs the workflow of the default branch).
 
@@ -33,8 +37,8 @@ jobs:
           echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
           echo "folder=${BRANCH//[^A-Za-z0-9._-]/-}" >> "$GITHUB_OUTPUT"
 
+      # (also for a deleted branch: the default branch has scripts/pages/update-site.sh)
       - uses: actions/checkout@v4
-        if: github.event_name != 'delete'
 
       - uses: actions/setup-node@v4
         if: github.event_name != 'delete'
@@ -65,36 +69,11 @@ jobs:
             git init -b gh-pages site
             git -C site remote add origin "$url"
           fi
-          rm -rf "site/$FOLDER"
-          if [ "$DELETED" != "true" ]; then
-            cp -r packages/web/dist "site/$FOLDER"
-            printf '%s\n%s\n%s\n' "$BRANCH" "$(git rev-parse --short HEAD)" "$(git log -1 --format=%cs)" > "site/$FOLDER/.branch"
+          if [ "$DELETED" = "true" ]; then
+            scripts/pages/update-site.sh site "$BRANCH" "$FOLDER" --delete "$REPO"
+          else
+            scripts/pages/update-site.sh site "$BRANCH" "$FOLDER" packages/web/dist "$REPO"
           fi
-          touch site/.nojekyll
-
-          # overview page: one link per published branch, main first
-          {
-            echo '<!doctype html><html lang="en"><head><meta charset="utf-8">'
-            echo '<meta name="viewport" content="width=device-width, initial-scale=1">'
-            echo '<title>Device Modeler – branches</title>'
-            echo '<style>body{font-family:system-ui,sans-serif;max-width:40rem;margin:2rem auto;padding:0 1rem;color:#222;background:#fff}'
-            echo 'a{color:#a80036;font-weight:600;text-decoration:none}li{margin:.6rem 0}small{color:#666}'
-            echo '@media (prefers-color-scheme:dark){body{color:#ddd;background:#1e1e1e}a{color:#ff7a9c}small{color:#999}}</style>'
-            echo '</head><body><h1>Device Modeler</h1><p>Web app of each branch:</p><ul>'
-            # main first, then the other branches
-            listed_main=
-            for meta in site/main/.branch site/*/.branch; do
-              if [ "$meta" = site/main/.branch ]; then
-                [ -n "$listed_main" ] && continue
-                listed_main=1
-              fi
-              [ -f "$meta" ] || continue
-              dir=$(basename "$(dirname "$meta")")
-              name=$(sed -n 1p "$meta"); sha=$(sed -n 2p "$meta"); date=$(sed -n 3p "$meta")
-              echo "<li><a href=\"./$dir/\">$name</a> <small>$sha · $date</small></li>"
-            done
-            echo '</ul></body></html>'
-          } > site/index.html
 
           cd site
           git config user.name "github-actions[bot]"
