@@ -4,9 +4,9 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <!-- Eclipse plugin (prototype): the HSM web app in an editor of the Eclipse IDE. See README.md. -->
-    <groupId>hsm.eclipse</groupId>
-    <artifactId>hsm.eclipse.parent</artifactId>
+    <!-- Eclipse plugin (prototype): the Device Modeler web app in an editor of the Eclipse IDE. See README.md. -->
+    <groupId>devm.eclipse</groupId>
+    <artifactId>devm.eclipse.parent</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
@@ -15,22 +15,22 @@
         <!-- the plugin is compiled against this release; it runs on older and newer releases too (see README.md) -->
         <eclipse.repository>https://download.eclipse.org/releases/2025-06/</eclipse.repository>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- the hsm executables of packages/cli (packages/cli/dist/bin/<target>/hsm, other folder: -Dhsm.cli.dir=…)
-             are shipped in the platform fragments hsm.eclipse.cli.<os>.<arch>; a missing one leaves its fragment
-             empty (the plugin then uses hsm of the PATH) unless -Dhsm.cli.optional=false -->
-        <hsm.cli.optional>true</hsm.cli.optional>
+        <!-- the devm executables of packages/cli (packages/cli/dist/bin/<target>/devm, other folder: -Ddevm.cli.dir=…)
+             are shipped in the platform fragments devm.eclipse.cli.<os>.<arch>; a missing one leaves its fragment
+             empty (the plugin then uses devm of the PATH) unless -Ddevm.cli.optional=false -->
+        <devm.cli.optional>true</devm.cli.optional>
     </properties>
 
     <modules>
-        <module>hsm.eclipse</module>
-        <module>hsm.eclipse.lsp</module>
-        <module>hsm.eclipse.cli.linux.x86_64</module>
-        <module>hsm.eclipse.cli.linux.aarch64</module>
-        <module>hsm.eclipse.cli.macosx.x86_64</module>
-        <module>hsm.eclipse.cli.macosx.aarch64</module>
-        <module>hsm.eclipse.cli.win32.x86_64</module>
-        <module>hsm.eclipse.feature</module>
-        <module>hsm.eclipse.site</module>
+        <module>devm.eclipse</module>
+        <module>devm.eclipse.lsp</module>
+        <module>devm.eclipse.cli.linux.x86_64</module>
+        <module>devm.eclipse.cli.linux.aarch64</module>
+        <module>devm.eclipse.cli.macosx.x86_64</module>
+        <module>devm.eclipse.cli.macosx.aarch64</module>
+        <module>devm.eclipse.cli.win32.x86_64</module>
+        <module>devm.eclipse.feature</module>
+        <module>devm.eclipse.site</module>
     </modules>
 
     <profiles>
@@ -38,7 +38,7 @@
             <!-- mvn verify -Pui-tests: opens a model in a real workbench (a window opens for a minute) -->
             <id>ui-tests</id>
             <modules>
-                <module>hsm.eclipse.tests</module>
+                <module>devm.eclipse.tests</module>
             </modules>
         </profile>
     </profiles>

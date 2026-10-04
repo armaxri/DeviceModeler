@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<site>
+   <feature id="devm.eclipse.feature">
+      <category name="devm"/>
+   </feature>
+   <category-def name="devm" label="Device Modeler (prototype)"/>
+   <!-- LSP4E, TM4E and LSP4J (dependencies of devm.eclipse.lsp) are installed from the Eclipse release repository -->
+   <repository-reference location="https://download.eclipse.org/releases/2025-06/" enabled="true"/>
+</site>

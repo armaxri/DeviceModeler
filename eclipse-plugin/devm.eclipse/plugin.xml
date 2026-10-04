@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+   <!-- .devm files (state machines and structure files) are text: other editors (Generic Editor, TM4E, LSP4E) can be
+        bound to the content type -->
+   <extension point="org.eclipse.core.contenttype.contentTypes">
+      <content-type
+            id="devm.eclipse.devm"
+            name="Device Modeler Model (state machine or structure)"
+            base-type="org.eclipse.core.runtime.text"
+            file-extensions="devm"
+            default-charset="UTF-8"
+            priority="normal">
+      </content-type>
+   </extension>
+
+   <!-- the web app (text editor + state machine diagram or structure diagram) in an embedded browser -->
+   <extension point="org.eclipse.ui.editors">
+      <editor
+            id="devm.eclipse.editor"
+            name="Device Modeler"
+            icon="icons/devm.png"
+            class="devm.eclipse.DevmDiagramEditor"
+            default="true">
+         <contentTypeBinding contentTypeId="devm.eclipse.devm"/>
+      </editor>
+   </extension>
+
+   <!-- problems of the models (Problems view); not persisted: the editor / builder report them again -->
+   <extension id="problem" name="Device Modeler Problem" point="org.eclipse.core.resources.markers">
+      <super type="org.eclipse.core.resources.problemmarker"/>
+      <super type="org.eclipse.core.resources.textmarker"/>
+      <persistent value="false"/>
+   </extension>
+
+   <!-- validation of closed files on build (needs a ModelValidator, see devm.eclipse.tools.DevmTools) -->
+   <extension id="builder" name="Device Modeler Validation" point="org.eclipse.core.resources.builders">
+      <builder hasNature="true">
+         <run class="devm.eclipse.builder.DevmBuilder"/>
+      </builder>
+   </extension>
+   <extension id="nature" name="Device Modeler Models" point="org.eclipse.core.resources.natures">
+      <runtime>
+         <run class="devm.eclipse.builder.DevmNature"/>
+      </runtime>
+      <builder id="devm.eclipse.builder"/>
+   </extension>
+
+   <!-- preferences: C++ generation; the settings of the page are stored here, too -->
+   <extension point="org.eclipse.core.runtime.preferences">
+      <initializer class="devm.eclipse.Preferences$Initializer"/>
+   </extension>
+   <extension point="org.eclipse.ui.preferencePages">
+      <page id="devm.eclipse.preferences" name="Device Modeler" class="devm.eclipse.DevmPreferencePage"/>
+   </extension>
+
+   <!-- commands -->
+   <extension point="org.eclipse.ui.commands">
+      <category id="devm.eclipse.category" name="Device Modeler"/>
+      <command id="devm.eclipse.generateCpp" categoryId="devm.eclipse.category" name="Generate C++"
+            description="Generates the C++ code of the state machine (devm.gen.json or the Device Modeler preferences)"/>
+      <command id="devm.eclipse.toggleNature" categoryId="devm.eclipse.category" name="Enable / Disable Device Modeler Validation"
+            description="Adds or removes the Device Modeler validation builder of the project"/>
+   </extension>
+   <extension point="org.eclipse.ui.handlers">
+      <handler commandId="devm.eclipse.generateCpp" class="devm.eclipse.GenerateCppHandler"/>
+      <handler commandId="devm.eclipse.toggleNature" class="devm.eclipse.builder.ToggleNatureHandler"/>
+   </extension>
+   <extension point="org.eclipse.ui.menus">
+      <menuContribution locationURI="popup:org.eclipse.ui.popup.any?after=additions">
+         <command commandId="devm.eclipse.generateCpp" label="Generate C++" icon="icons/devm.png">
+            <visibleWhen checkEnabled="false">
+               <with variable="activeMenuSelection">
+                  <iterate ifEmpty="false" operator="and">
+                     <adapt type="org.eclipse.core.resources.IFile">
+                        <test property="org.eclipse.core.resources.extension" value="devm"/>
+                     </adapt>
+                  </iterate>
+               </with>
+            </visibleWhen>
+         </command>
+      </menuContribution>
+      <menuContribution locationURI="popup:org.eclipse.ui.projectConfigure?after=additions">
+         <command commandId="devm.eclipse.toggleNature" label="Enable / Disable Device Modeler Validation">
+            <visibleWhen checkEnabled="false">
+               <with variable="activeMenuSelection">
+                  <iterate ifEmpty="false" operator="and">
+                     <adapt type="org.eclipse.core.resources.IProject"/>
+                  </iterate>
+               </with>
+            </visibleWhen>
+         </command>
+      </menuContribution>
+   </extension>
+</plugin>

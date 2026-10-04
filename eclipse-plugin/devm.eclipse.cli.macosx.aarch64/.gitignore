@@ -1,0 +1,3 @@
+bin/
+# generated from p2-chmod.inf when bin/devm exists (pom.xml)
+META-INF/p2.inf

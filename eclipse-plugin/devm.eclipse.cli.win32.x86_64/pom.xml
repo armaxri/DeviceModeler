@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>devm.eclipse</groupId>
+        <artifactId>devm.eclipse.parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <!-- the devm executable of packages/cli for Windows x86_64 (bin/devm.exe), see the parent pom -->
+    <artifactId>devm.eclipse.cli.win32.x86_64</artifactId>
+    <packaging>eclipse-plugin</packaging>
+
+    <properties>
+        <devm.cli.dir>${project.basedir}/../../packages/cli/dist/bin</devm.cli.dir>
+        <devm.cli.target>windows-x64</devm.cli.target>
+        <devm.cli.file>devm.exe</devm.cli.file>
+    </properties>
+
+    <build>
+        <plugins>
+            <plugin>
+                <!-- bin/ = the executable built by packages/cli (npm run build:exe, or the CI artifacts) -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-cli</id>
+                        <phase>generate-resources</phase>
+                        <goals><goal>copy-resources</goal></goals>
+                        <configuration>
+                            <outputDirectory>${project.basedir}/bin</outputDirectory>
+                            <overwrite>true</overwrite>
+                            <resources>
+                                <resource>
+                                    <directory>${devm.cli.dir}/${devm.cli.target}</directory>
+                                    <includes><include>${devm.cli.file}</include></includes>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <!-- -Ddevm.cli.optional=false (CI, releases): fail if the executable is missing (not with the
+                             enforcer's requireFilesExist: it rejects paths with "..") -->
+                        <id>cli-built</id>
+                        <phase>validate</phase>
+                        <goals><goal>run</goal></goals>
+                        <configuration>
+                            <skip>${devm.cli.optional}</skip>
+                            <target>
+                                <fail message="The devm executable for ${devm.cli.target} is missing in ${devm.cli.dir}: build it (npm run build:exe) or omit -Ddevm.cli.optional=false.">
+                                    <condition><not><available file="${devm.cli.dir}/${devm.cli.target}/${devm.cli.file}"/></not></condition>
+                                </fail>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <!-- without the executable (local builds for other platforms) the fragment is empty -->
+                <groupId>org.eclipse.tycho</groupId>
+                <artifactId>tycho-packaging-plugin</artifactId>
+                <version>${tycho.version}</version>
+                <configuration>
+                    <strictBinIncludes>false</strictBinIncludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

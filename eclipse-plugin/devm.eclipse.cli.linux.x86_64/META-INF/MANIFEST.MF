@@ -1,0 +1,9 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Device Modeler command line executable (Linux x86_64)
+Bundle-SymbolicName: devm.eclipse.cli.linux.x86_64
+Bundle-Version: 0.1.0.qualifier
+Bundle-Vendor: Device Modeler
+Fragment-Host: devm.eclipse
+Eclipse-PlatformFilter: (& (osgi.os=linux) (osgi.arch=x86_64))
+Eclipse-BundleShape: dir

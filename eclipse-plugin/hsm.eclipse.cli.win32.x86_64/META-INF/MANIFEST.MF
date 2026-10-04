@@ -1,9 +1,0 @@
-Manifest-Version: 1.0
-Bundle-ManifestVersion: 2
-Bundle-Name: HSM Modeler command line executable (Windows x86_64)
-Bundle-SymbolicName: hsm.eclipse.cli.win32.x86_64
-Bundle-Version: 0.1.0.qualifier
-Bundle-Vendor: HSM Modeler
-Fragment-Host: hsm.eclipse
-Eclipse-PlatformFilter: (& (osgi.os=win32) (osgi.arch=x86_64))
-Eclipse-BundleShape: dir
