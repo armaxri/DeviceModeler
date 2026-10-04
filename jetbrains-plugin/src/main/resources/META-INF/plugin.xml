@@ -15,11 +15,17 @@
       <li><i>Generate C++</i> (configured by <code>hsm.gen.json</code> or the settings)</li>
       <li>Undo, redo, copy, paste, find and save shortcuts in the diagram editor; dark theme of the IDE</li>
       <li>Highlighting, comments and braces of <code>.hsm</code> and <code>.hsmtest</code> files</li>
+      <li>With the plugin <a href="https://plugins.jetbrains.com/plugin/23257-lsp4ij">LSP4IJ</a>: the HSM language
+          server (<code>hsm lsp</code>) in the text editor – diagnostics, completion, hover, go to definition /
+          declaration / type definition into C/C++ headers and other models, document links, formatting, structure,
+          folding, rename and semantic highlighting</li>
     </ul>
     ]]></description>
 
     <!-- only the platform: runs in CLion, IntelliJ IDEA and the other IDEs of the IntelliJ Platform -->
     <depends>com.intellij.modules.platform</depends>
+    <!-- optional: the language server in the text editor (LSP4IJ, works in all JetBrains IDEs incl. the free ones) -->
+    <depends optional="true" config-file="hsm-lsp4ij.xml">com.redhat.devtools.lsp4ij</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <fileType name="HSM" implementationClass="hsm.jetbrains.lang.HsmFileType" fieldName="INSTANCE"

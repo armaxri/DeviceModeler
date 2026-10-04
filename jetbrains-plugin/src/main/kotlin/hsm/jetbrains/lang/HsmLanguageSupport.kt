@@ -26,9 +26,9 @@ import com.intellij.psi.tree.IFileElementType
 import com.intellij.psi.tree.TokenSet
 
 // The text editor support of .hsm / .hsmtest: highlighting, comments, braces and a flat PSI (one element per
-// file, needed by the platform for annotators and the structure view). Validation, completion etc. come from
-// the page (diagram editor) and the command line tool – a language server (LSP4IJ or the platform's LSP API with
-// the server of packages/vscode) would be the next step for the text editor.
+// file, needed by the platform for annotators and the structure view). With LSP4IJ installed the language server
+// `hsm lsp` adds diagnostics, completion, hover, navigation, formatting, … (hsm-lsp4ij.xml, package lsp);
+// without it validation comes from the page (diagram editor) and the command line tool.
 
 private val KEYWORD = TextAttributesKey.createTextAttributesKey("HSM_KEYWORD", DefaultLanguageHighlighterColors.KEYWORD)
 private val STRING = TextAttributesKey.createTextAttributesKey("HSM_STRING", DefaultLanguageHighlighterColors.STRING)

@@ -12,6 +12,7 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
 import hsm.jetbrains.editor.HsmDiagramEditor
+import hsm.jetbrains.lsp.HsmLanguageServerSupport
 import hsm.jetbrains.model.ModelProblem
 import hsm.jetbrains.model.ProblemSource
 import hsm.jetbrains.model.ProjectPaths
@@ -19,7 +20,8 @@ import hsm.jetbrains.model.Severity
 
 /**
  * The problems of a model in the text editor: those the page of the diagram editor reported for the current
- * text, else (saved file, no page) those of `hsm validate --json` ([HsmValidation]).
+ * text, else (saved file, no page) those of `hsm validate --json` ([HsmValidation]). Nothing if the language server
+ * runs for the text editor (LSP4IJ, [HsmLanguageServerSupport]): it reports the problems itself.
  */
 class HsmExternalAnnotator : ExternalAnnotator<HsmExternalAnnotator.Info, HsmExternalAnnotator.Result>(), DumbAware {
 
@@ -33,7 +35,8 @@ class HsmExternalAnnotator : ExternalAnnotator<HsmExternalAnnotator.Info, HsmExt
 
     private fun collect(file: PsiFile, document: Document): Info? {
         val virtualFile = file.virtualFile ?: return null
-        if (!ProjectPaths.isModel(virtualFile.name)) {
+        if (!ProjectPaths.isModel(virtualFile.name) || HsmLanguageServerSupport.active()) {
+            // the language server (LSP4IJ) reports the problems of the text
             return null
         }
         return Info(file.project, virtualFile, document.textLength, FileDocumentManager.getInstance().isDocumentUnsaved(document))
