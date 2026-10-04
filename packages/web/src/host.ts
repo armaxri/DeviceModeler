@@ -13,14 +13,24 @@
  * - `POST api/save` (text body): save the text (`Ctrl+S`, *Save*)
  * - `POST api/model` (JSON {@link HostModelReport}): problems and outline of the model after every validation
  * - `POST api/settings` (JSON body): the page settings (theme, layout, …) to store
- * - `POST api/open` (text body: path): open another file (submachine state)
+ * - `POST api/open?line=…&column=…&endLine=…&endColumn=…` (text body: path): open another file of the root in
+ *   the host's editor for its type: a model (double-click on a submachine state, go to definition into an
+ *   imported model) or a C/C++ header (go to definition / declaration / type definition of a C++ name,
+ *   Ctrl+Click on `import "motor.h"`). The query parameters are optional ({@link HostOpenPosition}, 1-based,
+ *   UTF-16 columns as in Monaco; pages before them sent none): the host selects the range and reveals it.
+ *   Answers 2xx if it opened the file, 404 if it does not exist or the host cannot open it (the page then
+ *   shows a header itself, read-only). Hosts that do not know the parameters ignore them.
  * - `POST api/export?fileName=…` (binary body): store an exported diagram; answers `{ message }`
  * - `POST api/generate` (JSON {@link HostGeneratedFiles}): write generated files; answers `{ message }`
  *
  * The host calls functions of the page (`window.hsmApp`): `reloadFromHost(replaceText)` after external
  * changes, `hostCommand(name, argument)` for its edit commands (undo, copy, find, …), `revealRange(offset, end)`
- * (problem markers, outline), `generateCpp()`, `getText()` and `setHostTheme('light' | 'dark')` (the theme of
- * the host changed; optional, hosts check that it exists).
+ * (problem markers, outline), `revealPosition(line, column, endLine?, endColumn?)` (1-based, like `api/open`:
+ * a host opened the model at a position), `generateCpp()`, `getText()` and `setHostTheme('light' | 'dark')`
+ * (the theme of the host changed; optional, hosts check that they exist).
+ * The page also reveals a position given in its URL at the start: `index.html?host=http&line=…&column=…`
+ * (`endLine`, `endColumn`), and `index.html?host=http&view=<path>&line=…` shows another file of the root
+ * read-only instead of the editor (the header viewer windows of the desktop app).
  * Without the query parameter nothing of this is used and the app keeps its files in the browser.
  */
 
@@ -40,6 +50,43 @@ export interface HostDocument {
     settings?: string;
     /** Theme of the host: the page follows a dark host theme. */
     theme?: 'light' | 'dark';
+}
+
+/** A position or range in a file (1-based lines and columns, UTF-16 code units as in Monaco). */
+export interface HostOpenPosition {
+    line: number;
+    column: number;
+    /** End of the range to select (default: the position). */
+    endLine?: number;
+    endColumn?: number;
+}
+
+/** The query of `api/open` for a position (empty without one). */
+export function openQuery(position?: HostOpenPosition): string {
+    if (!position) {
+        return '';
+    }
+    const parameters = new URLSearchParams({ line: String(position.line), column: String(position.column) });
+    if (position.endLine !== undefined && position.endColumn !== undefined) {
+        parameters.set('endLine', String(position.endLine));
+        parameters.set('endColumn', String(position.endColumn));
+    }
+    return `?${parameters.toString()}`;
+}
+
+/** The position of URL query parameters (`line`, `column`, `endLine`, `endColumn`), undefined without a valid line. */
+export function positionOfQuery(parameters: URLSearchParams): HostOpenPosition | undefined {
+    const number = (name: string) => {
+        const value = Number(parameters.get(name));
+        return parameters.has(name) && Number.isInteger(value) && value >= 1 ? value : undefined;
+    };
+    const line = number('line');
+    if (line === undefined) {
+        return undefined;
+    }
+    const endLine = number('endLine');
+    const endColumn = number('endColumn');
+    return { line, column: number('column') ?? 1, ...endLine !== undefined && endColumn !== undefined ? { endLine, endColumn } : {} };
 }
 
 export interface HostCppSettings {
@@ -138,8 +185,9 @@ export class HttpHost {
         void this.post('api/settings', JSON.stringify(settings), 'application/json').catch(error => console.error(error));
     }
 
-    async open(path: string): Promise<boolean> {
-        const response = await fetch('api/open', { method: 'POST', body: path, headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
+    /** Asks the host to open a file of its root (a model or a header), optionally at a position; false if it did not. */
+    async open(path: string, position?: HostOpenPosition): Promise<boolean> {
+        const response = await fetch(`api/open${openQuery(position)}`, { method: 'POST', body: path, headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
         return response.ok;
     }
 

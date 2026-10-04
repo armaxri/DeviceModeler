@@ -78,6 +78,19 @@ export class HsmModelService {
         this.workspaceVersion++;
     }
 
+    /** The text of another file of the workspace (given with {@link setWorkspace}) by URI. */
+    fileText(uri: string): string | undefined {
+        if (uri in this.files) {
+            return this.files[uri];
+        }
+        try {
+            // URIs of the language services are encoded (`my%20file.h`), the keys may not be
+            return this.files[decodeURIComponent(uri)];
+        } catch {
+            return undefined;
+        }
+    }
+
     /** Parses, links and validates the text. Calls are serialized. */
     parse(text: string): Promise<ParsedModel> {
         const result = this.queue.then(async () => {

@@ -43,3 +43,5 @@ export * from './lsp/cpp-lsp.js';
 export * from './class-members.js';
 export * from './hsm-value-converter.js';
 export * from './lsp/cpp-navigation.js';
+export * from './lsp/model-navigation.js';
+export * from './lsp/semantic-tokens.js';
