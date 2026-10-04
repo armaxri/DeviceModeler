@@ -16,6 +16,7 @@ export * from './diagram/layout-annotations.js';
 export * from './diagram/diagram-ids.js';
 export * from './diagram/edge-routes.js';
 export * from './diagram/edge-anchors.js';
+export * from './diagram/diagram-bounds.js';
 export * from './model-annotations.js';
 export * from './edit/model-edits.js';
 export * from './hsm-linker.js';

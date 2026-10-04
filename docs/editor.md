@@ -24,6 +24,7 @@ Drag the bar between text and diagram to change their sizes. In windows narrower
 | Fit the diagram to the view | *Fit to screen* button at the bottom of the palette (the tooltips of the palette name each tool and its key) |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Y` (shared with the text editor) |
 | Keep a tool active | hold `Shift` while choosing it, `Esc` to go back to selection |
+| Hide / show the properties panel | panel button at the right end of the toolbar or `Ctrl+Alt+B` (`Cmd+Alt+B` on macOS); the diagram gets the width, the choice is remembered in the browser |
 
 ## Side panel
 

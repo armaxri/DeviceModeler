@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic hsm-export" width="853" height="1363" viewBox="0 0 853 1363" font-family="Helvetica, Arial, sans-serif">
-<title>Door</title>
+<svg xmlns="http://www.w3.org/2000/svg" class="sprotty-graph theme-classic hsm-export" width="1750" height="627" viewBox="0 0 1750 627" font-family="Helvetica, Arial, sans-serif">
+<title>Sensor</title>
 <style><![CDATA[
 .theme-classic, .theme-modern, .theme-dark {
     --hsm-font: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
@@ -600,224 +600,103 @@
 <rect class="export-background" width="100%" height="100%"/>
 <g>
 <g class="hsm-node definition" transform="translate(20, 20)">
-<rect class="definition-shape" x="0" y="0" rx="3" ry="3" width="196" height="218"/>
-<text class="definition-header" x="8" y="17.9"><tspan class="definition-name">Door</tspan><tspan class="definition-kind" dx="6">definitions</tspan></text>
-<line class="definition-separator" x1="0" y1="26" x2="196" y2="26"/>
-<text class="definition-line definition-scope" x="8" y="43.53">@EventDriven</text>
-<text class="definition-line definition-scope" x="8" y="58.53">@ChildFirstExecution</text>
-<text class="definition-line definition-scope" x="8" y="73.53">interface:</text>
-<text class="definition-line" x="8" y="88.53">  in event open</text>
-<text class="definition-line" x="8" y="103.53">  in event close</text>
-<text class="definition-line" x="8" y="118.53">  in event obstacle</text>
-<text class="definition-line" x="8" y="133.53">  in event motorStopped</text>
-<text class="definition-line" x="8" y="148.53">  in event serviceDone</text>
-<text class="definition-line" x="8" y="163.53">  in event maintenance</text>
-<text class="definition-line" x="8" y="178.53">  in event lower</text>
-<text class="definition-line" x="8" y="193.53">  out event alarm</text>
-<text class="definition-line" x="8" y="208.53">  var cycles : integer = 0</text>
+<rect class="definition-shape" x="0" y="0" rx="3" ry="3" width="363" height="218"/>
+<text class="definition-header" x="8" y="17.9"><tspan class="definition-name">Sensor</tspan><tspan class="definition-kind" dx="6">definitions</tspan></text>
+<line class="definition-separator" x1="0" y1="26" x2="363" y2="26"/>
+<text class="definition-line definition-scope" x="8" y="43.53">namespace example</text>
+<text class="definition-line definition-scope" x="8" y="58.53">import &quot;sensor_codes.h&quot;</text>
+<text class="definition-line definition-scope" x="8" y="73.53">@EventDriven</text>
+<text class="definition-line definition-scope" x="8" y="88.53">interface:</text>
+<text class="definition-line" x="8" y="103.53">  in event command : sensor::Command</text>
+<text class="definition-line" x="8" y="118.53">  in event measured : integer</text>
+<text class="definition-line" x="8" y="133.53">  in event timeout</text>
+<text class="definition-line" x="8" y="148.53">  out event stateChanged : sensor::State</text>
+<text class="definition-line" x="8" y="163.53">  var current : sensor::State = sensor::State::Off</text>
+<text class="definition-line" x="8" y="178.53">  var status : integer = sensor::kNone</text>
+<text class="definition-line" x="8" y="193.53">  var level : sensor::Level = sensor::kZero</text>
+<text class="definition-line" x="8" y="208.53">  var result : sensor_result_t = ::SENSOR_OK</text>
 </g>
-<g class="hsm-node initial" transform="translate(766, 20)">
+<g class="hsm-node initial" transform="translate(901, 20)">
 <circle class="initial-shape" cx="10" cy="10" r="10"/>
 </g>
-<g class="hsm-node state" transform="translate(719, 76)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="114" height="53"/>
-<text class="state-name" x="57" y="17.9">Closed</text>
-<line class="state-separator" x1="0" y1="26" x2="114" y2="26"/>
-<text class="state-body" x="6" y="43.7">entry / cycles += 1</text>
+<g class="hsm-node state" transform="translate(755, 76)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="311" height="68"/>
+<text class="state-name" x="155.5" y="17.9">Off</text>
+<line class="state-separator" x1="0" y1="26" x2="311" y2="26"/>
+<text class="state-body" x="6" y="43.7">entry / current = sensor::State::Off;<title>entry / current = sensor::State::Off; status = sensor::kNone; raise stateChanged : current</title></text>
+<text class="state-body" x="6" y="58.7">    status = sensor::kNone; raise stateChanged : current<title>entry / current = sensor::State::Off; status = sensor::kNone; raise stateChanged : current</title></text>
 </g>
-<g class="hsm-node state composite" transform="translate(370, 224)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="280" height="247"/>
-<text class="state-name" x="140" y="17.9">Moving</text>
-<line class="state-separator" x1="0" y1="26" x2="280" y2="26"/>
-<g class="hsm-node entry-point" transform="translate(36, 40)">
-<title>Entry point Opening</title>
-<circle class="entry-shape" cx="8" cy="8" r="7.25"/>
-<text class="node-label" x="23" y="12.2">Opening</text>
-</g>
-<g class="hsm-node entry-point" transform="translate(201, 40)">
-<title>Entry point Closing</title>
-<circle class="entry-shape" cx="8" cy="8" r="7.25"/>
-<text class="node-label" x="23" y="12.2">Closing</text>
-</g>
-<g class="hsm-node exit-point" transform="translate(137, 217)">
-<title>Exit node Blocked</title>
-<circle class="exit-shape" cx="8" cy="8" r="7.25"/>
-<path class="exit-cross" d="M 2.87,2.87 L 13.13,13.13 M 2.87,13.13 L 13.13,2.87"/>
-<text class="node-label" x="23" y="12.2">Blocked</text>
-</g>
-<g class="hsm-node state" transform="translate(14, 92)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="60" height="38"/>
-<text class="state-name" x="30" y="17.9">Up</text>
-<line class="state-separator" x1="0" y1="26" x2="60" y2="26"/>
-</g>
-<g class="hsm-node state" transform="translate(177, 92)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="64" height="38"/>
-<text class="state-name" x="32" y="17.9">Down</text>
-<line class="state-separator" x1="0" y1="26" x2="64" y2="26"/>
-</g>
-</g>
-<g class="hsm-node state composite" transform="translate(524, 641)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="240" height="602"/>
-<text class="state-name" x="120" y="17.9">Service</text>
-<line class="state-separator" x1="0" y1="26" x2="240" y2="26"/>
-<g class="hsm-node region" transform="translate(0, 32)">
-<rect class="region-shape" x="0" y="0" width="240" height="282"/>
-<text class="region-name" x="6" y="14">Lock</text>
-<g class="hsm-node initial" transform="translate(46, 27)">
+<g class="hsm-node state composite" transform="translate(423, 231)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="1307" height="376"/>
+<text class="state-name" x="653.5" y="17.9">On</text>
+<line class="state-separator" x1="0" y1="26" x2="1307" y2="26"/>
+<text class="state-body" x="6" y="43.7">entry / status = sensor::kReady</text>
+<g class="hsm-node initial" transform="translate(600, 67)">
 <circle class="initial-shape" cx="10" cy="10" r="10"/>
 </g>
-<g class="hsm-node state" transform="translate(12, 83)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="87" height="38"/>
-<text class="state-name" x="43.5" y="17.9">Unlocked</text>
-<line class="state-separator" x1="0" y1="26" x2="87" y2="26"/>
+<g class="hsm-node state" transform="translate(500, 123)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="220" height="68"/>
+<text class="state-name" x="110" y="17.9">Ready</text>
+<line class="state-separator" x1="0" y1="26" x2="220" y2="26"/>
+<text class="state-body" x="6" y="43.7">entry / current = sensor::State::Ready;<title>entry / current = sensor::State::Ready; raise stateChanged : current</title></text>
+<text class="state-body" x="6" y="58.7">    raise stateChanged : current<title>entry / current = sensor::State::Ready; raise stateChanged : current</title></text>
 </g>
-<g class="hsm-node state" transform="translate(66, 208)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="74" height="38"/>
-<text class="state-name" x="37" y="17.9">Locked</text>
-<line class="state-separator" x1="0" y1="26" x2="74" y2="26"/>
+<g class="hsm-node state" transform="translate(492, 294)">
+<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="241" height="68"/>
+<text class="state-name" x="120.5" y="17.9">Measuring</text>
+<line class="state-separator" x1="0" y1="26" x2="241" y2="26"/>
+<text class="state-body" x="6" y="43.7">entry / current = sensor::State::Measuring;<title>entry / current = sensor::State::Measuring; raise stateChanged : current</title></text>
+<text class="state-body" x="6" y="58.7">    raise stateChanged : current<title>entry / current = sensor::State::Measuring; raise stateChanged : current</title></text>
 </g>
-</g>
-<g class="hsm-node region" transform="translate(0, 314)">
-<rect class="region-shape" x="0" y="0" width="240" height="288"/>
-<line class="region-separator" x1="0" y1="0" x2="240" y2="0"/>
-<text class="region-name" x="6" y="14">Light</text>
-<g class="hsm-node initial" transform="translate(152, 51)">
-<circle class="initial-shape" cx="10" cy="10" r="10"/>
-</g>
-<g class="hsm-node state" transform="translate(132, 107)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="60" height="38"/>
-<text class="state-name" x="30" y="17.9">Off</text>
-<line class="state-separator" x1="0" y1="26" x2="60" y2="26"/>
-</g>
-<g class="hsm-node state" transform="translate(168, 232)">
-<rect class="state-shape" x="0" y="0" rx="12.5" ry="12.5" width="60" height="38"/>
-<text class="state-name" x="30" y="17.9">On</text>
-<line class="state-separator" x1="0" y1="26" x2="60" y2="26"/>
-</g>
-</g>
-</g>
-<g class="hsm-node sync" transform="translate(483, 584)">
-<title>Fork</title>
-<rect class="sync-shape" x="0" y="0" width="44" height="7" rx="1.5" ry="1.5"/>
-</g>
-<g class="hsm-node sync" transform="translate(700, 1336)">
-<title>Join</title>
-<rect class="sync-shape" x="0" y="0" width="44" height="7" rx="1.5" ry="1.5"/>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 776,40 C 776,40 776,58 776,76"/>
-<path class="transition-arrow" d="M 776,76 L 780.5,66 L 776,69 L 771.5,66 Z"/>
+<path class="transition-line" d="M 911,40 C 911,40 911,58 911,76"/>
+<path class="transition-arrow" d="M 911,76 L 915.5,66 L 911,69 L 906.5,66 Z"/>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 738,129 C 556,151 556,162 556,168.75 C 556,175.5 556,178 556,180.5 C 556,183 556,185.5 556,191.25 C 556,197 556,206 406,224"/>
-<path class="transition-arrow" d="M 406,224 L 416.46,227.28 L 412.95,223.17 L 415.39,218.34 Z"/>
+<path class="transition-line" d="M 859,144 C 859,162 859,174.75 859,187.5 C 859,200.25 859,213 859,231"/>
+<path class="transition-arrow" d="M 859,231 L 863.5,221 L 859,224 L 854.5,221 Z"/>
 <g class="transition-label">
-<text x="444" y="184.7">1: open # &gt;Opening</text>
+<text x="540" y="191.7">command [valueof(command) == sensor::Command::Start]</text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 795,129 C 797,151 797,162 797,170.25 C 797,178.5 797,184 797,189.5 C 797,195 797,200.5 797,253.08 C 797,305.67 797,405.33 797,460.25 C 797,515.17 797,525.33 797,535.5 C 797,545.67 797,555.83 797,565.08 C 797,574.33 797,582.67 797,592.33 C 797,602 797,613 742,641"/>
-<path class="transition-arrow" d="M 742,641 L 752.95,640.47 L 748.24,637.82 L 748.87,632.45 Z"/>
+<path class="transition-line" d="M 1294,231 C 1294,213 1294,204.75 1294,197.87 C 1294,191 1294,185.5 1294,178.25 C 1294,171 1294,162 962,144"/>
+<path class="transition-arrow" d="M 962,144 L 971.74,149.03 L 968.99,144.38 L 972.23,140.05 Z"/>
 <g class="transition-label">
-<text x="708" y="354.7">2: maintenance</text>
+<text x="1301" y="191.7">command [valueof(command) == sensor::Command::Stop]</text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 617,1243 C 617,1249 617,1258 573.17,1262.5 C 529.33,1267 441.67,1267 397.83,1264 C 354,1261 354,1255 354,1146 C 354,1037 354,825 354,715.08 C 354,605.17 354,597.33 354,589.5 C 354,581.67 354,573.83 354,559.75 C 354,545.67 354,525.33 354,491.75 C 354,458.17 354,411.33 354,364.5 C 354,317.67 354,270.83 354,244.42 C 354,218 354,212 364.33,209 C 374.67,206 395.33,206 405.67,210.5 C 416,215 416,224 416,224"/>
-<path class="transition-arrow" d="M 416,224 L 420.5,214 L 416,217 L 411.5,214 Z"/>
+<path class="transition-line" d="M 1033,318 C 1033,318 1033,336 1033,354"/>
+<path class="transition-arrow" d="M 1033,354 L 1037.5,344 L 1033,347 L 1028.5,344 Z"/>
+</g>
+<g class="transition">
+<path class="transition-line" d="M 1011,422 C 1011,444 1011,458.75 1011,473.5 C 1011,488.25 1011,503 1011,525"/>
+<path class="transition-arrow" d="M 1011,525 L 1015.5,515 L 1011,518 L 1006.5,515 Z"/>
 <g class="transition-label">
-<text x="258" y="544.7">lower # &gt;Closing</text>
+<text x="684" y="477.7">command [valueof(command) == sensor::Command::Query]</text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 404,354 L 404,372 L 404,384.75 L 404,395.38 L 404,406 L 404,414.5 L 404,427.25 L 404,440 L 404,457 L 404,477 L 404,491 L 451.67,498 L 499.33,505 L 594.67,505 L 642.33,500.33 L 690,495.67 L 690,486.33 L 690,439.5 L 690,392.67 L 690,308.33 L 690,263.17 L 690,218 L 690,212 L 704.33,209 L 718.67,206 L 747.33,206 L 761.67,203 L 776,200 L 776,194 L 776,187.92 L 776,181.83 L 776,175.67 L 776,167.96 L 776,160.25 L 776,151 L 776,129"/>
-<path class="transition-arrow" d="M 776,129 L 771.5,139 L 776,136 L 780.5,139 Z"/>
+<path class="transition-line" d="M 1060,525 C 1368,503 1368,492 1368,485.25 C 1368,478.5 1368,476 1368,473.5 C 1368,471 1368,468.5 1368,461.75 C 1368,455 1368,444 1055,422"/>
+<path class="transition-arrow" d="M 1055,422 L 1064.66,427.19 L 1061.98,422.49 L 1065.29,418.21 Z"/>
 <g class="transition-label">
-<text x="681" y="184.7">2: motorStopped</text>
+<text x="1026" y="477.7">1: measured [valueof(measured) &lt;= 80] / level = sensor::kNo…<title>1: measured [valueof(measured) &lt;= 80] / level = sensor::kNormal; result = ::SENSOR_OK</title></text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 590,354 L 590,372 L 590,384.75 L 590,395.38 L 590,406 L 590,414.5 L 590,427.25 L 590,440 L 590,457 L 590,477 L 590,485 L 602.67,489 L 615.33,493 L 640.67,493 L 653.33,490.33 L 666,487.67 L 666,482.33 L 666,434.5 L 666,386.67 L 666,296.33 L 666,248.42 L 666,200.5 L 666,195 L 666,189.5 L 666,184 L 666,178.5 L 666,170.25 L 666,162 L 666,151 L 757,129"/>
-<path class="transition-arrow" d="M 757,129 L 746.22,126.98 L 750.2,130.64 L 748.34,135.72 Z"/>
+<path class="transition-line" d="M 1108,525 C 1715,503 1715,492 1715,485.25 C 1715,478.5 1715,476 1715,473.5 C 1715,471 1715,468.5 1715,461.75 C 1715,455 1715,444 1099,422"/>
+<path class="transition-arrow" d="M 1099,422 L 1108.83,426.85 L 1106,422.25 L 1109.15,417.86 Z"/>
 <g class="transition-label">
-<text x="571" y="184.7">2: motorStopped</text>
+<text x="1383" y="477.7">2: measured [valueof(measured) &gt; 80] / status = status | se…<title>2: measured [valueof(measured) &gt; 80] / status = status | sensor::kOverTemperature; level = sensor::kMaxLevel</title></text>
 </g>
 </g>
 <g class="transition">
-<path class="transition-line" d="M 394,471 C 505,505 505,519 505,528.75 C 505,538.5 505,544 505,550.87 C 505,557.75 505,566 505,584"/>
-<path class="transition-arrow" d="M 505,584 L 509.5,574 L 505,577 L 500.5,574 Z"/>
+<path class="transition-line" d="M 963,525 C 669,503 669,492 669,485.25 C 669,478.5 669,476 669,473.5 C 669,471 669,468.5 669,461.75 C 669,455 669,444 967,422"/>
+<path class="transition-arrow" d="M 967,422 L 956.7,418.25 L 960.02,422.52 L 957.36,427.22 Z"/>
 <g class="transition-label">
-<text x="369" y="544.7">/ raise alarm # Blocked&gt;</text>
-</g>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 498,591 L 498,591 L 512.1,613 L 639,635 L 639,667 L 639,667 L 639,700 L 639,709.5 L 639,717.42 L 639,725.33 L 639,731.67 L 639,747.17 L 639,762.67 L 639,787.33 L 639,803.92 L 639,820.5 L 639,829 L 639,839.63 L 639,850.25 L 639,863 L 639,881"/>
-<path class="transition-arrow" d="M 639,881 L 643.5,871 L 639,874 L 634.5,871 Z"/>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 512,591 L 512,591 L 534,613 L 732,635 L 732,667 L 732,739 L 732,811 L 732,883 L 732,955 L 732,1006 L 732,1015.5 L 732,1023.42 L 732,1031.33 L 732,1037.67 L 732,1053.17 L 732,1068.67 L 732,1093.33 L 732,1109.92 L 732,1126.5 L 732,1135 L 732,1145.63 L 732,1156.25 L 732,1169 L 732,1187"/>
-<path class="transition-arrow" d="M 732,1187 L 736.5,1177 L 732,1180 L 727.5,1177 Z"/>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 627,919 L 627,919 L 627,919 L 627,955 L 627,1027 L 627,1099 L 627,1171 L 627,1243 L 627,1249 L 709,1267 L 709,1276 L 709,1281.75 L 709,1287.5 L 709,1290 L 709,1292.5 L 709,1295 L 709,1297.5 L 709,1303.25 L 709,1309 L 709,1318 L 711,1336"/>
-<path class="transition-arrow" d="M 711,1336 L 714.37,1325.56 L 710.23,1329.04 L 705.42,1326.56 Z"/>
-<g class="transition-label">
-<text x="636" y="1296.7">serviceDone</text>
-</g>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 722,1225 L 722,1225 L 722,1225 L 722,1243 L 722,1243 L 722,1267 L 722,1279.75 L 722,1292.5 L 722,1305.25 L 722,1318 L 722,1336"/>
-<path class="transition-arrow" d="M 722,1336 L 726.5,1326 L 722,1329 L 717.5,1326 Z"/>
-<g class="transition-label">
-<text x="729" y="1296.7">serviceDone</text>
-</g>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 733,1336 C 814,1318 814,1309 814,1299 C 814,1289 814,1278 814,1218 C 814,1158 814,1049 814,940 C 814,831 814,722 814,659.67 C 814,597.33 814,581.67 814,568.75 C 814,555.83 814,545.67 814,535.5 C 814,525.33 814,515.17 814,460.25 C 814,405.33 814,305.67 814,251.25 C 814,196.83 814,187.67 814,176.21 C 814,164.75 814,151 814,129"/>
-<path class="transition-arrow" d="M 814,129 L 809.5,139 L 814,136 L 818.5,139 Z"/>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 414,280 C 414,280 414,298 414,316"/>
-<path class="transition-arrow" d="M 414,316 L 418.5,306 L 414,309 L 409.5,306 Z"/>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 579,280 C 579,280 579,298 579,316"/>
-<path class="transition-arrow" d="M 579,316 L 583.5,306 L 579,309 L 574.5,306 Z"/>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 424,354 C 488,372 488,381 488,386.75 C 488,392.5 488,395 488,397.5 C 488,400 488,402.5 488,408.25 C 488,414 488,423 512,441"/>
-<path class="transition-arrow" d="M 512,441 L 506.7,431.4 L 506.4,436.8 L 501.3,438.6 Z"/>
-<g class="transition-label">
-<text x="423" y="401.7">1: obstacle</text>
-</g>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 568,354 C 568,372 568,380.25 568,387.13 C 568,394 568,399.5 568,406.75 C 568,414 568,423 518,441"/>
-<path class="transition-arrow" d="M 518,441 L 528.93,441.85 L 524.59,438.63 L 525.88,433.38 Z"/>
-<g class="transition-label">
-<text x="503" y="401.7">1: obstacle</text>
-</g>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 580,720 C 580,720 580,738 580,756"/>
-<path class="transition-arrow" d="M 580,756 L 584.5,746 L 580,749 L 575.5,746 Z"/>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 580,794 C 615,812 615,821 615,828.25 C 615,835.5 615,841 615,847.88 C 615,854.75 615,863 615,881"/>
-<path class="transition-arrow" d="M 615,881 L 619.5,871 L 615,874 L 610.5,871 Z"/>
-<g class="transition-label">
-<text x="580" y="841.7">close</text>
-</g>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 686,1026 C 686,1026 686,1044 686,1062"/>
-<path class="transition-arrow" d="M 686,1062 L 690.5,1052 L 686,1055 L 681.5,1052 Z"/>
-</g>
-<g class="transition">
-<path class="transition-line" d="M 686,1100 C 712,1118 712,1127 712,1134.25 C 712,1141.5 712,1147 712,1153.88 C 712,1160.75 712,1169 712,1187"/>
-<path class="transition-arrow" d="M 712,1187 L 716.5,1177 L 712,1180 L 707.5,1177 Z"/>
-<g class="transition-label">
-<text x="679" y="1147.7">open</text>
+<text x="439" y="477.7">3: timeout / result = ::SENSOR_TIMEOUT</text>
 </g>
 </g>
 </g>

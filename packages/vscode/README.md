@@ -1,11 +1,5 @@
 # HSM Modeler for VS Code
 
-> 🧪 This is the build of the branch `claude/layout-annotations` (version `0.1.0-manual-layout`, display name
-> *HSM Modeler (manual layout)*) with hand-arranged diagrams, see [Manual layout](#manual-layout-experimental).
-> It has the same extension id as the regular build (`hsm-modeler.hsm-vscode`), so only one of them can
-> be installed at a time: uninstall the other one first (`code --uninstall-extension hsm-modeler.hsm-vscode`)
-> or install with `code --install-extension <file>.vsix --force`.
-
 Hierarchical state machines (`.hsm`) and their unit tests (`.hsmtest`) in VS Code: a language
 server, the PlantUML-style diagram editor of the HSM web app, C++ code generation, a test runner in
 the Test Explorer and the import of itemis CREATE models.
@@ -185,7 +179,7 @@ the diagram is refreshed). The protocol is in `src/common/protocol.ts`.
 npm run build -w packages/vscode      # bundles into packages/vscode/dist
 npm test -w packages/vscode           # unit tests + language server round trip over stdio
 npm run package -w packages/vscode    # build + packages/vscode/hsm-vscode-<version>.vsix
-code --install-extension packages/vscode/hsm-vscode-0.1.0-manual-layout.vsix --force
+code --install-extension packages/vscode/hsm-vscode-0.1.0.vsix --force
 ```
 
 To debug, open the repository in VS Code and start an *Extension Development Host* with
