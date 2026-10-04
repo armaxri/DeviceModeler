@@ -409,7 +409,7 @@ Event payloads, operation parameters and return values may use all these types.
   - Name ranges: the name of a using-declaration is its last segment, an anonymous enum / struct named by
     `typedef` (`typedef enum { … } color_t;`) has the range of the typedef name. Declarations produced by
     macro expansions have the range of the macro invocation. Forward declarations of classes are not
-    recorded (the definition is the only target).
+    navigation targets (the definition is the only target).
 - Completion (`HsmCompletionProvider`, both languages, the VS Code language server and the web app): after
   `ns::` the members of the namespace / class / enum (in type positions – `var x : `, `in event e : `,
   parameters, return types, `alias`, `x as ` – only namespaces and types, in expressions values and scopes;
@@ -427,7 +427,16 @@ Event payloads, operation parameters and return values may use all these types.
 - Hover of enumerators shows the computed value (also hexadecimal, its derivation, implicit or unknown, see
   §3.5), the enum and its underlying type; hover of enums the enumerators with their values, the underlying
   type, whether the enum is unscoped or an opaque declaration.
-- Semantic highlighting (VS Code): C++ types (enum types as enums), enumerators and constants.
+- Semantic highlighting (VS Code): C++ types (enum types as enums), enumerators and constants; the names in the
+  types of the C++ class sections are types even if the headers do not declare them (they get a warning, see below).
+- Unknown C++ types of the C++ class sections (`cpp-unknown-types.ts`, a check of `HsmImportValidator`): a warning on
+  the part of the name that the imported headers do not declare (`Driver` of `EpicProject::Driver`), see
+  [language.md](language.md#c-class-sections) for the rules. If a header in the directory of the model or in the include
+  paths (two subdirectory levels deep; `CppHeaderStore.lister` lists directories in Node hosts, the web app searches
+  the texts of its store) declares the name, the message names it and the quick fix (`HsmCodeActionProvider` in
+  `lsp/cpp-code-actions.ts`, VS Code language server) inserts the import after the last import; `std::` names of the
+  built-in map (`STD_HEADER_OF`) get the system import (`import "<vector>"`). Forward declarations of classes
+  (`class Driver;`) and class / alias templates are recorded in `CppHeader.otherTypes` for this check only.
 - The definitions box of the diagram lists the imports.
 
 ### 4.7 Hosts and settings

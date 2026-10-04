@@ -12,7 +12,7 @@ struct Config {
     std::uint32_t maxErrors = 3;
 };
 
-/// The hardware driver (driver.h); the state machine only stores a pointer to it.
+/// The hardware driver (defined in driver.h); the controller holds a reference to it.
 class Driver;
 
 }  // namespace EpicProject

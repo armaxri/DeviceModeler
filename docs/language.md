@@ -323,6 +323,19 @@ statemachine Controller {
   pointers (`Driver*`, `const char*`) and template arguments (`std::array<int, 4>`, `std::map<int, std::string>`,
   `std::vector<std::vector<int>>`). The HSM types (`integer`, `string`, aliases) can be used as well. Elsewhere in the
   model these C++ forms are reported as errors.
+- **Unknown types** are allowed (the type is passed to the generated code as written), but a name that the imported
+  headers do not declare gets a **warning** on that name, since it has no highlighting, hover, completion and
+  navigation and the generated code only compiles if other includes declare it (`Unknown type 'EpicProject::Driver':
+  it is not declared in the imported headers. Import its header (import "driver.h") …`). If a header in the directory
+  of the model or in the include paths declares the name, the message names it and the quick fix adds the import.
+  Known are the fundamental types, the `<cstdint>` / `<cstddef>` typedefs (`uint8_t`, `std::size_t`), `std::string`,
+  `std::string_view`, `std::array` and the names declared by the imported headers and the headers they include
+  (definitions, aliases, forward declarations like `class Driver;`, templates; also relative to the `namespace` of the
+  model). A `std::` name is known if its standard header is imported (`import "<vector>"` for `std::vector`,
+  `"<map>"` for `std::map`, `"<memory>"` for `std::unique_ptr`, …) or included by an imported header; otherwise the
+  quick fix adds that import. `std::` names the tool does not map to a header are accepted if any system header is
+  imported or included. Names cannot be verified – and are accepted – if the model imports a system header that is
+  not a standard header (`import "<QString>"`) or an imported header includes a header that is not found.
 - **Use in the model**: a member can be used in the model if the model knows its types – the types of
   [C/C++ header imports](#cc-header-imports) (integers, reals, `bool`, `std::string`, enums, structs, `std::array`),
   where `const T&` and `T&` are values of type `T`. Members with other types (pointers, other templates, types of

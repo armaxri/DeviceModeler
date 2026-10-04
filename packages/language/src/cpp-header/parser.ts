@@ -3,7 +3,7 @@ import { preprocess } from './preprocessor.js';
 import { KEYWORDS, makeTypeRef, SyntaxError, TokenCursor } from './syntax.js';
 import type {
     CppAccess, CppAlias, CppBaseSpecifier, CppConstant, CppDeclaration, CppDiagnostic, CppDiagnosticSeverity, CppEnum,
-    CppEnumerator, CppExpression, CppField, CppHeader, CppNamespace, CppNamespaceAlias, CppUsingDirective, CppParseOptions, CppQualifiedName, CppRange,
+    CppEnumerator, CppExpression, CppField, CppHeader, CppNamespace, CppNamespaceAlias, CppOtherTypeName, CppUsingDirective, CppParseOptions, CppQualifiedName, CppRange,
     CppRecord, CppTypeName, CppTypeRef
 } from './model.js';
 
@@ -35,7 +35,7 @@ export function parseCppHeader(text: string, fileName: string, options: CppParse
     const declarations = parser.parseTranslationUnit();
     diagnostics.push(...parser.diagnostics);
     diagnostics.sort((a, b) => a.range.start.line - b.range.start.line || a.range.start.character - b.range.start.character);
-    return { fileName, declarations, includes: preprocessed.includes, macros: preprocessed.macros, diagnostics };
+    return { fileName, declarations, otherTypes: parser.otherTypes, includes: preprocessed.includes, macros: preprocessed.macros, diagnostics };
 }
 
 /** Calls `action` for every declaration of the tree (depth first, in declaration order). */
@@ -78,6 +78,8 @@ function anonymousName(scope: string): string {
 
 class DeclarationParser extends TokenCursor {
     readonly diagnostics: CppDiagnostic[] = [];
+    /** Forward declared classes and templates (see {@link CppOtherTypeName}). */
+    readonly otherTypes: CppOtherTypeName[] = [];
     private scope = '';
     private output: CppDeclaration[] = [];
     private recordContext: RecordContext | undefined;
@@ -409,6 +411,13 @@ class DeclarationParser extends TokenCursor {
         if (this.at('template')) {
             this.skipTemplate();
             return;
+        }
+        // `template <…> class Buffer` / `template <…> using Ptr = …`: the name is a type
+        const keyword = this.peek().text;
+        if (['class', 'struct', 'union', 'using'].includes(keyword) && this.atIdentifier(1)
+            && (keyword !== 'using' || this.at('=', 2))) {
+            const name = this.peek(1);
+            this.otherTypes.push({ kind: 'template', qualifiedName: this.qualify(name.text), range: this.range(name, name) });
         }
         this.skipDeclaration(false);
     }
@@ -947,6 +956,10 @@ class DeclarationParser extends TokenCursor {
         if (!this.at('{')) {
             if (!name) {
                 throw new SyntaxError('expected a class name or \'{\'', this.peek());
+            }
+            if (this.at(';') && bases.length === 0 && !name.global && name.parts.length === 1 && nameToken) {
+                // forward declaration `class Driver;`
+                this.otherTypes.push({ kind: 'forward', qualifiedName: this.qualify(name.parts[0].name), range: this.range(nameToken, nameToken) });
             }
             return { kind: 'named', name };
         }

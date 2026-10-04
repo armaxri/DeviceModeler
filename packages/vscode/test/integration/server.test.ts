@@ -102,6 +102,7 @@ const VALVE = `statemachine Valve {
 `;
 
 let dir: string;
+let tokenTypes: string[] = [];
 let server: ChildProcess;
 let connection: MessageConnection;
 const diagnostics = new Map<string, Diagnostic[]>();
@@ -151,6 +152,9 @@ beforeAll(async () => {
     // a header found through the include paths of the headers block of hsm.gen.json
     await fs.mkdir(path.join(dir, 'include'));
     await fs.writeFile(path.join(dir, 'include/shared.h'), 'namespace shared { constexpr int kOffset = 1; }\n');
+    // a header that is not imported by the controller: found by the quick fix of the unknown type
+    await fs.mkdir(path.join(dir, 'include/hal'));
+    await fs.writeFile(path.join(dir, 'include/hal/driver.h'), 'namespace hal { class Driver { public: void on(); }; }\n');
     await fs.writeFile(path.join(dir, 'hsm.gen.json'), JSON.stringify({ models: ['models/*.hsm'], cpp: {}, headers: { includePaths: ['include'] } }));
     await esbuild.build({ ...bundleOptions('server', { outdir: path.join(dir, 'out') }), logLevel: 'warning', sourcemap: false });
 
@@ -173,9 +177,10 @@ beforeAll(async () => {
         }
     });
     for (const capability of ['hoverProvider', 'completionProvider', 'definitionProvider', 'referencesProvider', 'renameProvider',
-        'documentFormattingProvider', 'documentSymbolProvider', 'foldingRangeProvider', 'semanticTokensProvider']) {
+        'documentFormattingProvider', 'documentSymbolProvider', 'foldingRangeProvider', 'semanticTokensProvider', 'codeActionProvider']) {
         expect(result.capabilities[capability], capability).toBeTruthy();
     }
+    tokenTypes = (result.capabilities.semanticTokensProvider as { legend: { tokenTypes: string[] } }).legend.tokenTypes;
     await connection.sendNotification('initialized', {});
 }, 120000);
 
@@ -344,5 +349,37 @@ describe('HSM language server', () => {
         await fs.writeFile(path.join(dir, 'models/types.h'), TYPES_H);
         connection.sendNotification('workspace/didChangeWatchedFiles', { changes: [{ uri: uriOf('models/types.h'), type: 2 }] });
         await diagnosticsFor(valveUri, d => !d.some(e => e.severity === 1));
+    });
+
+    it('warns about unknown C++ types of class sections, offers the import of the declaring header and highlights them as types', async () => {
+        const controller = 'statemachine Controller {\n    import "types.h"\n    private:\n        var driver : hal::Driver&\n    [*] -> A\n    state A\n}\n';
+        open('models/controller.hsm', 'hsm', controller);
+        const uri = uriOf('models/controller.hsm');
+        const found = await diagnosticsFor(uri, d => d.length > 0);
+        const unknown = found.filter(d => /Unknown type 'hal::Driver'/.test(d.message)) as Array<Diagnostic & { range: { end: { line: number, character: number } } }>;
+        expect(unknown).toHaveLength(1);
+        expect(unknown[0].severity).toBe(2);
+        expect(unknown[0].message).toContain('import "hal/driver.h"');
+        expect(unknown[0].range.start).toEqual(position(controller, 'hal::Driver'));
+
+        const actions = await connection.sendRequest<Array<{ title: string, edit: { changes: Record<string, Array<{ newText: string }>> } }>>('textDocument/codeAction', {
+            textDocument: { uri }, range: unknown[0].range, context: { diagnostics: unknown }
+        });
+        expect(actions.map(a => a.title)).toEqual(['Import "hal/driver.h"']);
+        expect(actions[0].edit.changes[uri][0].newText).toBe('\n    import "hal/driver.h"');
+
+        // the unknown name is still highlighted as a type
+        const tokens = await connection.sendRequest<{ data: number[] }>('textDocument/semanticTokens/full', { textDocument: { uri } });
+        const decoded: Array<{ line: number, character: number, length: number, type: string }> = [];
+        let line = 0;
+        let character = 0;
+        for (let i = 0; i < tokens.data.length; i += 5) {
+            const [deltaLine, deltaStart, length, type] = tokens.data.slice(i, i + 4);
+            line += deltaLine;
+            character = deltaLine === 0 ? character + deltaStart : deltaStart;
+            decoded.push({ line, character, length, type: tokenTypes[type] });
+        }
+        const start = position(controller, 'hal::Driver');
+        expect(decoded).toContainEqual({ ...start, length: 'hal::Driver'.length, type: 'type' });
     });
 });
