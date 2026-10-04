@@ -47,7 +47,7 @@ async function load(file: string, options: HeaderCommandOptions = {}) {
     installNodeHeaderSupport(services.shared, nodeHeaderOptions(options));
     const loader = new HsmModelLoader(services);
     const text = await fs.readFile(file, 'utf-8');
-    const parsed = await loader.load(text, `file://${path.resolve(file)}`);
+    const parsed = await loader.load(text, URI.file(path.resolve(file)).toString());
     let errors = 0;
     for (const d of parsed.diagnostics) {
         const severity = severities[d.severity ?? 1];

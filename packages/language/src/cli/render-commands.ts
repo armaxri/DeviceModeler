@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { URI } from 'langium';
 import { NodeFileSystem } from 'langium/node';
 import type { EdgeRouting, LayoutDirection } from '../diagram/diagram-model.js';
 import { EDGE_ROUTINGS, parseEdgeRouting } from '../diagram/edge-routes.js';
@@ -77,7 +78,7 @@ async function loadModels(files: string[], logger: Logger): Promise<{ models: Lo
             failures++;
             continue;
         }
-        const parsed = await loader.load(text, `file://${path.resolve(file)}`);
+        const parsed = await loader.load(text, URI.file(path.resolve(file)).toString());
         for (const d of parsed.diagnostics.filter(d => d.severity === 1)) {
             logger.error(`${file}:${d.range.start.line + 1}:${d.range.start.character + 1}: ${severities[d.severity ?? 1]}: ${d.message}`);
         }

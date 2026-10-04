@@ -29,7 +29,25 @@ function assert(condition, message) {
     }
 }
 function run(...args) {
-    return execFileSync(exe, args, { cwd: repo, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
+    try {
+        return execFileSync(exe, args, { cwd: repo, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (error) {
+        // the output of the failed command (execFileSync's message only has the start of stderr)
+        throw Object.assign(new Error(`hsm ${args.join(' ')} failed (exit code ${error.status ?? error.signal})`
+            + `\n--- stdout:\n${error.stdout ?? ''}\n--- stderr:\n${error.stderr ?? ''}`), { status: error.status });
+    }
+}
+/** File URIs compared as paths: the server may encode a Windows drive differently (file:///c%3A/… vs file:///C:/…). */
+function sameFile(a, b) {
+    const normalize = uri => {
+        const file = path.resolve(fileURLToPath(uri));
+        return process.platform === 'win32' ? file.toLowerCase() : file;
+    };
+    try {
+        return normalize(a) === normalize(b);
+    } catch {
+        return false;
+    }
 }
 
 /** A minimal LSP client (Content-Length framing over stdio) talking to `hsm lsp --stdio` in a workspace with a header. */
@@ -85,13 +103,14 @@ async function lspSession(dir) {
     }
     async function diagnostics() {
         for (let i = 0; i < 300; i++) {
-            const published = notifications.filter(n => n.method === 'textDocument/publishDiagnostics' && n.params.uri === uri).pop();
+            const published = notifications.filter(n => n.method === 'textDocument/publishDiagnostics' && sameFile(n.params.uri, uri)).pop();
             if (published) {
                 return published.params.diagnostics;
             }
             await new Promise(resolve => setTimeout(resolve, 100));
         }
-        throw new Error('no diagnostics');
+        const uris = notifications.filter(n => n.method === 'textDocument/publishDiagnostics').map(n => n.params.uri);
+        throw new Error(`no diagnostics for ${uri} (diagnostics published for: ${uris.join(', ') || 'none'})`);
     }
     try {
         const folder = pathToFileURL(dir).toString();
@@ -106,9 +125,7 @@ async function lspSession(dir) {
         assert(JSON.stringify(hover).includes('Number of steps.'), `hover: ${JSON.stringify(hover)}`);
         const definition = await request('textDocument/definition', { textDocument: { uri }, position });
         const target = definition?.[0]?.targetUri ?? definition?.[0]?.uri;
-        // compared as paths: the server's URIs may encode a Windows drive differently (file:///c%3A/…)
-        const samePath = (a, b) => process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
-        assert(target && samePath(path.resolve(fileURLToPath(target)), path.resolve(dir, 'include', 'types.h')), `definition: ${JSON.stringify(definition)}`);
+        assert(target && sameFile(target, pathToFileURL(path.join(dir, 'include', 'types.h')).toString()), `definition: ${JSON.stringify(definition)}`);
         await request('shutdown', null);
         send({ jsonrpc: '2.0', method: 'exit' });
         const code = await Promise.race([exited, new Promise(resolve => setTimeout(() => resolve('timeout'), 10000))]);
