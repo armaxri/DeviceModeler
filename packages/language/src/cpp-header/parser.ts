@@ -959,7 +959,10 @@ class DeclarationParser extends TokenCursor {
             }
             if (this.at(';') && bases.length === 0 && !name.global && name.parts.length === 1 && nameToken) {
                 // forward declaration `class Driver;`
-                this.otherTypes.push({ kind: 'forward', qualifiedName: this.qualify(name.parts[0].name), range: this.range(nameToken, nameToken) });
+                this.otherTypes.push({
+                    kind: 'forward', qualifiedName: this.qualify(name.parts[0].name), range: this.range(nameToken, nameToken), keyword: keyword.text,
+                    ...(doc ? { doc } : {})
+                });
             }
             return { kind: 'named', name };
         }

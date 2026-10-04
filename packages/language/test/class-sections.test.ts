@@ -118,9 +118,11 @@ describe('C++ class sections: validation', () => {
         expect(errors(parsed)).toEqual([]);
         // members of the class sections are also used by the C++ code: no "never used" infos
         expect(parsed.diagnostics.filter(d => d.severity === 3).map(d => d.message)).toEqual([]);
-        expect(warnings(parsed)).toEqual([]);
+        // app.h only forward declares app::Driver (see cpp-unknown-types.test.ts)
+        const forward = "'app::Driver' is only forward-declared (app.h:4). Import the header that defines it for hover, completion and navigation.";
+        expect(warnings(parsed)).toEqual([forward, forward]);
         // without the standard headers: warnings at the std:: names (see cpp-unknown-types.test.ts)
-        expect(warnings(await parseModel(MEMBERS, effect)).map(w => w.substring(0, w.indexOf("':") + 1))).toEqual([
+        expect(warnings(await parseModel(MEMBERS, effect)).filter(w => w !== forward).map(w => w.substring(0, w.indexOf("':") + 1))).toEqual([
             "Unknown type 'std::vector'", "Unknown type 'std::vector'", "Unknown type 'std::map'"
         ]);
     });
@@ -349,9 +351,10 @@ describe('C++ class sections: formatting and documentation', () => {
         const language = fs.readFileSync(path.join(docs, 'language.md'), 'utf-8');
         const section = language.slice(language.indexOf('## C++ class sections'));
         const example = /```\n([\s\S]*?)```/.exec(section)![1];
-        const header = 'namespace EpicProject {\nstruct Config { unsigned int maxErrors = 3; };\nclass Driver;\n}';
+        const header = 'namespace EpicProject {\nstruct Config { unsigned int maxErrors = 3; };\nclass Driver { public: void on(); };\n}';
         const parsed = await parse(example, { 'path/to/header.h': header });
         expect(errors(parsed)).toEqual([]);
+        expect(warnings(parsed)).toEqual([]);
         expect(generateCpp(parsed.model).diagnostics).toEqual([]);
         // the implementation in docs/cpp-generator.md is the one of the example
         const generator = fs.readFileSync(path.join(docs, 'cpp-generator.md'), 'utf-8');

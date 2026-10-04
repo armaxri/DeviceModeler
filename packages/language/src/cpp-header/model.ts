@@ -306,6 +306,10 @@ export interface CppOtherTypeName {
     /** Qualified name, e.g. `app::Driver`. */
     readonly qualifiedName: string;
     readonly range: CppRange;
+    /** The class key of a forward declaration (`class`, `struct`, `union`). */
+    readonly keyword?: string;
+    /** Documentation comment of a forward declaration (text without comment markers). */
+    readonly doc?: string;
 }
 
 /** The syntactic model of one header. */
