@@ -11,7 +11,7 @@ import {
     type Hover, type HoverParams, type TypeDefinitionParams
 } from 'vscode-languageserver';
 import {
-    cppElementAt, cppHover, cppHeaderStore, cppLocations, cppTypeLocationsOf, cppTypeOfReference, createHsmServices, importKind, isClassScope, isCppReference,
+    cppElementAt, cppHover, cppHeaderStore, cppTypeNames, isClassMember, cppLocations, cppTypeLocationsOf, cppTypeOfReference, createHsmServices, importKind, isClassScope, isCppReference,
     isElementReference, isEventDeclaration, isImportPath, isInterfaceScope, isInternalScope, isOperationDeclaration, isPseudoState, isState, isStateMachine,
     isTypeReference, isVariableDeclaration, machineType, nodeText, qualifiedName, referenceBaseRange, resolveCppValue, resolvedImports, scopeLabel,
     type CppLocation, type HsmServiceExtensions, type StateMachine
@@ -68,6 +68,11 @@ export class HsmSemanticTokenProvider extends AbstractSemanticTokenProvider {
         const cppType = isTypeReference(node) && node.$cstNode ? cppTypeOfReference(node) : undefined;
         if (cppType && node.$cstNode) {
             acceptor({ cst: node.$cstNode, type: cppType.resolved.kind === 'enum' ? SemanticTokenTypes.enum : SemanticTokenTypes.type });
+        } else if (isTypeReference(node) && isClassMember(node)) {
+            // C++ types of class sections that are not declared in the imported headers (a warning) are still types
+            for (const name of cppTypeNames(node).filter(n => !n.dotted)) {
+                acceptor({ range: name.range, type: SemanticTokenTypes.type });
+            }
         } else if (isCppReference(node) && node.$cstNode) {
             const resolved = resolveCppValue(node);
             const enumerator = resolved.info?.declaration.kind === 'enumerator';

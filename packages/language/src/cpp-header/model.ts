@@ -296,11 +296,25 @@ export interface CppMacro {
     readonly range: CppRange;
 }
 
+/**
+ * A type name declared by a header that the index does not model: a forward declaration of a class
+ * (`class Driver;`) or a class / alias template (`template <typename T> class Buffer {…};`). Such names
+ * are valid C++ types of the C++ class sections (references, pointers, template arguments).
+ */
+export interface CppOtherTypeName {
+    readonly kind: 'forward' | 'template';
+    /** Qualified name, e.g. `app::Driver`. */
+    readonly qualifiedName: string;
+    readonly range: CppRange;
+}
+
 /** The syntactic model of one header. */
 export interface CppHeader {
     readonly fileName: string;
     /** Top-level declarations (namespaces contain their members). */
     readonly declarations: readonly CppDeclaration[];
+    /** Forward declared classes and templates (not part of {@link declarations}). */
+    readonly otherTypes?: readonly CppOtherTypeName[];
     readonly includes: readonly CppInclude[];
     readonly macros: readonly CppMacro[];
     readonly diagnostics: readonly CppDiagnostic[];

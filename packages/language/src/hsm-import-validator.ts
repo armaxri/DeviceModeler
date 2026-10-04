@@ -1,4 +1,4 @@
-import { UriUtils, type ValidationAcceptor, type ValidationChecks } from 'langium';
+import { AstUtils, UriUtils, type ValidationAcceptor, type ValidationChecks } from 'langium';
 import { displayPath, headerDiagnosticMessage } from './cpp-headers.js';
 import * as ast from './generated/ast.js';
 import type { HsmServices } from './hsm-module.js';
@@ -9,12 +9,14 @@ import {
 } from './imports.js';
 import { isKnownType } from './hsm-expression-validator.js';
 import { isComposite } from './model-utils.js';
+import { UNKNOWN_CPP_TYPE, unknownCppTypeDiagnostic, unknownCppTypes } from './cpp-unknown-types.js';
 
 export function registerImportValidationChecks(services: HsmServices): void {
     const validator = services.validation.HsmImportValidator;
     const checks: ValidationChecks<ast.HsmAstType> = {
         StateMachine: [validator.checkImports, validator.checkInstances],
-        State: validator.checkSubmachineState
+        State: validator.checkSubmachineState,
+        TypeReference: validator.checkCppTypeNames
     };
     services.validation.ValidationRegistry.register(checks, validator);
 }
@@ -38,6 +40,18 @@ export class HsmImportValidator {
 
     constructor(services: HsmServices) {
         this.resolver = services.references.ImportResolver;
+    }
+
+    /**
+     * The C++ type names in the types of the C++ class sections must be declared in the imported headers
+     * (see cpp-unknown-types.ts): a warning on the unknown part of the name, with the header to import
+     * (quick fix) if a header of the model directory or the include paths declares it.
+     */
+    checkCppTypeNames(reference: ast.TypeReference, accept: ValidationAcceptor): void {
+        for (const unknown of unknownCppTypes(reference)) {
+            const { message, data } = unknownCppTypeDiagnostic(unknown, this.resolver.headerStore, AstUtils.getDocument(reference).uri);
+            accept('warning', message, { node: reference, range: unknown.range, code: UNKNOWN_CPP_TYPE, data });
+        }
     }
 
     checkImports(machine: ast.StateMachine, accept: ValidationAcceptor): void {
