@@ -31,7 +31,7 @@ jobs:
           BRANCH: ${{ github.event_name == 'delete' && github.event.ref || github.ref_name }}
         run: |
           echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
-          echo "folder=$(echo "$BRANCH" | sed -e 's#[^A-Za-z0-9._-]#-#g')" >> "$GITHUB_OUTPUT"
+          echo "folder=${BRANCH//[^A-Za-z0-9._-]/-}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v4
         if: github.event_name != 'delete'
@@ -81,7 +81,14 @@ jobs:
             echo 'a{color:#a80036;font-weight:600;text-decoration:none}li{margin:.6rem 0}small{color:#666}'
             echo '@media (prefers-color-scheme:dark){body{color:#ddd;background:#1e1e1e}a{color:#ff7a9c}small{color:#999}}</style>'
             echo '</head><body><h1>Device Modeler</h1><p>Web app of each branch:</p><ul>'
-            for meta in $( (ls site/main/.branch 2>/dev/null; ls site/*/.branch 2>/dev/null | grep -v '^site/main/') ); do
+            # main first, then the other branches
+            listed_main=
+            for meta in site/main/.branch site/*/.branch; do
+              if [ "$meta" = site/main/.branch ]; then
+                [ -n "$listed_main" ] && continue
+                listed_main=1
+              fi
+              [ -f "$meta" ] || continue
               dir=$(basename "$(dirname "$meta")")
               name=$(sed -n 1p "$meta"); sha=$(sed -n 2p "$meta"); date=$(sed -n 3p "$meta")
               echo "<li><a href=\"./$dir/\">$name</a> <small>$sha · $date</small></li>"
