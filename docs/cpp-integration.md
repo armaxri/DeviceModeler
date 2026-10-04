@@ -510,6 +510,7 @@ Unsaved changes of a header open in VS Code are not seen (headers are read from 
   arithmetic, like in the generated code; host values are JS numbers (exact up to 2^53).
 - The C generator does not support header types; the C++ generator does not support submachine instances
   (independent of headers).
-- The web editor cannot open or navigate into headers (hover works); navigation is a feature of the
-  language server (`packages/language/src/node/hsm-lsp.ts`: VS Code, and `hsm lsp` in the text editors of
-  Eclipse and the JetBrains IDEs).
+- Navigation into headers works everywhere, but opens the header differently: VS Code and the text editors
+  of Eclipse and the JetBrains IDEs (`hsm lsp`) use the language server
+  (`packages/language/src/node/hsm-lsp.ts`); the embedded web editor asks its host to open the header
+  (Eclipse, JetBrains, desktop app) or, as a standalone web app, shows it in a read-only viewer.
