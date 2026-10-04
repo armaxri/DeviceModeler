@@ -41,8 +41,8 @@ class HostServerTest {
         override fun settings(json: String) {
             calls.add("settings:$json")
         }
-        override fun open(path: String, position: OpenPosition?): Boolean {
-            calls.add("open:$path:$position")
+        override fun open(path: String, position: OpenPosition?, location: String?): Boolean {
+            calls.add("open:$path:$position" + (location?.let { ":$it" } ?: ""))
             return path == "models/b.devm" || path == "include/b.h"
         }
         override fun export(fileName: String, content: ByteArray): String = "Exported $fileName (${content.size} bytes)."
@@ -161,6 +161,8 @@ class HostServerTest {
         assertEquals(404, post(base + "api/open", "models/c.devm").statusCode())
         // with a position (go to definition into a header); pages before it sent none
         assertEquals(204, post(base + "api/open?line=3&column=12&endLine=3&endColumn=16", "include/b.h").statusCode())
+        // with a location (a navigation of the structure diagram), passed on to the page of the opened file
+        assertEquals(204, post(base + "api/open?location=%7B%22uri%22%3A%22memory%3A%2Fb.devm%22%2C%22element%22%3A%22B%22%7D", "models/b.devm").statusCode())
         val export = post(base + "api/export?fileName=gate.svg", "<svg/>")
         assertEquals("Exported gate.svg (6 bytes).", JsonParser.parseString(export.body()).asJsonObject.get("message").asString)
         val generate = post(base + "api/generate", """{"files":[{"path":"a.h","content":""}],"messages":[]}""")
@@ -169,7 +171,8 @@ class HostServerTest {
         assertEquals(405, post(base + "index.html", "").statusCode())
 
         assertEquals(listOf("changed:text ä", "save:saved", "model:5", "settings:{\"theme\":\"dark\"}", "open:models/b.devm:null", "open:models/c.devm:null",
-            "open:include/b.h:OpenPosition(line=3, column=12, endLine=3, endColumn=16)"), session.calls)
+            "open:include/b.h:OpenPosition(line=3, column=12, endLine=3, endColumn=16)",
+            "open:models/b.devm:null:{\"uri\":\"memory:/b.devm\",\"element\":\"B\"}"), session.calls)
     }
 
     @Test

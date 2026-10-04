@@ -151,9 +151,9 @@ class DevmSession(val project: Project, val file: VirtualFile, private val page:
         DevmSettings.get().state.pageSettings = json
     }
 
-    override fun open(path: String, position: OpenPosition?): Boolean {
+    override fun open(path: String, position: OpenPosition?, location: String?): Boolean {
         val target = ProjectFiles.resolve(ProjectFiles.root(project, file), path)?.takeIf { !it.isDirectory } ?: return false
-        ApplicationManager.getApplication().invokeLater({ openAt(project, target, position) }, project.disposed)
+        ApplicationManager.getApplication().invokeLater({ openAt(project, target, position, location) }, project.disposed)
         return true
     }
 
@@ -268,10 +268,20 @@ class DevmSession(val project: Project, val file: VirtualFile, private val page:
 
 /**
  * Opens a file of the project in the editor of its type (a model in the Device Modeler editor, a header in CLion's C/C++
- * editor) and selects the range of [position] (1-based lines and columns; null: only opens the file). EDT.
+ * editor) and selects the range of [position] (1-based lines and columns; null: only opens the file). The page of a
+ * Device Modeler editor also shows [location] (JSON of `api/open`, a navigation of the diagram). EDT.
  */
-fun openAt(project: Project, target: VirtualFile, position: OpenPosition?) {
+fun openAt(project: Project, target: VirtualFile, position: OpenPosition?, location: String? = null) {
     val manager = FileEditorManager.getInstance(project)
+    openAtPosition(manager, project, target, position)
+    // a navigation of the diagram: the page of the opened file shows the structure, the element and the breadcrumb
+    if (location != null) {
+        (manager.getSelectedEditor(target) as? DevmSplitEditor)?.diagram
+            ?.runInPage("window.devmApp.revealLocation(${com.google.gson.JsonPrimitive(location)});")
+    }
+}
+
+private fun openAtPosition(manager: FileEditorManager, project: Project, target: VirtualFile, position: OpenPosition?) {
     val document = if (position == null) null else FileDocumentManager.getInstance().getDocument(target)
     if (position == null || document == null) {
         manager.openFile(target, true)

@@ -45,7 +45,9 @@ DevmSplitEditor (TextEditorWithPreview)                   JCEF browser
 - **Navigation from the page's text editor** (`F12`, `Cmd/Ctrl`+Click, *Go to Declaration / Type
   Definition*, links of import paths): C++ names open the imported header in the editor of its type (CLion's
   C/C++ editor) with the declaration selected, imported models open in the Device Modeler editor at the target
-  (`api/open` with a position, `OpenFileDescriptor`). Peek shows the target inside the page.
+  (`api/open` with a position, `OpenFileDescriptor`); navigating in the structure diagram to another file opens
+  it the same way, and its page shows the structure with the element selected and the breadcrumb of the
+  subsystem or system the user came from (`api/open` with `location`). Peek shows the target inside the page.
 - **Edit shortcuts in the page**: the IDE's *Undo*, *Redo*, *Cut*, *Copy*, *Paste*, *Select All*, *Find*,
   *Replace* and *Save All* shortcuts of the active keymap act on the page while it has the focus (on the
   Monaco editor, an input field of the properties panel or the diagram); copy and paste use the IDE clipboard

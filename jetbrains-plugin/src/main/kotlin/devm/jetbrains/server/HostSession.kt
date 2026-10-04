@@ -29,9 +29,11 @@ interface HostSession {
 
     /**
      * The page asks to open another file below the root (a model, or a C/C++ header of a go to definition) in the
-     * editor for its type, at [position] if one is given; false if it does not exist.
+     * editor for its type, at [position] if one is given; false if it does not exist. A navigation of the diagram
+     * also gives [location] (JSON, `DiagramLocation` of the page's structure-diagram.ts: the structure to show, the
+     * element to select and the breadcrumb context), which is passed on to the page of the opened file.
      */
-    fun open(path: String, position: OpenPosition?): Boolean
+    fun open(path: String, position: OpenPosition?, location: String? = null): Boolean
 
     /** Stores an exported diagram; returns a message for the user. */
     fun export(fileName: String, content: ByteArray): String
