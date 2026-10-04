@@ -8,6 +8,8 @@ import { isStructureModel } from '../generated/ast.js';
 import { StateMachineModelLoader } from '../model-loader.js';
 import { layoutFileName, layoutStateMachineWithLayout, parseManualLayout } from '../diagram/manual-layout.js';
 import { layoutTextEdits } from '../diagram/layout-annotations.js';
+import { layoutStructure } from '../diagram/ibd-layout.js';
+import { IBD_OVERVIEW_ID, IBD_TYPES_ID, type IbdGraph } from '../diagram/ibd-model.js';
 import { applyEdits } from '../edit/model-edits.js';
 import { GENERATOR_CONFIG_FILE } from '../generator/config.js';
 import { runGenerateCommand, type GenerateCommandOptions } from '../generator/generate-command.js';
@@ -124,18 +126,28 @@ export function createProgram(): Command {
         });
 
     headerOptions(program.command('layout'))
-        .argument('<file>', '.devm file of a state machine')
-        .option('-d, --direction <direction>', 'DOWN or RIGHT', 'DOWN')
+        .argument('<file>', '.devm file of a state machine or a structure file')
+        .option('-d, --direction <direction>', 'state machines: DOWN or RIGHT', 'DOWN')
+        .option('-e, --element <name>', 'structure files: the subsystem, system or component type (default: the first system or subsystem)')
         .option('--auto', 'lay out automatically, ignoring the layout annotations (@at, ...)')
-        .description('prints the computed diagram layout as JSON (the manual layout of the layout annotations, if any)')
-        .action(async (file: string, options: { direction: 'DOWN' | 'RIGHT', auto?: boolean } & HeaderCommandOptions) => {
-            const loaded = await loadMachine(file, options);
-            if (!loaded) {
-                process.exitCode = 1;
+        .description('prints the computed diagram layout as JSON (the manual layout of the layout annotations, if any); '
+            + 'of a structure file its internal block diagram')
+        .action(async (file: string, options: { direction: 'DOWN' | 'RIGHT', element?: string, auto?: boolean } & HeaderCommandOptions) => {
+            const { parsed } = await load(file, options);
+            const model = parsed.model;
+            if (isStructureModel(model)) {
+                const layout = await layoutStructure(model, { element: options.element, layout: options.auto ? null : undefined });
+                if (!layout || (options.element !== undefined && !showsElement(layout.graph, options.element))) {
+                    console.error(options.element !== undefined
+                        ? `${file}: no subsystem, system or component type '${options.element}'`
+                        : `${file}: no components, subsystems, systems or data types to lay out`);
+                    process.exitCode = 1;
+                    return;
+                }
+                console.log(JSON.stringify(layout.graph, undefined, 2));
                 return;
             }
-            const { parsed } = loaded;
-            const { graph } = await layoutStateMachineWithLayout(parsed.model, { direction: options.direction }, options.auto ? null : undefined);
+            const { graph } = await layoutStateMachineWithLayout(model, { direction: options.direction }, options.auto ? null : undefined);
             console.log(JSON.stringify(graph, undefined, 2));
         });
 
@@ -291,6 +303,11 @@ async function migrateLayout(file: string, layoutFile: string): Promise<number> 
     await fs.writeFile(file, applyEdits(text, edits));
     console.log(`${file}: layout of ${layoutFile} written as layout annotations (${edits.length} changes); ${layoutFile} is no longer used and can be deleted.`);
     return 0;
+}
+
+/** Whether the structure diagram shows the element chosen with `--element` (not the default element instead). */
+function showsElement(graph: IbdGraph, element: string): boolean {
+    return graph.name === element || (graph.kind === 'overview' && element === IBD_OVERVIEW_ID) || (graph.kind === 'types' && element === IBD_TYPES_ID);
 }
 
 async function exists(file: string): Promise<boolean> {
