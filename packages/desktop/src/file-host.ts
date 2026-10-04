@@ -45,12 +45,46 @@ export interface Session {
     problems?: Array<{ severity: string, message: string, line: number, column: number }>;
 }
 
+/** A position of `api/open` (1-based lines and columns, see packages/web/src/host.ts). */
+export interface OpenPosition {
+    line: number;
+    column: number;
+    endLine: number;
+    endColumn: number;
+}
+
+/** The position of the query parameters `line`, `column`, `endLine`, `endColumn`; undefined without a line. */
+export function openPosition(parameters: URLSearchParams): OpenPosition | undefined {
+    const number = (name: string) => {
+        const value = Number(parameters.get(name) ?? NaN);
+        return Number.isInteger(value) && value >= 1 ? value : undefined;
+    };
+    const line = number('line');
+    if (line === undefined) {
+        return undefined;
+    }
+    const column = number('column') ?? 1;
+    const endLine = number('endLine');
+    const endColumn = number('endColumn');
+    return endLine !== undefined && endColumn !== undefined && endLine >= line
+        ? { line, column, endLine, endColumn }
+        : { line, column, endLine: line, endColumn: column };
+}
+
+/** The query parameters of a position (`&line=…&column=…&endLine=…&endColumn=…`, empty without one). */
+export function positionQuery(position: OpenPosition | undefined): string {
+    return position ? `&line=${position.line}&column=${position.column}&endLine=${position.endLine}&endColumn=${position.endColumn}` : '';
+}
+
 /** Notifications of the host to the app (all optional). */
 export interface FileHostListener {
     /** The dirty state of a session changed (or it was saved). */
     dirtyChanged?(session: Session): void;
-    /** The page asks to open another file (double-click on a submachine state). */
-    openFile?(session: Session, file: string): void;
+    /**
+     * The page asks to open another file of the root (double-click on a submachine state, go to definition
+     * into a model or a header), at a position if one is given (`api/open?line=…`).
+     */
+    openFile?(session: Session, file: string, position?: OpenPosition): void;
     /**
      * The page asks to save (`api/save`): a promise if the app saves itself (e.g. a new model that needs a
      * file name first; false: not saved), undefined to let the host write the file.
@@ -294,7 +328,7 @@ export class FileHost {
                 if (!isFile(file)) {
                     throw new HttpError(404, 'Not found');
                 }
-                this.options.listener?.openFile?.(session, file);
+                this.options.listener?.openFile?.(session, file, openPosition(url.searchParams));
                 sendEmpty(response);
                 return;
             }

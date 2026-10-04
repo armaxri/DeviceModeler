@@ -37,6 +37,10 @@ HsmSplitEditor (TextEditorWithPreview)                   JCEF browser
   model opened without page (no JCEF) is validated by the annotator with the executable.
 - **Structure** tool window: state machine, definitions, states, regions, pseudo states and transitions of the
   page; selecting an element selects its text and its diagram element.
+- **Navigation from the page's text editor** (`F12`, `Cmd/Ctrl`+Click, *Go to Declaration / Type
+  Definition*, links of import paths): C++ names open the imported header in the editor of its type (CLion's
+  C/C++ editor) with the declaration selected, imported models open in the HSM editor at the target
+  (`api/open` with a position, `OpenFileDescriptor`). Peek shows the target inside the page.
 - **Edit shortcuts in the page**: the IDE's *Undo*, *Redo*, *Cut*, *Copy*, *Paste*, *Select All*, *Find*,
   *Replace* and *Save All* shortcuts of the active keymap act on the page while it has the focus (on the
   Monaco editor, an input field of the properties panel or the diagram); copy and paste use the IDE clipboard

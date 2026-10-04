@@ -67,7 +67,8 @@ web app, see [Web editor](editor.md)) and is read from and saved to its file on 
 - **Imports and submachines**: a model can import the `.hsm` models and C/C++ headers below its *root
   folder*: the folder of the model, or the folder opened with *Open Folder…* if the model is inside of it
   (use *Open Folder…* for `import "../motor.hsm"`). Double-clicking a submachine state opens its model in
-  a new window. *Export…* writes the SVG / PNG next to the model, *Generate C++* into the configured output
+  a new window. Go to definition in the text editor (`F12`, `Cmd/Ctrl`+Click) opens imported models in their
+  window at the target and C/C++ headers in a read-only viewer window with the declaration selected. *Export…* writes the SVG / PNG next to the model, *Generate C++* into the configured output
   directory (both only inside the root folder).
 - **Unsaved changes**: the title shows `●` (macOS: the dot in the close button); closing a window or
   quitting asks to save. Changes of the file on disk (another editor, git) are loaded into the window – after
