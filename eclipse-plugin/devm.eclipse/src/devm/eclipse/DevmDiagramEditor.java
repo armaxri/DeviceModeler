@@ -508,7 +508,7 @@ public class DevmDiagramEditor extends EditorPart implements HostSession, IGotoM
     private static final String TEXT_EDITOR_ID = "org.eclipse.ui.DefaultTextEditor";
 
     @Override
-    public boolean open(String path, Position position) {
+    public boolean open(String path, Position position, String location) {
         IFile target = ProjectFiles.resolve(file.getProject(), path);
         if (target == null || !target.exists()) {
             return false;
@@ -516,7 +516,7 @@ public class DevmDiagramEditor extends EditorPart implements HostSession, IGotoM
         AtomicReference<Boolean> opened = new AtomicReference<>(false);
         display.syncExec(() -> {
             try {
-                opened.set(openEditor(getSite().getPage(), target, position) != null);
+                opened.set(openEditor(getSite().getPage(), target, position, location) != null);
             } catch (PartInitException e) {
                 Activator.getDefault().getLog().log(e.getStatus());
             }
@@ -530,9 +530,21 @@ public class DevmDiagramEditor extends EditorPart implements HostSession, IGotoM
      * position (1-based lines and columns, null: none).
      */
     public static IEditorPart openEditor(IWorkbenchPage page, IFile target, Position position) throws PartInitException {
+        return openEditor(page, target, position, null);
+    }
+
+    /**
+     * {@link #openEditor(IWorkbenchPage, IFile, Position)} for a navigation of the diagram: the page of a Device
+     * Modeler editor also shows the {@code location} (JSON of {@code api/open}, null: none), i.e. the structure,
+     * the selected element and the breadcrumb context.
+     */
+    public static IEditorPart openEditor(IWorkbenchPage page, IFile target, Position position, String location) throws PartInitException {
         IEditorDescriptor descriptor = IDE.getDefaultEditor(target);
         String id = descriptor != null && descriptor.isInternal() ? descriptor.getId() : TEXT_EDITOR_ID;
         IEditorPart part = IDE.openEditor(page, target, id, true);
+        if (location != null && !location.isBlank() && part instanceof DevmDiagramEditor editor) {
+            editor.runInPage("window.devmApp.revealLocation(" + Json.quote(location) + ");");
+        }
         if (position == null || part == null) {
             return part;
         }

@@ -36,7 +36,8 @@ Eclipse editor (DevmDiagramEditor)                       SWT Browser (Edge / Web
   imported models, component types of structure files, `behavior` paths and model import paths open the model
   (state machine or structure file) in the Device Modeler editor at the target (`api/open` with a position);
   navigating in the structure diagram to another file (e.g. the component type of an instance, *Used by*)
-  opens that file the same way. Peek shows the target inside the page.
+  opens that file the same way, and its page shows the structure with the element selected and the breadcrumb
+  of the subsystem or system the user came from (`api/open` with `location`). Peek shows the target inside the page.
 - **Edit commands**: Eclipse's *Undo*, *Redo*, *Cut*, *Copy*, *Paste*, *Select All* and *Find/Replace* (menus
   and key bindings) act on the page: on the text editor, on an input field of the properties panel or on the
   diagram (undo / select all). Copy and paste use the Eclipse clipboard. On macOS (WebKit) the key bindings
@@ -247,8 +248,5 @@ commands themselves are tested), interactive use in a full IDE.
   *Problems* view (LSP4E markers of the open text, builder markers of the saved file).
 - The language server's `devm.headers.*` settings (include paths for all models) are not offered in the
   preferences; the `headers` block of `devm.gen.json` applies.
-- Navigating from the structure diagram into another file (`api/open`) opens that file on its own: the
-  context of the navigation (the instance path of the subsystem or system the user came from) stays in the
-  page that started it.
 - Signing of the bundles. The update site with all five executables is about 200 MB (each platform installs
   only its fragment of about 40 MB).

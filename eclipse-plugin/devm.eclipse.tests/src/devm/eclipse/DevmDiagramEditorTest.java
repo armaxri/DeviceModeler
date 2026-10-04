@@ -9,6 +9,7 @@ import java.io.ByteArrayInputStream;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
@@ -384,6 +385,16 @@ public class DevmDiagramEditorTest {
         assertTrue(editor.open("models/parts.devm", new HostSession.Position(5, 14, 5, 19)));
         waitFor("position revealed", () -> "start".equals(eval(partsBrowser,
                 "const e = window.devmApp.editor; return e.getModel().getValueInRange(e.getSelection());")));
+
+        // the host API with a location (a navigation of the diagram): the page of the already open drive.devm shows
+        // the subsystem and selects the instance at the offset
+        String driveUri = String.valueOf(eval(browser, "return window.devmApp.diagram.structure.currentLocation().uri;"));
+        eval(browser, "window.devmApp.diagram.selection.clear(); return null;");
+        String location = Json.write(Map.of("uri", driveUri, "element", "Drive", "offset", DRIVE.indexOf("motor : MotorUnit") + 2));
+        assertTrue(partsEditor.open("models/drive.devm", null, location));
+        waitFor(() -> "location revealed: " + eval(browser, "return [...window.devmApp.diagram.selection].join(',');"),
+                () -> Boolean.TRUE.equals(eval(browser, "return window.devmApp.diagram.selection.size === 1"
+                        + " && window.devmApp.diagram.structure.currentLocation().element === 'Drive';")));
 
         // Generate C++ of a structure file: nothing is generated (a structure file has no code of its own)
         assertTrue(ProjectFiles.isStructureFile(parts));

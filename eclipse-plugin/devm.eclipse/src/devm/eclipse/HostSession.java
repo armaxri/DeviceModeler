@@ -60,7 +60,16 @@ public interface HostSession {
      * The page asks to open another file below the root (a model, or a C/C++ header of a go to definition) in the
      * editor for its type, at a position if one is given ({@code null}: none); false if it does not exist.
      */
-    boolean open(String path, Position position);
+    default boolean open(String path, Position position) {
+        return open(path, position, null);
+    }
+
+    /**
+     * {@link #open(String, Position)} for a navigation of the diagram: {@code location} (JSON, {@code DiagramLocation}
+     * of the page's structure-diagram.ts, null: none) is the structure or component to show in the page of the opened
+     * file, the element to select and the breadcrumb context; it is passed on to that page.
+     */
+    boolean open(String path, Position position, String location);
 
     /** Stores an exported diagram; returns a message for the user. */
     String export(String fileName, byte[] content) throws IOException;
