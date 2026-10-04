@@ -1,6 +1,7 @@
 import type { Container } from 'inversify';
 import { LocalModelSource, TYPES, type IActionDispatcher, type SModelElementImpl } from 'sprotty';
 import { FitToScreenAction, SelectAction, SelectAllAction, CenterAction, UpdateModelAction } from 'sprotty-protocol';
+import { SetViewportAction } from 'sprotty-protocol';
 import type { AstNode } from 'langium';
 import {
     EditError, ModelEditor, allVertices, applyEdits, definitionRange, isEventDeclaration, isInterfaceScope, isOperationDeclaration,
@@ -14,6 +15,7 @@ import {
     applyManualLayout, captureLayout, cloneManualLayout, contentOrigin, diagramElementIds, layoutFromModel, layoutTextEdits, toFrameCoordinates,
     type ManualLayout, type Point
 } from 'hsm-language';
+import { diagramBounds } from 'hsm-language';
 import { describeSyntaxProblem, type HsmModelService } from './model-service.js';
 import { createDiagramContainer } from './diagram/di.config.js';
 import type { DiagramCallbacks, DragInfo } from './diagram/listeners.js';
@@ -1611,7 +1613,25 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     // Viewport, export
 
     fit(animate = true): void {
-        this.actionDispatcher.dispatch(FitToScreenAction.create([], { padding: 24, maxZoom: 1.3, animate }));
+        // sprotty's FitToScreenAction only takes the bounds of the nodes (or of the selected ones) into
+        // account: transitions routed around the outermost states and their labels were cut off. The
+        // bounds of the laid out diagram include them (diagramBounds).
+        const padding = 24, maxZoom = 1.3;
+        const graph = this.state?.layout.graph;
+        const bounds = graph && diagramBounds(graph);
+        const canvas = byId('sprotty').querySelector('svg')?.getBoundingClientRect();
+        if (!graph || !bounds || !canvas || canvas.width <= 2 * padding || canvas.height <= 2 * padding) {
+            this.actionDispatcher.dispatch(FitToScreenAction.create([], { padding, maxZoom, animate }));
+            return;
+        }
+        // the padding in screen pixels (a margin that does not shrink with the zoom of large diagrams)
+        // (not below the minimum zoom of the viewer options, di.config.ts: the diagram stays centered)
+        const zoom = Math.max(0.1, Math.min(maxZoom, (canvas.width - 2 * padding) / Math.max(bounds.width, 1), (canvas.height - 2 * padding) / Math.max(bounds.height, 1)));
+        const scroll = {
+            x: bounds.x + bounds.width / 2 - canvas.width / zoom / 2,
+            y: bounds.y + bounds.height / 2 - canvas.height / zoom / 2
+        };
+        this.actionDispatcher.dispatch(SetViewportAction.create(graph.id, { scroll, zoom }, { animate }));
     }
 
     private lastSize?: { width: number, height: number };

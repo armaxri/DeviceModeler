@@ -14,6 +14,7 @@ export * from './diagram/layout.js';
 export * from './diagram/manual-layout.js';
 export * from './diagram/layout-annotations.js';
 export * from './diagram/diagram-ids.js';
+export * from './diagram/diagram-bounds.js';
 export * from './model-annotations.js';
 export * from './edit/model-edits.js';
 export * from './hsm-linker.js';
