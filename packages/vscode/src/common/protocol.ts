@@ -39,6 +39,19 @@ export type StatusSeverity = 'info' | 'warning' | 'error';
  */
 export type LayoutCommand = 'arrange' | 'reset';
 
+/**
+ * The state of a debug session of a test shown in the diagram (read-only while set): active states and
+ * the transitions taken last, identified by the offsets of their text in the model.
+ */
+export interface DebugViewState {
+    title: string;
+    activeOffsets: number[];
+    transitionOffsets: number[];
+    instances: Array<{ offset: number, text: string }>;
+    activeStates: string[];
+    running: boolean;
+}
+
 /** Messages from the extension to the webview. */
 export type ToWebview =
     /**
@@ -55,7 +68,9 @@ export type ToWebview =
     | { type: 'cursor', offset: number }
     /** Answer to an `edit` message: `ok` false if the document changed in between or the edit failed. */
     | { type: 'editResult', requestId: number, ok: boolean, text: string, version: number, message?: string }
-    | { type: 'fit' };
+    | { type: 'fit' }
+    /** A debug session of a test drives the diagram (undefined: the session ended, back to editing). */
+    | { type: 'debugState', state?: DebugViewState };
 
 /** Messages from the webview to the extension. */
 export type FromWebview =

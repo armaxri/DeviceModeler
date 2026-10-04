@@ -4,7 +4,7 @@ import { byId, h } from '@hsm-web/ui/dom.js';
 import { svgToPng } from '@hsm-web/ui/export-svg.js';
 import { SidePanel, type SidePanelState } from '@hsm-web/ui/side-panel.js';
 import { LAYOUT_TEXT, POSITIONS_LABEL, layoutControls } from '@hsm-web/layout-actions.js';
-import type { FromWebview, LayoutCommand, ToWebview, WebviewSettings } from '../common/protocol.js';
+import type { DebugViewState, FromWebview, LayoutCommand, ToWebview, WebviewSettings } from '../common/protocol.js';
 
 /** The persisted state of the webview (the URI is used to restore the diagram when VS Code is restarted). */
 interface WebviewState {
@@ -188,6 +188,20 @@ export class WebviewHost implements DiagramHost {
             case 'fit':
                 this.controller.fit();
                 break;
+            case 'debugState':
+                this.debugStateChanged(message.state);
+                break;
+        }
+    }
+
+    /** A debug session of a test drives the diagram: read-only, the simulation and layout controls are disabled. */
+    private debugStateChanged(state: DebugViewState | undefined): void {
+        this.controller.showExternalSimulation(state);
+        const button = byId<HTMLButtonElement>('btn-simulate');
+        button.disabled = state !== undefined;
+        button.title = state ? 'A test is being debugged – the diagram shows its state' : 'Simulate the state machine (the model must not contain errors)';
+        for (const id of ['direction-select', 'routing-select', 'priorities-toggle']) {
+            byId<HTMLInputElement>(id).disabled = state !== undefined;
         }
     }
 

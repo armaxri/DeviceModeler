@@ -103,6 +103,26 @@ export interface TextRange {
 export type StatusSeverity = 'info' | 'warning' | 'error';
 
 /**
+ * A simulation state driven from outside the diagram (VS Code: a debug session of a test): the diagram
+ * highlights the states and transitions and cannot be edited meanwhile. Elements are identified by the
+ * offsets of their text (the model text of the diagram and of the debugger are the same).
+ */
+export interface ExternalSimulationState {
+    /** Status shown in the banner (`Paused on step: DoorTest.opens (line 12)`). */
+    title: string;
+    /** Offsets of the active states. */
+    activeOffsets: number[];
+    /** Offsets of the transitions taken last. */
+    transitionOffsets: number[];
+    /** Active states of submachine instances, shown in the state they are bound to. */
+    instances: Array<{ offset: number, text: string }>;
+    /** Qualified names of the active states (side panel). */
+    activeStates: string[];
+    /** Whether the state machine is running (entered and not exited). */
+    running: boolean;
+}
+
+/**
  * The text side of the diagram: the text editor holding the model (Monaco in the web app, the VS Code
  * text editor for the webview). The text is the single source of truth; every diagram operation
  * becomes a text edit applied by the host.
@@ -188,6 +208,8 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     /** The running simulation (simulation mode), if any. */
     private simulationSession?: SimulationSession;
     private simulationPanel?: SimulationPanel;
+    /** The simulation state shown from outside (debug session), if any: read-only diagram. */
+    private external?: ExternalSimulationState;
     /** Key of the simulation flags last rendered (to skip identical diagram updates). */
     private renderedFlags = '';
     private flagTimer?: ReturnType<typeof setTimeout>;
@@ -215,6 +237,15 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
 
     get simulation(): SimulationSession | undefined {
         return this.simulationSession;
+    }
+
+    /** The diagram cannot be edited: simulating, or showing the state of a debug session. */
+    private get locked(): boolean {
+        return this.simulationSession !== undefined || this.external !== undefined;
+    }
+
+    get externalSimulation(): ExternalSimulationState | undefined {
+        return this.external;
     }
 
     get hasSyntaxErrors(): boolean {
@@ -261,7 +292,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         // note: sprotty replaces its base div when rendering, so listeners are registered on the parent
         const diagram = byId('diagram-area');
         diagram.addEventListener('keydown', event => {
-            if (event.target instanceof HTMLInputElement || this.simulationSession) {
+            if (event.target instanceof HTMLInputElement || this.locked) {
                 return;
             }
             const ctrl = event.ctrlKey || event.metaKey;
@@ -376,7 +407,10 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             this.renderPropertiesPanel();
             return;
         }
-        banner.hidden = true;
+        banner.hidden = !this.external;
+        if (this.external) {
+            banner.textContent = this.external.title;
+        }
         // (the same parse result: neither the text nor the imported files changed)
         if (!forceLayout && this.state?.parsed === parsed) {
             return;
@@ -474,7 +508,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             activeStates: flags?.active,
             recentTransitions: flags?.recent,
             breakpoints: flags?.breakpoints,
-            layoutEditable: !this.simulationSession,
+            layoutEditable: !this.locked,
             instanceTexts: flags?.instanceTexts
         });
         if (!this.rendered) {
@@ -563,8 +597,8 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
      */
     async applyEdit(producer: (editor: ModelEditor, state: ModelState) => EditResult | undefined,
         layoutChange?: (layout: ManualLayout | undefined, model: ParsedModel) => ManualLayout | undefined): Promise<boolean> {
-        if (this.simulationSession) {
-            this.setStatus('Stop the simulation to edit the model.', 'warning');
+        if (this.locked) {
+            this.setStatus(this.external ? 'The diagram is read-only while a test is being debugged.' : 'Stop the simulation to edit the model.', 'warning');
             return false;
         }
         if (!this.state || this.state.parsed.text !== this.host.getText()) {
@@ -930,7 +964,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     }
 
     doubleClick(target: SModelElementImpl): void {
-        if (this.tool !== 'select' || this.simulationSession) {
+        if (this.tool !== 'select' || this.locked) {
             return;
         }
         const id = this.diagramId(target);
@@ -1080,11 +1114,11 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     }
 
     canEdit(): boolean {
-        return !this.simulationSession;
+        return !this.locked;
     }
 
     deleteSelection(): void {
-        if (this.simulationSession) {
+        if (this.locked) {
             return;
         }
         const targets = [...this.selection].flatMap((id): DeletionTarget[] => {
@@ -1113,7 +1147,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
 
     /** Opens an inline editor to rename a vertex / region or to edit the label of a transition. */
     startRename(id: string): void {
-        if (this.simulationSession) {
+        if (this.locked) {
             return;
         }
         const node = this.astOf(id);
@@ -1448,6 +1482,49 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
         this.focusDiagram();
     }
 
+    /**
+     * Shows a simulation state driven from outside (a debug session of a test; undefined: back to
+     * editing). The diagram is read-only meanwhile: the palette and the layout controls are disabled, and
+     * the side panel shows the state instead of the properties.
+     */
+    showExternalSimulation(state: ExternalSimulationState | undefined): void {
+        const wasShown = this.external !== undefined;
+        if (state && this.simulationSession) {
+            this.stopSimulation();
+        }
+        this.external = state;
+        if (state && !wasShown) {
+            closeInlineEditor();
+            this.setTool('select');
+            this.pendingSource = undefined;
+        }
+        document.body.classList.toggle('debugging', state !== undefined);
+        this.setPaletteEnabled(!state);
+        const banner = byId('diagram-banner');
+        if (state) {
+            banner.hidden = false;
+            banner.textContent = state.title;
+            banner.classList.add('debug-banner');
+        } else if (wasShown) {
+            banner.hidden = true;
+            banner.classList.remove('debug-banner');
+            byId('properties').replaceChildren();
+        }
+        this.render();
+    }
+
+    private renderExternalPanel(panel: HTMLElement, state: ExternalSimulationState): void {
+        panel.replaceChildren(h('div', { class: 'debug-panel' },
+            h('h3', {}, 'Test debugging'),
+            h('p', { class: 'debug-status' }, state.title),
+            h('h4', {}, 'Active states'),
+            state.running
+                ? h('ul', { class: 'debug-active' }, ...state.activeStates.map(name => h('li', {}, name)))
+                : h('p', { class: 'debug-empty' }, 'The state machine is not running.'),
+            h('p', { class: 'debug-hint' }, 'The diagram is read-only while the test is debugged. Use the debug toolbar to step; '
+                + 'variables, events and calls are shown in the Run and Debug view.')));
+    }
+
     /** Leaves the simulation mode and returns to editing. */
     stopSimulation(): void {
         const session = this.simulationSession;
@@ -1497,6 +1574,9 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     private simulationFlags(): { active: Set<string>, recent: Set<string>, breakpoints: Set<string>, instanceTexts: Map<string, string>, key: string } | undefined {
         const session = this.simulationSession;
         const state = this.state;
+        if (!session && this.external && state) {
+            return externalFlags(this.external, state);
+        }
         if (!session || !state) {
             return undefined;
         }
@@ -1629,6 +1709,10 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
     private renderPropertiesPanel(): void {
         const panel = byId('properties');
         // (not while a field of the panel is edited; the header of a collapsible section may keep the focus)
+        if (this.external) {
+            this.renderExternalPanel(panel, this.external);
+            return;
+        }
         if (this.simulationSession || panel.contains(document.activeElement) && !document.activeElement?.closest('.side-section-header')) {
             return;
         }
@@ -1735,4 +1819,55 @@ function reuseAutoLayout(previous: ModelState, parsed: ParsedModel): LayoutResul
         return undefined;
     }
     return { graph: previous.auto.graph, elements, ids };
+}
+
+/** Diagram flags of an external simulation state: elements are found by the offsets of their text. */
+function externalFlags(external: ExternalSimulationState, state: ModelState): { active: Set<string>, recent: Set<string>, breakpoints: Set<string>, instanceTexts: Map<string, string>, key: string } {
+    const activeOffsets = new Set(external.activeOffsets);
+    const transitionOffsets = new Set(external.transitionOffsets);
+    const instanceOffsets = new Map(external.instances.map(i => [i.offset, i.text]));
+    const active = new Set<string>();
+    const recent = new Set<string>();
+    const instanceTexts = new Map<string, string>();
+    const activeNodes = new Set<AstNode>();
+    for (const [node, id] of state.layout.ids) {
+        const offset = node.$cstNode?.offset;
+        if (offset === undefined) {
+            continue;
+        }
+        if (isState(node) && activeOffsets.has(offset)) {
+            active.add(id);
+            activeNodes.add(node);
+        } else if (isTransition(node) && transitionOffsets.has(offset)) {
+            recent.add(id);
+        }
+        const text = isState(node) ? instanceOffsets.get(offset) : undefined;
+        if (text !== undefined) {
+            instanceTexts.set(id, text);
+        }
+    }
+    // the final state of a container is active if the container is active but none of its states
+    if (external.running) {
+        const containers: ScopeContainer[] = [state.parsed.model];
+        for (const vertex of allVertices(state.parsed.model)) {
+            if (isState(vertex)) {
+                containers.push(vertex, ...vertex.regions);
+            }
+        }
+        for (const container of containers) {
+            const containerId = state.layout.ids.get(container);
+            const finalId = containerId && finalNodeId(containerId);
+            if (!finalId || !state.nodes.has(finalId)) {
+                continue;
+            }
+            const owner = isRegion(container) ? container.$container : container;
+            const ownerActive = isStateMachine(owner) || activeNodes.has(owner);
+            if (ownerActive && !container.vertices.some(v => isState(v) && activeNodes.has(v))) {
+                active.add(finalId);
+            }
+        }
+    }
+    const key = ['external', [...active].sort().join(','), [...recent].sort().join(','),
+        [...instanceTexts].map(([id, text]) => `${id}=${text}`).sort().join(','), external.title].join('|');
+    return { active, recent, breakpoints: new Set(), instanceTexts, key };
 }
