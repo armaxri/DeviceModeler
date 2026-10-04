@@ -8,6 +8,8 @@ import { createWorkerElk } from './diagram/elk.js';
 import { byId, download, h } from './ui/dom.js';
 import type { SimulationSession } from './simulation/session.js';
 import { SidePanel, type SidePanelState } from './ui/side-panel.js';
+import { editorSizeAt, splitAxis } from './ui/drag-geometry.js';
+import { trackPointerDrag } from './ui/pointer-drag.js';
 import { EMPTY_MODEL, EXAMPLE_HEADERS, EXAMPLES } from './examples.js';
 import { HttpHost, positionOfQuery, type HostDocument, type HostOpenPosition } from './host.js';
 import { showFileViewer } from './ui/file-viewer.js';
@@ -18,6 +20,8 @@ export type { Tool } from './diagram-controller.js';
 
 interface Settings extends DiagramSettings {
     editorWidth?: string;
+    /** Height of the text editor when the panes are on top of each other (narrow windows). */
+    editorHeight?: string;
     sidePanel?: SidePanelState;
 }
 
@@ -540,29 +544,41 @@ export class HsmApp implements DiagramHost {
         await this.diagram.update(true);
     }
 
+    /**
+     * The splitter between the text editor and the diagram: side by side it changes the width of the editor,
+     * in narrow windows (panes on top of each other, e.g. an IDE editor tab) its height (both kept in the
+     * settings).
+     */
     private bindSplitter(): void {
         const splitter = byId('splitter');
         const main = document.querySelector('main')!;
         if (this.settings.editorWidth) {
             main.style.setProperty('--editor-width', this.settings.editorWidth);
         }
+        if (this.settings.editorHeight) {
+            main.style.setProperty('--editor-height', this.settings.editorHeight);
+        }
         splitter.addEventListener('pointerdown', event => {
-            splitter.setPointerCapture(event.pointerId);
+            if (event.button !== 0) {
+                return;
+            }
+            // no text selection or native drag while resizing
+            event.preventDefault();
+            const axis = splitAxis(splitter.getBoundingClientRect());
             splitter.classList.add('dragging');
-            const move = (e: PointerEvent) => {
-                const bounds = main.getBoundingClientRect();
-                const width = Math.min(Math.max(e.clientX - bounds.left, 180), bounds.width - 300);
-                this.settings.editorWidth = `${width}px`;
-                main.style.setProperty('--editor-width', this.settings.editorWidth);
-            };
-            const up = () => {
+            trackPointerDrag(splitter, event, e => {
+                const size = `${editorSizeAt(axis, main.getBoundingClientRect(), e.clientX, e.clientY)}px`;
+                if (axis === 'columns') {
+                    this.settings.editorWidth = size;
+                    main.style.setProperty('--editor-width', size);
+                } else {
+                    this.settings.editorHeight = size;
+                    main.style.setProperty('--editor-height', size);
+                }
+            }, () => {
                 splitter.classList.remove('dragging');
-                splitter.removeEventListener('pointermove', move);
-                splitter.removeEventListener('pointerup', up);
                 this.saveSettings();
-            };
-            splitter.addEventListener('pointermove', move);
-            splitter.addEventListener('pointerup', up);
+            });
         });
     }
 
