@@ -163,6 +163,11 @@ export function examplesTarget(options, ide, { cwd = process.cwd() } = {}) {
     return { dir: path.join(sandboxDir(ide), 'workspace', 'devm-examples'), copy: true };
 }
 
+/** The models an IDE opens at the start: a state machine and the structure example (system of examples/device). */
+export function exampleFiles(folder) {
+    return [path.join(folder, 'traffic-light.devm'), path.join(folder, 'device', 'system.devm')];
+}
+
 /**
  * The folder the IDE opens: the copy of examples/ in the sandbox (created if missing), the repository's
  * examples (`--in-place`) or `--examples <dir>`.

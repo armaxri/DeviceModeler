@@ -5,7 +5,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
     ScriptError, cleanSandbox, commonHelp, ensureDependencies, firstExisting, homeDir, info, isFile, isMain,
-    launchDetached, npm, prepareExamples, repoRoot, run, runScript, sandboxDir, show, step, which
+    exampleFiles, launchDetached, npm, prepareExamples, repoRoot, run, runScript, sandboxDir, show, step, which
 } from './lib.mjs';
 
 const usage = `Usage: npm run ide:vscode -- [options]
@@ -75,7 +75,7 @@ export function vscodeCliOf(given, { platform = process.platform, exists = isFil
 }
 
 /** The arguments of the launch (pure). */
-export function vscodeArguments({ userDataDir, extensionsDir, developmentPath, folder, file }) {
+export function vscodeArguments({ userDataDir, extensionsDir, developmentPath, folder, files = [] }) {
     const args = [
         '--user-data-dir', userDataDir,
         '--extensions-dir', extensionsDir,
@@ -87,10 +87,7 @@ export function vscodeArguments({ userDataDir, extensionsDir, developmentPath, f
     if (developmentPath) {
         args.push(`--extensionDevelopmentPath=${developmentPath}`);
     }
-    args.push(folder);
-    if (file) {
-        args.push(file);
-    }
+    args.push(folder, ...files);
     return args;
 }
 
@@ -177,14 +174,15 @@ if (isMain(import.meta.url)) await runScript({
         }
 
         const folder = prepareExamples(options, 'vscode');
-        const file = path.join(folder, 'traffic-light.devm');
+        // a state machine and the structure example (the last one is the active editor)
+        const files = exampleFiles(folder).filter((file) => options.dryRun || isFile(file));
         step(options.vsix ? 'Starting VS Code with the installed .vsix' : 'Starting VS Code with the extension in development mode');
         launchDetached(cli, vscodeArguments({
             userDataDir,
             extensionsDir,
             developmentPath: options.vsix ? undefined : extensionDir,
             folder,
-            file: options.dryRun || isFile(file) ? file : undefined
+            files
         }), { logFile: path.join(sandbox, 'code.out'), dryRun: options.dryRun });
         info(`logs: ${show(path.join(userDataDir, 'logs'))} (extension host: …/window1/exthost/exthost.log)`);
     }

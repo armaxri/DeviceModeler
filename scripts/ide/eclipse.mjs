@@ -6,8 +6,8 @@ import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
     ScriptError, cleanSandbox, commonHelp, download, ensureCliExecutable, ensureDependencies, fetchText, info,
-    isDirectory, isFile, isMain, launchDetached, npm, parseChecksumFile, prepareExamples, repoRoot, run, runScript,
-    sandboxDir, sha512, show, step, which
+    exampleFiles, isDirectory, isFile, isMain, launchDetached, npm, parseChecksumFile, prepareExamples, repoRoot, run,
+    runScript, sandboxDir, sha512, show, step, which
 } from './lib.mjs';
 
 const FEATURE_IU = 'devm.eclipse.feature.feature.group';
@@ -372,8 +372,9 @@ if (isMain(import.meta.url)) await runScript({
 
         step('Starting Eclipse');
         const args = ['-data', workspace];
-        const model = path.join(projectDir, 'traffic-light.devm');
+        const [model, structure] = exampleFiles(projectDir);
         const openModel = imported && (options.dryRun || isFile(model));
+        const openStructure = openModel && (options.dryRun || isFile(structure));
         const logFile = path.join(sandbox, 'eclipse.out');
         let pid;
         const app = macApp(layout.launcher);
@@ -384,7 +385,7 @@ if (isMain(import.meta.url)) await runScript({
                 fs.mkdirSync(path.dirname(logFile), { recursive: true });
                 fs.writeFileSync(logFile, '');
             }
-            run('open', ['-n', '-a', app, '--stdout', logFile, '--stderr', logFile, model, '--args', ...args], options);
+            run('open', ['-n', '-a', app, '--stdout', logFile, '--stderr', logFile, model, ...(openStructure ? [structure] : []), '--args', ...args], options);
         } else {
             if (!imported) {
                 args.push(projectDir);

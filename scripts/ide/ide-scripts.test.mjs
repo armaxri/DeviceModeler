@@ -101,10 +101,10 @@ describe('VS Code', () => {
     });
 
     it('starts an isolated profile', () => {
-        const args = vscodeArguments({ userDataDir: '/s/u', extensionsDir: '/s/e', developmentPath: '/r/vscode', folder: '/w', file: '/w/a.devm' });
+        const args = vscodeArguments({ userDataDir: '/s/u', extensionsDir: '/s/e', developmentPath: '/r/vscode', folder: '/w', files: ['/w/a.devm', '/w/d/s.devm'] });
         assert.deepEqual(args.slice(0, 4), ['--user-data-dir', '/s/u', '--extensions-dir', '/s/e']);
         assert.ok(args.includes('--extensionDevelopmentPath=/r/vscode'));
-        assert.deepEqual(args.slice(-2), ['/w', '/w/a.devm']);
+        assert.deepEqual(args.slice(-3), ['/w', '/w/a.devm', '/w/d/s.devm']);
         assert.ok(!vscodeArguments({ userDataDir: 'u', extensionsDir: 'e', folder: 'w' }).some((a) => a.startsWith('--extensionDevelopmentPath')));
     });
 });
