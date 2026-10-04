@@ -2,6 +2,7 @@ package hsm.jetbrains.lsp
 
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.openapi.project.Project
+import com.redhat.devtools.lsp4ij.LanguageServerEnablementSupport
 import com.redhat.devtools.lsp4ij.LanguageServerFactory
 import com.redhat.devtools.lsp4ij.server.CannotStartProcessException
 import com.redhat.devtools.lsp4ij.server.OSProcessStreamConnectionProvider
@@ -10,9 +11,25 @@ import hsm.jetbrains.cli.HsmExecutable
 
 // Only loaded with LSP4IJ installed (hsm-lsp4ij.xml): the plugin's other classes do not refer to LSP4IJ.
 
-/** The HSM language server for LSP4IJ (`hsm-lsp4ij.xml`): `hsm lsp --stdio` of the hsm executable. */
-class HsmLanguageServerFactory : LanguageServerFactory {
+/**
+ * The HSM language server for LSP4IJ (`hsm-lsp4ij.xml`): `hsm lsp --stdio` of the hsm executable.
+ *
+ * The server is only enabled while there is an hsm executable (like [HsmLanguageServerSupport.active]): without
+ * one, LSP4IJ does not try to start it (which would fail with an error logged for every opened model) and the
+ * plugin's own validation reports the problems instead.
+ */
+class HsmLanguageServerFactory : LanguageServerFactory, LanguageServerEnablementSupport {
     override fun createConnectionProvider(project: Project): StreamConnectionProvider = HsmConnectionProvider(project)
+
+    /** Disabled by the user in the LSP4IJ settings (Languages & Frameworks > Language Servers). */
+    @Volatile
+    private var disabled = false
+
+    override fun isEnabled(project: Project): Boolean = !disabled && HsmExecutable.locate() != null
+
+    override fun setEnabled(enabled: Boolean, project: Project) {
+        disabled = !enabled
+    }
 }
 
 /**
