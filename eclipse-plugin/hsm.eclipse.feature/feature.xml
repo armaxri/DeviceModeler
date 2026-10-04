@@ -7,7 +7,9 @@
 
    <description>
       Editor for hierarchical state machines (.hsm): the HSM web app (text editor and PlantUML-style
-      diagram editor, simulation, export) in an embedded browser of the Eclipse IDE.
+      diagram editor, simulation, export) in an embedded browser of the Eclipse IDE, and language support
+      (diagnostics, completion, hover, navigation into C/C++ headers, formatting, outline, rename) for .hsm and
+      .hsmtest files in Eclipse's Generic Editor through the HSM language server (LSP4E, TM4E).
    </description>
 
    <license url="https://opensource.org/licenses/MIT">
@@ -16,6 +18,12 @@
 
    <plugin
          id="hsm.eclipse"
+         version="0.0.0"/>
+
+   <!-- language support in text editors (Generic Editor): language server via LSP4E, highlighting via TM4E;
+        p2 installs LSP4E, TM4E and LSP4J from the Eclipse release repository (see README.md) -->
+   <plugin
+         id="hsm.eclipse.lsp"
          version="0.0.0"/>
 
 

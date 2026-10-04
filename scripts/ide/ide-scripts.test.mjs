@@ -6,7 +6,7 @@ import {
     clionCandidates, envVarBaseNameOf, expandCandidate, gradleArgs, ideaProperties, jetbrainsIde
 } from './clion.mjs';
 import {
-    eclipseDownload, eclipseLayout, installedVersion, macApp, projectDescription, releaseOfPom
+    directorRepositories, eclipseDownload, eclipseLayout, installedVersion, macApp, projectDescription, releaseOfPom
 } from './eclipse.mjs';
 import {
     UsageError, cliTarget, commandFileNames, examplesTarget, parseChecksumFile, parseOptions, pathDirs, repoRoot, which
@@ -113,6 +113,7 @@ describe('Eclipse', () => {
     it('reads the release of the pom', () => {
         assert.equal(releaseOfPom('<eclipse.repository>https://download.eclipse.org/releases/2025-06/</eclipse.repository>'), '2025-06');
         assert.equal(releaseOfPom('<eclipse.repository>https://mirror/x</eclipse.repository>'), undefined);
+        assert.equal(directorRepositories('file:///site', '2025-06'), 'file:///site,https://download.eclipse.org/releases/2025-06/');
     });
 
     it('names the downloads of all platforms', () => {

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+   <!-- unit tests of state machines (.hsmtest); .hsm is the content type hsm.eclipse.hsm of the plugin hsm.eclipse -->
+   <extension point="org.eclipse.core.contenttype.contentTypes">
+      <content-type
+            id="hsm.eclipse.hsmtest"
+            name="HSM Unit Test"
+            base-type="org.eclipse.core.runtime.text"
+            file-extensions="hsmtest"
+            default-charset="UTF-8"
+            priority="normal">
+      </content-type>
+   </extension>
+
+   <!-- the Generic Editor for both languages ("Open With > Generic Text Editor" for .hsm, whose default editor stays
+        the HSM Modeler; the default editor of .hsmtest); LSP4E and TM4E contribute their features to it -->
+   <extension point="org.eclipse.ui.editors">
+      <editorContentTypeBinding contentTypeId="hsm.eclipse.hsm" editorId="org.eclipse.ui.genericeditor.GenericEditor"/>
+      <editorContentTypeBinding contentTypeId="hsm.eclipse.hsmtest" editorId="org.eclipse.ui.genericeditor.GenericEditor"/>
+   </extension>
+
+   <!-- the language server: "hsm lsp" (stdio) of the hsm executable (preference, platform fragment or PATH) -->
+   <extension point="org.eclipse.lsp4e.languageServer">
+      <server
+            id="hsm.eclipse.lsp.server"
+            label="HSM Language Server"
+            class="hsm.eclipse.lsp.HsmLanguageServer">
+      </server>
+      <contentTypeMapping contentType="hsm.eclipse.hsm" id="hsm.eclipse.lsp.server" languageId="hsm"/>
+      <contentTypeMapping contentType="hsm.eclipse.hsmtest" id="hsm.eclipse.lsp.server" languageId="hsmtest"/>
+   </extension>
+
+   <!-- TextMate highlighting with the grammars of packages/language (the language server adds semantic tokens) -->
+   <extension point="org.eclipse.tm4e.registry.grammars">
+      <grammar scopeName="source.hsm" path="syntaxes/hsm.tmLanguage.json"/>
+      <grammar scopeName="source.hsmtest" path="syntaxes/hsmtest.tmLanguage.json"/>
+      <grammar scopeName="documentation.injection.hsm" path="syntaxes/hsm-doc-comments.tmLanguage.json"/>
+      <injection scopeName="documentation.injection.hsm" injectTo="source.hsm"/>
+      <injection scopeName="documentation.injection.hsm" injectTo="source.hsmtest"/>
+      <scopeNameContentTypeBinding contentTypeId="hsm.eclipse.hsm" scopeName="source.hsm"/>
+      <scopeNameContentTypeBinding contentTypeId="hsm.eclipse.hsmtest" scopeName="source.hsmtest"/>
+   </extension>
+   <extension point="org.eclipse.ui.genericeditor.presentationReconcilers">
+      <presentationReconciler class="org.eclipse.tm4e.ui.text.TMPresentationReconciler" contentType="hsm.eclipse.hsm"/>
+      <presentationReconciler class="org.eclipse.tm4e.ui.text.TMPresentationReconciler" contentType="hsm.eclipse.hsmtest"/>
+   </extension>
+
+   <!-- comments, brackets, auto closing, indentation (the language configuration of the VS Code extension) -->
+   <extension point="org.eclipse.tm4e.languageconfiguration.languageConfigurations">
+      <languageConfiguration contentTypeId="hsm.eclipse.hsm" path="language-configuration.json"/>
+      <languageConfiguration contentTypeId="hsm.eclipse.hsmtest" path="language-configuration.json"/>
+   </extension>
+</plugin>
