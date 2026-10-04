@@ -47,23 +47,23 @@
                 </executions>
             </plugin>
             <plugin>
-                <!-- -Dhsm.cli.optional=false (CI, releases): fail if the executable is missing -->
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-enforcer-plugin</artifactId>
-                <version>3.6.2</version>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
                 <executions>
                     <execution>
+                        <!-- -Dhsm.cli.optional=false (CI, releases): fail if the executable is missing (not with the
+                             enforcer's requireFilesExist: it rejects paths with "..") -->
                         <id>cli-built</id>
                         <phase>validate</phase>
-                        <goals><goal>enforce</goal></goals>
+                        <goals><goal>run</goal></goals>
                         <configuration>
                             <skip>${hsm.cli.optional}</skip>
-                            <rules>
-                                <requireFilesExist>
-                                    <files><file>${hsm.cli.dir}/${hsm.cli.target}/${hsm.cli.file}</file></files>
-                                    <message>The hsm executable for ${hsm.cli.target} is missing in ${hsm.cli.dir}: build it (npm run build:exe) or omit -Dhsm.cli.optional=false.</message>
-                                </requireFilesExist>
-                            </rules>
+                            <target>
+                                <fail message="The hsm executable for ${hsm.cli.target} is missing in ${hsm.cli.dir}: build it (npm run build:exe) or omit -Dhsm.cli.optional=false.">
+                                    <condition><not><available file="${hsm.cli.dir}/${hsm.cli.target}/${hsm.cli.file}"/></not></condition>
+                                </fail>
+                            </target>
                         </configuration>
                     </execution>
                 </executions>

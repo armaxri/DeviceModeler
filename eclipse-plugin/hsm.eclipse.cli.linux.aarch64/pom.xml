@@ -55,6 +55,21 @@
                 <version>3.1.0</version>
                 <executions>
                     <execution>
+                        <!-- -Dhsm.cli.optional=false (CI, releases): fail if the executable is missing (not with the
+                             enforcer's requireFilesExist: it rejects paths with "..") -->
+                        <id>cli-built</id>
+                        <phase>validate</phase>
+                        <goals><goal>run</goal></goals>
+                        <configuration>
+                            <skip>${hsm.cli.optional}</skip>
+                            <target>
+                                <fail message="The hsm executable for ${hsm.cli.target} is missing in ${hsm.cli.dir}: build it (npm run build:exe) or omit -Dhsm.cli.optional=false.">
+                                    <condition><not><available file="${hsm.cli.dir}/${hsm.cli.target}/${hsm.cli.file}"/></not></condition>
+                                </fail>
+                            </target>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>p2-advice</id>
                         <phase>generate-resources</phase>
                         <goals><goal>run</goal></goals>
@@ -64,28 +79,6 @@
                                 <delete file="${project.basedir}/META-INF/p2.inf" quiet="true"/>
                                 <copy if:set="hsm.cli.present" file="${project.basedir}/p2-chmod.inf" tofile="${project.basedir}/META-INF/p2.inf"/>
                             </target>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <!-- -Dhsm.cli.optional=false (CI, releases): fail if the executable is missing -->
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-enforcer-plugin</artifactId>
-                <version>3.6.2</version>
-                <executions>
-                    <execution>
-                        <id>cli-built</id>
-                        <phase>validate</phase>
-                        <goals><goal>enforce</goal></goals>
-                        <configuration>
-                            <skip>${hsm.cli.optional}</skip>
-                            <rules>
-                                <requireFilesExist>
-                                    <files><file>${hsm.cli.dir}/${hsm.cli.target}/${hsm.cli.file}</file></files>
-                                    <message>The hsm executable for ${hsm.cli.target} is missing in ${hsm.cli.dir}: build it (npm run build:exe) or omit -Dhsm.cli.optional=false.</message>
-                                </requireFilesExist>
-                            </rules>
                         </configuration>
                     </execution>
                 </executions>
