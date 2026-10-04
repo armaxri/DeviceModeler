@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Starts VS Code with the HSM extension (packages/vscode) in an isolated profile and opens the examples.
+// Starts VS Code with the Device Modeler extension (packages/vscode) in an isolated profile and opens the examples.
 // See `node scripts/ide/vscode.mjs --help` and docs/installation.md#trying-the-plugins-locally.
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -19,13 +19,13 @@ Host" window, as with F5 in VS Code; best for debugging). With --vsix the .vsix 
 into the isolated extensions folder instead (what users get).
 
 Options:
-  --code <path>      the VS Code command line (code, code.cmd) or app to use (env HSM_VSCODE); default: code,
+  --code <path>      the VS Code command line (code, code.cmd) or app to use (env DEVM_VSCODE); default: code,
                      code-insiders or codium in the PATH, else the standard installation folders
   --vsix             package the .vsix and install it into the sandbox instead of the development mode
 
 ${commonHelp}
 
-Sandbox: .ide/vscode/ (user-data/, extensions/). Only the HSM extension is installed; install others (e.g.
+Sandbox: .ide/vscode/ (user-data/, extensions/). Only the Device Modeler extension is installed; install others (e.g.
 the C/C++ extension for the generated code) in that window as usual – they stay in the sandbox.
 `;
 
@@ -102,9 +102,9 @@ export const sandboxSettings = {
     'update.mode': 'none',
     'extensions.autoCheckUpdates': false,
     'extensions.ignoreRecommendations': true,
-    // the sandbox lies inside the HSM repository
+    // the sandbox lies inside the DeviceModeler repository
     'git.openRepositoryInParentFolders': 'never',
-    'hsm.diagram.autoOpen': true
+    'devm.diagram.autoOpen': true
 };
 
 // ---------------------------------------------------------------------------------------------------------
@@ -113,7 +113,7 @@ const sandbox = sandboxDir('vscode');
 const extensionDir = path.join(repoRoot, 'packages', 'vscode');
 
 function findVsCode(options) {
-    const given = options.code ?? process.env.HSM_VSCODE;
+    const given = options.code ?? process.env.DEVM_VSCODE;
     if (given) {
         const cli = vscodeCliOf(path.resolve(given)) ?? which(given);
         if (!cli) {
@@ -177,7 +177,7 @@ if (isMain(import.meta.url)) await runScript({
         }
 
         const folder = prepareExamples(options, 'vscode');
-        const file = path.join(folder, 'traffic-light.hsm');
+        const file = path.join(folder, 'traffic-light.devm');
         step(options.vsix ? 'Starting VS Code with the installed .vsix' : 'Starting VS Code with the extension in development mode');
         launchDetached(cli, vscodeArguments({
             userDataDir,

@@ -96,6 +96,16 @@ export class DevmApp implements DiagramHost {
             this.diagram.revealLocation(location);
         }
         await this.diagram.update();
+        // a link to an example (`?example=system.devm`, e.g. on the GitHub Pages overview) opens it like the
+        // examples menu does
+        const linked = this.host ? undefined : EXAMPLES.find(e => e.fileName === query.get('example'));
+        if (linked) {
+            this.loadText(linked.text, linked.fileName);
+            // a reload keeps the edits of the example instead of opening it again
+            query.delete('example');
+            const search = query.toString();
+            history.replaceState(history.state, '', `${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`);
+        }
         // a host opened the model at a position (go to definition from another model)
         const position = this.host ? positionOfQuery(query) : undefined;
         if (position) {

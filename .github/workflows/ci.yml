@@ -1,3 +1,7 @@
+# Type check, tests and build of the npm packages (language, web, vscode, cli, desktop) and of the scripts.
+# The command line executable `devm` (smoke tested on every platform), the desktop app, the VS Code extension and
+# the Eclipse and JetBrains plugins (with their tests) are built by distribution.yml, which runs on the same events;
+# the web app of every branch is published by pages.yml.
 name: CI
 
 on:
@@ -23,3 +27,5 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: Shell scripts (shellcheck is installed on the runner)
+        run: shellcheck scripts/pages/*.sh
