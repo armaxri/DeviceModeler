@@ -126,3 +126,50 @@ button.side-panel-toggle {
     border-radius: 2px;
 }
 
+/* Debugging a test: the diagram shows the state of the debug session (read-only) */
+#diagram-banner.debug-banner {
+    background: var(--vscode-editorWidget-background, #f0f6ff);
+    border-color: var(--vscode-debugIcon-pauseForeground, var(--vscode-focusBorder, #75beff));
+    color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
+    max-width: calc(100% - 40px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.debug-panel {
+    padding: 8px 12px;
+}
+
+.debug-panel h3 {
+    margin: 4px 0 8px;
+    font-size: 1.05em;
+}
+
+.debug-panel h4 {
+    margin: 12px 0 4px;
+    font-size: 0.95em;
+    color: var(--ui-muted);
+    font-weight: 600;
+}
+
+.debug-panel .debug-status {
+    margin: 0;
+    word-break: break-word;
+}
+
+.debug-panel .debug-active {
+    margin: 0;
+    padding-left: 18px;
+    font-family: var(--vscode-editor-font-family, monospace);
+}
+
+.debug-panel .debug-empty, .debug-panel .debug-hint {
+    color: var(--ui-muted);
+}
+
+.debug-panel .debug-hint {
+    margin-top: 16px;
+    font-size: 0.9em;
+}
+

@@ -6,6 +6,7 @@
 !language-configuration.json
 !dist/extension.cjs
 !dist/server.cjs
+!dist/debug-worker.cjs
 !dist/webview/**
 !media/**
 !syntaxes/**

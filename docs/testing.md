@@ -73,6 +73,11 @@ every test. The exit code is 1 if a test failed or a file has errors. The exampl
 [`examples/tests/`](../examples/tests) test all example state machines. The runner is available as API
 (`runTests`, `HsmTestWorkspace`, `toJUnitXml` in `hsm-language`); it runs in the browser as well.
 
+In **VS Code** the tests appear in the Test Explorer and can be **debugged**: breakpoints on test statements
+and on states / transitions / reactions of the model, stepping over statements and into the microsteps of the
+interpreter, the active states and variables in the debug views and the diagram showing the current states on
+every stop (see [VS Code: Debugging tests](vscode.md#debugging-tests)).
+
 Not yet supported (compared to SCTUnit): `@Ignore`, `package` / imports, test suites, verifying the
 order of calls, mocks with sequences of values, calling operations of the state machine in a test,
 `assert` on time (`proceed` is the only way to advance time); the web editor does not run tests yet.

@@ -19,7 +19,7 @@ await fs.mkdir(path.join(root, 'schemas'), { recursive: true });
 await fs.copyFile(path.join(root, '../language/schemas/hsm-gen.schema.json'), path.join(root, 'schemas/hsm-gen.schema.json'));
 await fs.copyFile(path.join(root, '../../LICENSE'), path.join(root, 'LICENSE'));
 
-const builds = [bundleOptions('extension', { minify: !watch }), bundleOptions('server', { minify: !watch })];
+const builds = [bundleOptions('extension', { minify: !watch }), bundleOptions('server', { minify: !watch }), bundleOptions('debug-worker', { minify: !watch })];
 
 if (watch) {
     for (const options of builds) {
@@ -31,5 +31,5 @@ if (watch) {
     await Promise.all(builds.map(options => esbuild.build(options)));
     const { build } = await import('vite');
     await build({ configFile: path.join(root, 'vite.webview.config.ts'), root, logLevel: 'warn' });
-    console.log('built dist/extension.cjs, dist/server.cjs and dist/webview/');
+    console.log('built dist/extension.cjs, dist/server.cjs, dist/debug-worker.cjs and dist/webview/');
 }
