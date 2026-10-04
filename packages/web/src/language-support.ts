@@ -56,6 +56,19 @@ export function toMonacoLinks(links: readonly NavigationLink[], uri: (target: st
  */
 export class HsmLanguageSupport extends HsmModelService {
 
+    /** The links of the last navigation (see {@link targetSelection}). */
+    private recentLinks: monaco.languages.LocationLink[] = [];
+
+    /**
+     * The whole name a navigation leads to: Monaco opens other files with the start of the target only, the
+     * hosts select the name of the declaration (`Mode` of `enum class Mode`).
+     */
+    targetSelection(uri: monaco.Uri, range: monaco.IRange): monaco.IRange {
+        const link = this.recentLinks.find(l => l.uri.toString() === uri.toString() && l.targetSelectionRange
+            && monaco.Position.equals(monaco.Range.getStartPosition(l.targetSelectionRange), monaco.Range.getStartPosition(range)));
+        return link?.targetSelectionRange && monaco.Range.isEmpty(range) ? link.targetSelectionRange : range;
+    }
+
     /** The Monaco models of the other files of the workspace that were navigation targets, by URI of the file. */
     private readonly workspaceModels = new Map<string, monaco.editor.ITextModel>();
 
@@ -202,8 +215,9 @@ export class HsmLanguageSupport extends HsmModelService {
                 return undefined;
             }
             const document = await this.document(model);
-            const links = await navigationLinks(services, document, model.getOffsetAt(position), kind);
-            return toMonacoLinks(links, uri => this.targetUri(uri, model));
+            const links = toMonacoLinks(await navigationLinks(services, document, model.getOffsetAt(position), kind), uri => this.targetUri(uri, model));
+            this.recentLinks = links;
+            return links;
         };
         monaco.languages.registerDefinitionProvider(LANGUAGE_ID, { provideDefinition: navigation('definition') });
         monaco.languages.registerDeclarationProvider(LANGUAGE_ID, { provideDeclaration: navigation('declaration') });

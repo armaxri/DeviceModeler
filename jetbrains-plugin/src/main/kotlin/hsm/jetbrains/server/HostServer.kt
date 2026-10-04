@@ -212,7 +212,8 @@ class HostServer(root: Path, port: Int) {
                 send(exchange, 204, null, null)
             }
             "POST open" -> {
-                if (session.open(readText(exchange).trim())) send(exchange, 204, null, null) else send(exchange, 404, TEXT, "Not found")
+                val position = OpenPosition.of { query(exchange.requestURI, it) }
+                if (session.open(readText(exchange).trim(), position)) send(exchange, 204, null, null) else send(exchange, 404, TEXT, "Not found")
             }
             "POST export" -> {
                 val fileName = query(exchange.requestURI, "fileName") ?: "diagram"

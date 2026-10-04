@@ -645,8 +645,9 @@ export class HsmApp implements DiagramHost {
             return false;
         }
         const path = resource.path.replace(/^\//, '');
-        const range = selection === undefined ? undefined : 'startLineNumber' in selection ? monaco.Range.lift(selection)
+        const start = selection === undefined ? undefined : 'startLineNumber' in selection ? monaco.Range.lift(selection)
             : new monaco.Range(selection.lineNumber, selection.column, selection.lineNumber, selection.column);
+        const range = start && monaco.Range.lift(this.language.targetSelection(resource, start));
         if (this.host) {
             const position: HostOpenPosition | undefined = range && {
                 line: range.startLineNumber, column: range.startColumn, endLine: range.endLineNumber, endColumn: range.endColumn

@@ -10,6 +10,7 @@ import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.ThrowableComputable
 import com.intellij.openapi.vfs.VirtualFile
@@ -23,6 +24,7 @@ import hsm.jetbrains.model.ProjectPaths
 import hsm.jetbrains.problems.HsmProblems
 import hsm.jetbrains.server.HostServer.HostException
 import hsm.jetbrains.server.HostSession
+import hsm.jetbrains.server.OpenPosition
 import hsm.jetbrains.settings.HsmSettings
 import java.io.IOException
 import java.nio.charset.StandardCharsets
@@ -149,9 +151,9 @@ class HsmSession(val project: Project, val file: VirtualFile, private val page: 
         HsmSettings.get().state.pageSettings = json
     }
 
-    override fun open(path: String): Boolean {
+    override fun open(path: String, position: OpenPosition?): Boolean {
         val target = ProjectFiles.resolve(ProjectFiles.root(project, file), path)?.takeIf { !it.isDirectory } ?: return false
-        ApplicationManager.getApplication().invokeLater({ FileEditorManager.getInstance(project).openFile(target, true) }, project.disposed)
+        ApplicationManager.getApplication().invokeLater({ openAt(project, target, position) }, project.disposed)
         return true
     }
 
@@ -261,5 +263,33 @@ class HsmSession(val project: Project, val file: VirtualFile, private val page: 
 
     companion object {
         fun isDarkTheme(): Boolean = !JBColor.isBright()
+    }
+}
+
+/**
+ * Opens a file of the project in the editor of its type (a model in the HSM editor, a header in CLion's C/C++
+ * editor) and selects the range of [position] (1-based lines and columns; null: only opens the file). EDT.
+ */
+fun openAt(project: Project, target: VirtualFile, position: OpenPosition?) {
+    val manager = FileEditorManager.getInstance(project)
+    val document = if (position == null) null else FileDocumentManager.getInstance().getDocument(target)
+    if (position == null || document == null) {
+        manager.openFile(target, true)
+        return
+    }
+    fun offset(line: Int, column: Int): Int {
+        if (document.lineCount == 0) return 0
+        val index = (line - 1).coerceIn(0, document.lineCount - 1)
+        return minOf(document.getLineStartOffset(index) + maxOf(column - 1, 0), document.getLineEndOffset(index))
+    }
+    val start = offset(position.line, position.column)
+    val end = maxOf(start, offset(position.endLine, position.endColumn))
+    val editor = manager.openTextEditor(OpenFileDescriptor(project, target, start), true)
+    val split = manager.getSelectedEditor(target) as? HsmSplitEditor
+    if (split != null) {
+        // the text editor and the page
+        split.select(start, end)
+    } else if (editor != null) {
+        editor.selectionModel.setSelection(start, end)
     }
 }

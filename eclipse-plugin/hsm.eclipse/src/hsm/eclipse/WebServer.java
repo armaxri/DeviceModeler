@@ -191,7 +191,8 @@ public final class WebServer {
                 send(exchange, 204, null, null);
             }
             case "POST open" -> {
-                boolean opened = session.open(readText(exchange).trim());
+                URI uri = exchange.getRequestURI();
+                boolean opened = session.open(readText(exchange).trim(), HostSession.Position.of(name -> query(uri, name)));
                 send(exchange, opened ? 204 : 404, opened ? null : "text/plain", opened ? null : "Not found");
             }
             case "POST export" -> {
