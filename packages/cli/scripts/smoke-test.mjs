@@ -106,7 +106,9 @@ async function lspSession(dir) {
         assert(JSON.stringify(hover).includes('Number of steps.'), `hover: ${JSON.stringify(hover)}`);
         const definition = await request('textDocument/definition', { textDocument: { uri }, position });
         const target = definition?.[0]?.targetUri ?? definition?.[0]?.uri;
-        assert(target === pathToFileURL(path.join(dir, 'include', 'types.h')).toString(), `definition: ${JSON.stringify(definition)}`);
+        // compared as paths: the server's URIs may encode a Windows drive differently (file:///c%3A/…)
+        const samePath = (a, b) => process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+        assert(target && samePath(path.resolve(fileURLToPath(target)), path.resolve(dir, 'include', 'types.h')), `definition: ${JSON.stringify(definition)}`);
         await request('shutdown', null);
         send({ jsonrpc: '2.0', method: 'exit' });
         const code = await Promise.race([exited, new Promise(resolve => setTimeout(() => resolve('timeout'), 10000))]);
