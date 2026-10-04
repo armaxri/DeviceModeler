@@ -62,8 +62,10 @@ button:disabled, select:disabled {
     max-width: 30ch;
 }
 
+/* The webview only has the diagram pane: one cell, also below 900px where app.css stacks editor and diagram. */
 main {
     grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
 }
 
 #side-panel {

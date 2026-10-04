@@ -669,7 +669,6 @@ body.ui-dark #properties .problems li.error { background: #3d1f1f; color: #ffb4b
         grid-template-rows: 35% 5px 1fr;
     }
     #splitter { cursor: row-resize; }
-    #side-panel, #btn-side-panel { display: none; }
 }
 
 /* ---- manual layout (experimental) ---- */
