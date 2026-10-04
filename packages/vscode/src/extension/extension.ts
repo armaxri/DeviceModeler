@@ -3,6 +3,7 @@ import { LanguageClient, TransportKind, type LanguageClientOptions, type ServerO
 import { registerCommands } from './commands.js';
 import { DiagramManager } from './diagram-panel.js';
 import { HsmTestController } from './test-controller.js';
+import { registerTestDebugger } from './debug.js';
 
 let client: LanguageClient | undefined;
 
@@ -15,6 +16,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const tests = new HsmTestController(output);
     context.subscriptions.push(tests);
     registerCommands(context, { diagrams, tests, output });
+    registerTestDebugger(context, diagrams, output);
 
     client = startLanguageClient(context);
     await client.start();

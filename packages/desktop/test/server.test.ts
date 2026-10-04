@@ -102,7 +102,7 @@ describe('server with file host', () => {
             theme: () => 'dark',
             listener: {
                 dirtyChanged: session => events.push(`dirty ${session.path} ${session.dirty}`),
-                openFile: (_session, file) => events.push(`open ${path.relative(root, file)}`),
+                openFile: (_session, file, position) => events.push(`open ${path.relative(root, file)}${position ? ` ${JSON.stringify(position)}` : ''}`),
                 ...listener
             }
         });
@@ -182,7 +182,10 @@ describe('server with file host', () => {
         expect((await post(`${api}open`, 'sub/motor.hsm')).status).toBe(204);
         expect((await post(`${api}open`, 'missing.hsm')).status).toBe(404);
         expect((await post(`${api}open`, '../../x.hsm')).status).toBe(403);
-        expect(events).toEqual([`open ${path.join('models', 'sub', 'motor.hsm')}`, `open ${path.join('models', 'sub', 'motor.hsm')}`]);
+        // go to definition into a header: with the range to select
+        expect((await post(`${api}open?line=1&column=8&endLine=1&endColumn=9`, 'types.h')).status).toBe(204);
+        expect(events).toEqual([`open ${path.join('models', 'sub', 'motor.hsm')}`, `open ${path.join('models', 'sub', 'motor.hsm')}`,
+            'open types.h {"line":1,"column":8,"endLine":1,"endColumn":9}']);
 
         const exported = await fetch(`${api}export?fileName=${encodeURIComponent('../../gate.svg')}`, { method: 'POST', body: '<svg/>' });
         expect(await exported.json()).toEqual({ message: 'Exported models/gate.svg.' });

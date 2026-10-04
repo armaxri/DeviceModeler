@@ -69,6 +69,16 @@ export function registerCommands(context: vscode.ExtensionContext, commands: Com
         await commands.tests.runFile(uri);
     });
 
+    register('hsm.debugTests', async (arg?: unknown) => {
+        const uri = arg instanceof vscode.Uri ? arg : vscode.window.activeTextEditor?.document.languageId === 'hsmtest'
+            ? vscode.window.activeTextEditor.document.uri : undefined;
+        if (!uri) {
+            vscode.window.showWarningMessage('HSM: Open an .hsmtest file to debug its tests.');
+            return;
+        }
+        await commands.tests.debugFile(uri);
+    });
+
     register('hsm.importSct', async (arg?: unknown) => {
         let uri = arg instanceof vscode.Uri && arg.path.toLowerCase().endsWith('.sct') ? arg : undefined;
         if (!uri) {

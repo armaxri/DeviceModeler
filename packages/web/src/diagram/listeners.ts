@@ -4,7 +4,7 @@ import {
     type IActionHandler, type SModelElementImpl, type SModelRootImpl, type ViewerOptions
 } from 'sprotty';
 import { BringToFrontAction, MoveAction, SelectAction, SelectAllAction, type Action } from 'sprotty-protocol';
-import { arrowDirection, borderPoint, displayRoute, type Point } from 'hsm-language';
+import { anchorNormal, anchorPoint, arrowDirection, borderPoint, displayRoute, projectToBorder, type EdgeAnchor, type Point } from 'hsm-language';
 import { isTransitionEdge, isVertexNode, type TransitionEdge, type VertexNode } from './model.js';
 import { arrowHead, routePath } from './views.js';
 
@@ -45,6 +45,10 @@ export interface DiagramCallbacks {
     bendRemoved(edgeId: string, index: number): void;
     /** Manual layout: the label of a transition was moved. */
     labelMoved(edgeId: string, dx: number, dy: number): void;
+    /** Manual layout: the start / end of a transition was dragged to the anchor on the border of its source / target state. */
+    anchorMoved(edgeId: string, end: 'source' | 'target', anchor: EdgeAnchor): void;
+    /** Manual layout: the anchor of the start / end of a transition was removed (double-click on its handle). */
+    anchorReset(edgeId: string, end: 'source' | 'target'): void;
 }
 
 export const DiagramCallbacks = Symbol('DiagramCallbacks');
@@ -79,7 +83,7 @@ interface Rect {
 /** The DOM element of a handle (resize handle, bend point) the event started on. */
 function handleElement(event: MouseEvent): Element | undefined {
     const target = event.target;
-    return target instanceof Element ? target.closest('.resize-handle, .bend-handle') ?? undefined : undefined;
+    return target instanceof Element ? target.closest('.resize-handle, .bend-handle, .anchor-handle') ?? undefined : undefined;
 }
 
 /** Whether the mouse down starts dragging a handle or the label of a selected transition (manual layout). */
@@ -113,7 +117,7 @@ function absolutePosition(element: VertexNode): Point {
 }
 
 interface HandleDrag {
-    kind: 'resize' | 'bend' | 'label';
+    kind: 'resize' | 'bend' | 'label' | 'anchor';
     id: string;
     startX: number;
     startY: number;
@@ -176,6 +180,10 @@ export class HsmMouseListener extends MouseListener {
         if (edge && handle?.classList.contains('bend-handle')) {
             const index = Array.from(handle.parentElement?.children ?? []).indexOf(handle);
             this.handle = { ...base, kind: 'bend', id: edge.id, index, element: edge };
+            return true;
+        }
+        if (edge && handle?.classList.contains('anchor-handle')) {
+            this.handle = { ...base, kind: 'anchor', id: edge.id, index: handle.classList.contains('anchor-target') ? 1 : 0, element: edge };
             return true;
         }
         if (edge && startsHandleDrag(target, event)) {
@@ -340,7 +348,43 @@ export class HsmMouseListener extends MouseListener {
             circle?.setAttribute('cy', String(point.y));
         } else if (handle.kind === 'label') {
             dom.querySelector('.transition-label')?.setAttribute('transform', `translate(${dx}, ${dy})`);
+        } else if (handle.kind === 'anchor' && isTransitionEdge(handle.element)) {
+            const drag = this.anchorDrag(handle.element, handle.index, dx, dy);
+            if (!drag) {
+                return;
+            }
+            // straight lines from the anchor (with a short piece perpendicular to the side) through the waypoints
+            const edge = handle.element;
+            const normal = anchorNormal(drag.anchor.side);
+            const stub = { x: drag.point.x + normal.x * 12, y: drag.point.y + normal.y * 12 };
+            const points = handle.index === 0
+                ? [drag.point, stub, ...edge.waypoints, edge.points[edge.points.length - 1]]
+                : [edge.points[0], ...edge.waypoints, stub, drag.point];
+            this.showPreview(edge, points, false);
+            this.moveAnchorHandle(dom, handle.index, drag.point);
         }
+    }
+
+    /**
+     * The anchor of the end (`index` 0: source, 1: target) of a transition dragged by (dx, dy): the point
+     * on the border of the state nearest to the mouse.
+     */
+    private anchorDrag(edge: TransitionEdge, index: number, dx: number, dy: number, precision = 0.1): { anchor: EdgeAnchor, point: Point } | undefined {
+        const vertex = edge.root.index.getById(index === 0 ? edge.sourceId : edge.targetId);
+        if (!isVertexNode(vertex) || edge.points.length < 2) {
+            return undefined;
+        }
+        const rect = { ...absolutePosition(vertex), width: vertex.size.width, height: vertex.size.height };
+        const start = index === 0 ? edge.points[0] : edge.points[edge.points.length - 1];
+        const anchor = projectToBorder(rect, { x: start.x + dx, y: start.y + dy }, undefined, precision);
+        return { anchor, point: anchorPoint(rect, anchor) };
+    }
+
+    private moveAnchorHandle(dom: Element, index: number, point: Point): void {
+        const rect = dom.querySelector(index === 0 ? '.anchor-handle.anchor-source' : '.anchor-handle.anchor-target');
+        const size = Number(rect?.getAttribute('width') ?? 8);
+        rect?.setAttribute('x', String(point.x - size / 2));
+        rect?.setAttribute('y', String(point.y - size / 2));
     }
 
     override mouseUp(target: SModelElementImpl, event: MouseEvent): Action[] {
@@ -383,6 +427,18 @@ export class HsmMouseListener extends MouseListener {
         if (handle.kind === 'label') {
             document.getElementById(`${this.viewerOptions.baseDiv}_${handle.id}`)?.querySelector('.transition-label')?.removeAttribute('transform');
         }
+        if (handle.kind === 'anchor' && isTransitionEdge(handle.element)) {
+            const points = handle.element.points;
+            const dom = document.getElementById(`${this.viewerOptions.baseDiv}_${handle.id}`);
+            if (dom && points.length >= 2) {
+                this.moveAnchorHandle(dom, handle.index, handle.index === 0 ? points[0] : points[points.length - 1]);
+            }
+            const drag = this.anchorDrag(handle.element, handle.index, dx, dy, 1);
+            if (drag) {
+                this.callbacks.anchorMoved(handle.id, handle.index === 0 ? 'source' : 'target', drag.anchor);
+            }
+            return;
+        }
         if (handle.kind === 'resize' && isVertexNode(handle.element)) {
             this.callbacks.resizeEnd(handle.id, Math.max(20, handle.element.size.width + dx), Math.max(20, handle.element.size.height + dy));
         } else if (handle.kind === 'bend' && isTransitionEdge(handle.element)) {
@@ -422,6 +478,11 @@ export class HsmMouseListener extends MouseListener {
     override doubleClick(target: SModelElementImpl, event: MouseEvent): Action[] {
         if (this.callbacks.canEdit() && isTransitionEdge(target) && event.target instanceof Element) {
             // manual layout: double-click on the line adds a waypoint, on a waypoint removes it
+            const anchor = event.target.closest('.anchor-handle');
+            if (anchor) {
+                this.callbacks.anchorReset(target.id, anchor.classList.contains('anchor-target') ? 'target' : 'source');
+                return [];
+            }
             const handle = event.target.closest('.bend-handle');
             if (handle) {
                 this.callbacks.bendRemoved(target.id, Array.from(handle.parentElement?.children ?? []).indexOf(handle));

@@ -25,6 +25,9 @@ import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.jface.dialogs.ErrorDialog;
+import org.eclipse.jface.text.BadLocationException;
+import org.eclipse.jface.text.IDocument;
+import org.eclipse.jface.text.IRegion;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
@@ -38,9 +41,12 @@ import org.eclipse.swt.layout.FillLayout;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Text;
+import org.eclipse.ui.IEditorDescriptor;
 import org.eclipse.ui.IEditorInput;
+import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.IEditorSite;
 import org.eclipse.ui.IWorkbenchCommandConstants;
+import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.dialogs.SaveAsDialog;
 import org.eclipse.ui.handlers.IHandlerService;
@@ -48,6 +54,7 @@ import org.eclipse.ui.ide.IDE;
 import org.eclipse.ui.ide.IGotoMarker;
 import org.eclipse.ui.part.EditorPart;
 import org.eclipse.ui.part.FileEditorInput;
+import org.eclipse.ui.texteditor.ITextEditor;
 import org.eclipse.ui.views.contentoutline.IContentOutlinePage;
 
 import hsm.eclipse.tools.ModelProblem;
@@ -494,8 +501,11 @@ public class HsmDiagramEditor extends EditorPart implements HostSession, IGotoMa
         Preferences.store().setValue(Preferences.PAGE_SETTINGS, json);
     }
 
+    /** Editor of files without an internal default editor (headers without CDT). */
+    private static final String TEXT_EDITOR_ID = "org.eclipse.ui.DefaultTextEditor";
+
     @Override
-    public boolean open(String path) {
+    public boolean open(String path, Position position) {
         IFile target = ProjectFiles.resolve(file.getProject(), path);
         if (target == null || !target.exists()) {
             return false;
@@ -503,13 +513,50 @@ public class HsmDiagramEditor extends EditorPart implements HostSession, IGotoMa
         AtomicReference<Boolean> opened = new AtomicReference<>(false);
         display.syncExec(() -> {
             try {
-                IDE.openEditor(getSite().getPage(), target, true);
-                opened.set(true);
+                opened.set(openEditor(getSite().getPage(), target, position) != null);
             } catch (PartInitException e) {
                 Activator.getDefault().getLog().log(e.getStatus());
             }
         });
         return opened.get();
+    }
+
+    /**
+     * Opens a file of the workspace in its default editor (the HSM editor for models, the CDT C/C++ editor for
+     * headers if it is installed, otherwise the text editor; never an external program) and selects the
+     * position (1-based lines and columns, null: none).
+     */
+    public static IEditorPart openEditor(IWorkbenchPage page, IFile target, Position position) throws PartInitException {
+        IEditorDescriptor descriptor = IDE.getDefaultEditor(target);
+        String id = descriptor != null && descriptor.isInternal() ? descriptor.getId() : TEXT_EDITOR_ID;
+        IEditorPart part = IDE.openEditor(page, target, id, true);
+        if (position == null || part == null) {
+            return part;
+        }
+        if (part instanceof HsmDiagramEditor hsm) {
+            hsm.runInPage("window.hsmApp.revealPosition(" + position.line() + "," + position.column() + ","
+                    + position.endLine() + "," + position.endColumn() + ");");
+        } else if (part.getAdapter(ITextEditor.class) != null) {
+            ITextEditor text = part.getAdapter(ITextEditor.class);
+            IDocument document = text.getDocumentProvider().getDocument(text.getEditorInput());
+            if (document != null) {
+                int start = offsetOf(document, position.line(), position.column());
+                int end = Math.max(start, offsetOf(document, position.endLine(), position.endColumn()));
+                text.selectAndReveal(start, end - start);
+            }
+        }
+        return part;
+    }
+
+    /** The offset of a 1-based line and column (clamped to the document). */
+    static int offsetOf(IDocument document, int line, int column) {
+        try {
+            int index = Math.min(Math.max(line - 1, 0), document.getNumberOfLines() - 1);
+            IRegion region = document.getLineInformation(index);
+            return region.getOffset() + Math.min(Math.max(column - 1, 0), region.getLength());
+        } catch (BadLocationException e) {
+            return 0;
+        }
     }
 
     @Override

@@ -14,11 +14,22 @@ import {
     type AnnotatedElement, type AnnotationContainer
 } from '../model-annotations.js';
 import { diagramElementIds } from './diagram-ids.js';
+import { isAnchorSide, type EdgeAnchor } from './edge-anchors.js';
 import { DEFINITION_ID } from './layout.js';
-import { createManualLayout, type EdgeLayout, type ManualLayout, type NodeLayout } from './manual-layout.js';
+import { createManualLayout, hasEdgeLayout, type EdgeLayout, type ManualLayout, type NodeLayout } from './manual-layout.js';
 
-/** A layout annotation value: numbers, or the orientation of `@regions`. */
-type Value = number[] | string;
+/** A layout annotation value: numbers, the orientation of `@regions` or an anchor (`@from`, `@to`). */
+type Value = number[] | string | EdgeAnchor;
+
+/** The anchor of `@from(side, position)` / `@to(side, position)`; undefined if the arguments are not a side and a number. */
+export function annotationAnchor(annotation: ast.Annotation): EdgeAnchor | undefined {
+    const [side, position] = annotation.arguments;
+    if (annotation.arguments.length !== 2 || !ast.isStringLiteral(side) || !isAnchorSide(side.value)) {
+        return undefined;
+    }
+    const value = numberValue(position);
+    return value === undefined ? undefined : { side: side.value, position: value };
+}
 
 /** The numbers of a layout annotation (number literals, optionally negated); undefined if an argument is not a number. */
 export function annotationNumbers(annotation: ast.Annotation): number[] | undefined {
@@ -134,7 +145,14 @@ export function layoutFromModel(machine: ast.StateMachine): ManualLayout | undef
             if (label) {
                 entry.label = { x: label[0], y: label[1] };
             }
-            if (entry.bends || entry.label) {
+            for (const [name, end] of [['from', 'source'], ['to', 'target']] as const) {
+                const annotation = annotations.get(name);
+                const anchor = annotation ? annotationAnchor(annotation) : undefined;
+                if (anchor && anchor.position >= 0 && anchor.position <= 100) {
+                    entry[end] = anchor;
+                }
+            }
+            if (hasEdgeLayout(entry)) {
                 layout.edges[id] = entry;
             }
             continue;
@@ -215,6 +233,12 @@ function desiredAnnotations(element: LayoutNode, layout: ManualLayout | undefine
         if (edge?.label) {
             result.set('label', [edge.label.x, edge.label.y]);
         }
+        if (edge?.source) {
+            result.set('from', edge.source);
+        }
+        if (edge?.target) {
+            result.set('to', edge.target);
+        }
         return result;
     }
     const node = id ? layout.nodes[id] : undefined;
@@ -255,16 +279,31 @@ function round(value: number): number {
 }
 
 function normalize(value: Value): Value {
-    return typeof value === 'string' ? value : value.map(round);
+    return typeof value === 'string' ? value : Array.isArray(value) ? value.map(round) : { side: value.side, position: roundPosition(value.position) };
+}
+
+/** Anchor positions are written as integers between 0 and 100. */
+function roundPosition(position: number): number {
+    return Math.min(100, Math.max(0, round(position)));
 }
 
 function annotationText(name: string, value: Value): string {
-    return typeof value === 'string' ? `@${name}("${value}")` : `@${name}(${value.map(round).join(', ')})`;
+    if (typeof value === 'string') {
+        return `@${name}("${value}")`;
+    }
+    if (!Array.isArray(value)) {
+        return `@${name}("${value.side}", ${roundPosition(value.position)})`;
+    }
+    return `@${name}(${value.map(round).join(', ')})`;
 }
 
 function sameValue(annotation: ast.Annotation, value: Value): boolean {
     if (typeof value === 'string') {
         return stringValue(annotation) === value;
+    }
+    if (!Array.isArray(value)) {
+        const anchor = annotationAnchor(annotation);
+        return anchor !== undefined && anchor.side === value.side && anchor.position === roundPosition(value.position);
     }
     const numbers = annotationNumbers(annotation);
     return numbers !== undefined && numbers.length === value.length && numbers.every((n, i) => n === round(value[i]));
@@ -312,6 +351,13 @@ export function layoutTextEdits(machine: ast.StateMachine, text: string, layout:
                     const cst = annotation.$cstNode!;
                     edits.push({ offset: cst.offset, length: cst.length, text: annotationText(annotation.name, normalize(value)) });
                 }
+            }
+            // a new @from is written before an existing @to
+            const to = kept.find(a => a.name === 'to');
+            const from = missing.get('from');
+            if (to && from !== undefined) {
+                edits.push({ offset: to.$cstNode!.offset, length: 0, text: `${annotationText('from', from)} ` });
+                missing.delete('from');
             }
             const added = [...missing].map(([name, value]) => annotationText(name, value)).join(' ');
             const others = all.filter(a => !isLayoutAnnotation(a));

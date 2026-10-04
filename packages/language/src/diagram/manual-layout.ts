@@ -23,9 +23,10 @@ import type {
     DiagramEdge, DiagramGraph, DiagramLabel, DiagramNode, DiagramNodeKind, EdgeRouting, LayoutDirection, LayoutOptionsInput, LayoutResult, Point, TextMeasure
 } from './diagram-model.js';
 import { DiagramMetrics, MACHINE_ID, approximateTextMeasure, layoutStateMachine } from './layout.js';
+import { anchorDirection, anchorNormal, anchorPoint, isAnchorSide, supportsAnchors, type AnchorSide, type EdgeAnchor } from './edge-anchors.js';
 import { applyEdgeCurves, elkEdgeRouting, roundedCorners, sampleSpline } from './edge-routes.js';
 import { layoutFromModel } from './layout-annotations.js';
-import { POINT_PORT_KINDS, crossesRect, distributePorts, routeOrthogonal, type OrthogonalRoute } from './orthogonal-router.js';
+import { POINT_PORT_KINDS, crossesRect, distributePorts, routeOrthogonal, type FixedPort, type OrthogonalRoute } from './orthogonal-router.js';
 
 export const MANUAL_LAYOUT_VERSION = 1;
 
@@ -52,6 +53,15 @@ export interface EdgeLayout {
     bends?: Point[];
     /** Offset of the label from its computed position. */
     label?: Point;
+    /** Anchor of the start of the transition on the border of its source state (`@from`). */
+    source?: EdgeAnchor;
+    /** Anchor of the end of the transition on the border of its target state (`@to`). */
+    target?: EdgeAnchor;
+}
+
+/** Whether an edge layout contains anything (waypoints, label offset or anchors). */
+export function hasEdgeLayout(edge: EdgeLayout | undefined): boolean {
+    return !!edge && (!!edge.bends?.length || !!edge.label || !!edge.source || !!edge.target);
 }
 
 export interface ManualLayout {
@@ -142,7 +152,13 @@ export function parseManualLayout(text: string): ManualLayout {
         if (edge?.label !== undefined) {
             entry.label = parsePoint(edge.label, `label offset of '${id}'`);
         }
-        if (entry.bends || entry.label) {
+        for (const end of ['source', 'target'] as const) {
+            const anchor = edge?.[end] as Partial<EdgeAnchor> | undefined;
+            if (anchor && isAnchorSide(anchor.side) && isFiniteNumber(anchor.position)) {
+                entry[end] = { side: anchor.side, position: anchor.position };
+            }
+        }
+        if (hasEdgeLayout(entry)) {
             layout.edges[id] = entry;
         }
     }
@@ -177,7 +193,13 @@ export function serializeManualLayout(layout: ManualLayout): string {
         if (edge.label) {
             entry.label = { x: round(edge.label.x), y: round(edge.label.y) };
         }
-        if (entry.bends || entry.label) {
+        for (const end of ['source', 'target'] as const) {
+            const anchor = edge[end];
+            if (anchor) {
+                entry[end] = { side: anchor.side, position: round(anchor.position) };
+            }
+        }
+        if (hasEdgeLayout(entry)) {
             edges[id] = entry;
         }
     }
@@ -436,6 +458,11 @@ class ManualLayoutEngine {
             if (edge.label && route.label) {
                 edge.label = { ...route.label, x: route.label.x + origin.x, y: route.label.y + origin.y };
             }
+            const source = this.anchor(edge, 'source');
+            const target = this.anchor(edge, 'target');
+            if (source || target) {
+                edge.anchors = { ...(source ? { source: { ...source } } : {}), ...(target ? { target: { ...target } } : {}) };
+            }
         }
         const graph: DiagramGraph = {
             ...auto.graph,
@@ -546,6 +573,8 @@ class ManualLayoutEngine {
             const minimum = this.compositeMinimum(node);
             node.width = Math.max(minimum.width, extent.x + m.compositePadding, explicit?.width ?? 0);
             node.height = Math.max(minimum.height, extent.y + m.compositePadding, explicit?.height ?? 0);
+            // the transitions between the state and its content end on its border
+            this.routeEdges(node.id, 'container');
         } else {
             // leaf: the size computed by the automatic layout is the size of its text
             node.width = Math.max(node.width, explicit?.width ?? 0);
@@ -630,8 +659,11 @@ class ManualLayoutEngine {
             this.placeNew(child, pinned, placed, left, top);
             placed.push(child);
         }
-        if (owner.kind !== 'state' || !owner.regions) {
+        if (owner === this.root) {
             this.routeEdges(owner.id);
+        } else if (owner.kind !== 'state' || !owner.regions) {
+            // (the transitions between the state and its content: once the size of the state is known)
+            this.routeEdges(owner.id, owner.kind === 'state' ? 'inner' : undefined);
         }
         let right = 0;
         let bottom = 0;
@@ -712,12 +744,21 @@ class ManualLayoutEngine {
     // -----------------------------------------------------------------------------------------
     // Edges
 
-    private routeEdges(frame: string): void {
-        const edges = this.framedEdges.get(frame) ?? [];
+    /**
+     * Routes the transitions of a frame node. `part`: only the transitions between the frame and its content
+     * (`container`, routed once the size of the frame is known) or only the others (`inner`).
+     */
+    private routeEdges(frame: string, part?: 'inner' | 'container'): void {
+        const all = this.framedEdges.get(frame) ?? [];
+        const isContainerEdge = (edge: DiagramEdge) => edge.source === frame || edge.target === frame;
+        const edges = part ? all.filter(edge => isContainerEdge(edge) === (part === 'container')) : all;
         const straight: DiagramEdge[] = [];
         const pending: DiagramEdge[] = [];
-        const placed: Point[][] = [];
+        // (the routes of the frame computed before)
+        const placed: Point[][] = all.filter(e => !edges.includes(e)).map(e => this.localRoutes.get(e.id)?.points).filter((p): p is Point[] => !!p);
         const waypoints = new Map<string, Point[]>();
+        /** Routes of anchored self transitions and transitions between a composite state and its content. */
+        const fixed: Array<{ edge: DiagramEdge, points: Point[] }> = [];
         for (const edge of edges) {
             const stored = this.layout.edges[edge.id];
             const label = edge.label ? { ...edge.label } : undefined;
@@ -734,6 +775,24 @@ class ManualLayoutEngine {
                 route = { points: this.polyline(edge, frame, bends), label, waypoints: bends };
                 edge.routing = 'polyline';
                 this.placeLabel(route);
+            } else if (this.anchor(edge, 'source') || this.anchor(edge, 'target')) {
+                // anchored ends: routed from / to the anchors
+                if (edge.source === edge.target) {
+                    fixed.push({ edge, points: this.selfLoop(edge, frame, 0) });
+                    continue;
+                }
+                if (edge.source === frame || edge.target === frame) {
+                    const points = this.anchoredHierarchicalRoute(edge, frame, placed);
+                    if (!points) {
+                        straight.push(edge);
+                        continue;
+                    }
+                    placed.push(points);
+                    fixed.push({ edge, points });
+                    continue;
+                }
+                pending.push(edge);
+                continue;
             } else if (edge.source === edge.target || edge.source === frame || edge.target === frame) {
                 route = this.autoRoute(edge, frame);
                 if (!route) {
@@ -783,13 +842,17 @@ class ManualLayoutEngine {
             placed.push(points);
             routes.push({
                 edge, points, waypoints: through, cuts,
-                source: { vertex: edge.source, rect: source, kind: this.nodes.get(edge.source)!.kind },
-                target: { vertex: edge.target, rect: target, kind: this.nodes.get(edge.target)!.kind }
+                source: { vertex: edge.source, rect: source, kind: this.nodes.get(edge.source)!.kind, fixed: !!this.anchor(edge, 'source') },
+                target: { vertex: edge.target, rect: target, kind: this.nodes.get(edge.target)!.kind, fixed: !!this.anchor(edge, 'target') }
             });
         }
         // (the ends of routes through waypoints stay where they are: shifting them could move a waypoint)
         distributePorts(routes.filter(r => r.waypoints.length === 0));
-        const taken = edges.map(e => this.localRoutes.get(e.id)?.label).filter((l): l is DiagramLabel => !!l);
+        for (const { edge, points } of fixed) {
+            const end = (id: string) => ({ vertex: id, rect: this.boundsIn(id, frame), kind: this.nodes.get(id)!.kind, fixed: true });
+            routes.push({ edge, points, waypoints: [], cuts: [], source: end(edge.source), target: end(edge.target) });
+        }
+        const taken = all.map(e => this.localRoutes.get(e.id)?.label).filter((l): l is DiagramLabel => !!l);
         const vertices = this.labelObstacles(frame);
         const orthogonal = new Set(routes.map(r => r.points));
         const shapes = routes.map(({ edge, points, waypoints: through, cuts }) => this.shapeRoute(edge, frame, points, through, cuts));
@@ -798,7 +861,7 @@ class ManualLayoutEngine {
             const shape = shapes[i];
             const route = { points: shape.points, label: edge.label ? { ...edge.label } : undefined, waypoints: through.length > 0 ? through : undefined };
             edge.routing = shape.routing;
-            this.placeFreeLabel(route, shape.outline, vertices, taken, lines.filter(l => l !== shape.outline));
+            this.placeFreeLabel(route, shape.outline, vertices, taken, lines.filter(l => l !== shape.outline), frame === MACHINE_ID);
             this.applyLabelOffset(route, this.layout.edges[edge.id]);
             this.localRoutes.set(edge.id, route);
             if (route.label) {
@@ -886,6 +949,8 @@ class ManualLayoutEngine {
                 sourceFixed: i > 0 || fixedKind(edge.source),
                 targetFixed: i + 2 < stops.length || fixedKind(edge.target),
                 sourceExclude: exclude,
+                sourcePort: i === 0 ? this.fixedPort(edge, 'source', frame) : undefined,
+                targetPort: i + 2 === stops.length ? this.fixedPort(edge, 'target', frame) : undefined,
                 bounds: this.routingBounds(frame, [...stops, ...obstacles])
             });
             if (!leg) {
@@ -916,12 +981,18 @@ class ManualLayoutEngine {
         }
         // (vertices containing a waypoint are crossed anyway)
         const obstacles = this.obstacles(edge, frame).map(o => o.rect).filter(o => !waypoints.some(w => insideRect(w, o)));
-        const ends = [this.boundsIn(edge.source, frame), this.boundsIn(edge.target, frame)];
-        // shortcuts within the parts between the waypoints (the route keeps passing through them)
+        // (a composite state is not an obstacle for the transitions to / from its content)
+        const ends = [edge.source, edge.target].filter(id => id !== frame).map(id => this.boundsIn(id, frame));
+        // shortcuts within the parts between the waypoints (the route keeps passing through them); the
+        // loop of a self transition is kept
         const bounds = [0, ...cuts, orthogonal.length - 1];
         const polyline: Point[] = [];
         for (let i = 0; i + 1 < bounds.length; i++) {
-            const part = shortcut(orthogonal.slice(bounds[i], bounds[i + 1] + 1), obstacles, ends);
+            const segment = orthogonal.slice(bounds[i], bounds[i + 1] + 1);
+            // (an anchored end is left / entered away from its side)
+            const startNormal = i === 0 ? this.anchorOutward(edge, 'source', frame) : undefined;
+            const endNormal = i + 2 === bounds.length ? this.anchorOutward(edge, 'target', frame) : undefined;
+            const part = edge.source === edge.target ? segment : shortcut(segment, obstacles, ends, startNormal, endNormal);
             polyline.push(...(i === 0 ? part : part.slice(1)));
         }
         if (routing === 'SPLINES') {
@@ -930,6 +1001,9 @@ class ManualLayoutEngine {
         }
         // the ends point towards the next corner (like the routes of the automatic layout), unless the
         // ends of several routes were spread along the side
+        if (edge.source === frame || edge.target === frame || edge.source === edge.target) {
+            return { points: polyline, routing: 'polyline', outline: polyline };
+        }
         const [source, target] = ends;
         const sourceKind = this.nodes.get(edge.source)!.kind;
         const targetKind = this.nodes.get(edge.target)!.kind;
@@ -938,10 +1012,10 @@ class ManualLayoutEngine {
         const free = (a: Point, b: Point) => !obstacles.some(o => crossesRect([a, b], o));
         if (polyline.length > 2 ? free(start, polyline[1]) && free(polyline[polyline.length - 2], end) : free(start, end)) {
             const spread = (p: Point, rect: Rect) => Math.abs(p.x - center(rect).x) > 0.5 && Math.abs(p.y - center(rect).y) > 0.5;
-            if (!spread(polyline[0], source) || ROUND_KINDS.has(sourceKind)) {
+            if ((!spread(polyline[0], source) || ROUND_KINDS.has(sourceKind)) && !this.anchor(edge, 'source')) {
                 polyline[0] = start;
             }
-            if (!spread(polyline[polyline.length - 1], target) || ROUND_KINDS.has(targetKind)) {
+            if ((!spread(polyline[polyline.length - 1], target) || ROUND_KINDS.has(targetKind)) && !this.anchor(edge, 'target')) {
                 polyline[polyline.length - 1] = end;
             }
         }
@@ -1004,7 +1078,8 @@ class ManualLayoutEngine {
      * Places the label next to a segment of the route (preferring long segments and their middle) where it
      * does not cover a vertex, the border of a state, another label or another route.
      */
-    private placeFreeLabel(route: { points: Point[], label?: DiagramLabel }, outline: Point[], vertices: Array<{ rect: Rect, container: boolean }>, labels: Rect[], routes: Point[][]): void {
+    private placeFreeLabel(route: { points: Point[], label?: DiagramLabel }, outline: Point[], vertices: Array<{ rect: Rect, container: boolean }>, labels: Rect[], routes: Point[][],
+        onCanvas = false): void {
         const label = route.label;
         if (!label) {
             return;
@@ -1031,7 +1106,9 @@ class ManualLayoutEngine {
         }
         const contains = (outer: Rect, inner: Rect) => inner.x >= outer.x && inner.y >= outer.y
             && inner.x + inner.width <= outer.x + outer.width && inner.y + inner.height <= outer.y + outer.height;
-        const free = (r: Rect) => vertices.every(v => !overlaps(r, v.rect, 0) || (v.container && contains(v.rect, r)))
+        // (on the canvas: not left of or above it, where it would be cut off)
+        const free = (r: Rect) => (!onCanvas || (r.x >= 0 && r.y >= 0))
+            && vertices.every(v => !overlaps(r, v.rect, 0) || (v.container && contains(v.rect, r)))
             && labels.every(l => !overlaps(r, l, 0))
             && routes.every(other => !crossesRect(other, r));
         const best = candidates.find(free) ?? candidates[0];
@@ -1092,6 +1169,9 @@ class ManualLayoutEngine {
     private straightRoute(edge: DiagramEdge, frame: string, index: number, count: number): Point[] {
         const source = this.boundsIn(edge.source, frame);
         const target = this.boundsIn(edge.target, frame);
+        if (edge.source === edge.target && (this.anchor(edge, 'source') || this.anchor(edge, 'target'))) {
+            return this.selfLoop(edge, frame, index);
+        }
         if (edge.source === edge.target) {
             // self transition: a loop at the right side
             const size = 22 + index * 12;
@@ -1125,16 +1205,101 @@ class ManualLayoutEngine {
         const outer = outerIsSource ? source : target;
         const inner = outerIsSource ? target : source;
         const innerNode = this.nodes.get(outerIsSource ? edge.target : edge.source)!;
-        const c = center(inner);
-        const distances = [
-            { d: inner.x, p: { x: 0, y: c.y } },
-            { d: inner.y, p: { x: c.x, y: 0 } },
-            { d: outer.width - inner.x - inner.width, p: { x: outer.width, y: c.y } },
-            { d: outer.height - inner.y - inner.height, p: { x: c.x, y: outer.height } }
-        ];
-        const border = distances.reduce((a, b) => a.d <= b.d ? a : b).p;
-        const end = borderPoint(inner, innerNode.kind, border);
+        const innerAnchor = this.anchor(edge, outerIsSource ? 'target' : 'source');
+        const outerAnchor = this.anchor(edge, outerIsSource ? 'source' : 'target');
+        const border = outerAnchor ? anchorPoint(outer, outerAnchor) : this.nearestContainerSide(outer, inner, innerAnchor).point;
+        const end = innerAnchor ? anchorPoint(inner, innerAnchor) : borderPoint(inner, innerNode.kind, border);
         return outerIsSource ? [border, end] : [end, border];
+    }
+
+    /**
+     * The side of a composite state (`outer`, in its own coordinates) nearest to a vertex inside it and the
+     * point on it in front of the vertex (in front of the anchor of the vertex: on the side of the anchor).
+     */
+    private nearestContainerSide(outer: Rect, inner: Rect, innerAnchor?: EdgeAnchor): { point: Point, side: AnchorSide } {
+        const c = innerAnchor ? anchorPoint(inner, innerAnchor) : center(inner);
+        const distances: Array<{ d: number, p: Point, side: AnchorSide }> = [
+            { d: inner.x, p: { x: 0, y: c.y }, side: 'left' },
+            { d: inner.y, p: { x: c.x, y: 0 }, side: 'top' },
+            { d: outer.width - inner.x - inner.width, p: { x: outer.width, y: c.y }, side: 'right' },
+            { d: outer.height - inner.y - inner.height, p: { x: c.x, y: outer.height }, side: 'bottom' }
+        ];
+        const best = innerAnchor
+            ? distances.find(d => d.side === innerAnchor.side) ?? distances[0]
+            : distances.reduce((a, b) => a.d <= b.d ? a : b);
+        return { point: best.p, side: best.side };
+    }
+
+    /** The anchor of an end of a transition (only at states; undefined if none is stored). */
+    private anchor(edge: DiagramEdge, end: 'source' | 'target'): EdgeAnchor | undefined {
+        const anchor = this.layout.edges[edge.id]?.[end];
+        return anchor && supportsAnchors(this.nodes.get(edge[end])?.kind) ? anchor : undefined;
+    }
+
+    /** The direction away from the side of an anchored end into the frame (undefined: not anchored). */
+    private anchorOutward(edge: DiagramEdge, end: 'source' | 'target', frame: string): Point | undefined {
+        const anchor = this.anchor(edge, end);
+        if (!anchor) {
+            return undefined;
+        }
+        const normal = anchorNormal(anchor.side);
+        return edge[end] === frame ? { x: -normal.x, y: -normal.y } : normal;
+    }
+
+    /** The anchored end of a transition as fixed port of the orthogonal router (relative to the frame). */
+    private fixedPort(edge: DiagramEdge, end: 'source' | 'target', frame: string): FixedPort | undefined {
+        const anchor = this.anchor(edge, end);
+        if (!anchor) {
+            return undefined;
+        }
+        const rect = this.boundsIn(edge[end], frame);
+        const dir = anchorDirection(anchor.side);
+        // (the anchor of a composite state on a transition to / from its content: into the state)
+        return { point: anchorPoint(rect, anchor), dir: edge[end] === frame ? (dir + 2) % 4 : dir };
+    }
+
+    /**
+     * The orthogonal route of a transition between a composite state and a vertex inside it with an
+     * anchored end: from the anchor on the border of the composite state (or the side nearest to the
+     * vertex) around the other vertices inside the state (undefined if there is no such route).
+     */
+    private anchoredHierarchicalRoute(edge: DiagramEdge, frame: string, placed: Point[][]): Point[] | undefined {
+        const outerIsSource = edge.source === frame;
+        const innerId = outerIsSource ? edge.target : edge.source;
+        const node = this.nodes.get(frame)!;
+        const outer: Rect = { x: 0, y: 0, width: node.width, height: node.height };
+        const inner = this.boundsIn(innerId, frame);
+        const innerEnd = outerIsSource ? 'target' : 'source';
+        const outerAnchor = this.anchor(edge, outerIsSource ? 'source' : 'target');
+        const nearest = this.nearestContainerSide(outer, inner, this.anchor(edge, innerEnd));
+        const side = outerAnchor?.side ?? nearest.side;
+        const point = outerAnchor ? anchorPoint(outer, outerAnchor) : nearest.point;
+        const outerPort: FixedPort = { point, dir: (anchorDirection(side) + 2) % 4 };
+        const innerPort = this.fixedPort(edge, innerEnd, frame);
+        const fixedKind = POINT_PORT_KINDS.has(this.nodes.get(innerId)!.kind);
+        const zero: Rect = { x: point.x, y: point.y, width: 0, height: 0 };
+        return routeOrthogonal({
+            source: outerIsSource ? zero : inner,
+            target: outerIsSource ? inner : zero,
+            sourcePort: outerIsSource ? outerPort : innerPort,
+            targetPort: outerIsSource ? innerPort : outerPort,
+            sourceFixed: fixedKind, targetFixed: fixedKind,
+            obstacles: this.obstacles(edge, frame).map(o => o.rect), placed,
+            bounds: { minX: 0, minY: 0, maxX: outer.width, maxY: outer.height },
+            // (the content of a state is close to its border)
+            compact: true
+        });
+    }
+
+    /**
+     * The loop of a self transition with anchored ends (a missing anchor: on the right side, like the loop
+     * of a transition without anchors).
+     */
+    private selfLoop(edge: DiagramEdge, frame: string, index: number): Point[] {
+        const rect = this.boundsIn(edge.source, frame);
+        const a = this.anchor(edge, 'source') ?? { side: 'right', position: 35 };
+        const b = this.anchor(edge, 'target') ?? { side: 'right', position: 65 };
+        return selfLoopRoute(rect, a, b, 22 + index * 12);
     }
 
     /** Polyline from the border of the source through the bend points to the border of the target. */
@@ -1143,10 +1308,14 @@ class ManualLayoutEngine {
         const target = this.boundsIn(edge.target, frame);
         const sourceKind = this.nodes.get(edge.source)!.kind;
         const targetKind = this.nodes.get(edge.target)!.kind;
-        const first = bends[0] ?? center(target);
-        const last = bends[bends.length - 1] ?? center(source);
-        const start = edge.source === frame ? nearestBorderPoint(source, first) : borderPoint(source, sourceKind, first);
-        const end = edge.target === frame ? nearestBorderPoint(target, last) : borderPoint(target, targetKind, last);
+        const sourceAnchor = this.anchor(edge, 'source');
+        const targetAnchor = this.anchor(edge, 'target');
+        const first = bends[0] ?? (targetAnchor ? anchorPoint(target, targetAnchor) : center(target));
+        const last = bends[bends.length - 1] ?? (sourceAnchor ? anchorPoint(source, sourceAnchor) : center(source));
+        const start = sourceAnchor ? anchorPoint(source, sourceAnchor)
+            : edge.source === frame ? nearestBorderPoint(source, first) : borderPoint(source, sourceKind, first);
+        const end = targetAnchor ? anchorPoint(target, targetAnchor)
+            : edge.target === frame ? nearestBorderPoint(target, last) : borderPoint(target, targetKind, last);
         return [start, ...bends, end];
     }
 
@@ -1215,7 +1384,9 @@ class ManualLayoutEngine {
             const shift = this.shifts.get(this.frames.get(edge.id)!) ?? { x: 0, y: 0 };
             result.edges[edge.id] = {
                 ...(stored.bends?.length ? { bends: stored.bends.map(p => ({ x: p.x + shift.x, y: p.y + shift.y })) } : {}),
-                ...(stored.label ? { label: { ...stored.label } } : {})
+                ...(stored.label ? { label: { ...stored.label } } : {}),
+                ...(stored.source ? { source: { ...stored.source } } : {}),
+                ...(stored.target ? { target: { ...stored.target } } : {})
             };
         }
         return result;
@@ -1292,6 +1463,61 @@ export function borderPoint(rect: Rect, kind: DiagramNodeKind, toward: Point): P
     return { x: c.x + dx * t, y: c.y + dy * t };
 }
 
+/**
+ * The loop of a self transition from anchor `a` to anchor `b` on the border of `rect`: perpendicular out of
+ * the side of `a` by `size`, around the corners of the rectangle (the shorter way) and perpendicular back
+ * into the side of `b`.
+ */
+export function selfLoopRoute(rect: Rect, a: EdgeAnchor, b: EdgeAnchor, size: number): Point[] {
+    const start = anchorPoint(rect, a);
+    const end = anchorPoint(rect, b);
+    const na = anchorNormal(a.side);
+    const nb = anchorNormal(b.side);
+    const out = { x: start.x + na.x * size, y: start.y + na.y * size };
+    const back = { x: end.x + nb.x * size, y: end.y + nb.y * size };
+    // the corners of the rectangle enlarged by `size`, clockwise from top left; the corner after side i
+    // (clockwise: top, right, bottom, left) is corners[(i + 1) % 4]
+    const left = rect.x - size;
+    const top = rect.y - size;
+    const right = rect.x + rect.width + size;
+    const bottom = rect.y + rect.height + size;
+    const corners: Point[] = [{ x: left, y: top }, { x: right, y: top }, { x: right, y: bottom }, { x: left, y: bottom }];
+    const order: AnchorSide[] = ['top', 'right', 'bottom', 'left'];
+    const ia = order.indexOf(a.side);
+    const ib = order.indexOf(b.side);
+    let path: Point[] = [out, back];
+    if (ia !== ib) {
+        const clockwise: Point[] = [];
+        for (let i = ia; i !== ib; i = (i + 1) % 4) {
+            clockwise.push(corners[(i + 1) % 4]);
+        }
+        const counter: Point[] = [];
+        for (let i = ia; i !== ib; i = (i + 3) % 4) {
+            counter.push(corners[i]);
+        }
+        const length = (points: Point[]) => points.slice(1).reduce((sum, p, i) => sum + Math.hypot(p.x - points[i].x, p.y - points[i].y), 0);
+        const cw = [out, ...clockwise, back];
+        const ccw = [out, ...counter, back];
+        path = clockwise.length < counter.length || (clockwise.length === counter.length && length(cw) <= length(ccw)) ? cw : ccw;
+    }
+    // without duplicates and points in the middle of straight lines
+    const result: Point[] = [];
+    for (const p of [start, ...path, end]) {
+        const last = result[result.length - 1];
+        const before = result[result.length - 2];
+        if (last && Math.abs(last.x - p.x) < 0.01 && Math.abs(last.y - p.y) < 0.01) {
+            continue;
+        }
+        if (before && last && ((Math.abs(before.x - last.x) < 0.01 && Math.abs(last.x - p.x) < 0.01)
+            || (Math.abs(before.y - last.y) < 0.01 && Math.abs(last.y - p.y) < 0.01))) {
+            result[result.length - 1] = p;
+            continue;
+        }
+        result.push(p);
+    }
+    return result;
+}
+
 /** The point on the border of a container (in its own coordinates) nearest to `point`. */
 function nearestBorderPoint(rect: Rect, point: Point): Point {
     const x = Math.min(Math.max(point.x, rect.x), rect.x + rect.width);
@@ -1309,10 +1535,17 @@ function nearestBorderPoint(rect: Rect, point: Point): Point {
  * Removes the corners of a route where the direct line between the points before and after does not
  * come close to an obstacle (or run through the source / target).
  */
-function shortcut(points: Point[], obstacles: Rect[], ends: Rect[]): Point[] {
+function shortcut(points: Point[], obstacles: Rect[], ends: Rect[], startNormal?: Point, endNormal?: Point): Point[] {
     const clearance = 8;
     const inflated = obstacles.map(o => ({ x: o.x - clearance, y: o.y - clearance, width: o.width + 2 * clearance, height: o.height + 2 * clearance }));
-    const free = (a: Point, b: Point) => !inflated.some(o => crossesRect([a, b], o)) && !ends.some(e => crossesRect([a, b], e));
+    // a segment from / to an anchored end must leave / enter its side at an angle of at least 30 degrees
+    const outward = (from: Point, to: Point, normal: Point | undefined) => {
+        const length = Math.hypot(to.x - from.x, to.y - from.y);
+        return !normal || ((to.x - from.x) * normal.x + (to.y - from.y) * normal.y) >= 0.5 * length;
+    };
+    const last = points.length - 1;
+    const free = (a: Point, b: Point) => !inflated.some(o => crossesRect([a, b], o)) && !ends.some(e => crossesRect([a, b], e))
+        && (a !== points[0] || outward(a, b, startNormal)) && (b !== points[last] || outward(b, a, endNormal));
     const result = [points[0]];
     let i = 0;
     while (i < points.length - 1) {

@@ -1,7 +1,9 @@
 // Smoke test of the desktop app (used by CI on every platform; on Linux under xvfb-run): starts the app with
 // `--smoke-test <copy of examples/door-with-motor/gate.hsm>`, which opens the model in a hidden window, waits
 // until the diagram shows its states and the page validated it without errors (the import of motor.hsm is
-// resolved from the folder), edits the text, saves it through the page (api/save) and exits with 0.
+// resolved from the folder), edits the text, saves it through the page (api/save), goes to the definition of
+// the import of motor.hsm (a window of its own) and opens a header at a position (a read-only viewer window),
+// and exits with 0.
 // Usage: node scripts/smoke-test.mjs [app executable]
 //   default: the unpacked app of scripts/package.mjs in release/, else Electron with dist/ (development)
 import { spawn } from 'node:child_process';
@@ -44,6 +46,8 @@ const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'hsm-desktop-smoke-'));
 const model = path.join(tmp, 'models', 'gate.hsm');
 const result = path.join(tmp, 'result.json');
 await fs.cp(path.join(repo, 'examples', 'door-with-motor'), path.join(tmp, 'models'), { recursive: true });
+// a header for the go to definition into a header viewer window
+await fs.writeFile(path.join(tmp, 'models', 'smoke_types.h'), '#pragma once\nenum class Mode { Off, On };\n');
 
 const args = [...prefix, '--smoke-test', model, '--smoke-result', result];
 if (process.platform === 'linux') {
@@ -74,4 +78,4 @@ if (code !== 0 || !report.ok) {
     console.log(`FAIL: exit code ${code}, ${JSON.stringify(report)}`);
     process.exit(1);
 }
-console.log(`ok: the model was shown (${report.states} states in the diagram) and saved (version ${report.version})`);
+console.log(`ok: the model was shown (${report.states} states in the diagram), saved and navigated (${(report.navigation ?? []).join(', ')}) (version ${report.version})`);

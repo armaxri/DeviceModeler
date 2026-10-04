@@ -14,6 +14,15 @@
     --ui-hover: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
 }
 
+/* tooltips (styles/tooltips.css): the hover widget of VS Code (native tooltips do not show in webviews) */
+:root, body.ui-dark {
+    --tooltip-bg: var(--vscode-editorHoverWidget-background, var(--ui-panel));
+    --tooltip-fg: var(--vscode-editorHoverWidget-foreground, var(--ui-text));
+    --tooltip-border: var(--vscode-editorHoverWidget-border, var(--ui-border));
+    --tooltip-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
+    --tooltip-font: var(--vscode-font-size, 13px)/1.4 var(--vscode-font-family, system-ui, sans-serif);
+}
+
 body {
     padding: 0;
     font-family: var(--vscode-font-family);
@@ -124,5 +133,52 @@ button.side-panel-toggle {
 .toolbar label.toggle {
     height: 24px;
     border-radius: 2px;
+}
+
+/* Debugging a test: the diagram shows the state of the debug session (read-only) */
+#diagram-banner.debug-banner {
+    background: var(--vscode-editorWidget-background, #f0f6ff);
+    border-color: var(--vscode-debugIcon-pauseForeground, var(--vscode-focusBorder, #75beff));
+    color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
+    max-width: calc(100% - 40px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.debug-panel {
+    padding: 8px 12px;
+}
+
+.debug-panel h3 {
+    margin: 4px 0 8px;
+    font-size: 1.05em;
+}
+
+.debug-panel h4 {
+    margin: 12px 0 4px;
+    font-size: 0.95em;
+    color: var(--ui-muted);
+    font-weight: 600;
+}
+
+.debug-panel .debug-status {
+    margin: 0;
+    word-break: break-word;
+}
+
+.debug-panel .debug-active {
+    margin: 0;
+    padding-left: 18px;
+    font-family: var(--vscode-editor-font-family, monospace);
+}
+
+.debug-panel .debug-empty, .debug-panel .debug-hint {
+    color: var(--ui-muted);
+}
+
+.debug-panel .debug-hint {
+    margin-top: 16px;
+    font-size: 0.9em;
 }
 

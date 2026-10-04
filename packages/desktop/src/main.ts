@@ -10,7 +10,7 @@ import { app, BrowserWindow, dialog, Menu, nativeTheme, shell, type MenuItemCons
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { FileHost, isInside, writeFileAtomic, type Session } from './file-host.js';
+import { FileHost, isInside, positionQuery, writeFileAtomic, type OpenPosition, type Session } from './file-host.js';
 import { createServer, listen } from './server.js';
 import { directoryWebFiles } from './web-files.js';
 
@@ -43,6 +43,8 @@ interface WindowState {
     closing?: boolean;
     /** A save dialog is open (the menu and the page may both ask to save). */
     saving?: boolean;
+    /** A header viewer window (read-only, go to definition): the file it shows. */
+    viewer?: string;
 }
 
 const windows = new Map<BrowserWindow, WindowState>();
@@ -127,6 +129,11 @@ function createWindow(state: WindowState): BrowserWindow {
         }
     });
     contents.on('did-navigate', (_event, url) => {
+        if (state.viewer) {
+            // a header viewer shows a file of the session of a model window, it does not own the session
+            win.setTitle(`${path.basename(state.viewer)} (read-only) — ${path.dirname(state.viewer)}`);
+            return;
+        }
         const token = /\/s\/([0-9a-f]{32})\/index\.html/.exec(url)?.[1];
         if (token && host.session(token) && token !== state.token) {
             if (state.token) {
@@ -167,14 +174,20 @@ function windowOfSession(session: Session): BrowserWindow | undefined {
     return [...windows].find(([, state]) => state.token === session.token)?.[0];
 }
 
-/** Opens a model in a window (or focuses the window that shows it); `root`: the boundary of its imports. */
-function openFile(file: string, root?: string): BrowserWindow {
+/**
+ * Opens a model in a window (or focuses the window that shows it); `root`: the boundary of its imports;
+ * `position`: the range to select (go to definition from another model).
+ */
+function openFile(file: string, root?: string, position?: OpenPosition): BrowserWindow {
     const resolved = path.resolve(file);
     for (const [win, state] of windows) {
         const session = state.token ? host.session(state.token) : undefined;
         if (session && !state.untitled && host.fileOf(session) === safeRealPath(resolved)) {
             win.show();
             win.focus();
+            if (position) {
+                void inPage(win.webContents, `window.hsmApp.revealPosition(${position.line}, ${position.column}, ${position.endLine}, ${position.endColumn})`).catch(() => undefined);
+            }
             return win;
         }
     }
@@ -182,8 +195,27 @@ function openFile(file: string, root?: string): BrowserWindow {
     root ??= [...windows.values()].map(state => state.folder).find(folder => folder && isInside(folder, safeRealPath(resolved)));
     const { session, page } = host.openFile(resolved, root);
     const win = createWindow({ token: session.token });
-    void win.loadURL(baseUrl + page);
+    // (the page reveals a position of its URL once it has started)
+    void win.loadURL(baseUrl + page + positionQuery(position));
     addRecent(host.fileOf(session));
+    return win;
+}
+
+/**
+ * Shows a header read-only in a viewer window (the web app with `view=<path>`: Monaco with the C++ grammar),
+ * at the range of a go to definition; a header that is already shown gets the new position.
+ */
+function openViewer(session: Session, file: string, position?: OpenPosition): BrowserWindow {
+    const real = safeRealPath(file);
+    const url = `${baseUrl}s/${session.token}/index.html?host=http&view=${encodeURIComponent(path.relative(session.root, real).split(path.sep).join('/'))}${positionQuery(position)}`;
+    let win = [...windows].find(([, state]) => state.viewer === real)?.[0];
+    if (!win) {
+        win = createWindow({ viewer: real });
+        win.setSize(1000, 800);
+    }
+    void win.loadURL(url);
+    win.show();
+    win.focus();
     return win;
 }
 
@@ -547,13 +579,51 @@ async function smokeTest(model: string, resultFile: string | undefined): Promise
         if (!saved) {
             throw new Error('Save in the page did not write the file');
         }
-        report({ ok: true, states, file: model });
+        const navigation = await smokeTestNavigation(win, model);
+        report({ ok: true, states, file: model, navigation });
         clearTimeout(timeout);
         app.exit(0);
     } catch (error) {
         report({ ok: false, error: error instanceof Error ? error.message : String(error) });
         app.exit(1);
     }
+}
+
+/**
+ * Go to definition in the page (smoke test): F12 on the import path of `motor.hsm` opens the model in a window
+ * of its own; a header next to the model (`smoke_types.h`, written by scripts/smoke-test.mjs) opens in a
+ * read-only viewer window with the name of the declaration selected (`api/open` with a position).
+ */
+async function smokeTestNavigation(win: BrowserWindow, model: string): Promise<string[]> {
+    const done: string[] = [];
+    const until = async (what: string, condition: () => Promise<boolean> | boolean) => {
+        for (let i = 0; i < 150; i++) {
+            if (await condition()) {
+                return;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        throw new Error(`navigation: ${what}`);
+    };
+    const motor = safeRealPath(path.join(path.dirname(model), 'motor.hsm'));
+    await inPage(win.webContents, `(() => { const e = window.hsmApp.editor; const m = e.getModel(); e.setPosition(m.getPositionAt(m.getValue().indexOf('motor.hsm')));
+        e.focus(); e.trigger('smoke', 'editor.action.revealDefinition', null); })()`);
+    await until('motor.hsm was not opened', () => [...windows.values()].some(state => {
+        const session = state.token ? host.session(state.token) : undefined;
+        return !!session && host.fileOf(session) === motor;
+    }));
+    done.push('model');
+    const header = path.join(path.dirname(model), 'smoke_types.h');
+    if (fs.existsSync(header)) {
+        await inPage(win.webContents, `fetch('api/open?line=2&column=12&endLine=2&endColumn=16', { method: 'POST', body: 'smoke_types.h' }).then(r => r.status)`);
+        const viewer = () => [...windows].find(([, state]) => state.viewer === safeRealPath(header))?.[0];
+        await until('no viewer window for the header', () => !!viewer());
+        const contents = viewer()!.webContents;
+        await until('the viewer does not show the declaration', async () => await inPage<string>(contents,
+            "(() => { const t = document.querySelector('.file-viewer-title'); return t ? t.textContent : ''; })()").catch(() => '') === 'smoke_types.h');
+        done.push('header');
+    }
+    return done;
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -584,7 +654,8 @@ async function startServer(): Promise<void> {
                     updateTitle(win);
                 }
             },
-            openFile: (session, file) => openFile(file, session.root),
+            // models in their own window; headers (go to definition) in a read-only viewer window
+            openFile: (session, file, position) => /\.hsm$/i.test(file) ? openFile(file, session.root, position) : openViewer(session, file, position),
             // a new model: Save (also Ctrl+S in the page) asks for the file
             saveRequested: (session, text) => {
                 const win = windowOfSession(session);

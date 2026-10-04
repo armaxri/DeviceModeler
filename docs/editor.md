@@ -20,6 +20,7 @@ The web app (`npm run dev`, `packages/web`) edits the text and the diagram side 
 | Rename / edit label | double-click or `F2` |
 | Move into another state | hold `Shift` while dropping it (a plain drop only moves it, see [Manual layout](#manual-layout-experimental)) |
 | Delete | `Del` / `Backspace` or the trash button |
+| Fit the diagram to the view | *Fit to screen* button at the bottom of the palette (the tooltips of the palette name each tool and its key) |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Y` (shared with the text editor) |
 | Keep a tool active | hold `Shift` while choosing it, `Esc` to go back to selection |
 
@@ -76,7 +77,7 @@ mode switch. Design and trade-offs: [Manual layout](manual-layout.md).
 | --- | --- | --- |
 | *Direction* (Top → bottom / Left → right) | always | nothing – direction of the automatic arrangement (for stored positions: of new elements and of *Re-arrange*) |
 | **Store positions** | positions automatic | writes the current automatic arrangement as layout annotations (the diagram does not change; it can then be adjusted by hand) |
-| **Re-arrange** | positions stored | arranges all elements automatically again and replaces the layout annotations with the new positions (waypoints, sizes and label positions are dropped) |
+| **Re-arrange** | positions stored | arranges all elements automatically again and replaces the layout annotations with the new positions (waypoints, anchored ends, sizes and label positions are dropped) |
 | **Clear positions** | positions stored | removes all layout annotations: the diagram is arranged automatically again and follows every change of the model |
 
 - *Store positions* / *Re-arrange* and *Clear positions* are one text edit each, undone with `Ctrl+Z`
@@ -98,6 +99,8 @@ mode switch. Design and trade-offs: [Manual layout](manual-layout.md).
 | Resize a state | select it, drag the handle at the bottom right corner |
 | Add / move / remove a waypoint | select the transition; double-click its line / drag the point / double-click the point |
 | Move a transition label | select the transition, drag its label |
+| Move the start / end of a transition along the border of its state | select the transition, drag the square at its start / end (it snaps to the nearest point of the border) |
+| Place the start / end automatically again | double-click the square, or *Reset endpoints* in the side panel (both ends) |
 | Arrange automatically / back to the automatic arrangement | *Store positions* or *Re-arrange* / *Clear positions* in the toolbar |
 
 Importing an itemis CREATE `.sct` file keeps the arrangement of its diagram (also when several

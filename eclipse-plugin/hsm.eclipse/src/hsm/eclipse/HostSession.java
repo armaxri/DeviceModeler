@@ -29,8 +29,38 @@ public interface HostSession {
     /** The page settings (JSON) to store. */
     void settings(String json);
 
-    /** The page asks to open another file; false if it does not exist. */
-    boolean open(String path);
+    /**
+     * A position in a file of {@code api/open}: 1-based lines and columns (UTF-16 code units, as in Monaco); the
+     * end is the end of the range to select (the start if the page sent no range).
+     */
+    record Position(int line, int column, int endLine, int endColumn) {
+
+        /** The position of the query parameters {@code line}, {@code column}, {@code endLine}, {@code endColumn}; null without a line. */
+        public static Position of(java.util.function.Function<String, String> parameters) {
+            int line = number(parameters.apply("line"));
+            if (line < 1) {
+                return null;
+            }
+            int column = Math.max(1, number(parameters.apply("column")));
+            int endLine = number(parameters.apply("endLine"));
+            int endColumn = number(parameters.apply("endColumn"));
+            return endLine >= line && endColumn >= 1 ? new Position(line, column, endLine, endColumn) : new Position(line, column, line, column);
+        }
+
+        private static int number(String value) {
+            try {
+                return value == null ? -1 : Integer.parseInt(value.trim());
+            } catch (NumberFormatException e) {
+                return -1;
+            }
+        }
+    }
+
+    /**
+     * The page asks to open another file below the root (a model, or a C/C++ header of a go to definition) in the
+     * editor for its type, at a position if one is given ({@code null}: none); false if it does not exist.
+     */
+    boolean open(String path, Position position);
 
     /** Stores an exported diagram; returns a message for the user. */
     String export(String fileName, byte[] content) throws IOException;

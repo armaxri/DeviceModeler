@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { generateCpp, generateCppScenarioHarness, type CppGeneratorResult } from '../src/generator/cpp/index.js';
 import { scenarioFiles as filesOfScenario, scenarioText, validateScenario } from '../src/simulation/index.js';
-import { CPP_TYPE_SCENARIOS, errors, parse, SUBMACHINE_SCENARIOS } from './helpers.js';
+import { CPP_TYPE_SCENARIOS, errors, parse, warnings, SUBMACHINE_SCENARIOS } from './helpers.js';
 import { SUBMACHINES_NOT_SUPPORTED } from '../src/generator/common/statechart-generator.js';
 
 /**
@@ -298,8 +298,9 @@ describe.skipIf(!GXX && !CLANGXX)('C++ code generator: examples', () => {
     test('the example examples/cpp-class-sections compiles with the member functions of the application and runs', async () => {
         const source = path.join(exampleDirectory, 'cpp-class-sections');
         const read = (name: string) => fs.readFileSync(path.join(source, name), 'utf-8');
-        const parsed = await parse(read('controller.hsm'), { 'config.h': read('config.h') });
+        const parsed = await parse(read('controller.hsm'), { 'config.h': read('config.h'), 'driver.h': read('driver.h') });
         expect(errors(parsed)).toEqual([]);
+        expect(warnings(parsed)).toEqual([]);
         const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hsm-cpp-class-sections-'));
         try {
             for (const variant of [{ standard: 17 as const, flags: FLAGS }, { standard: 11 as const, flags: [...FLAGS.filter(f => !f.startsWith('-std=')), '-std=c++11'] }]) {

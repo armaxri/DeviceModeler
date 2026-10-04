@@ -1,20 +1,14 @@
+import { DefaultWorkspaceManager, DocumentState, URI, type LangiumDocument, type MaybePromise, type Module } from 'langium';
 import {
-    AstUtils, CstUtils, DefaultWorkspaceManager, DocumentState, GrammarUtils, isReference, URI, type AstNode, type LangiumDocument, type MaybePromise,
-    type Module, type References
-} from 'langium';
-import {
-    AbstractSemanticTokenProvider, DefaultDefinitionProvider, MultilineCommentHoverProvider, type DeclarationProvider, type DocumentLinkProvider,
-    type LangiumServices, type PartialLangiumServices, type SemanticTokenAcceptor, type TypeDefinitionProvider
+    DefaultDefinitionProvider, type DeclarationProvider, type DocumentLinkProvider, type LangiumServices, type PartialLangiumServices,
+    type TypeDefinitionProvider
 } from 'langium/lsp';
-import {
-    LocationLink, SemanticTokenModifiers, SemanticTokenTypes, type CancellationToken, type DeclarationParams, type DefinitionParams, type DocumentLink, type DocumentLinkParams,
-    type Hover, type HoverParams, type TypeDefinitionParams
+import type {
+    CancellationToken, DeclarationParams, DefinitionParams, DocumentLink, DocumentLinkParams, LocationLink, TypeDefinitionParams
 } from 'vscode-languageserver';
 import {
-    cppElementAt, cppHover, cppHeaderStore, cppLocations, cppTypeLocationsOf, cppTypeOfReference, createHsmServices, importKind, isClassScope, isCppReference,
-    isElementReference, isEventDeclaration, isImportPath, isInterfaceScope, isInternalScope, isOperationDeclaration, isPseudoState, isState, isStateMachine,
-    isTypeReference, isVariableDeclaration, machineType, nodeText, qualifiedName, referenceBaseRange, resolveCppValue, resolvedImports, scopeLabel,
-    type CppLocation, type HsmServiceExtensions, type StateMachine
+    cppHeaderStore, createHsmServices, declarationLinks, definitionLinks, importKind, importLinks, ModelHoverProvider, ModelSemanticTokenProvider,
+    semanticTokenKind, toLocationLinks, typeDefinitionLinks, type HsmServiceExtensions, type NavigationLink
 } from '../index.js';
 import type { DefaultSharedModuleContext, LangiumSharedServices, PartialLangiumSharedServices } from 'langium/lsp';
 import type { InitializeParams } from 'vscode-languageserver';
@@ -22,124 +16,36 @@ import {
     headerSettingsFromSection, installNodeHeaderSupport, type HeaderConfigFinder, type HeaderSettingsSection
 } from './cpp-headers-node.js';
 
-interface TokenKind {
-    type: string;
-    modifier?: string[];
-}
+/*
+ * The language server features of models are shared with the web app's Monaco editor (also embedded in
+ * Eclipse, JetBrains IDEs and the desktop app): navigation (`lsp/model-navigation.ts`), semantic tokens
+ * (`lsp/semantic-tokens.ts`) and hover (`lsp/model-hover.ts`) of the language package. The classes here adapt
+ * them to Langium's LSP services. The server (`language-server.ts`) runs in the VS Code extension and as
+ * `hsm lsp` of the command line executable (Eclipse, JetBrains IDEs, other LSP clients). Not exported from
+ * the package index (Node.js only).
+ */
 
 /** Semantic token type of a declaration (or of the target of a reference). */
-export function tokenKind(node: AstNode | undefined): TokenKind | undefined {
-    switch (node?.$type) {
-        case 'StateMachine':
-        case 'TestClass':
-            return { type: SemanticTokenTypes.class };
-        case 'State':
-            return { type: SemanticTokenTypes.type };
-        case 'PseudoState':
-            return { type: SemanticTokenTypes.enumMember };
-        case 'EventDeclaration':
-            return { type: SemanticTokenTypes.event };
-        case 'VariableDeclaration':
-            return isVariableDeclaration(node) && (node.const || node.readonly)
-                ? { type: SemanticTokenTypes.variable, modifier: [SemanticTokenModifiers.readonly] }
-                : { type: SemanticTokenTypes.variable };
-        case 'OperationDeclaration':
-            return { type: SemanticTokenTypes.function };
-        case 'TestOperation':
-            return { type: SemanticTokenTypes.method };
-        case 'Parameter':
-            return { type: SemanticTokenTypes.parameter };
-        case 'InterfaceScope':
-            return { type: SemanticTokenTypes.namespace };
-        default:
-            return undefined;
-    }
-}
+export const tokenKind = semanticTokenKind;
 
 /**
  * Semantic highlighting for both languages: names of declarations and all cross references are
  * highlighted by the kind of the element they declare / refer to (states, events, variables,
- * constants, operations, …), which the TextMate grammar cannot know.
+ * constants, operations, …), C++ names of the headers as types, enums, enumerators and constants.
  */
-export class HsmSemanticTokenProvider extends AbstractSemanticTokenProvider {
-
-    protected override highlightElement(node: AstNode, acceptor: SemanticTokenAcceptor): void {
-        // C++ names of imported headers: types, enumerators and constants
-        const cppType = isTypeReference(node) && node.$cstNode ? cppTypeOfReference(node) : undefined;
-        if (cppType && node.$cstNode) {
-            acceptor({ cst: node.$cstNode, type: cppType.resolved.kind === 'enum' ? SemanticTokenTypes.enum : SemanticTokenTypes.type });
-        } else if (isCppReference(node) && node.$cstNode) {
-            const resolved = resolveCppValue(node);
-            const enumerator = resolved.info?.declaration.kind === 'enumerator';
-            acceptor({ cst: node.$cstNode, type: enumerator ? SemanticTokenTypes.enumMember : SemanticTokenTypes.variable, modifier: enumerator ? [] : [SemanticTokenModifiers.readonly] });
-        }
-        const own = tokenKind(node);
-        if (own && node.$cstNode && GrammarUtils.findNodeForProperty(node.$cstNode, 'name')) {
-            acceptor({ node, property: 'name' as never, type: own.type, modifier: [SemanticTokenModifiers.declaration, ...own.modifier ?? []] });
-        }
-        for (const [property, value] of Object.entries(node)) {
-            if (property.startsWith('$') || !isReference(value)) {
-                continue;
-            }
-            const target = tokenKind(value.ref);
-            if (target && value.$refNode) {
-                acceptor({ cst: value.$refNode, type: target.type, modifier: target.modifier });
-            }
-        }
-    }
-}
+export class HsmSemanticTokenProvider extends ModelSemanticTokenProvider { }
 
 /**
  * Hover: a short signature of the declaration (e.g. `in event request : integer` or
- * `state Operating.Red`) followed by its documentation comment.
+ * `state Operating.Red`) followed by its documentation comment; the declarations of C++ names.
  */
-export class HsmHoverProvider extends MultilineCommentHoverProvider {
+export class HsmHoverProvider extends ModelHoverProvider { }
 
-    /** C++ names, struct members and header imports: the declaration of the header (see `cpp-lsp.ts`). */
-    override async getHoverContent(document: LangiumDocument, params: HoverParams): Promise<Hover | undefined> {
-        const cpp = cppHover(document, document.textDocument.offsetAt(params.position));
-        if (cpp) {
-            return { contents: { kind: 'markdown', value: cpp } };
-        }
-        return super.getHoverContent(document, params);
-    }
+export { hoverSignature } from '../index.js';
 
-    protected override getAstNodeHoverContent(node: AstNode): MaybePromise<string | undefined> {
-        const signature = hoverSignature(node);
-        const documentation = super.getAstNodeHoverContent(node);
-        // the documentation provider starts with a shorter signature of its own: replaced by this one
-        const withoutSignature = (doc: string | undefined) => signature ? doc?.replace(/^```hsm\n[^\n]*\n```(\n\n)?/, '') : doc;
-        const combine = (doc: string | undefined) => [signature ? '```hsm\n' + signature + '\n```' : undefined, withoutSignature(doc)].filter(part => part).join('\n\n') || undefined;
-        return documentation instanceof Promise ? documentation.then(combine) : combine(documentation);
-    }
-}
-
-/** The signature shown in the hover of a declaration. */
-export function hoverSignature(node: AstNode): string | undefined {
-    if (isState(node)) {
-        return `state ${qualifiedName(node)}`;
-    }
-    if (isPseudoState(node)) {
-        return `${node.kind} ${qualifiedName(node)}`;
-    }
-    if (isStateMachine(node)) {
-        return `statemachine ${node.name}`;
-    }
-    if (isEventDeclaration(node) || isVariableDeclaration(node) || isOperationDeclaration(node)) {
-        const text = nodeText(node).replace(/\s+/g, ' ');
-        const scope = node.$container;
-        const prefix = isInterfaceScope(scope) || isInternalScope(scope) || isClassScope(scope) ? `${scopeLabel(scope)} ` : '';
-        return prefix + text;
-    }
-    if (node.$type === 'TestClass' || node.$type === 'TestOperation') {
-        return nodeText(node).split('\n')[0].replace(/\s*\{\s*$/, '');
-    }
-    return undefined;
-}
-
-/** LSP location links of header locations (see `cppLocations` in the language package). */
-function cppLinks(locations: readonly CppLocation[]): LocationLink[] | undefined {
-    return locations.length > 0 ? locations.map(l => LocationLink.create(l.uri, l.range, l.selection, l.origin)) : undefined;
+/** LSP location links (undefined if there are none). */
+function links(locations: readonly NavigationLink[]): LocationLink[] | undefined {
+    return locations.length > 0 ? toLocationLinks(locations) : undefined;
 }
 
 /**
@@ -151,35 +57,13 @@ function cppLinks(locations: readonly CppLocation[]): LocationLink[] | undefined
  */
 export class HsmDefinitionProvider extends DefaultDefinitionProvider {
 
-    override getDefinition(document: LangiumDocument, params: DefinitionParams): MaybePromise<LocationLink[] | undefined> {
-        const offset = document.textDocument.offsetAt(params.position);
-        const cpp = cppLinks(cppLocations(document, offset, 'definition'));
-        if (cpp) {
-            return cpp;
-        }
-        const root = document.parseResult.value.$cstNode;
-        const leaf = root ? CstUtils.findLeafNodeAtOffset(root, offset) : undefined;
-        const node = leaf?.astNode;
-        let machine: StateMachine | undefined;
-        if (isTypeReference(node)) {
-            machine = machineType(node);
-        } else if (isImportPath(node)) {
-            const owner = AstUtils.getContainerOfType(node, isStateMachine);
-            machine = owner ? resolvedImports(owner).find(i => i.node === node)?.machine : undefined;
-        }
-        const target = machine?.$cstNode;
-        const targetDocument = machine?.$document;
-        if (leaf && target && targetDocument) {
-            const name = GrammarUtils.findNodeForProperty(target, 'name') ?? target;
-            return [LocationLink.create(targetDocument.textDocument.uri, target.range, name.range, leaf.range)];
-        }
-        const base = isElementReference(node) ? referenceBaseRange(node) : undefined;
-        const links = super.getDefinition(document, params);
-        if (!base) {
-            return links;
-        }
-        const narrow = (list: LocationLink[] | undefined) => list?.map(link => ({ ...link, originSelectionRange: base }));
-        return links instanceof Promise ? links.then(narrow) : narrow(links);
+    constructor(private readonly services: LangiumServices) {
+        super(services);
+    }
+
+    override async getDefinition(document: LangiumDocument, params: DefinitionParams): Promise<LocationLink[] | undefined> {
+        return links(await definitionLinks(this.services, document, document.textDocument.offsetAt(params.position),
+            (d, p) => super.getDefinition(d, { ...params, ...p })));
     }
 }
 
@@ -192,9 +76,10 @@ export class HsmDeclarationProvider implements DeclarationProvider {
 
     constructor(private readonly services: LangiumServices) { }
 
-    getDeclaration(document: LangiumDocument, params: DeclarationParams): MaybePromise<LocationLink[] | undefined> {
-        return cppLinks(cppLocations(document, document.textDocument.offsetAt(params.position), 'declaration'))
-            ?? this.services.lsp.DefinitionProvider?.getDefinition(document, params);
+    async getDeclaration(document: LangiumDocument, params: DeclarationParams): Promise<LocationLink[] | undefined> {
+        const definition = async () => (await this.services.lsp.DefinitionProvider?.getDefinition(document, params) ?? [])
+            .map(l => ({ uri: l.targetUri, range: l.targetRange, selection: l.targetSelectionRange, origin: l.originSelectionRange ?? l.targetSelectionRange }));
+        return links(await declarationLinks(this.services, document, document.textDocument.offsetAt(params.position), definition));
     }
 }
 
@@ -205,39 +90,10 @@ export class HsmDeclarationProvider implements DeclarationProvider {
  */
 export class HsmTypeDefinitionProvider implements TypeDefinitionProvider {
 
-    private readonly references: References;
-    private readonly nameRegexp: RegExp;
-
-    constructor(services: LangiumServices) {
-        this.references = services.references.References;
-        this.nameRegexp = services.parser.GrammarConfig.nameRegexp;
-    }
+    constructor(private readonly services: LangiumServices) { }
 
     getTypeDefinition(document: LangiumDocument, params: TypeDefinitionParams): MaybePromise<LocationLink[] | undefined> {
-        const offset = document.textDocument.offsetAt(params.position);
-        if (cppElementAt(document, offset)) {
-            // a C++ name or struct member: its type in the header (none for built-in types)
-            return cppLinks(cppLocations(document, offset, 'typeDefinition'));
-        }
-        const root = document.parseResult.value.$cstNode;
-        const leaf = root ? CstUtils.findDeclarationNodeAtOffset(root, offset, this.nameRegexp) : undefined;
-        const target = leaf ? this.references.findDeclarations(leaf)[0] : undefined;
-        if (!leaf || !target) {
-            return undefined;
-        }
-        const base = isElementReference(leaf.astNode) ? referenceBaseRange(leaf.astNode) : undefined;
-        const origin = base ?? leaf.range;
-        const links = cppLinks(cppTypeLocationsOf(target, origin));
-        if (links) {
-            return links;
-        }
-        const machine = isVariableDeclaration(target) ? machineType(target.type) : undefined;
-        const machineNode = machine?.$cstNode;
-        if (machine?.$document && machineNode) {
-            const name = GrammarUtils.findNodeForProperty(machineNode, 'name') ?? machineNode;
-            return [LocationLink.create(machine.$document.textDocument.uri, machineNode.range, name.range, origin)];
-        }
-        return undefined;
+        return links(typeDefinitionLinks(this.services, document, document.textDocument.offsetAt(params.position)));
     }
 }
 
@@ -252,20 +108,7 @@ export class HsmDocumentLinkProvider implements DocumentLinkProvider {
     async getDocumentLinks(document: LangiumDocument, _params: DocumentLinkParams, cancelToken?: CancellationToken): Promise<DocumentLink[]> {
         // the imports are resolved when the document is linked
         await this.services.shared.workspace.DocumentBuilder.waitUntil(DocumentState.Linked, document.uri, cancelToken);
-        const links: DocumentLink[] = [];
-        for (const node of AstUtils.streamAst(document.parseResult.value)) {
-            if (!isStateMachine(node)) {
-                continue;
-            }
-            for (const resolved of resolvedImports(node)) {
-                const found = resolved.kind === 'header' ? resolved.header?.found : resolved.machine !== undefined;
-                const cst = resolved.node.$cstNode;
-                if (found && resolved.uri && cst) {
-                    links.push({ range: cst.range, target: resolved.uri.toString(), tooltip: resolved.kind === 'header' ? 'Open header' : 'Open state machine' });
-                }
-            }
-        }
-        return links;
+        return importLinks(document).map(link => ({ range: link.range, target: link.target, tooltip: link.kind === 'header' ? 'Open header' : 'Open state machine' }));
     }
 }
 

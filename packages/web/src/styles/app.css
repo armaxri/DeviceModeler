@@ -656,6 +656,73 @@ body.ui-dark #properties .problems li.error { background: #3d1f1f; color: #ffb4b
     color: var(--ui-select);
 }
 
+/* ---- file viewer (read-only header of a go to definition, ui/file-viewer.ts) ---- */
+
+.file-viewer-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 210;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 0, 0, 0.35);
+}
+
+.file-viewer-backdrop .file-viewer {
+    width: min(1000px, 94vw);
+    height: min(720px, 88vh);
+    border-radius: 10px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.file-viewer-page {
+    position: fixed;
+    inset: 0;
+    z-index: 210;
+    display: flex;
+}
+
+.file-viewer-page .file-viewer {
+    flex: 1;
+}
+
+.file-viewer {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--ui-panel);
+}
+
+.file-viewer-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--ui-border);
+}
+
+.file-viewer-title {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-viewer-hint {
+    flex: 1;
+    color: var(--ui-muted);
+    font-size: 12px;
+}
+
+.file-viewer-close {
+    border: none;
+    background: transparent;
+}
+
+.file-viewer-editor {
+    flex: 1;
+    min-height: 0;
+}
+
 /* ---- editor decorations ---- */
 
 .hsm-selected-range {

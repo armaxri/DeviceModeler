@@ -323,6 +323,25 @@ statemachine Controller {
   pointers (`Driver*`, `const char*`) and template arguments (`std::array<int, 4>`, `std::map<int, std::string>`,
   `std::vector<std::vector<int>>`). The HSM types (`integer`, `string`, aliases) can be used as well. Elsewhere in the
   model these C++ forms are reported as errors.
+- **Unknown types** are allowed (the type is passed to the generated code as written), but a name that the imported
+  headers do not declare gets a **warning** on that name, since it has no highlighting, hover, completion and
+  navigation and the generated code only compiles if other includes declare it (`Unknown type 'EpicProject::Driver':
+  it is not declared in the imported headers. Import its header (import "driver.h") …`). If a header in the directory
+  of the model or in the include paths declares the name, the message names it and the quick fix adds the import.
+  Known are the fundamental types, the `<cstdint>` / `<cstddef>` typedefs (`uint8_t`, `std::size_t`), `std::string`,
+  `std::string_view`, `std::array` and the names declared by the imported headers and the headers they include
+  (definitions, aliases, forward declarations like `class Driver;`, templates; also relative to the `namespace` of the
+  model). A `std::` name is known if its standard header is imported (`import "<vector>"` for `std::vector`,
+  `"<map>"` for `std::map`, `"<memory>"` for `std::unique_ptr`, …) or included by an imported header; otherwise the
+  quick fix adds that import. `std::` names the tool does not map to a header are accepted if any system header is
+  imported or included. Names cannot be verified – and are accepted – if the model imports a system header that is
+  not a standard header (`import "<QString>"`) or an imported header includes a header that is not found.
+  A name that the imported headers only **forward-declare** (`class Driver;` in `config.h`) is valid C++ for
+  references and pointers, but its definition is unknown, so it gets a warning as well, also for `Driver&` and
+  `Driver*` (`'EpicProject::Driver' is only forward-declared (config.h:16). Import the header that defines it
+  (import "driver.h") for hover, completion and navigation.`); the quick fix imports the header that defines it.
+  Once a header with the definition is imported (directly or through an `#include`), the warning disappears. Hover
+  on such a name shows the forward declaration and its location, go to definition jumps to it.
 - **Use in the model**: a member can be used in the model if the model knows its types – the types of
   [C/C++ header imports](#cc-header-imports) (integers, reals, `bool`, `std::string`, enums, structs, `std::array`),
   where `const T&` and `T&` are values of type `T`. Members with other types (pointers, other templates, types of
@@ -371,7 +390,7 @@ statemachine Door {
         @at(14, 40)
         state Idle
     }
-    @via(420, 160) @label(8, 0)
+    @via(420, 160) @label(8, 0) @from("bottom", 50) @to("top", 25)
     Closed -> Opened : open
 }
 ```
@@ -379,9 +398,12 @@ statemachine Door {
 - Before a state, pseudo state or region: `@at(x, y)` (position relative to the content area of the
   parent), `@size(width, height)` (states and regions), `@regions("vertical" | "horizontal")` (states).
 - Before a transition: `@via(x1, y1, x2, y2, …)` (waypoints, relative to the innermost state containing
-  both end points) and `@label(dx, dy)` (label offset).
+  both end points), `@label(dx, dy)` (label offset) and `@from(side, position)` / `@to(side, position)`
+  (where the transition starts / ends on the border of its source / target state: side `"top"`,
+  `"right"`, `"bottom"` or `"left"`, position along the side in percent, 0 to 100).
 - In the body of the state machine, a state or a region: `@initial(x, y)` / `@final(x, y)` (its `[*]`
   states); in the body of the state machine also `@definitions(x, y[, width, height])`.
-- Arguments are numbers (written as integers, `-` allowed), `@regions` takes a string. Other annotations
+- Arguments are numbers (written as integers, `-` allowed), `@regions` takes a string, `@from` / `@to` a
+  string and a number. Other annotations
   of the state machine (`@CycleBased`, …) and the definition section must come before the states and
   transitions.

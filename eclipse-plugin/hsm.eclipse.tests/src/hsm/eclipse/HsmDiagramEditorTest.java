@@ -21,6 +21,7 @@ import org.eclipse.core.resources.IncrementalProjectBuilder;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.Path;
+import org.eclipse.jface.text.ITextSelection;
 import org.eclipse.swt.browser.Browser;
 import org.eclipse.swt.dnd.Clipboard;
 import org.eclipse.swt.dnd.TextTransfer;
@@ -32,6 +33,7 @@ import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.handlers.IHandlerService;
 import org.eclipse.ui.ide.IDE;
+import org.eclipse.ui.texteditor.ITextEditor;
 import org.eclipse.ui.views.contentoutline.IContentOutlinePage;
 import org.junit.After;
 import org.junit.Assume;
@@ -217,6 +219,54 @@ public class HsmDiagramEditorTest {
         assertTrue(moved.exists());
         waitFor("no errors in models/ again", () -> errorMarkers(copy).length == 0 && Boolean.TRUE.equals(eval(browser,
                 "return /^(✓|0 errors)/.test(document.getElementById('status-problems').textContent);")));
+    }
+
+    /**
+     * Go to definition in the page's text editor: a C++ name opens the header in the editor of its type (the
+     * text editor without CDT) with the declaration selected, an import path opens the imported model in the HSM
+     * editor (api/open with a position).
+     */
+    @Test
+    public void navigationFromThePage() throws Exception {
+        IFile file = project.getFile("models/door/gate.hsm");
+        HsmDiagramEditor editor = open(file);
+        Browser browser = browserOf(editor);
+        waitFor("page loaded", () -> Boolean.TRUE.equals(eval(browser, "return !!window.hsmApp && !!window.hsmApp.diagram"
+                + " && /^(✓|0 errors)/.test(document.getElementById('status-problems').textContent);")));
+
+        // F12 on `Mode` of `t::Mode::On`: include/types.h, `Mode` of `enum class Mode { Off, On };` selected
+        eval(browser, "const e = window.hsmApp.editor; const m = e.getModel(); e.setPosition(m.getPositionAt(m.getValue().indexOf('t::Mode::On') + 4));"
+                + " e.focus(); e.trigger('test', 'editor.action.revealDefinition', null); return null;");
+        IFile header = project.getFile("include/types.h");
+        waitFor(() -> "header opened: " + ui(() -> String.valueOf(activeEditor())), () -> ui(() -> header.equals(activeEditor().getEditorInput().getAdapter(IFile.class))));
+        ITextEditor text = ui(() -> activeEditor().getAdapter(ITextEditor.class));
+        assertNotNull("a text editor for the header", text);
+        ITextSelection selection = ui(() -> (ITextSelection) text.getSelectionProvider().getSelection());
+        assertEquals(2, selection.getStartLine());
+        assertEquals("Mode", selection.getText());
+
+        // the import path of a model: the HSM editor of motor.hsm
+        ui(() -> {
+            PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage().activate(editor);
+            return null;
+        });
+        eval(browser, "const e = window.hsmApp.editor; const m = e.getModel(); e.setPosition(m.getPositionAt(m.getValue().indexOf('motor.hsm')));"
+                + " e.focus(); e.trigger('test', 'editor.action.revealDefinition', null); return null;");
+        IFile motor = project.getFile("models/motor.hsm");
+        waitFor("model opened", () -> ui(() -> activeEditor() instanceof HsmDiagramEditor hsm && motor.equals(hsm.file())));
+
+        // the host API with a position (as the page sends it): line 5, column 11 of motor.hsm selects `Off`
+        HsmDiagramEditor motorEditor = (HsmDiagramEditor) ui(HsmDiagramEditorTest::activeEditor);
+        Browser motorBrowser = browserOf(motorEditor);
+        waitFor("motor page loaded", () -> Boolean.TRUE.equals(eval(motorBrowser, "return !!window.hsmApp && !!window.hsmApp.diagram;")));
+        assertTrue(editor.open("models/motor.hsm", new HostSession.Position(5, 11, 5, 14)));
+        waitFor("position revealed", () -> "Off".equals(eval(motorBrowser,
+                "const e = window.hsmApp.editor; return e.getModel().getValueInRange(e.getSelection());")));
+        assertFalse(editor.open("models/missing.h", null));
+    }
+
+    private static IEditorPart activeEditor() {
+        return PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage().getActiveEditor();
     }
 
     @Test

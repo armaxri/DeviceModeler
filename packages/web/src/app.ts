@@ -2,14 +2,15 @@ import { monaco } from './monaco.js';
 import {
     importSct, importSctFiles, type DiagramSubmachine, type EdgeRouting, type LayoutDirection, type ParsedModel, type TextEdit
 } from 'hsm-language';
-import { EDITOR_THEMES, HsmLanguageSupport, LANGUAGE_ID } from './language-support.js';
+import { EDITOR_THEMES, HsmLanguageSupport, LANGUAGE_ID, WORKSPACE_SCHEME } from './language-support.js';
 import { DiagramController, type DiagramHost, type DiagramSettings, type StatusSeverity, type TextRange } from './diagram-controller.js';
 import { createWorkerElk } from './diagram/elk.js';
 import { byId, download, h } from './ui/dom.js';
 import type { SimulationSession } from './simulation/session.js';
 import { SidePanel, type SidePanelState } from './ui/side-panel.js';
 import { EMPTY_MODEL, EXAMPLE_HEADERS, EXAMPLES } from './examples.js';
-import { HttpHost, type HostDocument } from './host.js';
+import { HttpHost, positionOfQuery, type HostDocument, type HostOpenPosition } from './host.js';
+import { showFileViewer } from './ui/file-viewer.js';
 import { generateCppForHost, hostHeaderSettings } from './host-generate.js';
 import { modelReport } from './host-model.js';
 
@@ -62,12 +63,20 @@ export class HsmApp implements DiagramHost {
 
     async start(): Promise<void> {
         this.loadSettings();
+        const query = new URLSearchParams(window.location.search);
         if (this.host) {
             await this.loadHostDocument();
+        }
+        const view = this.host ? query.get('view') : null;
+        if (view) {
+            // a header viewer window of the desktop app: another file of the root, read-only
+            await this.startViewer(view, positionOfQuery(query));
+            return;
         }
         this.diagram = new DiagramController({ host: this, language: this.language, settings: this.settings, elk: createWorkerElk() });
         this.language.registerLanguage();
         this.createEditor();
+        this.registerOpeners();
         this.diagram.start();
         this.bindToolbar();
         this.bindKeyboard();
@@ -75,6 +84,11 @@ export class HsmApp implements DiagramHost {
         this.createSidePanel();
         this.applyTheme();
         await this.diagram.update();
+        // a host opened the model at a position (go to definition from another model)
+        const position = this.host ? positionOfQuery(query) : undefined;
+        if (position) {
+            this.revealPosition(position.line, position.column, position.endLine, position.endColumn);
+        }
     }
 
     /** The running simulation, if any. */
@@ -137,6 +151,8 @@ export class HsmApp implements DiagramHost {
             scrollBeyondLastLine: false,
             renderWhitespace: 'none',
             fixedOverflowWidgets: true,
+            // C++ names of the headers, states, events, variables, … (see language-support.ts)
+            'semanticHighlighting.enabled': true,
             theme: this.settings.theme === 'dark' ? EDITOR_THEMES.dark : EDITOR_THEMES.light
         });
         this.decorations = this.editor.createDecorationsCollection();
@@ -604,6 +620,93 @@ export class HsmApp implements DiagramHost {
         if (position) {
             this.diagram.selectElementAtOffset(this.editor.getModel()!.getOffsetAt(position));
         }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Navigation into other files (go to definition / declaration / type definition, import links)
+
+    /**
+     * Monaco opens targets in other files (headers, imported models: Ctrl/Cmd+Click, F12, the peek view, links
+     * of import paths) through these openers: the host opens them in its own editors, the web app shows a header
+     * read-only and opens a model of its virtual workspace.
+     */
+    private registerOpeners(): void {
+        monaco.editor.registerEditorOpener({
+            openCodeEditor: (_source, resource, selection) => this.openLocation(resource, selection)
+        });
+        monaco.editor.registerLinkOpener({
+            open: resource => this.openLocation(resource, undefined)
+        });
+    }
+
+    /** Opens a file of the workspace (`memory:///include/motor.h`) at a position; false for other URIs. */
+    private openLocation(resource: monaco.Uri, selection: monaco.IRange | monaco.IPosition | undefined): boolean {
+        if (resource.scheme !== WORKSPACE_SCHEME) {
+            return false;
+        }
+        const path = resource.path.replace(/^\//, '');
+        const start = selection === undefined ? undefined : 'startLineNumber' in selection ? monaco.Range.lift(selection)
+            : new monaco.Range(selection.lineNumber, selection.column, selection.lineNumber, selection.column);
+        const range = start && monaco.Range.lift(this.language.targetSelection(resource, start));
+        if (this.host) {
+            const position: HostOpenPosition | undefined = range && {
+                line: range.startLineNumber, column: range.startColumn, endLine: range.endLineNumber, endColumn: range.endColumn
+            };
+            this.host.open(path, position).then(opened => {
+                if (!opened && !(isHeaderFile(path) && this.viewFile(path, range))) {
+                    this.setStatus(`The file ${path} could not be opened.`, 'warning');
+                }
+            }, error => this.setStatus(String(error), 'error'));
+            return true;
+        }
+        if (isHeaderFile(path)) {
+            return this.viewFile(path, range);
+        }
+        if (path === this.fileName || this.openFile(path)) {
+            if (range) {
+                this.editor.setSelection(range);
+                this.editor.revealRangeInCenter(range, monaco.editor.ScrollType.Smooth);
+                this.editor.focus();
+            }
+            return true;
+        }
+        return false;
+    }
+
+    /** Shows a file of the workspace read-only (a header has no editor in the web app); false if it is unknown. */
+    private viewFile(path: string, range: monaco.IRange | undefined, fullPage = false): boolean {
+        const model = this.language.workspaceModel(FILE_BASE + path);
+        if (!model) {
+            return false;
+        }
+        showFileViewer({ title: path, model, range, fullPage, theme: this.settings.theme === 'dark' ? EDITOR_THEMES.dark : EDITOR_THEMES.light });
+        return true;
+    }
+
+    /** The page only shows another file of the host read-only (`?host=http&view=<path>`, desktop app). */
+    private async startViewer(path: string, position: HostOpenPosition | undefined): Promise<void> {
+        this.language.registerLanguage();
+        const uri = FILE_BASE + path;
+        if (this.language.fileText(uri) === undefined) {
+            const text = await this.host!.file(path);
+            if (text === undefined) {
+                throw new Error(`The file ${path} does not exist.`);
+            }
+            this.files.set(path, text);
+        }
+        this.language.setWorkspace(FILE_BASE + this.fileName, this.workspaceFiles());
+        document.body.classList.toggle('ui-dark', this.settings.theme === 'dark');
+        document.title = path;
+        const range = position && new monaco.Range(position.line, position.column, position.endLine ?? position.line, position.endColumn ?? position.column);
+        this.viewFile(path, range, true);
+    }
+
+    /** Selects a range of the text given by 1-based lines and columns (a host opened the model at a position). */
+    revealPosition(line: number, column: number, endLine?: number, endColumn?: number): void {
+        const model = this.editor.getModel()!;
+        const start = model.validatePosition({ lineNumber: line, column });
+        const end = model.validatePosition({ lineNumber: endLine ?? line, column: endColumn ?? column });
+        this.revealRange(model.getOffsetAt(start), model.getOffsetAt(end));
     }
 
     // -----------------------------------------------------------------------------------------

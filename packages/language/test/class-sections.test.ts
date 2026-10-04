@@ -31,10 +31,11 @@ const APP_H = [
 ].join('\n');
 
 /** A model importing app.h with the given definition section (and a state A with a transition on `go`). */
-function model(definitions: string, effect = ''): string {
+function model(definitions: string, effect = '', imports: string[] = []): string {
     return [
         'statemachine M {',
         '    import "app.h"',
+        ...imports.map(i => `    import "${i}"`),
         '    interface:',
         '        in event go',
         '        var count : integer',
@@ -46,8 +47,8 @@ function model(definitions: string, effect = ''): string {
     ].join('\n');
 }
 
-async function parseModel(definitions: string, effect = '') {
-    return parse(model(definitions, effect), { 'app.h': APP_H });
+async function parseModel(definitions: string, effect = '', imports: string[] = []) {
+    return parse(model(definitions, effect, imports), { 'app.h': APP_H });
 }
 
 const MEMBERS = `
@@ -112,11 +113,18 @@ describe('C++ class sections: parsing', () => {
 
 describe('C++ class sections: validation', () => {
     test('members, methods and their use in the model', async () => {
-        const parsed = await parseModel(MEMBERS, 'errorCnt++; setup(); setConfig(config); count = retries() + errorCnt + maxErrors; config.retries = errorCnt; ratio *= 2');
+        const effect = 'errorCnt++; setup(); setConfig(config); count = retries() + errorCnt + maxErrors; config.retries = errorCnt; ratio *= 2';
+        const parsed = await parseModel(MEMBERS, effect, ['<vector>', '<map>']);
         expect(errors(parsed)).toEqual([]);
         // members of the class sections are also used by the C++ code: no "never used" infos
         expect(parsed.diagnostics.filter(d => d.severity === 3).map(d => d.message)).toEqual([]);
-        expect(warnings(parsed)).toEqual([]);
+        // app.h only forward declares app::Driver (see cpp-unknown-types.test.ts)
+        const forward = "'app::Driver' is only forward-declared (app.h:4). Import the header that defines it for hover, completion and navigation.";
+        expect(warnings(parsed)).toEqual([forward, forward]);
+        // without the standard headers: warnings at the std:: names (see cpp-unknown-types.test.ts)
+        expect(warnings(await parseModel(MEMBERS, effect)).filter(w => w !== forward).map(w => w.substring(0, w.indexOf("':") + 1))).toEqual([
+            "Unknown type 'std::vector'", "Unknown type 'std::vector'", "Unknown type 'std::map'"
+        ]);
     });
 
     test('types of the model: C++ types of the headers and fundamental types; others make a member unusable', async () => {
@@ -343,9 +351,10 @@ describe('C++ class sections: formatting and documentation', () => {
         const language = fs.readFileSync(path.join(docs, 'language.md'), 'utf-8');
         const section = language.slice(language.indexOf('## C++ class sections'));
         const example = /```\n([\s\S]*?)```/.exec(section)![1];
-        const header = 'namespace EpicProject {\nstruct Config { unsigned int maxErrors = 3; };\nclass Driver;\n}';
+        const header = 'namespace EpicProject {\nstruct Config { unsigned int maxErrors = 3; };\nclass Driver { public: void on(); };\n}';
         const parsed = await parse(example, { 'path/to/header.h': header });
         expect(errors(parsed)).toEqual([]);
+        expect(warnings(parsed)).toEqual([]);
         expect(generateCpp(parsed.model).diagnostics).toEqual([]);
         // the implementation in docs/cpp-generator.md is the one of the example
         const generator = fs.readFileSync(path.join(docs, 'cpp-generator.md'), 'utf-8');
