@@ -2,7 +2,7 @@ import type { AstNode, LangiumDocument } from 'langium';
 import type { SModelElementImpl } from 'sprotty';
 import type { SModelRoot } from 'sprotty-protocol';
 import {
-    BUILTIN_TYPES, StructureEditor, EditError, IncompatiblePortsError, IBD_OVERVIEW_ID, IBD_TYPES_ID, applyEdits, behaviorMachine, checkRename, mapOffset, endpointLabel, findSources, findTargets, ibdChoices, ibdElementAt,
+    BUILTIN_TYPES, StructureEditor, EditError, IncompatiblePortsError, IBD_OVERVIEW_ID, IBD_TYPES_ID, applyEdits, behaviorMachine, checkRename, mapOffset, endpointLabel, findSources, findTargets, ibdChoices, ibdDiagramElementAt, ibdElementAt, ibdIssues,
     ibdNodes, ibdRouteElements, instanceType, isComponent, isComponentInstance, isComponentType, isConnection, isDelegation, isPort,
     isStructDeclaration, isCompositeType, isThread, layoutStructure, memberText, normalizeUri, planConnection, portEndpoint, portTypeLabel, resolveDataType, routeContinuations, routeIdsAt,
     systemPortsMessage, threadInstances, threadOf, threadSettings, visibleElements,
@@ -376,24 +376,7 @@ export class StructureDiagram {
     }
 
     private computeIssues(parsed: ParsedStructureModel, layout: IbdLayoutResult): Map<string, Issue> {
-        const issues = new Map<string, Issue>();
-        const textDocument = parsed.document.textDocument;
-        for (const diagnostic of parsed.diagnostics) {
-            if (diagnostic.severity !== 1 && diagnostic.severity !== 2) {
-                continue;
-            }
-            const id = this.elementAt(textDocument.offsetAt(diagnostic.range.start), layout, parsed, true);
-            if (!id) {
-                continue;
-            }
-            const severity = diagnostic.severity === 1 ? 'error' : 'warning';
-            const issue = issues.get(id) ?? { severity, messages: [] };
-            if (severity === 'error') {
-                issue.severity = 'error';
-            }
-            issue.messages.push(typeof diagnostic.message === 'string' ? diagnostic.message : diagnostic.message.value);
-            issues.set(id, issue);
-        }
+        const issues: Map<string, Issue> = ibdIssues(layout, parsed.document, parsed.diagnostics);
         // problems of other files: an instance whose component type (in an imported file) or state machine has errors
         for (const [id, node] of layout.elements) {
             if (!isComponentInstance(node)) {
@@ -425,21 +408,7 @@ export class StructureDiagram {
 
     /** The innermost diagram element (of the edited file) whose text contains the offset. */
     private elementAt(offset: number, layout: IbdLayoutResult, parsed: ParsedStructureModel, includeFrame: boolean): string | undefined {
-        let best: { id: string, length: number } | undefined;
-        for (const [id, node] of layout.elements) {
-            if (layout.instances.has(id) || documentOf(node) !== parsed.document || (!includeFrame && id === layout.graph.id)) {
-                continue;
-            }
-            const cst = node.$cstNode;
-            if (!cst || offset < cst.offset || offset > cst.end) {
-                continue;
-            }
-            const length = cst.end - cst.offset;
-            if (!best || length < best.length) {
-                best = { id, length };
-            }
-        }
-        return best?.id;
+        return ibdDiagramElementAt(layout, parsed.document, offset, includeFrame);
     }
 
     /** The diagram element (of the edited file) whose text starts at the offset (e.g. a created element). */

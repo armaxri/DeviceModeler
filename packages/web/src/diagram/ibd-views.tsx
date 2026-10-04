@@ -28,6 +28,18 @@ function issueMarker(issue: Issue | undefined, x: number, y: number): VNode | un
     </g>;
 }
 
+/**
+ * The marker of a port: at its outer lower corner (outside of the node; the label is inside of an
+ * instance or block and above the port outside of the frame).
+ */
+function portIssuePosition(side: IbdPortElement['side'], size: number): [number, number] {
+    switch (side) {
+        case 'WEST': return [-3, size + 3];
+        case 'NORTH': return [size + 3, -3];
+        default: return [size + 3, size + 3];
+    }
+}
+
 /** Manual layout: the resize handle of a selected node (bottom right corner). */
 function resizeHandle(node: Readonly<IbdNodeElement>): VNode | undefined {
     if (!node.resizable || !node.selected) {
@@ -208,6 +220,7 @@ export class IbdPortView extends ShapeView {
                         : label.text}
                 </text>
                 : undefined}
+            {issueMarker(port.issue, ...portIssuePosition(port.side, size))}
         </g>;
     }
 }

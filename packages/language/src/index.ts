@@ -52,6 +52,7 @@ export * from './structure-formatter.js';
 export * from './lsp/structure-lsp.js';
 export * from './diagram/ibd-model.js';
 export * from './diagram/ibd-layout.js';
+export * from './diagram/ibd-issues.js';
 export * from './diagram/ibd-manual-layout.js';
 export * from './diagram/ibd-layout-annotations.js';
 export * from './render/ibd-shapes.js';

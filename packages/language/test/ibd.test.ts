@@ -7,6 +7,7 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import { runRenderCommand } from '../src/cli/render-commands.js';
 import * as ast from '../src/generated/ast.js';
 import { defaultIbdElement, ibdChoices, ibdElementAt, ibdNodes, ibdRouteElements, layoutStructure, memberText } from '../src/diagram/ibd-layout.js';
+import { ibdDiagramElementAt, ibdIssues } from '../src/diagram/ibd-issues.js';
 import { IBD_OVERVIEW_ID, IBD_TYPES_ID, type IbdLayoutResult, type IbdNode } from '../src/diagram/ibd-model.js';
 import { StructureModelLoader } from '../src/model-loader.js';
 import { createDevmServices } from '../src/devm-module.js';
@@ -401,5 +402,89 @@ describe('devm render: structure files', () => {
         expect(fs.readFileSync(out, 'utf-8')).toContain('Buzzer');
         expect(await runRenderCommand([path.join(DEVICE, 'components.devm')], { out, element: 'Nope' }, logger)).toBe(1);
         expect(messages.at(-1)).toMatch(/no subsystem, system or component type 'Nope'/);
+    });
+});
+
+describe('internal block diagram: problems as markers on the diagram elements', () => {
+    async function issuesOf(text: string, element?: string) {
+        const parsed = await loader.load(text, `file:///ibd/issues-${counter++}.devm`);
+        expect(parsed.hasSyntaxErrors).toBe(false);
+        const layout = (await layoutStructure(parsed.model, { element }))!;
+        const issues = ibdIssues(layout, parsed.document, parsed.diagnostics);
+        return { parsed, layout, issues: Object.fromEntries([...issues].map(([id, issue]) => [id, `${issue.severity}: ${issue.messages.join(' | ')}`])) };
+    }
+
+    test('a port of a system: the error is shown at the boundary port of the frame (not at the frame)', async () => {
+        const { issues } = await issuesOf(`
+component A { in async e  out async f }
+system Top {
+    in async light
+    thread T { a : A  b : A }
+    connect b.f -> a.e
+}`);
+        expect(issues['Top.light']).toMatch(/^error: 'Top' is a system: the closed top level has no ports/);
+        expect(issues.Top).toBeUndefined();
+    });
+
+    test('a boundary port of a subsystem that is not delegated: a warning at the port', async () => {
+        const { issues } = await issuesOf(`
+component A { in async e  out async f }
+subsystem Sub {
+    in async go
+    out async done
+    thread T { a : A }
+    delegate go -> a.e
+}`);
+        expect(issues['Sub.done']).toMatch(/^warning: The out port 'done' is not delegated from a part/);
+        expect(issues['Sub.go']).toBeUndefined();
+        expect(Object.keys(issues)).toEqual(['Sub.done']);
+    });
+
+    test('delegations, connections and threads get their own markers', async () => {
+        const { issues } = await issuesOf(`
+component A { in async e  out async f  in sync v : integer  out sync w : real }
+subsystem Sub {
+    in async go
+    out async done
+    thread T { a : A  b : A }
+    thread U { a }
+    delegate go -> a.e
+    delegate go -> a.e
+    delegate b.f -> done
+    connect a.w -> b.v
+    connect a.f -> b.e
+    connect b.w -> a.v
+}`);
+        expect(issues['Sub/go->a.e~1']).toMatch(/^warning: Duplicate delegation/);
+        expect(issues['Sub/a.w->b.v']).toMatch(/^error: /);
+        expect(issues['Sub/thread:U']).toMatch(/^error: The instance 'a' is already assigned to the thread 'T'/);
+        expect(issues['Sub/a.f->b.e']).toBeUndefined();
+    });
+
+    test('the innermost element at an offset: boundary port, connector, instance, frame', async () => {
+        const text = `
+component A { in async e }
+subsystem Sub {
+    in async go
+    thread T { a : A }
+    delegate go -> a.e
+}`;
+        const { parsed, layout } = await issuesOf(text);
+        const at = (snippet: string, frame = true) => ibdDiagramElementAt(layout, parsed.document, text.indexOf(snippet), frame);
+        expect(at('in async go')).toBe('Sub.go');
+        expect(at('delegate go')).toBe('Sub/go->a.e');
+        expect(at('a : A')).toBe('Sub/a');
+        expect(at('thread T')).toBe('Sub/thread:T');
+        expect(at('subsystem Sub')).toBe('Sub');
+        expect(at('subsystem Sub', false)).toBeUndefined();
+        // the component type A is not part of the diagram of Sub
+        expect(at('component A')).toBeUndefined();
+    });
+
+    test('a port of a component block (the diagram of a component type)', async () => {
+        const { issues } = await issuesOf(`
+component A { in async e  in sync v : Missing }`, 'A');
+        expect(Object.keys(issues)).toEqual(['A.v']);
+        expect(issues['A.v']).toMatch(/^error: .*Missing/);
     });
 });
