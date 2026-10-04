@@ -4,11 +4,13 @@ import '@hsm-web/styles/app.css';
 import '@hsm-web/styles/diagram-styles.js';
 import '@hsm-web/styles/simulation.css';
 import '@hsm-web/styles/side-panel.css';
+import '@hsm-web/styles/tooltips.css';
 import './webview.css';
 import ElkApi from 'elkjs/lib/elk-api.js';
 import elkWorkerSource from 'elkjs/lib/elk-worker.min.js?raw';
 import { DiagramController } from '@hsm-web/diagram-controller.js';
 import { HsmModelService } from '@hsm-web/model-service.js';
+import { installTooltips } from '@hsm-web/ui/tooltips.js';
 import { WebviewHost, type VsCodeApi } from './webview-host.js';
 
 declare function acquireVsCodeApi(): VsCodeApi;
@@ -22,6 +24,9 @@ function createElk(): InstanceType<ElkConstructor> {
     const workerUrl = URL.createObjectURL(new Blob([elkWorkerSource], { type: 'text/javascript' }));
     return new Constructor({ workerUrl });
 }
+
+// native tooltips (title attributes) are not shown in VS Code webviews (macOS): styled ones instead
+installTooltips();
 
 const vscode = acquireVsCodeApi();
 const host = new WebviewHost(vscode);

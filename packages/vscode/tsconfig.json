@@ -11,6 +11,7 @@
       "hsm-language": ["../language/src/index.ts"],
       "@hsm-web/diagram/manual-layout-support.js": ["../web/src/diagram/manual-layout-support.ts"],
       "@hsm-web/ui/side-panel-state.js": ["../web/src/ui/side-panel-state.ts"],
+      "@hsm-web/ui/tooltip-position.js": ["../web/src/ui/tooltip-position.ts"],
       "@hsm-web/layout-actions.js": ["../web/src/layout-actions.ts"]
     }
   },

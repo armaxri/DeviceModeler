@@ -20,6 +20,7 @@ The web app (`npm run dev`, `packages/web`) edits the text and the diagram side 
 | Rename / edit label | double-click or `F2` |
 | Move into another state | hold `Shift` while dropping it (a plain drop only moves it, see [Manual layout](#manual-layout-experimental)) |
 | Delete | `Del` / `Backspace` or the trash button |
+| Fit the diagram to the view | *Fit to screen* button at the bottom of the palette (the tooltips of the palette name each tool and its key) |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Y` (shared with the text editor) |
 | Keep a tool active | hold `Shift` while choosing it, `Esc` to go back to selection |
 

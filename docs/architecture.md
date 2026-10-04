@@ -53,7 +53,8 @@ packages/
     src/language-support.ts     Langium services wired into Monaco (markers, completion, hover, formatting, …)
     src/diagram/                Sprotty model, views (PlantUML look), ELK worker, mouse / selection listeners
     src/simulation/             simulation session: interpreter, real-time clock, logs, operation mocks, breakpoints
-    src/ui/                     properties and simulation panels, value editor, inline editor, SVG / PNG export
+    src/ui/                     properties and simulation panels, value editor, inline editor, SVG / PNG export,
+                                tooltips (styled instead of native ones, which webviews / embedded browsers do not show)
     src/styles/                 style sheets of the app, the diagram and the simulation
   vscode/       VS Code extension
     src/extension/              extension host: language client, commands, diagram panel, test controller
