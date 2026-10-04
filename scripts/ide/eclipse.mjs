@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Starts Eclipse with the HSM plugin (eclipse-plugin/) and the examples imported as a project.
+// Starts Eclipse with the Device Modeler plugin (eclipse-plugin/) and the examples imported as a project.
 // See `node scripts/ide/eclipse.mjs --help` and docs/installation.md#trying-the-plugins-locally.
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -10,8 +10,8 @@ import {
     sandboxDir, sha512, show, step, which
 } from './lib.mjs';
 
-const FEATURE_IU = 'hsm.eclipse.feature.feature.group';
-const PROJECT_NAME = 'hsm-examples';
+const FEATURE_IU = 'devm.eclipse.feature.feature.group';
+const PROJECT_NAME = 'devm-examples';
 const PACKAGES = ['cpp', 'java'];
 
 const usage = `Usage: npm run ide:eclipse -- [options]
@@ -22,15 +22,15 @@ sandbox Eclipse and starts it with a workspace that contains the examples as the
 
 Without --eclipse the script downloads "Eclipse IDE for C/C++ Developers" of the release the plugin is
 built against (from archive.eclipse.org, checked against its SHA-512) into .ide/eclipse/install/ once.
-The C/C++ package is used because CDT is what C++ users of HSM work with (the generated code, CMake) and
+The C/C++ package is used because CDT is what C++ users of the Device Modeler work with (the generated code, CMake) and
 because it brings a headless project import, so the examples appear in the workspace without a wizard.
 
 Options:
   --eclipse <path>   use this Eclipse installation instead (Eclipse.app, its folder or the executable;
-                     env HSM_ECLIPSE). The plugin is installed INTO this installation – use a separate one.
+                     env DEVM_ECLIPSE). The plugin is installed INTO this installation – use a separate one.
   --package <name>   package to download: cpp (default) or java (without CDT the import is a wizard)
   --release <name>   release to download (default: the one of eclipse-plugin/pom.xml, e.g. 2025-06)
-  --rebuild-cli      rebuild the hsm executable of this platform (packages/cli, npm run build:exe) for the
+  --rebuild-cli      rebuild the devm executable of this platform (packages/cli, npm run build:exe) for the
                      plugin's fragment; by default it is only built if it is missing
 
 ${commonHelp}
@@ -118,21 +118,21 @@ export function installedVersion(listOutput, iu = FEATURE_IU) {
 }
 
 /** The `.project` of the examples project. */
-export function projectDescription(name, { hsmNature = false } = {}) {
-    const builder = hsmNature
+export function projectDescription(name, { devmNature = false } = {}) {
+    const builder = devmNature
         ? `
 		<buildCommand>
-			<name>hsm.eclipse.builder</name>
+			<name>devm.eclipse.builder</name>
 			<arguments>
 			</arguments>
 		</buildCommand>
 	`
         : '\n\t';
-    const nature = hsmNature ? '\n\t\t<nature>hsm.eclipse.nature</nature>\n\t' : '\n\t';
+    const nature = devmNature ? '\n\t\t<nature>devm.eclipse.nature</nature>\n\t' : '\n\t';
     return `<?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
 	<name>${name}</name>
-	<comment>HSM examples (created by scripts/ide/eclipse.mjs)</comment>
+	<comment>Device Modeler examples (created by scripts/ide/eclipse.mjs)</comment>
 	<projects>
 	</projects>
 	<buildSpec>${builder}</buildSpec>
@@ -145,7 +145,7 @@ export function projectDescription(name, { hsmNature = false } = {}) {
 
 const sandbox = sandboxDir('eclipse');
 const pluginDir = path.join(repoRoot, 'eclipse-plugin');
-const siteRepository = path.join(pluginDir, 'hsm.eclipse.site', 'target', 'repository');
+const siteRepository = path.join(pluginDir, 'devm.eclipse.site', 'target', 'repository');
 
 function defaultRelease() {
     const pom = fs.readFileSync(path.join(pluginDir, 'pom.xml'), 'utf-8');
@@ -201,7 +201,7 @@ async function sandboxEclipse({ release, pkg, dryRun }) {
 }
 
 function configuredEclipse(options) {
-    const given = options.eclipse ?? process.env.HSM_ECLIPSE;
+    const given = options.eclipse ?? process.env.DEVM_ECLIPSE;
     if (!given) {
         return undefined;
     }
@@ -230,8 +230,8 @@ function assertNotRunning(layout) {
 
 function buildPlugin(options) {
     ensureDependencies(options);
-    // the executable for the fragment of this platform (validation of closed models with the bundled hsm);
-    // without it the fragment is empty and the plugin uses hsm of the PATH, so it is built if missing
+    // the executable for the fragment of this platform (validation of closed models with the bundled devm);
+    // without it the fragment is empty and the plugin uses devm of the PATH, so it is built if missing
     ensureCliExecutable(options, { rebuild: options['rebuild-cli'] });
     step('Building the web app (packages/web/dist)');
     run(npm(), ['run', 'build', '-w', 'packages/language'], options);
@@ -253,8 +253,8 @@ export function macApp(launcher, platform = process.platform) {
 /** The feature version of the built update site. */
 function siteFeatureVersion() {
     const features = path.join(siteRepository, 'features');
-    const jar = isDirectory(features) && fs.readdirSync(features).find((name) => name.startsWith('hsm.eclipse.feature_'));
-    return jar ? jar.slice('hsm.eclipse.feature_'.length, -'.jar'.length) : undefined;
+    const jar = isDirectory(features) && fs.readdirSync(features).find((name) => name.startsWith('devm.eclipse.feature_'));
+    return jar ? jar.slice('devm.eclipse.feature_'.length, -'.jar'.length) : undefined;
 }
 
 function director(layout, args, options) {
@@ -266,7 +266,7 @@ function installFeature(layout, release, options) {
     if (!siteVersion && !options.dryRun) {
         throw new ScriptError(`the update site is not built (${show(siteRepository)}): run without --no-build`);
     }
-    step(`Installing the HSM feature ${siteVersion ?? ''} (p2 director)`);
+    step(`Installing the Device Modeler feature ${siteVersion ?? ''} (p2 director)`);
     const roots = director(layout, ['-listInstalledRoots'], { ...options, quiet: true });
     const installed = installedVersion(roots.stdout ?? '');
     if (installed === siteVersion && !options.dryRun) {
@@ -304,7 +304,7 @@ function ensureProjectFile(dir, options) {
     const name = dir === path.join(sandbox, 'workspace', PROJECT_NAME) ? PROJECT_NAME : path.basename(dir);
     info(`writing ${show(file)} (project '${name}')`);
     if (!options.dryRun) {
-        fs.writeFileSync(file, projectDescription(name, { hsmNature: true }));
+        fs.writeFileSync(file, projectDescription(name, { devmNature: true }));
     }
     return name;
 }
@@ -372,7 +372,7 @@ if (isMain(import.meta.url)) await runScript({
 
         step('Starting Eclipse');
         const args = ['-data', workspace];
-        const model = path.join(projectDir, 'traffic-light.hsm');
+        const model = path.join(projectDir, 'traffic-light.devm');
         const openModel = imported && (options.dryRun || isFile(model));
         const logFile = path.join(sandbox, 'eclipse.out');
         let pid;
@@ -389,13 +389,13 @@ if (isMain(import.meta.url)) await runScript({
             if (!imported) {
                 args.push(projectDir);
             } else if (openModel) {
-                // opened in the HSM editor once the workbench is up
+                // opened in the Device Modeler editor once the workbench is up
                 args.push('--launcher.openFile', model);
             }
             pid = launchDetached(layout.launcher, args, { logFile, dryRun: options.dryRun });
         }
         info(`workspace: ${show(workspace)}${pid ? `, PID ${pid}` : ''}`);
         info(`log: ${show(path.join(workspace, '.metadata', '.log'))}`);
-        info('double-click a .hsm file in the Project Explorer to open the HSM editor');
+        info('double-click a .devm file in the Project Explorer to open the Device Modeler editor');
     }
 });

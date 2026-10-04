@@ -34,7 +34,7 @@ export const commonHelp = `Common options:
   --no-build         use the existing build (do not build the plugin / extension first)
   --examples <dir>   open this folder instead of the examples
   --in-place         open the repository's examples/ directly (edits change the repository)
-                     default: a copy of examples/ in the sandbox (.ide/<ide>/workspace/hsm-examples),
+                     default: a copy of examples/ in the sandbox (.ide/<ide>/workspace/devm-examples),
                      created on the first start and kept afterwards (--clean for a fresh copy)
   --clean            reset the sandbox of this IDE first (profile, settings, workspace, examples copy;
                      downloaded IDEs are kept)
@@ -160,7 +160,7 @@ export function examplesTarget(options, ide, { cwd = process.cwd() } = {}) {
     if (options.inPlace) {
         return { dir: path.join(repoRoot, 'examples'), copy: false };
     }
-    return { dir: path.join(sandboxDir(ide), 'workspace', 'hsm-examples'), copy: true };
+    return { dir: path.join(sandboxDir(ide), 'workspace', 'devm-examples'), copy: true };
 }
 
 /**
@@ -348,16 +348,16 @@ export function cliTarget(platform = process.platform, arch = process.arch) {
     return `${os}-${arch}`;
 }
 
-/** The hsm executable of this platform built by packages/cli (`npm run build:exe`). */
+/** The devm executable of this platform built by packages/cli (`npm run build:exe`). */
 export function cliExecutable() {
-    return path.join(repoRoot, 'packages', 'cli', 'dist', 'bin', cliTarget(), process.platform === 'win32' ? 'hsm.exe' : 'hsm');
+    return path.join(repoRoot, 'packages', 'cli', 'dist', 'bin', cliTarget(), process.platform === 'win32' ? 'devm.exe' : 'devm');
 }
 
-/** Builds the hsm executable of this platform if it is missing (or `rebuild`); returns its path. */
+/** Builds the devm executable of this platform if it is missing (or `rebuild`); returns its path. */
 export function ensureCliExecutable(options, { rebuild = false } = {}) {
     const exe = cliExecutable();
     if (rebuild || !isFile(exe)) {
-        step(`Building the hsm executable of this platform (${show(exe)}, npm run build:exe)`);
+        step(`Building the devm executable of this platform (${show(exe)}, npm run build:exe)`);
         run(npm(), ['run', 'build:exe'], options);
     }
     return exe;

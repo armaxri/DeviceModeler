@@ -1,7 +1,7 @@
 # Everything users install (docs/installation.md), built on every push to main, every pull request and every
 # version tag (v1.2.3):
-#   - the desktop app "HSM Modeler" (Electron): macOS .dmg/.zip, Windows installer/.zip, Linux AppImage/.deb/.tar.gz
-#   - the command line executable `hsm` (Node.js single executable application) for 5 platforms
+#   - the desktop app "Device Modeler" (Electron): macOS .dmg/.zip, Windows installer/.zip, Linux AppImage/.deb/.tar.gz
+#   - the command line executable `devm` (Node.js single executable application) for 5 platforms
 #   - the VS Code extension (.vsix)
 #   - the Eclipse plugin (p2 update site archive)
 #   - the JetBrains plugin (CLion, IntelliJ IDEA, …: plugin .zip)
@@ -30,7 +30,7 @@ env:
 
 jobs:
   cli:
-    name: hsm CLI (${{ matrix.target }})
+    name: devm CLI (${{ matrix.target }})
     strategy:
       fail-fast: false
       matrix:
@@ -52,7 +52,7 @@ jobs:
           cache: npm
       - name: Version of a release tag
         if: startsWith(github.ref, 'refs/tags/v')
-        run: echo "HSM_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+        run: echo "DEVM_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
       - run: npm ci
       - name: Cache the Node.js binaries of the executables
         uses: actions/cache@v4
@@ -94,7 +94,7 @@ jobs:
           cache: npm
       - name: Version of a release tag
         if: startsWith(github.ref, 'refs/tags/v')
-        run: echo "HSM_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+        run: echo "DEVM_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
       - name: Linux packages (virtual display and libraries of Electron; fpm for .deb on arm64)
         if: runner.os == 'Linux'
         run: |
@@ -166,7 +166,7 @@ jobs:
 
   eclipse:
     name: Eclipse plugin
-    # the platform fragments of the plugin contain the hsm executables of the cli job
+    # the platform fragments of the plugin contain the devm executables of the cli job
     needs: cli
     runs-on: ubuntu-latest
     steps:
@@ -193,11 +193,11 @@ jobs:
           pattern: cli-*
           path: cli-archives
           merge-multiple: true
-      - name: Unpack the hsm executables (packages/cli/dist/bin/<target>/)
+      - name: Unpack the devm executables (packages/cli/dist/bin/<target>/)
         run: |
-          for archive in cli-archives/hsm-*; do
+          for archive in cli-archives/devm-*; do
             name="$(basename "$archive")"
-            target="$(echo "$name" | sed -E 's/^hsm-.*-((linux|macos|windows)-(x64|arm64))\.(tar\.gz|zip)$/\1/')"
+            target="$(echo "$name" | sed -E 's/^devm-.*-((linux|macos|windows)-(x64|arm64))\.(tar\.gz|zip)$/\1/')"
             mkdir -p "packages/cli/dist/bin/$target"
             case "$archive" in
               *.zip) unzip -o -q "$archive" -d "packages/cli/dist/bin/$target" ;;
@@ -207,13 +207,13 @@ jobs:
           ls -lR packages/cli/dist/bin
       - name: Build plugin, fragments with the executables, feature and update site
         working-directory: eclipse-plugin
-        run: mvn -B -ntp verify -Dhsm.cli.optional=false
+        run: mvn -B -ntp verify -Ddevm.cli.optional=false
       - name: Name of the update site archive
         run: |
           version="${GITHUB_REF_NAME#v}"
           [[ "$GITHUB_REF" == refs/tags/v* ]] || version="0.1.0-SNAPSHOT"
           mkdir -p eclipse-release
-          cp eclipse-plugin/hsm.eclipse.site/target/hsm.eclipse.site-*.zip "eclipse-release/hsm-eclipse-update-site-${version}.zip"
+          cp eclipse-plugin/devm.eclipse.site/target/devm.eclipse.site-*.zip "eclipse-release/devm-eclipse-update-site-${version}.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: eclipse
@@ -248,7 +248,7 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           [[ "$GITHUB_REF" == refs/tags/v* ]] || version="0.1.0-SNAPSHOT"
           mkdir -p jetbrains-release
-          cp jetbrains-plugin/build/distributions/hsm-jetbrains-*.zip "jetbrains-release/hsm-jetbrains-${version}.zip"
+          cp jetbrains-plugin/build/distributions/devm-jetbrains-*.zip "jetbrains-release/devm-jetbrains-${version}.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: jetbrains
@@ -281,5 +281,5 @@ jobs:
           if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" release/* --clobber
           else
-            gh release create "$GITHUB_REF_NAME" release/* --title "HSM Modeler $GITHUB_REF_NAME" --generate-notes --verify-tag
+            gh release create "$GITHUB_REF_NAME" release/* --title "Device Modeler $GITHUB_REF_NAME" --generate-notes --verify-tag
           fi

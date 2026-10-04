@@ -13,7 +13,7 @@ const usage = `Usage: npm run ide:desktop -- [options]
        node scripts/ide/desktop.mjs [options]
 
 Builds the desktop app (packages/desktop) and starts it with Electron from the sources, with its own user
-data folder in .ide/desktop/ (recent files, page settings; an installed HSM Modeler is not touched and not
+data folder in .ide/desktop/ (recent files, page settings; an installed Device Modeler is not touched and not
 reused as running instance), and opens the examples folder (the list of its models).
 
 ${commonHelp}
@@ -58,7 +58,7 @@ if (isMain(import.meta.url)) await runScript({
         if (!options.dryRun) {
             fs.mkdirSync(userData, { recursive: true });
         }
-        step('Starting HSM Modeler (Electron, development mode)');
+        step('Starting Device Modeler (Electron, development mode)');
         const pid = launchDetached(electron, [appDir, `--user-data-dir=${userData}`, folder], {
             logFile: path.join(sandbox, 'electron.out'),
             dryRun: options.dryRun

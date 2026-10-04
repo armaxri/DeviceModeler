@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Starts CLion (or another IntelliJ Platform IDE) with the HSM plugin (jetbrains-plugin/) and the examples.
+// Starts CLion (or another IntelliJ Platform IDE) with the Device Modeler plugin (jetbrains-plugin/) and the examples.
 // See `node scripts/ide/clion.mjs --help` and docs/installation.md#trying-the-plugins-locally.
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -24,17 +24,17 @@ the IDE directly with an idea.properties of its own (<PRODUCT>_PROPERTIES) – w
 "Install Plugin from Disk…". The IDE runs detached.
 
 Both modes install the plugin LSP4IJ (version of jetbrains-plugin/gradle.properties; --zip downloads it from
-the JetBrains Marketplace into .ide/clion/downloads/ once): the HSM language server in the text editor.
+the JetBrains Marketplace into .ide/clion/downloads/ once): the devm language server in the text editor.
 
 Options:
-  --clion <path>     the IDE to use (env HSM_CLION): CLion.app or the installation folder; any IntelliJ
+  --clion <path>     the IDE to use (env DEVM_CLION): CLion.app or the installation folder; any IntelliJ
                      Platform IDE ≥ 2025.2 works (IntelliJ IDEA, PyCharm, …). Default: CLion in /Applications,
                      ~/Applications, JetBrains Toolbox, /opt, %LOCALAPPDATA%\\Programs, %ProgramFiles%\\JetBrains
   --zip              install the built plugin zip into an isolated profile instead of Gradle's runIde
   --download-clion   without a CLion installation: let Gradle download CLion (./gradlew runClion, large)
                      instead of starting IntelliJ IDEA Community
-  --rebuild-cli      rebuild the hsm executable of this platform (npm run build:exe); by default it is only
-                     built if missing. It is put into the plugin (-PhsmExecutable) for the validation of
+  --rebuild-cli      rebuild the devm executable of this platform (npm run build:exe); by default it is only
+                     built if missing. It is put into the plugin (-PdevmExecutable) for the validation of
                      closed models.
 
 ${commonHelp}
@@ -177,7 +177,7 @@ export function envVarBaseNameOf(launcher) {
 export function ideaProperties(dir) {
     const slash = (file) => file.replace(/\\/g, '/');
     return [
-        '# created by scripts/ide/clion.mjs: an isolated profile with the HSM plugin',
+        '# created by scripts/ide/clion.mjs: an isolated profile with the Device Modeler plugin',
         `idea.config.path=${slash(path.join(dir, 'config'))}`,
         `idea.system.path=${slash(path.join(dir, 'system'))}`,
         `idea.plugins.path=${slash(path.join(dir, 'plugins'))}`,
@@ -200,7 +200,7 @@ const pluginProject = path.join(repoRoot, 'jetbrains-plugin');
 const initScript = path.join(repoRoot, 'scripts', 'ide', 'jetbrains-local-ide.init.gradle');
 
 function findIde(options) {
-    const given = options.clion ?? process.env.HSM_CLION;
+    const given = options.clion ?? process.env.DEVM_CLION;
     if (given) {
         const ide = jetbrainsIde(path.resolve(given));
         if (!ide) {
@@ -278,7 +278,7 @@ async function launchWithZip(ide, folder, options, gradleProperties) {
     step(`Installing ${zip ? show(zip) : 'the plugin zip'} into ${show(plugins)}`);
     if (!options.dryRun) {
         for (const entry of isDirectory(plugins) ? fs.readdirSync(plugins) : []) {
-            if (entry.startsWith('hsm')) {
+            if (entry.startsWith('devm')) {
                 fs.rmSync(path.join(plugins, entry), { recursive: true, force: true });
             }
         }
@@ -307,14 +307,14 @@ function launchWithGradle(ide, folder, options, gradleProperties) {
     let args;
     if (ide) {
         step(`Starting ${ide.name} ${ide.version} with the plugin (./gradlew runLocalIde; closes with the IDE)`);
-        args = ['-I', initScript, `-PhsmLocalIde=${ide.installation}`, `-PhsmSandbox=${gradleSandbox}`, ...gradleProperties, 'runLocalIde', gradleArgs(folder)];
+        args = ['-I', initScript, `-PdevmLocalIde=${ide.installation}`, `-PdevmSandbox=${gradleSandbox}`, ...gradleProperties, 'runLocalIde', gradleArgs(folder)];
         info(`sandbox: ${show(gradleSandbox)} (log: …/log_runLocalIde/idea.log)`);
     } else if (options['download-clion']) {
         step('No CLion installation found: starting CLion downloaded by Gradle (./gradlew runClion)');
         args = [...gradleProperties, 'runClion', gradleArgs(folder)];
         info(`sandbox: ${show(path.join(pluginProject, '.intellijPlatform', 'sandbox'))}`);
     } else {
-        step('No CLion installation found (--clion <path> or HSM_CLION): starting IntelliJ IDEA Community of the ' +
+        step('No CLion installation found (--clion <path> or DEVM_CLION): starting IntelliJ IDEA Community of the ' +
             "plugin's target platform instead (./gradlew runIde, downloaded by Gradle; --download-clion for CLion)");
         args = [...gradleProperties, 'runIde', gradleArgs(folder)];
         info(`sandbox: ${show(path.join(pluginProject, '.intellijPlatform', 'sandbox'))}`);
@@ -339,7 +339,7 @@ if (isMain(import.meta.url)) await runScript({
         if (ide) {
             step(`IDE: ${ide.name} ${ide.version} (${ide.installation})`);
         } else if (options.zip) {
-            throw new ScriptError('--zip needs an installed IDE: no CLion found (pass --clion <path> or set HSM_CLION)');
+            throw new ScriptError('--zip needs an installed IDE: no CLion found (pass --clion <path> or set DEVM_CLION)');
         }
         if (options.clean) {
             cleanSandbox('clion', { dryRun: options.dryRun });
@@ -349,9 +349,9 @@ if (isMain(import.meta.url)) await runScript({
         } else if (!options.dryRun && !isFile(path.join(repoRoot, 'packages', 'web', 'dist', 'index.html'))) {
             throw new ScriptError('the web app is not built (packages/web/dist): run without --no-build');
         }
-        // the hsm executable of this platform in the plugin (bin/hsm): validation of closed models
+        // the devm executable of this platform in the plugin (bin/devm): validation of closed models
         const exe = options.build ? ensureCliExecutable(options, { rebuild: options['rebuild-cli'] }) : cliExecutable();
-        const gradleProperties = options.dryRun || isFile(exe) ? [`-PhsmExecutable=${exe}`] : [];
+        const gradleProperties = options.dryRun || isFile(exe) ? [`-PdevmExecutable=${exe}`] : [];
         const folder = prepareExamples(options, 'clion');
         if (options.zip) {
             await launchWithZip(ide, folder, options, gradleProperties);

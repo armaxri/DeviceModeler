@@ -52,7 +52,7 @@ describe('options', () => {
 
     it('chooses the examples folder', () => {
         assert.deepEqual(examplesTarget({}, 'vscode'), {
-            dir: path.join(repoRoot, '.ide', 'vscode', 'workspace', 'hsm-examples'),
+            dir: path.join(repoRoot, '.ide', 'vscode', 'workspace', 'devm-examples'),
             copy: true
         });
         assert.deepEqual(examplesTarget({ inPlace: true }, 'vscode'), { dir: path.join(repoRoot, 'examples'), copy: false });
@@ -101,10 +101,10 @@ describe('VS Code', () => {
     });
 
     it('starts an isolated profile', () => {
-        const args = vscodeArguments({ userDataDir: '/s/u', extensionsDir: '/s/e', developmentPath: '/r/vscode', folder: '/w', file: '/w/a.hsm' });
+        const args = vscodeArguments({ userDataDir: '/s/u', extensionsDir: '/s/e', developmentPath: '/r/vscode', folder: '/w', file: '/w/a.devm' });
         assert.deepEqual(args.slice(0, 4), ['--user-data-dir', '/s/u', '--extensions-dir', '/s/e']);
         assert.ok(args.includes('--extensionDevelopmentPath=/r/vscode'));
-        assert.deepEqual(args.slice(-2), ['/w', '/w/a.hsm']);
+        assert.deepEqual(args.slice(-2), ['/w', '/w/a.devm']);
         assert.ok(!vscodeArguments({ userDataDir: 'u', extensionsDir: 'e', folder: 'w' }).some((a) => a.startsWith('--extensionDevelopmentPath')));
     });
 });
@@ -142,18 +142,18 @@ describe('Eclipse', () => {
     });
 
     it('reads the installed feature version', () => {
-        const output = 'org.eclipse.epp.package.cpp.feature.feature.group/4.36.0\nhsm.eclipse.feature.feature.group/0.1.0.2026\nOperation completed';
+        const output = 'org.eclipse.epp.package.cpp.feature.feature.group/4.36.0\ndevm.eclipse.feature.feature.group/0.1.0.2026\nOperation completed';
         assert.equal(installedVersion(output), '0.1.0.2026');
         assert.equal(installedVersion('Operation completed'), undefined);
     });
 
     it('writes a project description', () => {
-        const plain = projectDescription('hsm-examples');
-        assert.match(plain, /<name>hsm-examples<\/name>/);
-        assert.doesNotMatch(plain, /hsm\.eclipse\.nature/);
-        const validated = projectDescription('p', { hsmNature: true });
-        assert.match(validated, /<nature>hsm\.eclipse\.nature<\/nature>/);
-        assert.match(validated, /<name>hsm\.eclipse\.builder<\/name>/);
+        const plain = projectDescription('devm-examples');
+        assert.match(plain, /<name>devm-examples<\/name>/);
+        assert.doesNotMatch(plain, /devm\.eclipse\.nature/);
+        const validated = projectDescription('p', { devmNature: true });
+        assert.match(validated, /<nature>devm\.eclipse\.nature<\/nature>/);
+        assert.match(validated, /<name>devm\.eclipse\.builder<\/name>/);
     });
 
     it('knows the macOS app and the executable target', () => {
