@@ -1,0 +1,36 @@
+<!-- Language support in the text editor through Red Hat LSP4IJ (optional dependency, see plugin.xml): the language
+     server `devm lsp stdio` of the devm executable for .devm and .devmtest files. Without LSP4IJ the plugin keeps its own
+     lexer highlighting and the validation with the command line tool / the page. -->
+<idea-plugin>
+    <extensions defaultExtensionNs="com.redhat.devtools.lsp4ij">
+        <server id="devm" name="Device Modeler Language Server" factoryClass="devm.jetbrains.lsp.DevmLanguageServerFactory">
+            <description><![CDATA[
+            The language server of the Device Modeler (<code>devm lsp --stdio</code>): diagnostics, completion, hover,
+            go to definition / declaration / type definition into C/C++ headers and other models, document links,
+            formatting, outline, rename and semantic highlighting of <code>.devm</code> (state machines and structure files)
+            and <code>.devmtest</code> files.
+            ]]></description>
+        </server>
+        <languageMapping language="Devm" serverId="devm" languageId="devm"/>
+        <languageMapping language="DevmTest" serverId="devm" languageId="devmtest"/>
+    </extensions>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- tells the plugin that LSP4IJ runs the language server (DevmLanguageServerSupport) -->
+        <applicationService serviceImplementation="devm.jetbrains.lsp.Lsp4ijLoaded"/>
+        <!-- LSP4IJ registers these for plain text / TextMate files only; the plugin's languages have their own PSI -->
+        <lang.psiStructureViewFactory language="Devm"
+                implementationClass="com.redhat.devtools.lsp4ij.features.documentSymbol.LSPDocumentSymbolStructureViewFactory"/>
+        <lang.psiStructureViewFactory language="DevmTest"
+                implementationClass="com.redhat.devtools.lsp4ij.features.documentSymbol.LSPDocumentSymbolStructureViewFactory"/>
+        <lang.foldingBuilder language="Devm" implementationClass="com.redhat.devtools.lsp4ij.features.foldingRange.LSPFoldingRangeBuilder"/>
+        <lang.foldingBuilder language="DevmTest" implementationClass="com.redhat.devtools.lsp4ij.features.foldingRange.LSPFoldingRangeBuilder"/>
+        <codeBlockProvider language="Devm" implementationClass="com.redhat.devtools.lsp4ij.features.codeBlockProvider.LSPCodeBlockProvider"/>
+        <codeBlockProvider language="DevmTest" implementationClass="com.redhat.devtools.lsp4ij.features.codeBlockProvider.LSPCodeBlockProvider"/>
+        <!-- semantic tokens of the server (states, events, variables, C++ types, …) on top of the lexer highlighting -->
+        <lang.fileViewProviderFactory language="Devm"
+                implementationClass="com.redhat.devtools.lsp4ij.features.semanticTokens.viewProvider.LSPSemanticTokensFileViewProviderFactory"/>
+        <lang.fileViewProviderFactory language="DevmTest"
+                implementationClass="com.redhat.devtools.lsp4ij.features.semanticTokens.viewProvider.LSPSemanticTokensFileViewProviderFactory"/>
+    </extensions>
+</idea-plugin>

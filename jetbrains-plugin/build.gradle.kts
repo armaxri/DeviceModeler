@@ -9,7 +9,7 @@ plugins {
     id("org.jetbrains.intellij.platform") version "2.19.0"
 }
 
-group = "hsm"
+group = "devm"
 version = providers.gradleProperty("pluginVersion").get()
 
 val platformVersion = providers.gradleProperty("platformVersion")
@@ -37,7 +37,7 @@ repositories {
 dependencies {
     intellijPlatform {
         intellijIdeaCommunity(platformVersion)
-        // optional dependency (hsm-lsp4ij.xml): compiled against, installed into the sandboxes of runIde and the tests
+        // optional dependency (devm-lsp4ij.xml): compiled against, installed into the sandboxes of runIde and the tests
         plugin("com.redhat.devtools.lsp4ij", lsp4ijVersion.get())
         testFramework(TestFrameworkType.Platform)
     }
@@ -103,16 +103,16 @@ intellijPlatformTesting {
 }
 
 // The web app (packages/web/dist, built by `npm run build` in the repository root) is part of the plugin:
-// <plugin>/webapp. Optionally an hsm executable for one platform: -PhsmExecutable=<path> → <plugin>/bin/hsm[.exe].
+// <plugin>/webapp. Optionally an devm executable for one platform: -PdevmExecutable=<path> → <plugin>/bin/devm[.exe].
 val webApp = layout.projectDirectory.dir("../packages/web/dist")
-val hsmExecutable = providers.gradleProperty("hsmExecutable")
+val devmExecutable = providers.gradleProperty("devmExecutable")
 
 tasks.withType<PrepareSandboxTask>().configureEach {
     from(webApp) {
         into(pluginName.map { "$it/webapp" })
     }
-    if (hsmExecutable.isPresent) {
-        from(hsmExecutable) {
+    if (devmExecutable.isPresent) {
+        from(devmExecutable) {
             into(pluginName.map { "$it/bin" })
             filePermissions { unix("rwxr-xr-x") }
         }
