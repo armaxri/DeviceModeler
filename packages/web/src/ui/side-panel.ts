@@ -1,4 +1,5 @@
 import { h } from './dom.js';
+import { trackPointerDrag } from './pointer-drag.js';
 import { clampPanelWidth, isSectionCollapsed, normalizePanelState, withSection, SIDE_PANEL_MIN_WIDTH, type SidePanelState } from './side-panel-state.js';
 
 export type { SidePanelState } from './side-panel-state.js';
@@ -294,22 +295,14 @@ export class SidePanel {
                 return;
             }
             event.preventDefault();
-            sash.setPointerCapture(event.pointerId);
             sash.classList.add('dragging');
             this.element.classList.add('resizing');
             const right = this.element.getBoundingClientRect().right;
-            const move = (e: PointerEvent) => this.setWidth(right - e.clientX, false);
-            const up = () => {
+            trackPointerDrag(sash, event, e => this.setWidth(right - e.clientX, false), () => {
                 sash.classList.remove('dragging');
                 this.element.classList.remove('resizing');
-                sash.removeEventListener('pointermove', move);
-                sash.removeEventListener('pointerup', up);
-                sash.removeEventListener('pointercancel', up);
                 this.save();
-            };
-            sash.addEventListener('pointermove', move);
-            sash.addEventListener('pointerup', up);
-            sash.addEventListener('pointercancel', up);
+            });
         });
         sash.addEventListener('dblclick', () => this.setWidth(undefined, true));
         sash.addEventListener('keydown', event => {

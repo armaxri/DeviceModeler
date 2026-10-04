@@ -187,6 +187,11 @@ standard JetBrains runtimes have it; without it the editor shows the text only).
   action, for a model that is not open) opens the editor and writes `Door.h` / `Door.cpp`, and reports the
   errors of a model the generator does not support; an external change of the file reaches document and page;
   `hsm validate --json` with the executable of `npm run build:exe` reports the problem of a closed model.
+- Resizing in the real editor (IntelliJ IDEA Community 2025.2.6, macOS, JCEF with off-screen rendering; mouse
+  events posted to the IDE event queue through the Robot server, the path of real mouse input inside the IDE):
+  the bar between text and diagram of the page side by side (page wider than 900 px) and on top of each other
+  (narrower, e.g. *Text and Diagram*), the side panel's edge, the divider of *Text and Diagram* (grabbed on the
+  divider and on the page side of it) and dragging a state in the diagram.
 - `./gradlew runLatestIde`: IntelliJ IDEA 2026.2.3 starts with the plugin loaded, without errors (not driven
   further: it stopped at the dialogs of a first start).
 

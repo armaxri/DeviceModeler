@@ -733,7 +733,7 @@ body.ui-dark #properties .problems li.error { background: #3d1f1f; color: #ffb4b
 @media (max-width: 900px) {
     main {
         grid-template-columns: 1fr;
-        grid-template-rows: 35% 5px 1fr;
+        grid-template-rows: var(--editor-height, 35%) 5px 1fr;
     }
     #splitter { cursor: row-resize; }
 }

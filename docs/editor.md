@@ -1,6 +1,7 @@
 # Web editor
 
 The web app (`npm run dev`, `packages/web`) edits the text and the diagram side by side; the VS Code extension embeds the same diagram editor ([VS Code extension](vscode.md)).
+Drag the bar between text and diagram to change their sizes. In windows narrower than 900 px (e.g. an editor tab of an IDE) the text is shown above the diagram and the bar changes its height; width and height are kept separately.
 
 ## Editing in the diagram
 
