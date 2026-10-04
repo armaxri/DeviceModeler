@@ -67,10 +67,11 @@ The diagram is laid out automatically by default. It can be arranged by hand, as
 states, pseudo states and the definitions box (`Shift` while dropping moves a state into the state below
 the mouse), resize a selected state with the handle at its bottom right corner, double-click a selected
 transition to add a waypoint the route passes through (drag it, double-click it to remove it), drag the
-label of a selected transition. The first drag turns the diagram into a manual layout.
+label of a selected transition, drag the square at the start or end of a selected transition along the border
+of its state (double-click it to place that end automatically again). The first drag turns the diagram into a manual layout.
 
 - **Storage:** the layout is part of the model – layout annotations before the elements (`@at(x, y)`,
-  `@size(w, h)`, `@via(x1, y1, …)`, `@label(dx, dy)`, `@regions(…)`) and in their bodies (`@initial`,
+  `@size(w, h)`, `@via(x1, y1, …)`, `@label(dx, dy)`, `@from(side, %)` / `@to(side, %)`, `@regions(…)`) and in their bodies (`@initial`,
   `@final`, `@definitions`); syntax in `docs/manual-layout.md` of the repository. A model with layout
   annotations has a manual layout, one without the automatic layout.
 - **Toolbar:** *Positions: automatic* or *Positions: stored in model* shows whether the model has layout

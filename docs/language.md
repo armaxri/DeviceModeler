@@ -384,7 +384,7 @@ statemachine Door {
         @at(14, 40)
         state Idle
     }
-    @via(420, 160) @label(8, 0)
+    @via(420, 160) @label(8, 0) @from("bottom", 50) @to("top", 25)
     Closed -> Opened : open
 }
 ```
@@ -392,9 +392,12 @@ statemachine Door {
 - Before a state, pseudo state or region: `@at(x, y)` (position relative to the content area of the
   parent), `@size(width, height)` (states and regions), `@regions("vertical" | "horizontal")` (states).
 - Before a transition: `@via(x1, y1, x2, y2, …)` (waypoints, relative to the innermost state containing
-  both end points) and `@label(dx, dy)` (label offset).
+  both end points), `@label(dx, dy)` (label offset) and `@from(side, position)` / `@to(side, position)`
+  (where the transition starts / ends on the border of its source / target state: side `"top"`,
+  `"right"`, `"bottom"` or `"left"`, position along the side in percent, 0 to 100).
 - In the body of the state machine, a state or a region: `@initial(x, y)` / `@final(x, y)` (its `[*]`
   states); in the body of the state machine also `@definitions(x, y[, width, height])`.
-- Arguments are numbers (written as integers, `-` allowed), `@regions` takes a string. Other annotations
+- Arguments are numbers (written as integers, `-` allowed), `@regions` takes a string, `@from` / `@to` a
+  string and a number. Other annotations
   of the state machine (`@CycleBased`, …) and the definition section must come before the states and
   transitions.

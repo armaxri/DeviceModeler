@@ -11,7 +11,8 @@ import {
     type NewVertexKind, type ParsedModel, type ScopeContainer, type TextEdit, type Transition, type TransitionSource, type TransitionTarget, type Vertex
 } from 'hsm-language';
 import {
-    applyManualLayout, captureLayout, cloneManualLayout, contentOrigin, diagramElementIds, layoutFromModel, layoutTextEdits, routeOutline, toFrameCoordinates,
+    anchorAt, applyManualLayout, captureLayout, cloneManualLayout, contentOrigin, diagramElementIds, hasEdgeLayout, layoutFromModel, layoutTextEdits, routeOutline,
+    toFrameCoordinates, type EdgeAnchor,
     type ManualLayout, type Point
 } from 'hsm-language';
 import { describeSyntaxProblem, type HsmModelService } from './model-service.js';
@@ -1352,7 +1353,7 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             } else {
                 delete entry.bends;
             }
-            if (entry.bends || entry.label) {
+            if (hasEdgeLayout(entry)) {
                 layout.edges[edge.id] = entry;
             } else {
                 delete layout.edges[edge.id];
@@ -1403,6 +1404,52 @@ export class DiagramController implements PropertiesHost, DiagramCallbacks {
             shown.bends.splice(index, 1);
             this.storeBends(shown.edge, shown.bends);
         }
+    }
+
+    /**
+     * The start / end of a transition was dragged along the border of its state: stores the anchor
+     * (`@from` / `@to`). The other end of a self transition is anchored where it is, so that the loop
+     * keeps its shape.
+     */
+    anchorMoved(edgeId: string, end: 'source' | 'target', anchor: EdgeAnchor): void {
+        const edge = this.state?.layout.graph.edges.find(e => e.id === edgeId);
+        if (!edge) {
+            return;
+        }
+        const other = end === 'source' ? 'target' : 'source';
+        let otherAnchor: EdgeAnchor | undefined;
+        if (edge.source === edge.target && !edge.anchors?.[other] && edge.points.length >= 2) {
+            const node = this.state?.nodes.get(edge.source);
+            const position = this.absolutePosition(edge.source);
+            const point = other === 'source' ? edge.points[0] : edge.points[edge.points.length - 1];
+            otherAnchor = node ? anchorAt({ ...position, width: node.width, height: node.height }, point) : undefined;
+        }
+        this.changeLayout(layout => {
+            const entry = { ...layout.edges[edgeId], [end]: anchor };
+            if (otherAnchor) {
+                entry[other] = otherAnchor;
+            }
+            layout.edges[edgeId] = entry;
+        });
+    }
+
+    /** Removes the anchor of the start / end of a transition (both ends: `end` undefined). */
+    anchorReset(edgeId: string, end?: 'source' | 'target'): void {
+        const edge = this.state?.layout.graph.edges.find(e => e.id === edgeId);
+        if (!edge?.anchors || (end && !edge.anchors[end])) {
+            return;
+        }
+        this.changeLayout(layout => {
+            const entry = { ...layout.edges[edgeId] };
+            for (const e of end ? [end] : ['source', 'target'] as const) {
+                delete entry[e];
+            }
+            if (hasEdgeLayout(entry)) {
+                layout.edges[edgeId] = entry;
+            } else {
+                delete layout.edges[edgeId];
+            }
+        });
     }
 
     labelMoved(edgeId: string, dx: number, dy: number): void {
